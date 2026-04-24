@@ -440,7 +440,24 @@ function ControlPanel({
   onHit: () => void;
   onStand: () => void;
 }) {
-  const canBet = (amount: number) => seat.gold >= amount;
+  const [betDraft, setBetDraft] = useState<string>("");
+
+  useEffect(() => {
+    if (phase === "betting" && seat.status === "betting") {
+      setBetDraft((prev) =>
+        prev === "" ? String(BLACKJACK_CONFIG.minBet) : prev,
+      );
+    }
+  }, [phase, seat.status]);
+
+  const parsedBet = Math.floor(Number(betDraft));
+  const betValid =
+    Number.isFinite(parsedBet) &&
+    parsedBet >= BLACKJACK_CONFIG.minBet &&
+    parsedBet <= Math.min(seat.gold, BLACKJACK_CONFIG.maxBet);
+
+  const setPreset = (v: number) =>
+    setBetDraft(String(Math.max(BLACKJACK_CONFIG.minBet, Math.floor(v))));
 
   return (
     <div className="pointer-events-auto absolute bottom-4 right-4 flex flex-col items-end gap-2 rounded-xl border border-white/10 bg-black/70 p-3 text-xs backdrop-blur-md">
@@ -480,21 +497,66 @@ function ControlPanel({
       )}
 
       {phase === "betting" && seat.status === "betting" && (
-        <div className="flex flex-col gap-2">
-          <div className="text-[11px] text-zinc-400">Choisis ta mise</div>
-          <div className="flex gap-1.5">
-            {BLACKJACK_CONFIG.betPresets.map((amount) => (
-              <button
-                key={amount}
-                disabled={!canBet(amount)}
-                onClick={() => onBet(amount)}
-                className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-zinc-900 shadow hover:bg-amber-300 disabled:opacity-40"
-              >
-                {amount}
-              </button>
-            ))}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (betValid) onBet(parsedBet);
+          }}
+          className="flex flex-col gap-2"
+        >
+          <div className="text-[11px] text-zinc-400">
+            Mise libre · min {BLACKJACK_CONFIG.minBet} · max{" "}
+            {Math.min(seat.gold, BLACKJACK_CONFIG.maxBet).toLocaleString(
+              "fr-FR",
+            )}
           </div>
-        </div>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={BLACKJACK_CONFIG.minBet}
+              max={Math.min(seat.gold, BLACKJACK_CONFIG.maxBet)}
+              step={1}
+              value={betDraft}
+              onChange={(e) =>
+                setBetDraft(e.target.value.replace(/[^0-9]/g, ""))
+              }
+              className="w-28 rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-right text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-300"
+              placeholder={String(BLACKJACK_CONFIG.minBet)}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setPreset(parsedBet / 2)}
+              className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 hover:bg-white/10"
+              title="Diviser par 2"
+            >
+              ½
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset(Math.max(parsedBet, 1) * 2)}
+              className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 hover:bg-white/10"
+              title="Doubler"
+            >
+              ×2
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset(seat.gold)}
+              className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 hover:bg-white/10"
+              title="Tout miser"
+            >
+              Max
+            </button>
+            <button
+              type="submit"
+              disabled={!betValid}
+              className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-zinc-900 shadow hover:bg-amber-300 disabled:opacity-40"
+            >
+              Miser
+            </button>
+          </div>
+        </form>
       )}
 
       {phase === "betting" && seat.status === "ready" && (

@@ -175,8 +175,7 @@ export const PLAZA_CONFIG = {
 export const BLACKJACK_CONFIG = {
   seatCount: 5,
   minBet: 10,
-  maxBet: 1000,
-  betPresets: [10, 50, 100, 500] as const,
+  maxBet: 10_000_000,
   bettingDurationMs: 20_000,
   turnDurationMs: 15_000,
   roundIntervalMs: 3_000,
