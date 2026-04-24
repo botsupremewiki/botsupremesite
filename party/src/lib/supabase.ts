@@ -56,9 +56,12 @@ export async function patchProfileGold(
   gold: number,
 ) {
   const env = getSupabaseEnv(room);
-  if (!env) return;
+  if (!env) {
+    console.warn("[supabase] patchProfileGold: env missing");
+    return;
+  }
   try {
-    await fetch(`${env.url}/rest/v1/profiles?id=eq.${authId}`, {
+    const resp = await fetch(`${env.url}/rest/v1/profiles?id=eq.${authId}`, {
       method: "PATCH",
       headers: {
         apikey: env.key,
@@ -71,8 +74,14 @@ export async function patchProfileGold(
         updated_at: new Date().toISOString(),
       }),
     });
-  } catch {
-    // swallow; chat/game should still flow if the write fails
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "<no body>");
+      console.warn(
+        `[supabase] patchProfileGold failed ${resp.status} for ${authId}: ${body}`,
+      );
+    }
+  } catch (err) {
+    console.warn("[supabase] patchProfileGold threw:", err);
   }
 }
 

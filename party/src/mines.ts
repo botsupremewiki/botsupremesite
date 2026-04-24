@@ -18,9 +18,6 @@ type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
-  // True when `gold` came from the DB. Guards against persisting a
-  // fallback value back to the DB and clobbering a real one.
-  loadedFromDb: boolean;
   isAdmin: boolean;
 };
 
@@ -61,14 +58,12 @@ export default class MinesServer implements Party.Server {
       : null;
 
     let gold: number;
-    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
-        loadedFromDb = true;
       } else if (queryGold !== null) {
         gold = queryGold;
       } else {
@@ -78,7 +73,7 @@ export default class MinesServer implements Party.Server {
       gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
 
-    this.connInfo.set(conn.id, { authId, name, gold, loadedFromDb, isAdmin });
+    this.connInfo.set(conn.id, { authId, name, gold, isAdmin });
 
     const chat = await this.chat.list();
     this.sendTo(conn, {
@@ -348,7 +343,7 @@ export default class MinesServer implements Party.Server {
   }
 
   private async persistGold(info: ConnInfo) {
-    if (!info.authId || !info.loadedFromDb) return;
+    if (!info.authId) return;
     await patchProfileGold(this.room, info.authId, info.gold);
   }
 

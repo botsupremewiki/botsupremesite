@@ -18,11 +18,6 @@ type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
-  // True when `gold` was loaded from the DB (the only source of truth we
-  // trust for persistence). False means we fell back to a transient value
-  // (URL query for auth users, or sandbox value for guests) and must NOT
-  // overwrite the DB with it.
-  loadedFromDb: boolean;
   isAdmin: boolean;
   history: SlotsSpin[];
   spinningUntil: number; // ms epoch — 0 if idle
@@ -54,23 +49,22 @@ export default class SlotsServer implements Party.Server {
       : null;
 
     let gold: number;
-    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
-        loadedFromDb = true;
       } else if (queryGold !== null) {
-        // DB unavailable — trust the page's SSR-loaded gold for display
-        // only. We will NOT persist this value (loadedFromDb stays false).
+        // DB read failed — trust the page's SSR-loaded gold so the player
+        // can keep playing. patchProfileGold below still writes back, so
+        // the DB row stays in sync.
         gold = queryGold;
       } else {
         gold = 0;
       }
     } else {
-      // Guest: sandbox value, never persisted.
+      // Guest: sandbox value, never persisted (no authId).
       gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
 
@@ -78,7 +72,6 @@ export default class SlotsServer implements Party.Server {
       authId,
       name,
       gold,
-      loadedFromDb,
       isAdmin,
       history: [],
       spinningUntil: 0,
@@ -196,9 +189,7 @@ export default class SlotsServer implements Party.Server {
   }
 
   private async persistGold(info: ConnInfo) {
-    // Only write back if we successfully loaded from DB at connect time —
-    // otherwise we'd risk overwriting a real value with a fallback display.
-    if (!info.authId || !info.loadedFromDb) return;
+    if (!info.authId) return;
     await patchProfileGold(this.room, info.authId, info.gold);
   }
 

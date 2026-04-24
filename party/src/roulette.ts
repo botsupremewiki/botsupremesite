@@ -36,7 +36,6 @@ type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
-  loadedFromDb: boolean;
   isAdmin: boolean;
 };
 
@@ -129,14 +128,12 @@ export default class RouletteServer implements Party.Server {
       : null;
 
     let gold: number;
-    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
-        loadedFromDb = true;
       } else if (queryGold !== null) {
         gold = queryGold;
       } else {
@@ -150,7 +147,6 @@ export default class RouletteServer implements Party.Server {
       authId,
       name: providedName ?? `Invité-${conn.id.slice(0, 4)}`,
       gold,
-      loadedFromDb,
       isAdmin,
     });
 
@@ -571,7 +567,7 @@ export default class RouletteServer implements Party.Server {
   // ────────────────────────────── Supabase ────────────────────────────
 
   private async persistGold(info: ConnInfo) {
-    if (!info.authId || !info.loadedFromDb) return;
+    if (!info.authId) return;
     await patchProfileGold(this.room, info.authId, info.gold);
   }
 
