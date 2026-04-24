@@ -459,10 +459,10 @@ function BettingGrid({
     const color = NUM_COLOR(n);
     const bg =
       color === "red"
-        ? "bg-rose-600/70 hover:bg-rose-500"
+        ? "bg-rose-600/75 hover:bg-rose-500"
         : color === "black"
-          ? "bg-zinc-900/80 hover:bg-zinc-800"
-          : "bg-emerald-600/70 hover:bg-emerald-500";
+          ? "bg-zinc-900/85 hover:bg-zinc-800"
+          : "bg-emerald-600/75 hover:bg-emerald-500";
     const isWinning =
       state.phase !== "betting" && state.winningNumber === n;
     return (
@@ -474,18 +474,32 @@ function BettingGrid({
         highlight={isWinning}
         mineAmount={allBets.mine[`straight-${n}`] ?? 0}
         totalAmount={allBets.agg[`straight-${n}`] ?? 0}
-        className={`flex h-11 items-center justify-center rounded-sm text-sm font-bold text-white ${bg}`}
+        className={`flex items-center justify-center rounded-sm text-sm font-bold text-white ${bg}`}
       >
         {n}
       </BetCell>
     );
   };
 
+  // Grid template: 0 (tall) | 12 numbers | 2:1 column cell
+  const numberGridStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "48px repeat(12, minmax(0, 1fr)) 64px",
+    gridTemplateRows: "44px 44px 44px",
+    gap: 4,
+  };
+
+  const bottomRowStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "48px repeat(12, minmax(0, 1fr)) 64px",
+    gap: 4,
+  };
+
   return (
     <div className="w-full max-w-5xl rounded-xl border border-white/10 bg-black/30 p-3">
-      <div className="flex gap-1">
-        {/* 0 (tall, left) */}
-        <div className="flex">
+      <div style={numberGridStyle}>
+        {/* 0 spans all three rows on the first column */}
+        <div style={{ gridRow: "1 / span 3", gridColumn: "1 / 2" }}>
           <BetCell
             betKey="straight-0"
             disabled={disabled}
@@ -495,148 +509,179 @@ function BettingGrid({
             }
             mineAmount={allBets.mine["straight-0"] ?? 0}
             totalAmount={allBets.agg["straight-0"] ?? 0}
-            className="flex w-10 items-center justify-center rounded-sm bg-emerald-600/70 text-sm font-bold text-white hover:bg-emerald-500"
-            style={{ height: "140px" }}
+            className="flex h-full w-full items-center justify-center rounded-sm bg-emerald-600/75 text-sm font-bold text-white hover:bg-emerald-500"
           >
             0
           </BetCell>
         </div>
 
-        {/* Numbers grid + columns 2:1 */}
-        <div className="flex flex-1 flex-col gap-1">
-          <div className="flex gap-1">
-            {TOP_ROW.map(renderNumber)}
-            <BetCell
-              betKey="column3"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["column3"] ?? 0}
-              totalAmount={allBets.agg["column3"] ?? 0}
-              className="flex h-11 w-14 items-center justify-center rounded-sm bg-white/5 text-[10px] font-semibold uppercase text-zinc-300 hover:bg-white/10"
-            >
-              2:1
-            </BetCell>
-          </div>
-          <div className="flex gap-1">
-            {MID_ROW.map(renderNumber)}
-            <BetCell
-              betKey="column2"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["column2"] ?? 0}
-              totalAmount={allBets.agg["column2"] ?? 0}
-              className="flex h-11 w-14 items-center justify-center rounded-sm bg-white/5 text-[10px] font-semibold uppercase text-zinc-300 hover:bg-white/10"
-            >
-              2:1
-            </BetCell>
-          </div>
-          <div className="flex gap-1">
-            {BOT_ROW.map(renderNumber)}
-            <BetCell
-              betKey="column1"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["column1"] ?? 0}
-              totalAmount={allBets.agg["column1"] ?? 0}
-              className="flex h-11 w-14 items-center justify-center rounded-sm bg-white/5 text-[10px] font-semibold uppercase text-zinc-300 hover:bg-white/10"
-            >
-              2:1
-            </BetCell>
-          </div>
+        {TOP_ROW.map(renderNumber)}
+        <BetCell
+          betKey="column3"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["column3"] ?? 0}
+          totalAmount={allBets.agg["column3"] ?? 0}
+          className="flex items-center justify-center rounded-sm bg-white/5 text-[10px] font-semibold uppercase text-zinc-300 hover:bg-white/10"
+        >
+          2:1
+        </BetCell>
 
-          {/* Dozens */}
-          <div className="mt-1 flex gap-1">
-            {(["dozen1", "dozen2", "dozen3"] as const).map((k, i) => (
-              <BetCell
-                key={k}
-                betKey={k}
-                disabled={disabled}
-                onBet={onBet}
-                highlight={false}
-                mineAmount={allBets.mine[k] ?? 0}
-                totalAmount={allBets.agg[k] ?? 0}
-                className="flex h-10 flex-1 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-              >
-                {i === 0 ? "1–12" : i === 1 ? "13–24" : "25–36"}
-              </BetCell>
-            ))}
-            <div className="w-14" />
-          </div>
+        {MID_ROW.map(renderNumber)}
+        <BetCell
+          betKey="column2"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["column2"] ?? 0}
+          totalAmount={allBets.agg["column2"] ?? 0}
+          className="flex items-center justify-center rounded-sm bg-white/5 text-[10px] font-semibold uppercase text-zinc-300 hover:bg-white/10"
+        >
+          2:1
+        </BetCell>
 
-          {/* Outside bets */}
-          <div className="flex gap-1">
-            <BetCell
-              betKey="low"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["low"] ?? 0}
-              totalAmount={allBets.agg["low"] ?? 0}
-              className="flex h-10 flex-1 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-            >
-              1–18
-            </BetCell>
-            <BetCell
-              betKey="even"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["even"] ?? 0}
-              totalAmount={allBets.agg["even"] ?? 0}
-              className="flex h-10 flex-1 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-            >
-              Pair
-            </BetCell>
-            <BetCell
-              betKey="red"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["red"] ?? 0}
-              totalAmount={allBets.agg["red"] ?? 0}
-              className="flex h-10 flex-1 items-center justify-center rounded-sm bg-rose-600/60 text-xs font-semibold text-white hover:bg-rose-500"
-            >
-              Rouge
-            </BetCell>
-            <BetCell
-              betKey="black"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["black"] ?? 0}
-              totalAmount={allBets.agg["black"] ?? 0}
-              className="flex h-10 flex-1 items-center justify-center rounded-sm bg-zinc-900/80 text-xs font-semibold text-white hover:bg-zinc-800"
-            >
-              Noir
-            </BetCell>
-            <BetCell
-              betKey="odd"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["odd"] ?? 0}
-              totalAmount={allBets.agg["odd"] ?? 0}
-              className="flex h-10 flex-1 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-            >
-              Impair
-            </BetCell>
-            <BetCell
-              betKey="high"
-              disabled={disabled}
-              onBet={onBet}
-              highlight={false}
-              mineAmount={allBets.mine["high"] ?? 0}
-              totalAmount={allBets.agg["high"] ?? 0}
-              className="flex h-10 flex-1 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-            >
-              19–36
-            </BetCell>
-            <div className="w-14" />
-          </div>
+        {BOT_ROW.map(renderNumber)}
+        <BetCell
+          betKey="column1"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["column1"] ?? 0}
+          totalAmount={allBets.agg["column1"] ?? 0}
+          className="flex items-center justify-center rounded-sm bg-white/5 text-[10px] font-semibold uppercase text-zinc-300 hover:bg-white/10"
+        >
+          2:1
+        </BetCell>
+      </div>
+
+      {/* Dozens row */}
+      <div className="mt-1" style={bottomRowStyle}>
+        <div /> {/* filler under the 0 column */}
+        <div style={{ gridColumn: "span 4" }}>
+          <BetCell
+            betKey="dozen1"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["dozen1"] ?? 0}
+            totalAmount={allBets.agg["dozen1"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            1–12
+          </BetCell>
         </div>
+        <div style={{ gridColumn: "span 4" }}>
+          <BetCell
+            betKey="dozen2"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["dozen2"] ?? 0}
+            totalAmount={allBets.agg["dozen2"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            13–24
+          </BetCell>
+        </div>
+        <div style={{ gridColumn: "span 4" }}>
+          <BetCell
+            betKey="dozen3"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["dozen3"] ?? 0}
+            totalAmount={allBets.agg["dozen3"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            25–36
+          </BetCell>
+        </div>
+        <div /> {/* filler under the 2:1 column */}
+      </div>
+
+      {/* Outside bets row */}
+      <div className="mt-1" style={bottomRowStyle}>
+        <div />
+        <div style={{ gridColumn: "span 2" }}>
+          <BetCell
+            betKey="low"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["low"] ?? 0}
+            totalAmount={allBets.agg["low"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            1–18
+          </BetCell>
+        </div>
+        <div style={{ gridColumn: "span 2" }}>
+          <BetCell
+            betKey="even"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["even"] ?? 0}
+            totalAmount={allBets.agg["even"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            Pair
+          </BetCell>
+        </div>
+        <div style={{ gridColumn: "span 2" }}>
+          <BetCell
+            betKey="red"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["red"] ?? 0}
+            totalAmount={allBets.agg["red"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-rose-600/70 text-xs font-semibold text-white hover:bg-rose-500"
+          >
+            Rouge
+          </BetCell>
+        </div>
+        <div style={{ gridColumn: "span 2" }}>
+          <BetCell
+            betKey="black"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["black"] ?? 0}
+            totalAmount={allBets.agg["black"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-zinc-900/85 text-xs font-semibold text-white hover:bg-zinc-800"
+          >
+            Noir
+          </BetCell>
+        </div>
+        <div style={{ gridColumn: "span 2" }}>
+          <BetCell
+            betKey="odd"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["odd"] ?? 0}
+            totalAmount={allBets.agg["odd"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            Impair
+          </BetCell>
+        </div>
+        <div style={{ gridColumn: "span 2" }}>
+          <BetCell
+            betKey="high"
+            disabled={disabled}
+            onBet={onBet}
+            highlight={false}
+            mineAmount={allBets.mine["high"] ?? 0}
+            totalAmount={allBets.agg["high"] ?? 0}
+            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          >
+            19–36
+          </BetCell>
+        </div>
+        <div />
       </div>
     </div>
   );
