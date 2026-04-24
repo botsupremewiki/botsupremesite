@@ -189,9 +189,6 @@ export const MINES_CONFIG = {
   minBet: 10,
   maxBet: 10_000_000,
   rtp: 0.97,
-  // Mines count is randomized per game between these fractions of the grid
-  minMinesFraction: 0.2,
-  maxMinesFraction: 0.45,
 } as const;
 
 export type MinesStatus =
@@ -218,7 +215,13 @@ export type MinesGameState = {
 };
 
 export type MinesClientMessage =
-  | { type: "mines-start"; rows: number; cols: number; bet: number }
+  | {
+      type: "mines-start";
+      rows: number;
+      cols: number;
+      minesCount: number;
+      bet: number;
+    }
   | { type: "mines-reveal"; index: number }
   | { type: "mines-cash-out" };
 

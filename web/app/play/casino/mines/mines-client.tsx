@@ -35,8 +35,15 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
   const [gold, setGold] = useState<number>(profile?.gold ?? 1000);
   const [game, setGame] = useState<MinesGameState | null>(null);
   const [gridSize, setGridSize] = useState<number>(5);
+  const [minesCount, setMinesCount] = useState<number>(3);
   const [betDraft, setBetDraft] = useState<string>("10");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Clamp minesCount when gridSize changes so it stays in [1, N²-1].
+  useEffect(() => {
+    const max = gridSize * gridSize - 1;
+    setMinesCount((prev) => Math.max(1, Math.min(prev, max)));
+  }, [gridSize]);
 
   const globalChat = useAuxChat({
     partyName: "global",
@@ -149,10 +156,11 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
         type: "mines-start",
         rows: gridSize,
         cols: gridSize,
+        minesCount,
         bet: parsedBet,
       });
     },
-    [betValid, gridSize, parsedBet, send],
+    [betValid, gridSize, minesCount, parsedBet, send],
   );
 
   const revealTile = useCallback(
@@ -208,6 +216,8 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
               gold={gold}
               gridSize={gridSize}
               setGridSize={setGridSize}
+              minesCount={minesCount}
+              setMinesCount={setMinesCount}
               betDraft={betDraft}
               setBetDraft={setBetDraft}
               setPreset={setPreset}
@@ -295,6 +305,8 @@ function SetupPanel({
   gold,
   gridSize,
   setGridSize,
+  minesCount,
+  setMinesCount,
   betDraft,
   setBetDraft,
   setPreset,
@@ -307,6 +319,8 @@ function SetupPanel({
   gold: number;
   gridSize: number;
   setGridSize: (v: number) => void;
+  minesCount: number;
+  setMinesCount: (v: number) => void;
   betDraft: string;
   setBetDraft: (v: string) => void;
   setPreset: (v: number) => void;
@@ -320,6 +334,8 @@ function SetupPanel({
     { length: MINES_CONFIG.maxSize - MINES_CONFIG.minSize + 1 },
     (_, i) => MINES_CONFIG.minSize + i,
   );
+  const totalTiles = gridSize * gridSize;
+  const maxMines = totalTiles - 1;
 
   return (
     <motion.div
@@ -330,9 +346,9 @@ function SetupPanel({
       <div>
         <h1 className="text-xl font-semibold text-zinc-100">Mines</h1>
         <p className="mt-1 text-xs text-zinc-500">
-          Choisis la taille de la grille et ta mise. Le nombre de mines est
-          tiré au hasard par la maison. Plus tu révèles de cases, plus le
-          multiplicateur monte — mais une seule mine et c&apos;est perdu.
+          Choisis la taille de la grille, le nombre de mines et ta mise.
+          Plus il y a de mines, plus le multiplicateur grimpe vite — mais
+          une seule case piégée et c&apos;est perdu.
         </p>
       </div>
 
@@ -355,6 +371,44 @@ function SetupPanel({
               {s}×{s}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+          <span>Nombre de mines</span>
+          <span className="normal-case tracking-normal text-zinc-500">
+            1 à {maxMines}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={1}
+            max={maxMines}
+            step={1}
+            value={Math.min(minesCount, maxMines)}
+            onChange={(e) => setMinesCount(parseInt(e.target.value, 10))}
+            className="flex-1 accent-rose-400"
+          />
+          <input
+            type="number"
+            min={1}
+            max={maxMines}
+            step={1}
+            value={minesCount}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (Number.isFinite(v)) {
+                setMinesCount(Math.max(1, Math.min(maxMines, v)));
+              }
+            }}
+            className="w-16 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-right text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-rose-400"
+          />
+        </div>
+        <div className="mt-1 text-[10px] text-zinc-500">
+          {minesCount} mine{minesCount > 1 ? "s" : ""} sur {totalTiles} cases
+          ({Math.round((minesCount / totalTiles) * 100)}% piégées)
         </div>
       </div>
 

@@ -9,11 +9,7 @@ import type {
 import { MINES_CONFIG, PLAZA_CONFIG } from "../../shared/types";
 import { fetchProfile, patchProfileGold } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
-import {
-  minesMultiplier,
-  pickMinePositions,
-  pickMinesCount,
-} from "./lib/mines-math";
+import { minesMultiplier, pickMinePositions } from "./lib/mines-math";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -127,7 +123,7 @@ export default class MinesServer implements Party.Server {
   private async handleStart(
     conn: Party.Connection,
     info: ConnInfo,
-    data: { rows: number; cols: number; bet: number },
+    data: { rows: number; cols: number; minesCount: number; bet: number },
   ) {
     if (this.games.get(conn.id)?.status === "playing") {
       this.sendTo(conn, {
@@ -139,6 +135,7 @@ export default class MinesServer implements Party.Server {
     const rows = Math.floor(data.rows);
     const cols = Math.floor(data.cols);
     const bet = Math.floor(data.bet);
+    const minesCount = Math.floor(data.minesCount);
     if (
       !Number.isInteger(rows) ||
       !Number.isInteger(cols) ||
@@ -150,6 +147,18 @@ export default class MinesServer implements Party.Server {
       this.sendTo(conn, {
         type: "mines-error",
         message: `Grille entre ${MINES_CONFIG.minSize}×${MINES_CONFIG.minSize} et ${MINES_CONFIG.maxSize}×${MINES_CONFIG.maxSize}.`,
+      });
+      return;
+    }
+    const total = rows * cols;
+    if (
+      !Number.isInteger(minesCount) ||
+      minesCount < 1 ||
+      minesCount > total - 1
+    ) {
+      this.sendTo(conn, {
+        type: "mines-error",
+        message: `Entre 1 et ${total - 1} mines.`,
       });
       return;
     }
@@ -172,12 +181,6 @@ export default class MinesServer implements Party.Server {
       return;
     }
 
-    const total = rows * cols;
-    const minesCount = pickMinesCount(
-      total,
-      MINES_CONFIG.minMinesFraction,
-      MINES_CONFIG.maxMinesFraction,
-    );
     const mineSet = pickMinePositions(total, minesCount);
 
     // Deduct the bet immediately.
