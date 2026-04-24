@@ -241,6 +241,14 @@ export function ChatPanel({
                           animate={{ opacity: 1, y: 0 }}
                           className="py-0.5 leading-snug"
                         >
+                          <span className="mr-1.5 font-mono text-[10px] tabular-nums text-zinc-600">
+                            {formatTime(m.timestamp)}
+                          </span>
+                          {m.isAdmin && (
+                            <span className="mr-1 font-bold text-rose-500">
+                              [ADMIN]
+                            </span>
+                          )}
                           <span className="font-semibold text-indigo-300">
                             {m.playerName}
                           </span>
@@ -296,4 +304,11 @@ export function ChatPanel({
 function totalUnread(_channels: ChatChannel[]): number {
   // Placeholder: no unread tracking yet.
   return 0;
+}
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }

@@ -6,6 +6,8 @@ import type {
   ServerMessage,
 } from "../../shared/types";
 import { PLAZA_CONFIG } from "../../shared/types";
+import { fetchProfile } from "./lib/supabase";
+import { PersistentChatHistory } from "./lib/chat-storage";
 
 const AVATAR_COLORS = [
   "#ef4444",
@@ -24,25 +26,32 @@ const UUID_RE =
 
 export default class PlazaServer implements Party.Server {
   private players = new Map<string, Player>();
-  private chatHistory: ChatMessage[] = [];
+  private chat: PersistentChatHistory;
   private colorCursor = 0;
+  private connIdToIsAdmin = new Map<string, boolean>();
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.chat = new PersistentChatHistory(room, PLAZA_CONFIG.chatHistorySize);
+  }
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+  async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     if (this.players.size >= PLAZA_CONFIG.maxPlayers) {
       this.send(conn, { type: "error", message: "La plaza est pleine." });
       conn.close();
       return;
     }
 
-    // Read identity from connection query (sent by the web client).
-    // NOTE: for MVP we trust the client. For production anti-cheat we'll
-    // pass a Supabase JWT here and verify it server-side.
     const url = new URL(ctx.request.url);
     const authId = sanitizeAuthId(url.searchParams.get("authId"));
     const providedName = sanitizeName(url.searchParams.get("name"));
     const avatarUrl = sanitizeUrl(url.searchParams.get("avatarUrl"));
+
+    let isAdmin = false;
+    if (authId) {
+      const profile = await fetchProfile(this.room, authId);
+      if (profile?.is_admin) isAdmin = true;
+    }
+    this.connIdToIsAdmin.set(conn.id, isAdmin);
 
     const player: Player = {
       id: conn.id,
@@ -56,17 +65,18 @@ export default class PlazaServer implements Party.Server {
     };
     this.players.set(conn.id, player);
 
+    const chat = await this.chat.list();
     this.send(conn, {
       type: "welcome",
       selfId: conn.id,
       players: Array.from(this.players.values()),
-      chat: this.chatHistory,
+      chat,
     });
 
     this.broadcast({ type: "player-joined", player }, [conn.id]);
   }
 
-  onMessage(raw: string, sender: Party.Connection) {
+  async onMessage(raw: string, sender: Party.Connection) {
     let data: ClientMessage;
     try {
       data = JSON.parse(raw) as ClientMessage;
@@ -128,11 +138,9 @@ export default class PlazaServer implements Party.Server {
           playerName: player.name,
           text,
           timestamp: Date.now(),
+          isAdmin: this.connIdToIsAdmin.get(sender.id) || undefined,
         };
-        this.chatHistory.push(message);
-        if (this.chatHistory.length > PLAZA_CONFIG.chatHistorySize) {
-          this.chatHistory.shift();
-        }
+        await this.chat.add(message);
         this.broadcast({ type: "chat", message });
         break;
       }
@@ -140,6 +148,7 @@ export default class PlazaServer implements Party.Server {
   }
 
   onClose(conn: Party.Connection) {
+    this.connIdToIsAdmin.delete(conn.id);
     if (!this.players.delete(conn.id)) return;
     this.broadcast({ type: "player-left", playerId: conn.id });
   }

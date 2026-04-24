@@ -17,6 +17,7 @@ export type ChatMessage = {
   playerName: string;
   text: string;
   timestamp: number;
+  isAdmin?: boolean;
 };
 
 export type ClientMessage =

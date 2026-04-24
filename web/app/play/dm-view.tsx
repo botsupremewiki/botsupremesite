@@ -128,7 +128,7 @@ export function DmView({
                     key={m.id}
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`mb-1.5 flex ${mine ? "justify-end" : "justify-start"}`}
+                    className={`mb-1.5 flex flex-col ${mine ? "items-end" : "items-start"}`}
                   >
                     <div
                       className={`max-w-[75%] rounded-2xl px-3 py-1.5 text-[13px] leading-snug ${
@@ -139,6 +139,9 @@ export function DmView({
                     >
                       {m.content}
                     </div>
+                    <span className="mt-0.5 text-[9px] font-mono text-zinc-600">
+                      {formatDmTime(m.createdAt)}
+                    </span>
                   </motion.div>
                 );
               })}
@@ -282,6 +285,13 @@ export function DmView({
       </div>
     </div>
   );
+}
+
+function formatDmTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 function Avatar({ url, name }: { url?: string; name: string }) {

@@ -1,35 +1,51 @@
 import type * as Party from "partykit/server";
 import type { ChatMessage, ServerMessage } from "../../shared/types";
+import { fetchProfile } from "./lib/supabase";
+import { PersistentChatHistory } from "./lib/chat-storage";
 
 type AuxClientMessage = { type: "chat"; text: string };
 
-const MAX_HISTORY = 60;
+const MAX_HISTORY = 200;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type ConnName = { name: string; color: string };
+type ConnName = { name: string; isAdmin: boolean };
 
 export default class GlobalChatServer implements Party.Server {
-  private chatHistory: ChatMessage[] = [];
-  private names = new Map<string, ConnName>();
+  private chat: PersistentChatHistory;
+  private connInfo = new Map<string, ConnName>();
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.chat = new PersistentChatHistory(room, MAX_HISTORY);
+  }
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+  async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url);
-    const rawName = url.searchParams.get("name");
-    const rawColor = url.searchParams.get("color");
-    const name = sanitizeName(rawName) ?? `Invité-${conn.id.slice(0, 4)}`;
-    const color = sanitizeColor(rawColor) ?? "#6366f1";
-    this.names.set(conn.id, { name, color });
+    const rawAuthId = url.searchParams.get("authId");
+    const authId =
+      typeof rawAuthId === "string" && UUID_RE.test(rawAuthId)
+        ? rawAuthId
+        : null;
+    const name =
+      sanitizeName(url.searchParams.get("name")) ?? `Invité-${conn.id.slice(0, 4)}`;
 
+    let isAdmin = false;
+    if (authId) {
+      const profile = await fetchProfile(this.room, authId);
+      if (profile?.is_admin) isAdmin = true;
+    }
+    this.connInfo.set(conn.id, { name, isAdmin });
+
+    const history = await this.chat.list();
     this.sendTo(conn, {
       type: "welcome",
       selfId: conn.id,
       players: [],
-      chat: this.chatHistory,
+      chat: history,
     });
   }
 
-  onMessage(raw: string, sender: Party.Connection) {
+  async onMessage(raw: string, sender: Party.Connection) {
     let data: AuxClientMessage;
     try {
       data = JSON.parse(raw) as AuxClientMessage;
@@ -41,22 +57,21 @@ export default class GlobalChatServer implements Party.Server {
     const text = sanitizeChat(data.text);
     if (!text) return;
 
-    const who = this.names.get(sender.id);
+    const who = this.connInfo.get(sender.id);
     const msg: ChatMessage = {
       id: crypto.randomUUID(),
       playerId: sender.id,
       playerName: who?.name ?? "Invité",
       text,
       timestamp: Date.now(),
+      isAdmin: who?.isAdmin || undefined,
     };
-    this.chatHistory.push(msg);
-    if (this.chatHistory.length > MAX_HISTORY) this.chatHistory.shift();
-
+    await this.chat.add(msg);
     this.broadcast({ type: "chat", message: msg });
   }
 
   onClose(conn: Party.Connection) {
-    this.names.delete(conn.id);
+    this.connInfo.delete(conn.id);
   }
 
   private sendTo(conn: Party.Connection, msg: ServerMessage) {
@@ -72,11 +87,6 @@ function sanitizeName(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim().slice(0, 20);
   return trimmed.length >= 2 ? trimmed : null;
-}
-
-function sanitizeColor(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : null;
 }
 
 function sanitizeChat(raw: unknown): string | null {

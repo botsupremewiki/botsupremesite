@@ -11,6 +11,8 @@ import type {
   ServerMessage,
 } from "../../shared/types";
 import { BLACKJACK_CONFIG, PLAZA_CONFIG } from "../../shared/types";
+import { fetchProfile } from "./lib/supabase";
+import { PersistentChatHistory } from "./lib/chat-storage";
 
 const AVATAR_COLORS = [
   "#ef4444",
@@ -31,7 +33,7 @@ type TimerId = ReturnType<typeof setTimeout>;
 
 export default class BlackjackServer implements Party.Server {
   private players = new Map<string, Player>();
-  private chatHistory: ChatMessage[] = [];
+  private chat: PersistentChatHistory;
   private colorCursor = 0;
 
   private seats: BlackjackSeat[] = makeEmptySeats();
@@ -47,8 +49,11 @@ export default class BlackjackServer implements Party.Server {
   private authIdToSeatIndex = new Map<string, number>();
   private connIdToSeatIndex = new Map<string, number>();
   private connIdToGold = new Map<string, number>();
+  private connIdToIsAdmin = new Map<string, boolean>();
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.chat = new PersistentChatHistory(room, PLAZA_CONFIG.chatHistorySize);
+  }
 
   // ──────────────────────────────── connection handling ────────────────────────
 
@@ -72,13 +77,18 @@ export default class BlackjackServer implements Party.Server {
       ? Math.max(0, Math.min(10_000_000, parsedGold))
       : 1000;
 
-    // Authenticated? Prefer Supabase as source of truth for gold.
+    // Authenticated? Prefer Supabase as source of truth for gold + is_admin.
     let initialGold = queryGold;
+    let isAdmin = false;
     if (authId) {
-      const supabaseGold = await this.fetchGoldFromSupabase(authId);
-      if (supabaseGold !== null) initialGold = supabaseGold;
+      const profile = await fetchProfile(this.room, authId);
+      if (profile) {
+        if (Number.isFinite(profile.gold)) initialGold = profile.gold;
+        isAdmin = !!profile.is_admin;
+      }
     }
     this.connIdToGold.set(conn.id, initialGold);
+    this.connIdToIsAdmin.set(conn.id, isAdmin);
 
     const player: Player = {
       id: conn.id,
@@ -105,46 +115,19 @@ export default class BlackjackServer implements Party.Server {
       }
     }
 
+    const history = await this.chat.list();
     this.sendTo(conn, {
       type: "welcome",
       selfId: conn.id,
       players: Array.from(this.players.values()),
-      chat: this.chatHistory,
+      chat: history,
       blackjack: this.snapshotState(),
       gold: initialGold,
     });
     this.broadcast({ type: "player-joined", player }, [conn.id]);
   }
 
-  private async fetchGoldFromSupabase(authId: string): Promise<number | null> {
-    const env = (this.room as unknown as { env?: Record<string, string> }).env;
-    const url = env?.SUPABASE_URL ?? readProcessEnv("SUPABASE_URL");
-    const key =
-      env?.SUPABASE_SERVICE_ROLE_KEY ??
-      readProcessEnv("SUPABASE_SERVICE_ROLE_KEY");
-    if (!url || !key) return null;
-    try {
-      const resp = await fetch(
-        `${url}/rest/v1/profiles?id=eq.${authId}&select=gold`,
-        {
-          headers: {
-            apikey: key,
-            Authorization: `Bearer ${key}`,
-            Accept: "application/json",
-          },
-        },
-      );
-      if (!resp.ok) return null;
-      const rows = (await resp.json()) as Array<{ gold: number }>;
-      if (rows.length === 0) return null;
-      const g = rows[0].gold;
-      return typeof g === "number" && Number.isFinite(g) ? g : null;
-    } catch {
-      return null;
-    }
-  }
-
-  onMessage(raw: string, sender: Party.Connection) {
+  async onMessage(raw: string, sender: Party.Connection) {
     let data: ClientMessage;
     try {
       data = JSON.parse(raw) as ClientMessage;
@@ -198,10 +181,9 @@ export default class BlackjackServer implements Party.Server {
           playerName: player.name,
           text,
           timestamp: Date.now(),
+          isAdmin: this.connIdToIsAdmin.get(sender.id) || undefined,
         };
-        this.chatHistory.push(message);
-        if (this.chatHistory.length > PLAZA_CONFIG.chatHistorySize)
-          this.chatHistory.shift();
+        await this.chat.add(message);
         this.broadcast({ type: "chat", message });
         break;
       }
@@ -236,6 +218,7 @@ export default class BlackjackServer implements Party.Server {
   }
 
   onClose(conn: Party.Connection) {
+    this.connIdToIsAdmin.delete(conn.id);
     if (!this.players.delete(conn.id)) return;
     this.connIdToGold.delete(conn.id);
 
