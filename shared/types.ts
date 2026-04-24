@@ -180,3 +180,57 @@ export const BLACKJACK_CONFIG = {
   turnDurationMs: 15_000,
   roundIntervalMs: 3_000,
 } as const;
+
+// ────────────────────────────── Mines ──────────────────────────────
+
+export const MINES_CONFIG = {
+  minSize: 3,
+  maxSize: 10,
+  minBet: 10,
+  maxBet: 10_000_000,
+  rtp: 0.97,
+  // Mines count is randomized per game between these fractions of the grid
+  minMinesFraction: 0.2,
+  maxMinesFraction: 0.45,
+} as const;
+
+export type MinesStatus =
+  | "idle"
+  | "playing"
+  | "busted"
+  | "cashed";
+
+export type MinesTile = "hidden" | "safe" | "mine";
+
+export type MinesGameState = {
+  gridRows: number;
+  gridCols: number;
+  minesCount: number;
+  bet: number;
+  revealedCount: number;
+  multiplier: number;
+  potentialPayout: number;
+  nextMultiplier: number;
+  status: MinesStatus;
+  tiles: MinesTile[]; // row-major
+  // Only present when game ended (busted or cashed):
+  minesMap?: number[]; // indices where mines were
+};
+
+export type MinesClientMessage =
+  | { type: "mines-start"; rows: number; cols: number; bet: number }
+  | { type: "mines-reveal"; index: number }
+  | { type: "mines-cash-out" };
+
+export type MinesServerMessage =
+  | {
+      type: "mines-welcome";
+      selfId: string;
+      gold: number;
+      game: MinesGameState | null;
+      chat: ChatMessage[];
+    }
+  | { type: "mines-state"; game: MinesGameState }
+  | { type: "gold-update"; gold: number }
+  | { type: "mines-error"; message: string }
+  | { type: "chat"; message: ChatMessage };

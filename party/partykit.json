@@ -4,6 +4,7 @@
   "main": "src/server.ts",
   "parties": {
     "blackjack": "src/blackjack.ts",
+    "mines": "src/mines.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",
     "dm": "src/dm.ts"

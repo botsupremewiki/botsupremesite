@@ -143,8 +143,9 @@ export const CASINO_SCENE: SceneConfig = {
       height: 100,
       feltColor: 0x1e293b,
       accentColor: 0x10b981,
-      label: "Mines · Bientôt",
+      label: "Mines",
       seats: 1,
+      href: "/play/casino/mines",
     },
   ],
 };
