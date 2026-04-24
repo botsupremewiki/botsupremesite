@@ -29,6 +29,8 @@ import { ChatPanel } from "@/app/play/chat-panel";
 import { buildChannels } from "@/app/play/area-client";
 import { useAuxChat } from "@/app/play/use-aux-chat";
 import { FitBox } from "@/app/play/fit-box";
+import { useDmHub } from "@/app/play/use-dm-hub";
+import { DmView } from "@/app/play/dm-view";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -61,6 +63,12 @@ export function BlackjackClient({
     partyName: "zone",
     room: "casino",
     query: { name: profile?.username },
+  });
+
+  const dmHub = useDmHub({
+    authId: profile?.id ?? null,
+    username: profile?.username ?? null,
+    enabled: !!profile,
   });
 
   useEffect(() => {
@@ -384,10 +392,17 @@ export function BlackjackClient({
             zoneOnSend: zoneChat.send,
             zoneEnabled: zoneChat.status === "connected",
             zoneLabel: "Casino",
-            dmsReason: "Bientôt — messages privés",
+            dmsReason: profile
+              ? undefined
+              : "Connecte-toi avec Discord pour les DMs",
           })}
           connected={status === "connected" || globalChat.status === "connected"}
           hint="Entrée ouvre le chat · clique un siège pour t'asseoir"
+          renderDm={
+            profile
+              ? () => <DmView hub={dmHub} selfAuthId={profile.id} />
+              : undefined
+          }
         />
       </div>
     </div>

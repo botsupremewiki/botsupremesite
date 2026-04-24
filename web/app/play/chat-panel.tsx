@@ -29,10 +29,12 @@ export function ChatPanel({
   channels,
   hint,
   connected,
+  renderDm,
 }: {
   channels: ChatChannel[];
   hint?: string;
   connected: boolean;
+  renderDm?: () => React.ReactNode;
 }) {
   const byId = new Map(channels.map((c) => [c.id, c]));
   const [active, setActive] = useState<ChatTabId>(() => {
@@ -214,64 +216,70 @@ export function ChatPanel({
               </button>
             </div>
 
-            <div
-              ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm"
-            >
-              {activeChannel?.disabledReason ? (
-                <div className="italic text-zinc-600">
-                  {activeChannel.disabledReason}
+            {active === "dms" && renderDm ? (
+              renderDm()
+            ) : (
+              <>
+                <div
+                  ref={scrollRef}
+                  className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm"
+                >
+                  {activeChannel?.disabledReason ? (
+                    <div className="italic text-zinc-600">
+                      {activeChannel.disabledReason}
+                    </div>
+                  ) : activeChannel && activeChannel.messages.length === 0 ? (
+                    <div className="italic text-zinc-600">
+                      Aucun message pour l&apos;instant.
+                    </div>
+                  ) : (
+                    <AnimatePresence initial={false}>
+                      {activeChannel?.messages.map((m) => (
+                        <motion.div
+                          key={m.id}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="py-0.5 leading-snug"
+                        >
+                          <span className="font-semibold text-indigo-300">
+                            {m.playerName}
+                          </span>
+                          <span className="text-zinc-500"> : </span>
+                          <span className="text-zinc-100">{m.text}</span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  )}
                 </div>
-              ) : activeChannel && activeChannel.messages.length === 0 ? (
-                <div className="italic text-zinc-600">
-                  Aucun message pour l&apos;instant.
-                </div>
-              ) : (
-                <AnimatePresence initial={false}>
-                  {activeChannel?.messages.map((m) => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="py-0.5 leading-snug"
-                    >
-                      <span className="font-semibold text-indigo-300">
-                        {m.playerName}
-                      </span>
-                      <span className="text-zinc-500"> : </span>
-                      <span className="text-zinc-100">{m.text}</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              )}
-            </div>
 
-            <form
-              onSubmit={submit}
-              className="flex border-t border-white/5 bg-black/40"
-            >
-              <input
-                ref={inputRefCallback}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={
-                  activeChannel?.disabledReason
-                    ? "Canal indisponible"
-                    : `Écrire dans ${activeChannel?.label ?? ""}...`
-                }
-                maxLength={200}
-                disabled={!canSend}
-                className="flex-1 bg-transparent px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || !canSend}
-                className="px-4 py-2.5 text-sm font-medium text-indigo-300 transition-colors hover:text-indigo-200 disabled:text-zinc-600"
-              >
-                Envoyer
-              </button>
-            </form>
+                <form
+                  onSubmit={submit}
+                  className="flex border-t border-white/5 bg-black/40"
+                >
+                  <input
+                    ref={inputRefCallback}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={
+                      activeChannel?.disabledReason
+                        ? "Canal indisponible"
+                        : `Écrire dans ${activeChannel?.label ?? ""}...`
+                    }
+                    maxLength={200}
+                    disabled={!canSend}
+                    className="flex-1 bg-transparent px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none disabled:opacity-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || !canSend}
+                    className="px-4 py-2.5 text-sm font-medium text-indigo-300 transition-colors hover:text-indigo-200 disabled:text-zinc-600"
+                  >
+                    Envoyer
+                  </button>
+                </form>
+              </>
+            )}
 
             {hint && (
               <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] text-zinc-600">

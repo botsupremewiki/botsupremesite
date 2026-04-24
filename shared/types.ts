@@ -119,6 +119,50 @@ export type ServerMessage =
   | { type: "gold-update"; gold: number }
   | { type: "error"; message: string };
 
+// Direct messages (one-to-one chat)
+export type DmMessage = {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  senderName?: string;
+  recipientName?: string;
+  content: string;
+  createdAt: number;
+};
+
+export type DmConversation = {
+  partnerId: string;
+  partnerName: string;
+  partnerAvatarUrl?: string;
+  lastMessage: DmMessage;
+  unreadCount: number;
+};
+
+export type DmClientMessage =
+  | { type: "send"; recipientId: string; text: string }
+  | { type: "load-thread"; partnerId: string }
+  | { type: "mark-read"; partnerId: string }
+  | { type: "lookup-user"; query: string };
+
+export type DmServerMessage =
+  | {
+      type: "dm-welcome";
+      conversations: DmConversation[];
+    }
+  | { type: "dm-incoming"; message: DmMessage }
+  | { type: "dm-sent"; message: DmMessage }
+  | {
+      type: "dm-thread";
+      partnerId: string;
+      messages: DmMessage[];
+    }
+  | {
+      type: "dm-user-lookup";
+      query: string;
+      results: { id: string; username: string; avatarUrl?: string }[];
+    }
+  | { type: "dm-error"; message: string };
+
 export const PLAZA_CONFIG = {
   width: 1024,
   height: 640,

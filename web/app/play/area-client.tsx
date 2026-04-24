@@ -24,6 +24,8 @@ import { ChatPanel } from "./chat-panel";
 import type { ChatChannel } from "./chat-panel";
 import { useAuxChat } from "./use-aux-chat";
 import { FitBox } from "./fit-box";
+import { useDmHub } from "./use-dm-hub";
+import { DmView } from "./dm-view";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -74,6 +76,12 @@ export function AreaClient({
     room: zoneId ?? "disabled",
     query: { name: profile?.username },
     enabled: !!zoneId,
+  });
+
+  const dmHub = useDmHub({
+    authId: profile?.id ?? null,
+    username: profile?.username ?? null,
+    enabled: !!profile,
   });
 
   useEffect(() => {
@@ -355,10 +363,17 @@ export function AreaClient({
             zoneReason: zoneId
               ? undefined
               : "Aucune zone sur la plaza",
-            dmsReason: "Bientôt — messages privés",
+            dmsReason: profile
+              ? undefined
+              : "Connecte-toi avec Discord pour les DMs",
           })}
           connected={status === "connected" || globalChat.status === "connected"}
           hint="Entrée ouvre le chat · clique pour te déplacer"
+          renderDm={
+            profile
+              ? () => <DmView hub={dmHub} selfAuthId={profile.id} />
+              : undefined
+          }
         />
       </div>
     </div>
@@ -390,7 +405,7 @@ export function buildChannels({
   zoneEnabled: boolean;
   zoneLabel?: string;
   zoneReason?: string;
-  dmsReason: string;
+  dmsReason?: string;
 }): ChatChannel[] {
   return [
     {
