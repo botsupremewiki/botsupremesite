@@ -31,6 +31,7 @@ import { useAuxChat } from "@/app/play/use-aux-chat";
 import { FitBox } from "@/app/play/fit-box";
 import { useDmHub } from "@/app/play/use-dm-hub";
 import { DmView } from "@/app/play/dm-view";
+import { Countdown, CountdownBar } from "@/app/play/countdown";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -334,13 +335,44 @@ export function BlackjackClient({
               )}
 
               {blackjack && (
-                <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
-                  {phaseLabel(blackjack.phase)}
-                  {blackjack.lastOutcome && blackjack.phase === "resolving" && (
-                    <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
-                      {blackjack.lastOutcome}
-                    </span>
-                  )}
+                <div className="pointer-events-none absolute left-1/2 top-4 flex -translate-x-1/2 flex-col items-center gap-1">
+                  <div className="rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
+                    {phaseLabel(blackjack.phase)}
+                    {blackjack.phaseEndsAt &&
+                      (blackjack.phase === "betting" ||
+                        blackjack.phase === "playing") && (
+                        <Countdown
+                          endsAt={blackjack.phaseEndsAt}
+                          className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] tabular-nums text-amber-200"
+                        />
+                      )}
+                    {blackjack.lastOutcome &&
+                      blackjack.phase === "resolving" && (
+                        <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
+                          {blackjack.lastOutcome}
+                        </span>
+                      )}
+                  </div>
+                  {blackjack.phaseEndsAt &&
+                    blackjack.phase === "betting" && (
+                      <div className="w-56">
+                        <CountdownBar
+                          endsAt={blackjack.phaseEndsAt}
+                          totalMs={20_000}
+                          colorClass="bg-amber-400"
+                        />
+                      </div>
+                    )}
+                  {blackjack.phaseEndsAt &&
+                    blackjack.phase === "playing" && (
+                      <div className="w-56">
+                        <CountdownBar
+                          endsAt={blackjack.phaseEndsAt}
+                          totalMs={15_000}
+                          colorClass="bg-indigo-400"
+                        />
+                      </div>
+                    )}
                 </div>
               )}
 

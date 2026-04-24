@@ -27,6 +27,8 @@ import { buildChannels } from "@/app/play/area-client";
 import { useAuxChat } from "@/app/play/use-aux-chat";
 import { useDmHub } from "@/app/play/use-dm-hub";
 import { DmView } from "@/app/play/dm-view";
+import { Countdown, CountdownBar } from "@/app/play/countdown";
+import { RouletteWheel } from "./roulette-wheel";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -322,84 +324,72 @@ function WheelPanel({ state }: { state: RouletteState }) {
           ? "La roulette tourne..."
           : "Résultat";
 
+  const totalMs =
+    state.phase === "betting"
+      ? 20_000
+      : state.phase === "spinning"
+        ? 4_000
+        : state.phase === "resolving"
+          ? 4_000
+          : 0;
+  const progressColor =
+    state.phase === "betting"
+      ? "bg-amber-400"
+      : state.phase === "spinning"
+        ? "bg-sky-400"
+        : "bg-emerald-400";
+
   return (
-    <div className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/40 px-4 py-3 backdrop-blur-sm">
-      <div className="flex flex-col">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-          {phaseLabel}
-        </div>
-        {state.lastOutcome && state.phase === "resolving" && (
-          <div className="mt-0.5 truncate text-xs text-amber-300">
-            {state.lastOutcome}
-          </div>
-        )}
-      </div>
-
-      <SpinResult state={state} />
-
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-          Historique
-        </span>
-        <div className="flex gap-1">
-          {state.recentNumbers.length === 0 && (
-            <span className="text-xs italic text-zinc-600">—</span>
-          )}
-          {state.recentNumbers.map((n, i) => (
-            <HistoryChip key={`${n}-${i}`} n={n} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SpinResult({ state }: { state: RouletteState }) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <AnimatePresence mode="wait">
-        {state.phase === "spinning" ? (
-          <motion.div
-            key="spin"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="flex items-center gap-2"
-          >
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-400 border-r-transparent" />
-            <span className="text-xs font-semibold tracking-widest text-amber-300">
-              EN COURS
+    <div className="flex w-full max-w-5xl items-stretch justify-between gap-4 rounded-xl border border-white/10 bg-black/40 p-4 backdrop-blur-sm">
+      <div className="flex flex-1 flex-col justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+              {phaseLabel}
             </span>
-          </motion.div>
-        ) : state.winningNumber != null ? (
-          <motion.div
-            key={`num-${state.winningNumber}`}
-            initial={{ opacity: 0, scale: 0.5, rotate: -15 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ type: "spring", stiffness: 260, damping: 18 }}
-            className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold text-white shadow-lg ${
-              NUM_COLOR(state.winningNumber) === "red"
-                ? "bg-rose-600 shadow-rose-500/50"
-                : NUM_COLOR(state.winningNumber) === "black"
-                  ? "bg-zinc-900 shadow-black/50"
-                  : "bg-emerald-600 shadow-emerald-500/50"
-            }`}
-          >
-            {state.winningNumber}
-          </motion.div>
-        ) : (
-          <motion.div
-            key="idle-result"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 text-xs text-zinc-500"
-          >
-            ?
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {state.phaseEndsAt && totalMs > 0 && (
+              <Countdown
+                endsAt={state.phaseEndsAt}
+                className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold tabular-nums text-zinc-100"
+              />
+            )}
+          </div>
+          {state.phaseEndsAt && totalMs > 0 && (
+            <div className="mt-1 max-w-[320px]">
+              <CountdownBar
+                endsAt={state.phaseEndsAt}
+                totalMs={totalMs}
+                colorClass={progressColor}
+              />
+            </div>
+          )}
+          {state.lastOutcome && state.phase === "resolving" && (
+            <div className="mt-1 truncate text-xs text-amber-300">
+              {state.lastOutcome}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            Historique
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {state.recentNumbers.length === 0 && (
+              <span className="text-xs italic text-zinc-600">—</span>
+            )}
+            {state.recentNumbers.map((n, i) => (
+              <HistoryChip key={`${n}-${i}`} n={n} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <RouletteWheel
+        phase={state.phase}
+        winningNumber={state.winningNumber}
+        size={220}
+      />
     </div>
   );
 }
