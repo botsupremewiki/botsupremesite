@@ -79,6 +79,10 @@ export async function patchProfileGold(
       console.warn(
         `[supabase] patchProfileGold failed ${resp.status} for ${authId}: ${body}`,
       );
+    } else {
+      console.log(
+        `[supabase] patchProfileGold OK gold=${gold} for ${authId.slice(0, 8)}`,
+      );
     }
   } catch (err) {
     console.warn("[supabase] patchProfileGold threw:", err);
