@@ -57,6 +57,12 @@ export function BlackjackClient({
     query: { name: profile?.username },
   });
 
+  const zoneChat = useAuxChat({
+    partyName: "zone",
+    room: "casino",
+    query: { name: profile?.username },
+  });
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -374,7 +380,10 @@ export function BlackjackClient({
             globalMessages: globalChat.messages,
             globalOnSend: globalChat.send,
             globalEnabled: globalChat.status === "connected",
-            zoneReason: "Bientôt — canal du casino",
+            zoneMessages: zoneChat.messages,
+            zoneOnSend: zoneChat.send,
+            zoneEnabled: zoneChat.status === "connected",
+            zoneLabel: "Casino",
             dmsReason: "Bientôt — messages privés",
           })}
           connected={status === "connected" || globalChat.status === "connected"}

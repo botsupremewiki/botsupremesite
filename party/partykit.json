@@ -4,7 +4,8 @@
   "main": "src/server.ts",
   "parties": {
     "blackjack": "src/blackjack.ts",
-    "global": "src/global.ts"
+    "global": "src/global.ts",
+    "zone": "src/zone.ts"
   },
   "compatibilityDate": "2024-09-01"
 }

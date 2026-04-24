@@ -33,6 +33,8 @@ export type AreaClientProps = {
   roomName: string;
   areaLabel: string;
   backHref?: string;
+  zoneId?: string;
+  zoneLabel?: string;
 };
 
 export function AreaClient({
@@ -41,6 +43,8 @@ export function AreaClient({
   roomName,
   areaLabel,
   backHref = "/",
+  zoneId,
+  zoneLabel,
 }: AreaClientProps) {
   const router = useRouter();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -63,6 +67,13 @@ export function AreaClient({
     query: {
       name: profile?.username,
     },
+  });
+
+  const zoneChat = useAuxChat({
+    partyName: "zone",
+    room: zoneId ?? "disabled",
+    query: { name: profile?.username },
+    enabled: !!zoneId,
   });
 
   useEffect(() => {
@@ -337,7 +348,13 @@ export function AreaClient({
             globalMessages: globalChat.messages,
             globalOnSend: globalChat.send,
             globalEnabled: globalChat.status === "connected",
-            zoneReason: "Bientôt — canal de la zone en cours",
+            zoneMessages: zoneId ? zoneChat.messages : undefined,
+            zoneOnSend: zoneId ? zoneChat.send : undefined,
+            zoneEnabled: zoneId ? zoneChat.status === "connected" : false,
+            zoneLabel,
+            zoneReason: zoneId
+              ? undefined
+              : "Aucune zone sur la plaza",
             dmsReason: "Bientôt — messages privés",
           })}
           connected={status === "connected" || globalChat.status === "connected"}
@@ -355,6 +372,10 @@ export function buildChannels({
   globalMessages,
   globalOnSend,
   globalEnabled,
+  zoneMessages,
+  zoneOnSend,
+  zoneEnabled,
+  zoneLabel,
   zoneReason,
   dmsReason,
 }: {
@@ -364,7 +385,11 @@ export function buildChannels({
   globalMessages: ChatMessage[];
   globalOnSend: (text: string) => void;
   globalEnabled: boolean;
-  zoneReason: string;
+  zoneMessages?: ChatMessage[];
+  zoneOnSend?: (text: string) => void;
+  zoneEnabled: boolean;
+  zoneLabel?: string;
+  zoneReason?: string;
   dmsReason: string;
 }): ChatChannel[] {
   return [
@@ -376,9 +401,10 @@ export function buildChannels({
     },
     {
       id: "zone",
-      label: "Zone",
-      messages: [],
-      disabledReason: zoneReason,
+      label: zoneLabel ?? "Zone",
+      messages: zoneMessages ?? [],
+      onSend: zoneEnabled && zoneOnSend ? zoneOnSend : undefined,
+      disabledReason: zoneMessages ? undefined : zoneReason,
     },
     {
       id: "global",

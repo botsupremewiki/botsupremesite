@@ -11,6 +11,8 @@ export default async function CasinoPage() {
       roomName="casino"
       areaLabel="Casino"
       backHref="/play"
+      zoneId="casino"
+      zoneLabel="Casino"
     />
   );
 }
