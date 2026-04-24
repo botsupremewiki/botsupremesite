@@ -56,13 +56,13 @@ export function BlackjackClient({
   const globalChat = useAuxChat({
     partyName: "global",
     room: "main",
-    query: { name: profile?.username },
+    query: { name: profile?.username, authId: profile?.id },
   });
 
   const zoneChat = useAuxChat({
     partyName: "zone",
     room: "casino",
-    query: { name: profile?.username },
+    query: { name: profile?.username, authId: profile?.id },
   });
 
   const dmHub = useDmHub({

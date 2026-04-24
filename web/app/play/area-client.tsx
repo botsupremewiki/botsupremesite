@@ -68,13 +68,17 @@ export function AreaClient({
     room: "main",
     query: {
       name: profile?.username,
+      authId: profile?.id,
     },
   });
 
   const zoneChat = useAuxChat({
     partyName: "zone",
     room: zoneId ?? "disabled",
-    query: { name: profile?.username },
+    query: {
+      name: profile?.username,
+      authId: profile?.id,
+    },
     enabled: !!zoneId,
   });
 
