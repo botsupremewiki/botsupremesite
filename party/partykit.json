@@ -6,6 +6,7 @@
     "blackjack": "src/blackjack.ts",
     "mines": "src/mines.ts",
     "roulette": "src/roulette.ts",
+    "slots": "src/slots.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",
     "dm": "src/dm.ts"

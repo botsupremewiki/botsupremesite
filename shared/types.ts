@@ -331,3 +331,55 @@ export type MinesServerMessage =
   | { type: "gold-update"; gold: number }
   | { type: "mines-error"; message: string }
   | { type: "chat"; message: ChatMessage };
+
+// ────────────────────────────── Slots ──────────────────────────────
+
+export const SLOTS_CONFIG = {
+  reelCount: 3,
+  minBet: 10,
+  maxBet: 10_000_000,
+  spinDurationMs: 1800, // total time until last reel locks
+  reelStaggerMs: 350, // delay between each reel locking
+  historySize: 8,
+} as const;
+
+export type SlotsSymbol =
+  | "cherry"
+  | "lemon"
+  | "orange"
+  | "grape"
+  | "bell"
+  | "clover"
+  | "seven"
+  | "diamond";
+
+export type SlotsWinKind =
+  | "none"
+  | "three" // three-of-a-kind on the payline
+  | "two-cherry" // exactly two cherries from the left
+  | "one-cherry"; // a single cherry on the leftmost reel
+
+export type SlotsSpin = {
+  id: string;
+  reels: SlotsSymbol[]; // length = SLOTS_CONFIG.reelCount
+  bet: number;
+  win: number; // total OS won (0 if lose)
+  multiplier: number; // payout multiplier applied to bet (0 if lose)
+  kind: SlotsWinKind;
+  timestamp: number;
+};
+
+export type SlotsClientMessage = { type: "slots-spin"; bet: number };
+
+export type SlotsServerMessage =
+  | {
+      type: "slots-welcome";
+      selfId: string;
+      gold: number;
+      history: SlotsSpin[];
+      chat: ChatMessage[];
+    }
+  | { type: "slots-result"; spin: SlotsSpin }
+  | { type: "gold-update"; gold: number }
+  | { type: "slots-error"; message: string }
+  | { type: "chat"; message: ChatMessage };

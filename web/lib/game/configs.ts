@@ -120,8 +120,9 @@ export const CASINO_SCENE: SceneConfig = {
       height: 90,
       feltColor: 0x4c1d95,
       accentColor: 0xa78bfa,
-      label: "Slots · Bientôt",
+      label: "Slots",
       seats: 1,
+      href: "/play/casino/slots",
     },
     {
       kind: "table",
