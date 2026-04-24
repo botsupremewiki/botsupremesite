@@ -1,0 +1,45 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# next.js
+web/.next/
+web/out/
+web/build/
+web/next-env.d.ts
+
+# partykit
+party/.partykit/
+.partykit/
+
+# testing
+coverage/
+
+# production
+dist/
+
+# misc
+.DS_Store
+*.pem
+.vscode/
+.idea/
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env.local
+.env*.local
+!.env.example
+!.env.*.example
+
+# typescript
+*.tsbuildinfo
+
+# Claude Code (local tooling config)
+.claude/

@@ -1,0 +1,23 @@
+{
+  "name": "site-ultime",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "web",
+    "party",
+    "shared",
+    "bot"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,party -c cyan,magenta \"npm:dev:web\" \"npm:dev:party\"",
+    "dev:web": "npm run dev --workspace=web",
+    "dev:party": "npm run dev --workspace=party",
+    "build": "npm run build --workspace=web && npm run build --workspace=party",
+    "lint": "npm run lint --workspace=web",
+    "bot:post": "npm run post --workspace=bot",
+    "bot:update": "npm run update --workspace=bot"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
