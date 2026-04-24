@@ -18,8 +18,13 @@ type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
+  // True when `gold` came from the DB. Guards against persisting a
+  // fallback value back to the DB and clobbering a real one.
+  loadedFromDb: boolean;
   isAdmin: boolean;
 };
+
+const GUEST_SANDBOX_GOLD = 1000;
 
 type GameState = {
   rows: number;
@@ -53,18 +58,27 @@ export default class MinesServer implements Party.Server {
     const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
     const queryGold = Number.isFinite(parsedGold)
       ? Math.max(0, Math.min(10_000_000, parsedGold))
-      : 1000;
+      : null;
 
-    let gold = queryGold;
+    let gold: number;
+    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
-      if (profile) {
-        if (Number.isFinite(profile.gold)) gold = profile.gold;
+      if (profile && Number.isFinite(profile.gold)) {
+        gold = profile.gold;
         isAdmin = !!profile.is_admin;
+        loadedFromDb = true;
+      } else if (queryGold !== null) {
+        gold = queryGold;
+      } else {
+        gold = 0;
       }
+    } else {
+      gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
-    this.connInfo.set(conn.id, { authId, name, gold, isAdmin });
+
+    this.connInfo.set(conn.id, { authId, name, gold, loadedFromDb, isAdmin });
 
     const chat = await this.chat.list();
     this.sendTo(conn, {
@@ -182,6 +196,13 @@ export default class MinesServer implements Party.Server {
       this.sendTo(conn, {
         type: "mines-error",
         message: "Or Suprême insuffisant.",
+      });
+      return;
+    }
+    if (info.authId && !info.loadedFromDb) {
+      this.sendTo(conn, {
+        type: "mines-error",
+        message: "Profil indisponible — recharge la page.",
       });
       return;
     }
@@ -334,7 +355,7 @@ export default class MinesServer implements Party.Server {
   }
 
   private async persistGold(info: ConnInfo) {
-    if (!info.authId) return;
+    if (!info.authId || !info.loadedFromDb) return;
     await patchProfileGold(this.room, info.authId, info.gold);
   }
 

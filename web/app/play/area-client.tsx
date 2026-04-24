@@ -62,6 +62,11 @@ export function AreaClient({
   );
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  // Live gold pushed by the plaza/zone server. Falls back to the SSR value
+  // until the welcome message arrives — that way we always end up showing
+  // the freshest DB-backed balance, even when a client cache hands us a
+  // stale page on back-navigation.
+  const [liveGold, setLiveGold] = useState<number | null>(null);
 
   const globalChat = useAuxChat({
     partyName: "global",
@@ -191,8 +196,12 @@ export function AreaClient({
           setChat(msg.chat);
           const self = msg.players.find((p) => p.id === msg.selfId);
           if (self) setSelfName(self.name);
+          if (typeof msg.gold === "number") setLiveGold(msg.gold);
           break;
         }
+        case "gold-update":
+          setLiveGold(msg.gold);
+          break;
         case "player-joined":
           scene.addPlayer(msg.player);
           setPlayers((prev) => [...prev, msg.player]);
@@ -283,7 +292,12 @@ export function AreaClient({
             {players.length} joueur{players.length > 1 ? "s" : ""}
           </span>
           {profile ? (
-            <UserPill profile={profile} variant="play" />
+            <UserPill
+              profile={
+                liveGold !== null ? { ...profile, gold: liveGold } : profile
+              }
+              variant="play"
+            />
           ) : (
             selfName &&
             (editingName ? (

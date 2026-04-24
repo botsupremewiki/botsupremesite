@@ -49,6 +49,9 @@ export default class BlackjackServer implements Party.Server {
   private authIdToSeatIndex = new Map<string, number>();
   private connIdToSeatIndex = new Map<string, number>();
   private connIdToGold = new Map<string, number>();
+  // True only if we successfully read this conn's gold from the DB; we
+  // refuse to write gold back when this is false.
+  private connIdToLoadedFromDb = new Map<string, boolean>();
   private connIdToIsAdmin = new Map<string, boolean>();
 
   constructor(readonly room: Party.Room) {
@@ -75,19 +78,30 @@ export default class BlackjackServer implements Party.Server {
     const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
     const queryGold = Number.isFinite(parsedGold)
       ? Math.max(0, Math.min(10_000_000, parsedGold))
-      : 1000;
+      : null;
 
-    // Authenticated? Prefer Supabase as source of truth for gold + is_admin.
-    let initialGold = queryGold;
+    // For authenticated users the DB is the only source of truth. The URL
+    // value is just a transient display fallback if we briefly can't reach
+    // Supabase — we never persist that fallback.
+    let initialGold: number;
+    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
-      if (profile) {
-        if (Number.isFinite(profile.gold)) initialGold = profile.gold;
+      if (profile && Number.isFinite(profile.gold)) {
+        initialGold = profile.gold;
         isAdmin = !!profile.is_admin;
+        loadedFromDb = true;
+      } else if (queryGold !== null) {
+        initialGold = queryGold;
+      } else {
+        initialGold = 0;
       }
+    } else {
+      initialGold = queryGold ?? 1000; // guest sandbox, never persisted
     }
     this.connIdToGold.set(conn.id, initialGold);
+    this.connIdToLoadedFromDb.set(conn.id, loadedFromDb);
     this.connIdToIsAdmin.set(conn.id, isAdmin);
 
     const player: Player = {
@@ -221,6 +235,7 @@ export default class BlackjackServer implements Party.Server {
     this.connIdToIsAdmin.delete(conn.id);
     if (!this.players.delete(conn.id)) return;
     this.connIdToGold.delete(conn.id);
+    this.connIdToLoadedFromDb.delete(conn.id);
 
     const seatIndex = this.connIdToSeatIndex.get(conn.id);
     if (seatIndex !== undefined) {
@@ -287,7 +302,14 @@ export default class BlackjackServer implements Party.Server {
 
     // Authoritative balance comes from the onConnect cache (which itself is
     // populated from Supabase for authenticated users).
-    const existingGold = this.connIdToGold.get(conn.id) ?? 1000;
+    const existingGold = this.connIdToGold.get(conn.id) ?? 0;
+    if (player.authId && !this.connIdToLoadedFromDb.get(conn.id)) {
+      this.sendTo(conn, {
+        type: "error",
+        message: "Profil indisponible — recharge la page.",
+      });
+      return;
+    }
 
     seat.playerId = conn.id;
     seat.playerName = player.name;
@@ -581,7 +603,13 @@ export default class BlackjackServer implements Party.Server {
 
       this.sendGoldTo(seat.playerId!, seat.gold);
 
-      if (player?.authId) {
+      // Only persist if we trust this seat's gold lineage — i.e. we
+      // originally loaded the player's balance from the DB at connect time.
+      if (
+        player?.authId &&
+        seat.playerId &&
+        this.connIdToLoadedFromDb.get(seat.playerId)
+      ) {
         supabaseWrites.push(
           this.persistGoldToSupabase(player.authId, seat.gold),
         );

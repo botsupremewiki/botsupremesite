@@ -1,6 +1,8 @@
 import { getProfile } from "@/lib/auth";
 import { RouletteClient } from "./roulette-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function RouletteTablePage({
   params,
 }: {

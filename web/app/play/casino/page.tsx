@@ -2,6 +2,8 @@ import { getProfile } from "@/lib/auth";
 import { AreaClient } from "../area-client";
 import { CASINO_SCENE } from "@/lib/game/configs";
 
+export const dynamic = "force-dynamic";
+
 export default async function CasinoPage() {
   const profile = await getProfile();
   return (

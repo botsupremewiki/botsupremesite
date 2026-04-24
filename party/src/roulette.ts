@@ -36,8 +36,11 @@ type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
+  loadedFromDb: boolean;
   isAdmin: boolean;
 };
+
+const GUEST_SANDBOX_GOLD = 1000;
 
 type TimerId = ReturnType<typeof setTimeout>;
 
@@ -123,21 +126,31 @@ export default class RouletteServer implements Party.Server {
     const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
     const queryGold = Number.isFinite(parsedGold)
       ? Math.max(0, Math.min(10_000_000, parsedGold))
-      : 1000;
+      : null;
 
-    let gold = queryGold;
+    let gold: number;
+    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
-      if (profile) {
-        if (Number.isFinite(profile.gold)) gold = profile.gold;
+      if (profile && Number.isFinite(profile.gold)) {
+        gold = profile.gold;
         isAdmin = !!profile.is_admin;
+        loadedFromDb = true;
+      } else if (queryGold !== null) {
+        gold = queryGold;
+      } else {
+        gold = 0;
       }
+    } else {
+      gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
+
     this.connInfo.set(conn.id, {
       authId,
       name: providedName ?? `Invité-${conn.id.slice(0, 4)}`,
       gold,
+      loadedFromDb,
       isAdmin,
     });
 
@@ -436,6 +449,13 @@ export default class RouletteServer implements Party.Server {
       });
       return;
     }
+    if (info.authId && !info.loadedFromDb) {
+      this.sendTo(conn, {
+        type: "roulette-error",
+        message: "Profil indisponible — recharge la page.",
+      });
+      return;
+    }
 
     info.gold -= amount;
     seat.gold = info.gold;
@@ -558,7 +578,7 @@ export default class RouletteServer implements Party.Server {
   // ────────────────────────────── Supabase ────────────────────────────
 
   private async persistGold(info: ConnInfo) {
-    if (!info.authId) return;
+    if (!info.authId || !info.loadedFromDb) return;
     await patchProfileGold(this.room, info.authId, info.gold);
   }
 

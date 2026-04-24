@@ -66,7 +66,9 @@ export function SlotsClient({ profile }: { profile: Profile | null }) {
 
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [chat, setChat] = useState<ChatMessage[]>([]);
-  const [gold, setGold] = useState<number>(profile?.gold ?? 1000);
+  // Initial value is whatever the SSR profile says; the partykit "welcome"
+  // overrides this with the authoritative DB-backed gold within ~100ms.
+  const [gold, setGold] = useState<number>(profile?.gold ?? 0);
   const [betDraft, setBetDraft] = useState<string>("10");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [history, setHistory] = useState<SlotsSpin[]>([]);

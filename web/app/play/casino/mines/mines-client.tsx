@@ -32,7 +32,7 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
 
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [chat, setChat] = useState<ChatMessage[]>([]);
-  const [gold, setGold] = useState<number>(profile?.gold ?? 1000);
+  const [gold, setGold] = useState<number>(profile?.gold ?? 0);
   const [game, setGame] = useState<MinesGameState | null>(null);
   const [gridSize, setGridSize] = useState<number>(5);
   const [minesCount, setMinesCount] = useState<number>(3);

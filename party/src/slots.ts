@@ -18,10 +18,17 @@ type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
+  // True when `gold` was loaded from the DB (the only source of truth we
+  // trust for persistence). False means we fell back to a transient value
+  // (URL query for auth users, or sandbox value for guests) and must NOT
+  // overwrite the DB with it.
+  loadedFromDb: boolean;
   isAdmin: boolean;
   history: SlotsSpin[];
   spinningUntil: number; // ms epoch — 0 if idle
 };
+
+const GUEST_SANDBOX_GOLD = 1000;
 
 export default class SlotsServer implements Party.Server {
   private chat: PersistentChatHistory;
@@ -44,21 +51,34 @@ export default class SlotsServer implements Party.Server {
     const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
     const queryGold = Number.isFinite(parsedGold)
       ? Math.max(0, Math.min(10_000_000, parsedGold))
-      : 1000;
+      : null;
 
-    let gold = queryGold;
+    let gold: number;
+    let loadedFromDb = false;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
-      if (profile) {
-        if (Number.isFinite(profile.gold)) gold = profile.gold;
+      if (profile && Number.isFinite(profile.gold)) {
+        gold = profile.gold;
         isAdmin = !!profile.is_admin;
+        loadedFromDb = true;
+      } else if (queryGold !== null) {
+        // DB unavailable — trust the page's SSR-loaded gold for display
+        // only. We will NOT persist this value (loadedFromDb stays false).
+        gold = queryGold;
+      } else {
+        gold = 0;
       }
+    } else {
+      // Guest: sandbox value, never persisted.
+      gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
+
     this.connInfo.set(conn.id, {
       authId,
       name,
       gold,
+      loadedFromDb,
       isAdmin,
       history: [],
       spinningUntil: 0,
@@ -145,6 +165,15 @@ export default class SlotsServer implements Party.Server {
       });
       return;
     }
+    if (info.authId && !info.loadedFromDb) {
+      // Authenticated player but we never managed to read their DB row —
+      // refuse to take a bet rather than risk a phantom win/loss.
+      this.sendTo(conn, {
+        type: "slots-error",
+        message: "Profil indisponible — recharge la page.",
+      });
+      return;
+    }
 
     // Deduct bet up front
     info.gold -= bet;
@@ -176,7 +205,9 @@ export default class SlotsServer implements Party.Server {
   }
 
   private async persistGold(info: ConnInfo) {
-    if (!info.authId) return;
+    // Only write back if we successfully loaded from DB at connect time —
+    // otherwise we'd risk overwriting a real value with a fallback display.
+    if (!info.authId || !info.loadedFromDb) return;
     await patchProfileGold(this.room, info.authId, info.gold);
   }
 

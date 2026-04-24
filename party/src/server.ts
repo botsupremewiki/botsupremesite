@@ -47,9 +47,11 @@ export default class PlazaServer implements Party.Server {
     const avatarUrl = sanitizeUrl(url.searchParams.get("avatarUrl"));
 
     let isAdmin = false;
+    let gold: number | null = null;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile?.is_admin) isAdmin = true;
+      if (profile && Number.isFinite(profile.gold)) gold = profile.gold;
     }
     this.connIdToIsAdmin.set(conn.id, isAdmin);
 
@@ -71,6 +73,7 @@ export default class PlazaServer implements Party.Server {
       selfId: conn.id,
       players: Array.from(this.players.values()),
       chat,
+      ...(gold !== null ? { gold } : {}),
     });
 
     this.broadcast({ type: "player-joined", player }, [conn.id]);

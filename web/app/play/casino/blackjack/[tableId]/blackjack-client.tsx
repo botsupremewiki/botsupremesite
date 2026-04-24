@@ -52,7 +52,7 @@ export function BlackjackClient({
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [blackjack, setBlackjack] = useState<BlackjackState | null>(null);
-  const [gold, setGold] = useState<number>(profile?.gold ?? 1000);
+  const [gold, setGold] = useState<number>(profile?.gold ?? 0);
 
   const globalChat = useAuxChat({
     partyName: "global",

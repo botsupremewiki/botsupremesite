@@ -51,7 +51,7 @@ export function RouletteClient({
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [players, setPlayers] = useState<Player[]>([]);
   const [chat, setChat] = useState<ChatMessage[]>([]);
-  const [gold, setGold] = useState<number>(profile?.gold ?? 1000);
+  const [gold, setGold] = useState<number>(profile?.gold ?? 0);
   const [state, setState] = useState<RouletteState | null>(null);
   const [betDraft, setBetDraft] = useState<string>("10");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
