@@ -49,8 +49,13 @@ export default class MinesServer implements Party.Server {
         : null;
     const providedName = sanitizeName(url.searchParams.get("name"));
     const name = providedName ?? `Invité-${conn.id.slice(0, 4)}`;
+    const goldParam = url.searchParams.get("gold");
+    const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
+    const queryGold = Number.isFinite(parsedGold)
+      ? Math.max(0, Math.min(10_000_000, parsedGold))
+      : 1000;
 
-    let gold = 1000;
+    let gold = queryGold;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);

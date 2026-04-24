@@ -75,6 +75,7 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
     if (profile) {
       params.set("authId", profile.id);
       params.set("name", profile.username);
+      params.set("gold", String(profile.gold));
     }
     const url = `${scheme}://${partyHost}/parties/mines/lobby${
       params.toString() ? `?${params.toString()}` : ""

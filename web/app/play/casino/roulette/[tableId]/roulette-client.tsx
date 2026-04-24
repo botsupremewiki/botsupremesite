@@ -84,6 +84,7 @@ export function RouletteClient({
     if (profile) {
       params.set("authId", profile.id);
       params.set("name", profile.username);
+      params.set("gold", String(profile.gold));
       if (profile.avatar_url) params.set("avatarUrl", profile.avatar_url);
     }
     const url = `${scheme}://${partyHost}/parties/roulette/${tableId}${
@@ -236,6 +237,7 @@ export function RouletteClient({
           {state && (
             <>
               <WheelPanel state={state} />
+              <HotColdPanel state={state} />
               <BettingGrid
                 state={state}
                 selfSeat={selfSeat}
@@ -402,6 +404,53 @@ function SpinResult({ state }: { state: RouletteState }) {
   );
 }
 
+function HotColdPanel({ state }: { state: RouletteState }) {
+  const entries: { n: number; c: number }[] = [];
+  for (let n = 0; n <= 36; n++) {
+    entries.push({ n, c: state.numberCounts[String(n)] ?? 0 });
+  }
+  // Hot = highest count (tie-break: smaller number first for stability).
+  const hot = [...entries].sort((a, b) => b.c - a.c || a.n - b.n).slice(0, 5);
+  // Cold = lowest count.
+  const cold = [...entries]
+    .sort((a, b) => a.c - b.c || a.n - b.n)
+    .slice(0, 5);
+
+  return (
+    <div className="flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-rose-400">
+          Chauds
+        </span>
+        <div className="flex gap-1">
+          {hot.map((e) => (
+            <HistoryChip key={`h-${e.n}`} n={e.n} />
+          ))}
+        </div>
+        <span className="text-[10px] text-zinc-500">
+          {hot[0]?.c ?? 0}× max
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">
+          Froids
+        </span>
+        <div className="flex gap-1">
+          {cold.map((e) => (
+            <HistoryChip key={`c-${e.n}`} n={e.n} />
+          ))}
+        </div>
+        <span className="text-[10px] text-zinc-500">
+          {cold[0]?.c ?? 0}× min
+        </span>
+      </div>
+      <span className="text-[10px] text-zinc-500">
+        {state.totalSpins.toLocaleString("fr-FR")} spins totaux
+      </span>
+    </div>
+  );
+}
+
 function HistoryChip({ n }: { n: number }) {
   const color = NUM_COLOR(n);
   const bg =
@@ -557,130 +606,121 @@ function BettingGrid({
 
       {/* Dozens row */}
       <div className="mt-1" style={bottomRowStyle}>
-        <div /> {/* filler under the 0 column */}
-        <div style={{ gridColumn: "span 4" }}>
-          <BetCell
-            betKey="dozen1"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["dozen1"] ?? 0}
-            totalAmount={allBets.agg["dozen1"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            1–12
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 4" }}>
-          <BetCell
-            betKey="dozen2"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["dozen2"] ?? 0}
-            totalAmount={allBets.agg["dozen2"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            13–24
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 4" }}>
-          <BetCell
-            betKey="dozen3"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["dozen3"] ?? 0}
-            totalAmount={allBets.agg["dozen3"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            25–36
-          </BetCell>
-        </div>
-        <div /> {/* filler under the 2:1 column */}
+        <div />
+        <BetCell
+          betKey="dozen1"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["dozen1"] ?? 0}
+          totalAmount={allBets.agg["dozen1"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 4" }}
+        >
+          1–12
+        </BetCell>
+        <BetCell
+          betKey="dozen2"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["dozen2"] ?? 0}
+          totalAmount={allBets.agg["dozen2"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 4" }}
+        >
+          13–24
+        </BetCell>
+        <BetCell
+          betKey="dozen3"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["dozen3"] ?? 0}
+          totalAmount={allBets.agg["dozen3"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 4" }}
+        >
+          25–36
+        </BetCell>
+        <div />
       </div>
 
       {/* Outside bets row */}
       <div className="mt-1" style={bottomRowStyle}>
         <div />
-        <div style={{ gridColumn: "span 2" }}>
-          <BetCell
-            betKey="low"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["low"] ?? 0}
-            totalAmount={allBets.agg["low"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            1–18
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 2" }}>
-          <BetCell
-            betKey="even"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["even"] ?? 0}
-            totalAmount={allBets.agg["even"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            Pair
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 2" }}>
-          <BetCell
-            betKey="red"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["red"] ?? 0}
-            totalAmount={allBets.agg["red"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-rose-600/70 text-xs font-semibold text-white hover:bg-rose-500"
-          >
-            Rouge
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 2" }}>
-          <BetCell
-            betKey="black"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["black"] ?? 0}
-            totalAmount={allBets.agg["black"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-zinc-900/85 text-xs font-semibold text-white hover:bg-zinc-800"
-          >
-            Noir
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 2" }}>
-          <BetCell
-            betKey="odd"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["odd"] ?? 0}
-            totalAmount={allBets.agg["odd"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            Impair
-          </BetCell>
-        </div>
-        <div style={{ gridColumn: "span 2" }}>
-          <BetCell
-            betKey="high"
-            disabled={disabled}
-            onBet={onBet}
-            highlight={false}
-            mineAmount={allBets.mine["high"] ?? 0}
-            totalAmount={allBets.agg["high"] ?? 0}
-            className="flex h-10 items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
-          >
-            19–36
-          </BetCell>
-        </div>
+        <BetCell
+          betKey="low"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["low"] ?? 0}
+          totalAmount={allBets.agg["low"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 2" }}
+        >
+          1–18
+        </BetCell>
+        <BetCell
+          betKey="even"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["even"] ?? 0}
+          totalAmount={allBets.agg["even"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 2" }}
+        >
+          Pair
+        </BetCell>
+        <BetCell
+          betKey="red"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["red"] ?? 0}
+          totalAmount={allBets.agg["red"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-rose-600/70 text-xs font-semibold text-white hover:bg-rose-500"
+          style={{ gridColumn: "span 2" }}
+        >
+          Rouge
+        </BetCell>
+        <BetCell
+          betKey="black"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["black"] ?? 0}
+          totalAmount={allBets.agg["black"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-zinc-900/85 text-xs font-semibold text-white hover:bg-zinc-800"
+          style={{ gridColumn: "span 2" }}
+        >
+          Noir
+        </BetCell>
+        <BetCell
+          betKey="odd"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["odd"] ?? 0}
+          totalAmount={allBets.agg["odd"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 2" }}
+        >
+          Impair
+        </BetCell>
+        <BetCell
+          betKey="high"
+          disabled={disabled}
+          onBet={onBet}
+          highlight={false}
+          mineAmount={allBets.mine["high"] ?? 0}
+          totalAmount={allBets.agg["high"] ?? 0}
+          className="flex h-10 w-full items-center justify-center rounded-sm bg-white/5 text-xs font-semibold text-zinc-300 hover:bg-white/10"
+          style={{ gridColumn: "span 2" }}
+        >
+          19–36
+        </BetCell>
         <div />
       </div>
     </div>

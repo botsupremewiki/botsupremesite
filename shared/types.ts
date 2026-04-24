@@ -248,6 +248,8 @@ export type RouletteState = {
   recentNumbers: number[];
   phaseEndsAt: number | null;
   lastOutcome: string | null;
+  numberCounts: Record<string, number>; // "0".."36" → total spins landed on that number
+  totalSpins: number;
 };
 
 export type RouletteClientMessage =

@@ -57,8 +57,46 @@ export default class RouletteServer implements Party.Server {
   private phaseTimer: TimerId | null = null;
   private lastOutcome: string | null = null;
 
+  private numberCounts: Record<string, number> = {};
+  private totalSpins = 0;
+  private statsLoaded = false;
+
   constructor(readonly room: Party.Room) {
     this.chat = new PersistentChatHistory(room, PLAZA_CONFIG.chatHistorySize);
+  }
+
+  private async loadStats() {
+    if (this.statsLoaded) return;
+    try {
+      const counts = await this.room.storage.get<Record<string, number>>(
+        "roulette-number-counts",
+      );
+      const recent = await this.room.storage.get<number[]>(
+        "roulette-recent",
+      );
+      const total = await this.room.storage.get<number>("roulette-total");
+      this.numberCounts = counts ?? {};
+      this.recentNumbers = recent ?? [];
+      this.totalSpins = total ?? 0;
+    } catch {
+      this.numberCounts = {};
+      this.recentNumbers = [];
+      this.totalSpins = 0;
+    }
+    this.statsLoaded = true;
+  }
+
+  private async persistStats() {
+    try {
+      await this.room.storage.put(
+        "roulette-number-counts",
+        this.numberCounts,
+      );
+      await this.room.storage.put("roulette-recent", this.recentNumbers);
+      await this.room.storage.put("roulette-total", this.totalSpins);
+    } catch {
+      // non-fatal
+    }
   }
 
   // ────────────────────────────── connection ──────────────────────────
@@ -81,8 +119,13 @@ export default class RouletteServer implements Party.Server {
         : null;
     const providedName = sanitizeName(url.searchParams.get("name"));
     const avatarUrl = sanitizeUrl(url.searchParams.get("avatarUrl"));
+    const goldParam = url.searchParams.get("gold");
+    const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
+    const queryGold = Number.isFinite(parsedGold)
+      ? Math.max(0, Math.min(10_000_000, parsedGold))
+      : 1000;
 
-    let gold = 1000;
+    let gold = queryGold;
     let isAdmin = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
@@ -97,6 +140,8 @@ export default class RouletteServer implements Party.Server {
       gold,
       isAdmin,
     });
+
+    await this.loadStats();
 
     const player: Player = {
       id: conn.id,
@@ -463,6 +508,11 @@ export default class RouletteServer implements Party.Server {
       winning,
       ...this.recentNumbers.slice(0, ROULETTE_CONFIG.recentNumbersKept - 1),
     ];
+    const key = String(winning);
+    this.numberCounts[key] = (this.numberCounts[key] ?? 0) + 1;
+    this.totalSpins += 1;
+    void this.persistStats();
+
     this.lastOutcome =
       outcomeParts.length > 0
         ? `N°${winning} · ${outcomeParts.join(" · ")}`
@@ -522,6 +572,8 @@ export default class RouletteServer implements Party.Server {
       recentNumbers: [...this.recentNumbers],
       phaseEndsAt: this.phaseEndsAt,
       lastOutcome: this.lastOutcome,
+      numberCounts: { ...this.numberCounts },
+      totalSpins: this.totalSpins,
     };
   }
 
