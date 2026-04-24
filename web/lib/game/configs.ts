@@ -107,8 +107,9 @@ export const CASINO_SCENE: SceneConfig = {
       height: 110,
       feltColor: 0x064e3b,
       accentColor: 0xef4444,
-      label: "Roulette · Bientôt",
-      seats: 8,
+      label: "Roulette",
+      seats: 6,
+      href: "/play/casino/roulette/r1",
     },
     {
       kind: "table",

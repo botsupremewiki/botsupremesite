@@ -191,6 +191,98 @@ export const MINES_CONFIG = {
   rtp: 0.97,
 } as const;
 
+// ────────────────────────────── Roulette ──────────────────────────────
+
+export const ROULETTE_CONFIG = {
+  seatCount: 6,
+  minBet: 10,
+  maxBet: 10_000_000,
+  bettingDurationMs: 20_000,
+  spinDurationMs: 4_000,
+  resolveDurationMs: 4_000,
+  recentNumbersKept: 10,
+} as const;
+
+export type RouletteBetKey =
+  | `straight-${number}`
+  | "red"
+  | "black"
+  | "even"
+  | "odd"
+  | "low"
+  | "high"
+  | "dozen1"
+  | "dozen2"
+  | "dozen3"
+  | "column1"
+  | "column2"
+  | "column3";
+
+export type RoulettePhase = "idle" | "betting" | "spinning" | "resolving";
+
+export type RouletteSeatStatus =
+  | "empty"
+  | "waiting"
+  | "ready"
+  | "won"
+  | "lost"
+  | "pushed";
+
+export type RouletteSeat = {
+  seatIndex: number;
+  playerId: string | null;
+  playerName: string | null;
+  playerColor: string | null;
+  gold: number;
+  bets: Record<string, number>; // RouletteBetKey → stake
+  totalBet: number;
+  lastDelta: number; // net change in last round (-total bet if lost, +payout if won)
+  status: RouletteSeatStatus;
+  ready: boolean;
+};
+
+export type RouletteState = {
+  phase: RoulettePhase;
+  seats: RouletteSeat[];
+  winningNumber: number | null;
+  recentNumbers: number[];
+  phaseEndsAt: number | null;
+  lastOutcome: string | null;
+};
+
+export type RouletteClientMessage =
+  | { type: "take-seat"; seatIndex: number }
+  | { type: "leave-seat" }
+  | { type: "ready" }
+  | { type: "place-bet"; betKey: string; amount: number }
+  | { type: "clear-bets" }
+  | { type: "hit" } // unused placeholder kept for typed clients
+  | { type: "stand" }; // unused placeholder kept for typed clients
+
+export type RouletteServerMessage =
+  | {
+      type: "roulette-welcome";
+      selfId: string;
+      players: Player[];
+      chat: ChatMessage[];
+      state: RouletteState;
+      gold: number;
+    }
+  | { type: "player-joined"; player: Player }
+  | { type: "player-left"; playerId: string }
+  | {
+      type: "player-moved";
+      playerId: string;
+      x: number;
+      y: number;
+      direction: Direction;
+    }
+  | { type: "player-renamed"; playerId: string; name: string }
+  | { type: "chat"; message: ChatMessage }
+  | { type: "roulette-state"; state: RouletteState }
+  | { type: "gold-update"; gold: number }
+  | { type: "roulette-error"; message: string };
+
 export type MinesStatus =
   | "idle"
   | "playing"
