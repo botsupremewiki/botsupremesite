@@ -35,8 +35,16 @@ export async function fetchProfile(
       },
     );
     if (!resp.ok) return null;
-    const rows = (await resp.json()) as ProfileRow[];
-    return rows[0] ?? null;
+    const rows = (await resp.json()) as Array<
+      Omit<ProfileRow, "gold"> & { gold: number | string }
+    >;
+    const row = rows[0];
+    if (!row) return null;
+    // PostgREST serializes bigint as a JSON string to preserve precision —
+    // coerce here so callers always see a number.
+    const gold = typeof row.gold === "string" ? Number(row.gold) : row.gold;
+    if (!Number.isFinite(gold)) return null;
+    return { ...row, gold };
   } catch {
     return null;
   }
