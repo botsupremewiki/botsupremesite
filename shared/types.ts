@@ -383,3 +383,64 @@ export type SlotsServerMessage =
   | { type: "gold-update"; gold: number }
   | { type: "slots-error"; message: string }
   | { type: "chat"; message: ChatMessage };
+
+// ────────────────────────────── Hi-Lo ──────────────────────────────
+
+export const HILO_CONFIG = {
+  minBet: 10,
+  maxBet: 10_000_000,
+  rtp: 0.97,
+  historySize: 8,
+} as const;
+
+export type HiLoGuess = "higher" | "lower" | "same";
+
+export type HiLoStatus =
+  | "idle"
+  | "playing"
+  | "awaiting-ace"
+  | "busted"
+  | "cashed";
+
+export type HiLoState = {
+  status: HiLoStatus;
+  bet: number;
+  multiplier: number; // current cashable multiplier (0 if busted/idle)
+  history: Card[]; // dealt cards in order; last is current
+  aceValue: 1 | 14 | null;
+  // Pre-computed payout multipliers for each guess on the current card,
+  // factoring in the joker if aceValue is still null. 0 means impossible.
+  payouts: { higher: number; lower: number; same: number };
+};
+
+export type HiLoRound = {
+  id: string;
+  bet: number;
+  outcome: "cashed" | "busted";
+  payout: number; // total OS returned (0 if busted)
+  steps: number; // correct guesses before ending
+  endingMultiplier: number;
+  aceValue: 1 | 14 | null;
+  cards: Card[];
+  timestamp: number;
+};
+
+export type HiLoClientMessage =
+  | { type: "hilo-start"; bet: number }
+  | { type: "hilo-guess"; guess: HiLoGuess }
+  | { type: "hilo-set-ace"; value: 1 | 14 }
+  | { type: "hilo-cash-out" };
+
+export type HiLoServerMessage =
+  | {
+      type: "hilo-welcome";
+      selfId: string;
+      gold: number;
+      history: HiLoRound[];
+      chat: ChatMessage[];
+    }
+  | { type: "hilo-state"; state: HiLoState | null }
+  | { type: "hilo-round-end"; round: HiLoRound }
+  | { type: "gold-update"; gold: number }
+  | { type: "hilo-error"; message: string }
+  | { type: "chat"; message: ChatMessage };

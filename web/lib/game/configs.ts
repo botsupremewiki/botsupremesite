@@ -95,8 +95,9 @@ export const CASINO_SCENE: SceneConfig = {
       height: 100,
       feltColor: 0x7c2d12,
       accentColor: 0xfbbf24,
-      label: "Hi-Lo · Bientôt",
+      label: "Hi-Lo",
       seats: 1,
+      href: "/play/casino/hilo",
     },
     {
       kind: "table",

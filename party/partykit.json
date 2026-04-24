@@ -7,6 +7,7 @@
     "mines": "src/mines.ts",
     "roulette": "src/roulette.ts",
     "slots": "src/slots.ts",
+    "hilo": "src/hilo.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",
     "dm": "src/dm.ts"
