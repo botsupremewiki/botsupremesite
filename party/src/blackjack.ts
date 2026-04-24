@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
 import type {
+  BlackjackHand,
   BlackjackSeat,
   BlackjackState,
   Card,
@@ -28,6 +29,9 @@ const AVATAR_COLORS = [
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const INSURANCE_DURATION_MS = 10_000;
+const MAX_HANDS_PER_SEAT = 4; // up to 3 splits
 
 type TimerId = ReturnType<typeof setTimeout>;
 
@@ -77,10 +81,6 @@ export default class BlackjackServer implements Party.Server {
       ? Math.max(0, Math.min(10_000_000, parsedGold))
       : null;
 
-    // For authenticated users the DB is the source of truth. If we can't
-    // reach Supabase right now we fall through to the URL value (which the
-    // page got from its own DB read) so the player can keep playing —
-    // patchProfileGold below still writes back so the row stays in sync.
     let initialGold: number;
     let isAdmin = false;
     if (authId) {
@@ -94,7 +94,7 @@ export default class BlackjackServer implements Party.Server {
         initialGold = 0;
       }
     } else {
-      initialGold = queryGold ?? 1000; // guest sandbox, never persisted
+      initialGold = queryGold ?? 1000;
     }
     this.connIdToGold.set(conn.id, initialGold);
     this.connIdToIsAdmin.set(conn.id, isAdmin);
@@ -111,7 +111,6 @@ export default class BlackjackServer implements Party.Server {
     };
     this.players.set(conn.id, player);
 
-    // Try to rehydrate a seat for a returning authenticated user (same authId)
     if (authId && this.authIdToSeatIndex.has(authId)) {
       const seatIndex = this.authIdToSeatIndex.get(authId)!;
       const seat = this.seats[seatIndex];
@@ -221,6 +220,18 @@ export default class BlackjackServer implements Party.Server {
         this.handleStand(sender.id);
         break;
 
+      case "double":
+        this.handleDouble(sender.id);
+        break;
+
+      case "split":
+        this.handleSplit(sender.id);
+        break;
+
+      case "insurance":
+        this.handleInsurance(sender.id, data.take);
+        break;
+
       default:
         break;
     }
@@ -237,41 +248,46 @@ export default class BlackjackServer implements Party.Server {
       if (this.phase === "idle") {
         this.freeSeat(seatIndex);
       } else {
-        // Keep the seat slot marked as inactive for this round; player forfeits.
+        // Forfeit: detach player but keep the seat slot in the round.
         seat.playerId = null;
         seat.playerName = null;
         seat.playerColor = null;
         seat.ready = false;
-        if (seat.bet > 0) {
-          seat.status = "lost"; // forfeits their bet
+        if (seat.hands.some((h) => h.bet > 0)) {
+          for (const h of seat.hands) {
+            if (h.status === "playing") h.status = "lost";
+          }
+          seat.status = "settled";
         } else {
           seat.status = "empty";
         }
         if (this.activeSeatIndex === seatIndex) {
-          this.advanceToNextPlayer();
+          this.advanceToNextSeat();
         } else {
           this.broadcastState();
         }
       }
       this.connIdToSeatIndex.delete(conn.id);
+      const player = this.players.get(conn.id);
+      if (player?.authId) this.authIdToSeatIndex.delete(player.authId);
     }
-
     this.broadcast({ type: "player-left", playerId: conn.id });
   }
 
-  // ──────────────────────────────── seating ─────────────────────────────────────
+  // ──────────────────────────────── seating ────────────────────────────────────
 
   private handleTakeSeat(
     conn: Party.Connection,
     player: Player,
-    seatIndex: number,
+    seatIndexRaw: number,
   ) {
+    const seatIndex = Math.floor(seatIndexRaw);
     if (
       !Number.isInteger(seatIndex) ||
       seatIndex < 0 ||
-      seatIndex >= BLACKJACK_CONFIG.seatCount
+      seatIndex >= this.seats.length
     ) {
-      this.sendTo(conn, { type: "error", message: "Siège invalide." });
+      this.sendTo(conn, { type: "error", message: "Place invalide." });
       return;
     }
     if (this.connIdToSeatIndex.has(conn.id)) {
@@ -294,9 +310,6 @@ export default class BlackjackServer implements Party.Server {
       return;
     }
 
-    // Authoritative balance comes from the onConnect cache (which itself is
-    // populated from Supabase for authenticated users — and falls back to
-    // the URL value if Supabase is briefly unreachable).
     const existingGold = this.connIdToGold.get(conn.id) ?? 0;
 
     seat.playerId = conn.id;
@@ -305,9 +318,10 @@ export default class BlackjackServer implements Party.Server {
     seat.gold = existingGold;
     seat.status = "waiting";
     seat.ready = false;
-    seat.bet = 0;
-    seat.hand = [];
-    seat.score = 0;
+    seat.baseBet = 0;
+    seat.insuranceBet = 0;
+    seat.hands = [];
+    seat.activeHandIndex = 0;
 
     this.connIdToSeatIndex.set(conn.id, seatIndex);
     if (player.authId) this.authIdToSeatIndex.set(player.authId, seatIndex);
@@ -336,7 +350,7 @@ export default class BlackjackServer implements Party.Server {
     this.broadcastState();
   }
 
-  // ──────────────────────────────── game loop ───────────────────────────────────
+  // ──────────────────────────────── ready / betting ─────────────────────────────
 
   private handleReady(connId: string) {
     const seatIndex = this.connIdToSeatIndex.get(connId);
@@ -364,9 +378,10 @@ export default class BlackjackServer implements Party.Server {
     this.lastOutcome = null;
     for (const seat of this.seats) {
       if (seat.playerId) {
-        seat.bet = 0;
-        seat.hand = [];
-        seat.score = 0;
+        seat.baseBet = 0;
+        seat.insuranceBet = 0;
+        seat.hands = [];
+        seat.activeHandIndex = 0;
         seat.status = "betting";
       }
     }
@@ -392,7 +407,7 @@ export default class BlackjackServer implements Party.Server {
       });
       return;
     }
-    seat.bet = bet;
+    seat.baseBet = bet;
     seat.gold -= bet; // reserve the bet
     seat.status = "ready";
     this.connIdToGold.set(connId, seat.gold);
@@ -401,113 +416,325 @@ export default class BlackjackServer implements Party.Server {
   }
 
   private endBetting() {
-    const bettors = this.seats.filter((s) => s.playerId && s.bet > 0);
+    const bettors = this.seats.filter((s) => s.playerId && s.baseBet > 0);
     if (bettors.length === 0) {
       this.returnToIdle();
       return;
     }
     this.dealInitial();
-    this.startPlaying();
+
+    const dealerUp = this.dealerHand[0];
+    if (dealerUp.rank === "A") {
+      this.beginInsurancePhase();
+    } else if (cardValue(dealerUp) === 10) {
+      // Peek for dealer BJ silently.
+      if (scoreHand(this.dealerHand) === 21) {
+        this.dealerHoleHidden = false;
+        this.resolveRound();
+        return;
+      }
+      this.startPlaying();
+    } else {
+      this.startPlaying();
+    }
   }
 
   private dealInitial() {
     for (const seat of this.seats) {
-      if (seat.playerId && seat.bet > 0) {
-        seat.hand = [this.draw(), this.draw()];
-        seat.score = scoreHand(seat.hand);
-        if (seat.score === 21) {
-          seat.status = "blackjack";
-        } else {
-          seat.status = "playing";
-        }
+      if (seat.playerId && seat.baseBet > 0) {
+        const cards: Card[] = [this.draw(), this.draw()];
+        const score = scoreHand(cards);
+        const initialHand: BlackjackHand = {
+          cards,
+          score,
+          bet: seat.baseBet,
+          doubled: false,
+          fromSplit: false,
+          status: score === 21 ? "blackjack" : "playing",
+        };
+        seat.hands = [initialHand];
+        seat.activeHandIndex = 0;
+        seat.status = "playing";
       }
     }
     this.dealerHand = [this.draw(), this.draw()];
     this.dealerHoleHidden = true;
   }
 
+  // ──────────────────────────────── insurance ───────────────────────────────────
+
+  private beginInsurancePhase() {
+    this.phase = "insurance";
+    this.activeSeatIndex = null;
+    this.setPhaseTimeout(INSURANCE_DURATION_MS, () => this.endInsurancePhase());
+    this.broadcastState();
+  }
+
+  private handleInsurance(connId: string, takeRaw: unknown) {
+    if (this.phase !== "insurance") return;
+    const seatIndex = this.connIdToSeatIndex.get(connId);
+    if (seatIndex === undefined) return;
+    const seat = this.seats[seatIndex];
+    if (!seat.playerId || seat.baseBet <= 0) return;
+    if (seat.insuranceBet !== 0) return; // already chose
+    const take = takeRaw === true;
+    if (take) {
+      const cost = Math.floor(seat.baseBet / 2);
+      if (cost <= 0 || cost > seat.gold) {
+        this.sendTo(this.connOf(connId), {
+          type: "error",
+          message: "Pas assez d'OS pour l'assurance.",
+        });
+        return;
+      }
+      seat.insuranceBet = cost;
+      seat.gold -= cost;
+      this.connIdToGold.set(connId, seat.gold);
+      this.sendGoldTo(connId, seat.gold);
+    } else {
+      // -1 sentinel = "skipped insurance"; resolveRound treats anything
+      // other than a positive value as no insurance. We use -1 instead of
+      // staying at 0 so the UI can hide the prompt for this seat.
+      seat.insuranceBet = -1;
+    }
+    this.broadcastState();
+
+    // If every active seat has answered, end the phase early.
+    const stillPending = this.seats.some(
+      (s) => s.playerId && s.baseBet > 0 && s.insuranceBet === 0,
+    );
+    if (!stillPending) this.endInsurancePhase();
+  }
+
+  private endInsurancePhase() {
+    this.clearPhaseTimer();
+    this.dealerHoleHidden = false;
+    const dealerHasBJ = scoreHand(this.dealerHand) === 21;
+    if (dealerHasBJ) {
+      // Dealer reveals BJ → resolve immediately. resolveRound handles the
+      // insurance payout automatically.
+      this.resolveRound();
+    } else {
+      // No BJ → re-hide the hole card and play normally. Insurance bets
+      // are forfeited; resolveRound will skip them.
+      this.dealerHoleHidden = true;
+      this.startPlaying();
+    }
+  }
+
+  // ──────────────────────────────── playing loop ────────────────────────────────
+
   private startPlaying() {
     this.phase = "playing";
-    this.activeSeatIndex = this.findNextActiveSeat(-1);
+    this.activeSeatIndex = this.findNextActiveSeatFrom(-1);
     if (this.activeSeatIndex === null) {
       this.beginDealerPhase();
       return;
     }
+    this.armTurnTimer();
+    this.broadcastState();
+  }
+
+  private armTurnTimer() {
     this.setPhaseTimeout(BLACKJACK_CONFIG.turnDurationMs, () =>
       this.autoStand(),
     );
-    this.broadcastState();
+  }
+
+  private activeSeat(): BlackjackSeat | null {
+    if (this.activeSeatIndex === null) return null;
+    return this.seats[this.activeSeatIndex];
+  }
+
+  private activeHand(): BlackjackHand | null {
+    const seat = this.activeSeat();
+    if (!seat) return null;
+    return seat.hands[seat.activeHandIndex] ?? null;
+  }
+
+  private isPair(hand: BlackjackHand): boolean {
+    return hand.cards.length === 2 && hand.cards[0].rank === hand.cards[1].rank;
   }
 
   private handleHit(connId: string) {
     if (this.phase !== "playing") return;
     const seatIndex = this.connIdToSeatIndex.get(connId);
-    if (seatIndex === undefined) return;
-    if (seatIndex !== this.activeSeatIndex) return;
+    if (seatIndex === undefined || seatIndex !== this.activeSeatIndex) return;
     const seat = this.seats[seatIndex];
-    if (seat.status !== "playing") return;
+    const hand = seat.hands[seat.activeHandIndex];
+    if (!hand || hand.status !== "playing") return;
+    if (hand.doubled) return; // doubled hands are locked
 
-    seat.hand.push(this.draw());
-    seat.score = scoreHand(seat.hand);
-    if (seat.score > 21) {
-      seat.status = "busted";
-      this.advanceToNextPlayer();
+    hand.cards.push(this.draw());
+    hand.score = scoreHand(hand.cards);
+    if (hand.score > 21) {
+      hand.status = "busted";
+      this.advanceToNextHandOrSeat();
       return;
     }
-    if (seat.score === 21) {
-      seat.status = "stood";
-      this.advanceToNextPlayer();
+    if (hand.score === 21) {
+      hand.status = "stood";
+      this.advanceToNextHandOrSeat();
       return;
     }
-    this.setPhaseTimeout(BLACKJACK_CONFIG.turnDurationMs, () =>
-      this.autoStand(),
-    );
+    this.armTurnTimer();
     this.broadcastState();
   }
 
   private handleStand(connId: string) {
     if (this.phase !== "playing") return;
     const seatIndex = this.connIdToSeatIndex.get(connId);
-    if (seatIndex === undefined) return;
-    if (seatIndex !== this.activeSeatIndex) return;
+    if (seatIndex === undefined || seatIndex !== this.activeSeatIndex) return;
     const seat = this.seats[seatIndex];
-    if (seat.status !== "playing") return;
-    seat.status = "stood";
-    this.advanceToNextPlayer();
+    const hand = seat.hands[seat.activeHandIndex];
+    if (!hand || hand.status !== "playing") return;
+    hand.status = "stood";
+    this.advanceToNextHandOrSeat();
+  }
+
+  private handleDouble(connId: string) {
+    if (this.phase !== "playing") return;
+    const seatIndex = this.connIdToSeatIndex.get(connId);
+    if (seatIndex === undefined || seatIndex !== this.activeSeatIndex) return;
+    const seat = this.seats[seatIndex];
+    const hand = seat.hands[seat.activeHandIndex];
+    if (!hand || hand.status !== "playing") return;
+    if (hand.cards.length !== 2) return; // double only on first 2 cards
+    if (hand.fromSplit && hand.cards[0].rank === "A") return; // no double on split aces
+    if (seat.gold < hand.bet) {
+      this.sendTo(this.connOf(connId), {
+        type: "error",
+        message: "Pas assez d'OS pour doubler.",
+      });
+      return;
+    }
+    seat.gold -= hand.bet;
+    this.connIdToGold.set(connId, seat.gold);
+    this.sendGoldTo(connId, seat.gold);
+    hand.bet *= 2;
+    hand.doubled = true;
+    hand.cards.push(this.draw());
+    hand.score = scoreHand(hand.cards);
+    if (hand.score > 21) {
+      hand.status = "busted";
+    } else {
+      hand.status = "stood";
+    }
+    this.advanceToNextHandOrSeat();
+  }
+
+  private handleSplit(connId: string) {
+    if (this.phase !== "playing") return;
+    const seatIndex = this.connIdToSeatIndex.get(connId);
+    if (seatIndex === undefined || seatIndex !== this.activeSeatIndex) return;
+    const seat = this.seats[seatIndex];
+    const hand = seat.hands[seat.activeHandIndex];
+    if (!hand || hand.status !== "playing") return;
+    if (!this.isPair(hand)) return;
+    if (seat.hands.length >= MAX_HANDS_PER_SEAT) return;
+    if (seat.gold < hand.bet) {
+      this.sendTo(this.connOf(connId), {
+        type: "error",
+        message: "Pas assez d'OS pour split.",
+      });
+      return;
+    }
+    seat.gold -= hand.bet;
+    this.connIdToGold.set(connId, seat.gold);
+    this.sendGoldTo(connId, seat.gold);
+
+    const [a, b] = hand.cards;
+    const isAces = a.rank === "A";
+    const handA: BlackjackHand = {
+      cards: [a, this.draw()],
+      score: 0,
+      bet: hand.bet,
+      doubled: false,
+      fromSplit: true,
+      status: "playing",
+    };
+    handA.score = scoreHand(handA.cards);
+    const handB: BlackjackHand = {
+      cards: [b, this.draw()],
+      score: 0,
+      bet: hand.bet,
+      doubled: false,
+      fromSplit: true,
+      status: "playing",
+    };
+    handB.score = scoreHand(handB.cards);
+
+    // Split aces: each hand gets exactly one card and is auto-stood.
+    if (isAces) {
+      handA.status = "stood";
+      handB.status = "stood";
+    } else {
+      // 21 right after a split is just a stood hand, not a blackjack.
+      if (handA.score === 21) handA.status = "stood";
+      if (handB.score === 21) handB.status = "stood";
+    }
+
+    seat.hands.splice(seat.activeHandIndex, 1, handA, handB);
+
+    // Move to the new active hand (handA already at activeHandIndex).
+    if (handA.status !== "playing") {
+      this.advanceToNextHandOrSeat();
+    } else {
+      this.armTurnTimer();
+      this.broadcastState();
+    }
   }
 
   private autoStand() {
     if (this.phase !== "playing" || this.activeSeatIndex === null) return;
     const seat = this.seats[this.activeSeatIndex];
-    if (seat.status === "playing") {
-      seat.status = "stood";
-    }
-    this.advanceToNextPlayer();
+    const hand = seat.hands[seat.activeHandIndex];
+    if (hand && hand.status === "playing") hand.status = "stood";
+    this.advanceToNextHandOrSeat();
   }
 
-  private advanceToNextPlayer() {
+  private advanceToNextHandOrSeat() {
+    if (this.activeSeatIndex === null) return;
+    const seat = this.seats[this.activeSeatIndex];
+    // Find the next playable hand inside the current seat.
+    for (let i = seat.activeHandIndex + 1; i < seat.hands.length; i++) {
+      if (seat.hands[i].status === "playing") {
+        seat.activeHandIndex = i;
+        this.armTurnTimer();
+        this.broadcastState();
+        return;
+      }
+    }
+    this.advanceToNextSeat();
+  }
+
+  private advanceToNextSeat() {
     const from = this.activeSeatIndex ?? -1;
-    const next = this.findNextActiveSeat(from);
+    const next = this.findNextActiveSeatFrom(from);
     this.activeSeatIndex = next;
     if (next === null) {
       this.beginDealerPhase();
       return;
     }
-    this.setPhaseTimeout(BLACKJACK_CONFIG.turnDurationMs, () =>
-      this.autoStand(),
-    );
+    this.armTurnTimer();
     this.broadcastState();
   }
 
-  private findNextActiveSeat(fromIndex: number): number | null {
+  private findNextActiveSeatFrom(fromIndex: number): number | null {
     for (let i = fromIndex + 1; i < this.seats.length; i++) {
       const seat = this.seats[i];
-      if (seat.playerId && seat.bet > 0 && seat.status === "playing") {
+      if (!seat.playerId || seat.baseBet === 0) continue;
+      // Find first playable hand in this seat
+      const idx = seat.hands.findIndex((h) => h.status === "playing");
+      if (idx >= 0) {
+        seat.activeHandIndex = idx;
         return i;
       }
     }
     return null;
   }
+
+  // ──────────────────────────────── dealer / resolve ────────────────────────────
 
   private beginDealerPhase() {
     this.phase = "dealer";
@@ -515,8 +742,23 @@ export default class BlackjackServer implements Party.Server {
     this.dealerHoleHidden = false;
     this.clearPhaseTimer();
 
-    // Draw until score >= 17 (soft 17 stand by default per config note).
-    // We step with small delays so clients can animate reveals.
+    // Don't bother drawing if every player busted — nothing left to beat.
+    const anyAlive = this.seats.some(
+      (s) =>
+        s.playerId &&
+        s.hands.some(
+          (h) =>
+            h.status === "stood" ||
+            h.status === "blackjack" ||
+            h.status === "playing",
+        ),
+    );
+    if (!anyAlive) {
+      this.phaseTimer = setTimeout(() => this.resolveRound(), 500);
+      this.broadcastState();
+      return;
+    }
+
     this.broadcastState();
     this.stepDealer();
   }
@@ -538,56 +780,84 @@ export default class BlackjackServer implements Party.Server {
     this.phase = "resolving";
     this.clearPhaseTimer();
     const dealerScore = scoreHand(this.dealerHand);
+    const dealerBJ =
+      this.dealerHand.length === 2 && dealerScore === 21;
     const dealerBusted = dealerScore > 21;
 
-    let outcomeParts: string[] = [];
-
+    const outcomeParts: string[] = [];
     const supabaseWrites: Promise<void>[] = [];
 
     for (const seat of this.seats) {
-      if (!seat.playerId || seat.bet === 0) continue;
-      const seatScore = seat.score;
-      let payoutMultiplier = 0; // how much of bet we pay back (including the bet itself)
+      if (!seat.playerId) continue;
+      if (seat.baseBet === 0 && seat.insuranceBet <= 0) continue;
 
-      if (seat.status === "blackjack") {
-        if (dealerScore === 21 && this.dealerHand.length === 2) {
-          seat.status = "pushed";
-          payoutMultiplier = 1; // return bet
-        } else {
-          seat.status = "won";
-          payoutMultiplier = 2.5; // 3:2 blackjack payout
+      // Insurance settles separately — pays 2:1 if dealer has BJ, else lost.
+      if (seat.insuranceBet > 0) {
+        if (dealerBJ) {
+          // Refund insurance + pay 2x = total 3x stake back.
+          const credit = seat.insuranceBet * 3;
+          seat.gold += credit;
         }
-      } else if (seat.status === "busted") {
-        payoutMultiplier = 0;
-        seat.status = "lost";
-      } else if (dealerBusted) {
-        seat.status = "won";
-        payoutMultiplier = 2;
-      } else if (seatScore > dealerScore) {
-        seat.status = "won";
-        payoutMultiplier = 2;
-      } else if (seatScore < dealerScore) {
-        seat.status = "lost";
-        payoutMultiplier = 0;
-      } else {
-        seat.status = "pushed";
-        payoutMultiplier = 1;
+        // else: insurance lost (already deducted when taken)
       }
 
-      const credit = Math.floor(seat.bet * payoutMultiplier);
-      seat.gold += credit;
+      let totalCredit = 0;
+      for (const hand of seat.hands) {
+        let payoutMultiplier = 0;
+        if (hand.status === "blackjack") {
+          if (dealerBJ) {
+            hand.status = "pushed";
+            payoutMultiplier = 1;
+          } else {
+            hand.status = "won";
+            payoutMultiplier = 2.5; // 3:2 BJ
+          }
+        } else if (hand.status === "busted") {
+          payoutMultiplier = 0;
+          hand.status = "lost";
+        } else if (dealerBJ) {
+          // Dealer BJ vs non-BJ hand: lose
+          payoutMultiplier = 0;
+          hand.status = "lost";
+        } else if (dealerBusted) {
+          hand.status = "won";
+          payoutMultiplier = 2;
+        } else if (hand.score > dealerScore) {
+          hand.status = "won";
+          payoutMultiplier = 2;
+        } else if (hand.score < dealerScore) {
+          hand.status = "lost";
+          payoutMultiplier = 0;
+        } else {
+          hand.status = "pushed";
+          payoutMultiplier = 1;
+        }
+        const credit = Math.floor(hand.bet * payoutMultiplier);
+        totalCredit += credit;
+      }
+      seat.gold += totalCredit;
+      seat.status = "settled";
       if (seat.playerId) this.connIdToGold.set(seat.playerId, seat.gold);
 
       const player = seat.playerId ? this.players.get(seat.playerId) : null;
-      const label =
-        seat.status === "won"
-          ? `${seat.playerName} gagne ${credit - seat.bet}`
-          : seat.status === "lost"
-            ? `${seat.playerName} perd ${seat.bet}`
-            : seat.status === "pushed"
-              ? `${seat.playerName} égalité`
-              : "";
-      if (label) outcomeParts.push(label);
+      const wonAny = seat.hands.some((h) => h.status === "won");
+      const lostAny = seat.hands.some((h) => h.status === "lost");
+      const pushedAny = seat.hands.some((h) => h.status === "pushed");
+      let label = "";
+      const totalStake = seat.hands.reduce((s, h) => s + h.bet, 0);
+      const net = totalCredit - totalStake;
+      if (wonAny && !lostAny) {
+        label = `${seat.playerName} gagne ${Math.max(0, net)}`;
+      } else if (lostAny && !wonAny && !pushedAny) {
+        label = `${seat.playerName} perd ${Math.abs(net)}`;
+      } else if (pushedAny && !wonAny && !lostAny) {
+        label = `${seat.playerName} égalité`;
+      } else {
+        // mixed split outcome
+        const sign = net >= 0 ? "+" : "";
+        label = `${seat.playerName} ${sign}${net}`;
+      }
+      outcomeParts.push(label);
 
       this.sendGoldTo(seat.playerId!, seat.gold);
 
@@ -601,9 +871,7 @@ export default class BlackjackServer implements Party.Server {
     this.lastOutcome =
       outcomeParts.length > 0 ? outcomeParts.join(" · ") : "Manche terminée";
 
-    // Kick off Supabase writes but don't block the game
     void Promise.allSettled(supabaseWrites);
-
     this.broadcastState();
 
     this.phaseTimer = setTimeout(
@@ -620,15 +888,18 @@ export default class BlackjackServer implements Party.Server {
     this.clearPhaseTimer();
     for (const seat of this.seats) {
       if (seat.playerId) {
-        seat.bet = 0;
-        seat.hand = [];
-        seat.score = 0;
+        seat.baseBet = 0;
+        seat.insuranceBet = 0;
+        seat.hands = [];
+        seat.activeHandIndex = 0;
         seat.status = "waiting";
         seat.ready = false;
       }
     }
     this.broadcastState();
   }
+
+  // ──────────────────────────────── timers ──────────────────────────────────────
 
   private setPhaseTimeout(ms: number, cb: () => void) {
     this.clearPhaseTimer();
@@ -655,8 +926,7 @@ export default class BlackjackServer implements Party.Server {
   // ──────────────────────────────── Supabase write ─────────────────────────────
 
   private async persistGoldToSupabase(authId: string, gold: number) {
-    const env = (this.room as unknown as { env?: Record<string, string> })
-      .env;
+    const env = (this.room as unknown as { env?: Record<string, string> }).env;
     const url = env?.SUPABASE_URL ?? readProcessEnv("SUPABASE_URL");
     const key =
       env?.SUPABASE_SERVICE_ROLE_KEY ??
@@ -693,7 +963,10 @@ export default class BlackjackServer implements Party.Server {
   private snapshotState(): BlackjackState {
     return {
       phase: this.phase,
-      seats: this.seats.map((s) => ({ ...s, hand: [...s.hand] })),
+      seats: this.seats.map((s) => ({
+        ...s,
+        hands: s.hands.map((h) => ({ ...h, cards: [...h.cards] })),
+      })),
       activeSeatIndex: this.activeSeatIndex,
       dealerHand: this.dealerHoleHidden
         ? this.dealerHand.slice(0, 1)
@@ -746,9 +1019,10 @@ function emptySeat(seatIndex: number): BlackjackSeat {
     playerName: null,
     playerColor: null,
     gold: 0,
-    bet: 0,
-    hand: [],
-    score: 0,
+    baseBet: 0,
+    insuranceBet: 0,
+    hands: [],
+    activeHandIndex: 0,
     status: "empty",
     ready: false,
   };
@@ -805,6 +1079,12 @@ export function scoreHand(cards: Card[]): number {
   return total;
 }
 
+function cardValue(card: Card): number {
+  if (card.rank === "A") return 11;
+  if (card.rank === "J" || card.rank === "Q" || card.rank === "K") return 10;
+  return parseInt(card.rank, 10);
+}
+
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
@@ -839,7 +1119,8 @@ function sanitizeUrl(raw: unknown): string | null {
 }
 
 function readProcessEnv(key: string): string | undefined {
-  const globalProc = (globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process;
+  const globalProc = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process;
   return globalProc?.env?.[key];
 }

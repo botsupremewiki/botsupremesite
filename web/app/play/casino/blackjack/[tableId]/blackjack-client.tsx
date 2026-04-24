@@ -263,6 +263,12 @@ export function BlackjackClient({
   );
   const hit = useCallback(() => sendMsg({ type: "hit" }), [sendMsg]);
   const stand = useCallback(() => sendMsg({ type: "stand" }), [sendMsg]);
+  const doubleDown = useCallback(() => sendMsg({ type: "double" }), [sendMsg]);
+  const splitHand = useCallback(() => sendMsg({ type: "split" }), [sendMsg]);
+  const decideInsurance = useCallback(
+    (take: boolean) => sendMsg({ type: "insurance", take }),
+    [sendMsg],
+  );
 
   const selfSeat =
     blackjack?.seats.find((s) => s.playerId === selfIdRef.current) ?? null;
@@ -340,7 +346,8 @@ export function BlackjackClient({
                     {phaseLabel(blackjack.phase)}
                     {blackjack.phaseEndsAt &&
                       (blackjack.phase === "betting" ||
-                        blackjack.phase === "playing") && (
+                        blackjack.phase === "playing" ||
+                        blackjack.phase === "insurance") && (
                         <Countdown
                           endsAt={blackjack.phaseEndsAt}
                           className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] tabular-nums text-amber-200"
@@ -373,6 +380,16 @@ export function BlackjackClient({
                         />
                       </div>
                     )}
+                  {blackjack.phaseEndsAt &&
+                    blackjack.phase === "insurance" && (
+                      <div className="w-56">
+                        <CountdownBar
+                          endsAt={blackjack.phaseEndsAt}
+                          totalMs={10_000}
+                          colorClass="bg-sky-400"
+                        />
+                      </div>
+                    )}
                 </div>
               )}
 
@@ -381,11 +398,15 @@ export function BlackjackClient({
                   seat={selfSeat}
                   phase={blackjack.phase}
                   isMyTurn={isMyTurn}
+                  dealerUpRank={blackjack.dealerHand[0]?.rank}
                   onReady={setReady}
                   onLeaveSeat={leaveSeat}
                   onBet={placeBet}
                   onHit={hit}
                   onStand={stand}
+                  onDouble={doubleDown}
+                  onSplit={splitHand}
+                  onInsurance={decideInsurance}
                 />
               )}
             </div>
@@ -457,20 +478,28 @@ function ControlPanel({
   seat,
   phase,
   isMyTurn,
+  dealerUpRank,
   onReady,
   onLeaveSeat,
   onBet,
   onHit,
   onStand,
+  onDouble,
+  onSplit,
+  onInsurance,
 }: {
   seat: BlackjackSeat;
   phase: BlackjackState["phase"];
   isMyTurn: boolean;
+  dealerUpRank: string | undefined;
   onReady: () => void;
   onLeaveSeat: () => void;
   onBet: (amount: number) => void;
   onHit: () => void;
   onStand: () => void;
+  onDouble: () => void;
+  onSplit: () => void;
+  onInsurance: (take: boolean) => void;
 }) {
   const [betDraft, setBetDraft] = useState<string>("");
 
@@ -491,6 +520,22 @@ function ControlPanel({
   const setPreset = (v: number) =>
     setBetDraft(String(Math.max(BLACKJACK_CONFIG.minBet, Math.floor(v))));
 
+  const activeHand = seat.hands[seat.activeHandIndex] ?? null;
+  const canDouble =
+    isMyTurn &&
+    activeHand?.status === "playing" &&
+    activeHand.cards.length === 2 &&
+    !(activeHand.fromSplit && activeHand.cards[0]?.rank === "A") &&
+    seat.gold >= activeHand.bet;
+  const canSplit =
+    isMyTurn &&
+    activeHand?.status === "playing" &&
+    activeHand.cards.length === 2 &&
+    activeHand.cards[0]?.rank === activeHand.cards[1]?.rank &&
+    seat.hands.length < 4 &&
+    seat.gold >= activeHand.bet;
+  const totalStake = seat.hands.reduce((s, h) => s + h.bet, 0);
+
   return (
     <div className="pointer-events-auto absolute bottom-4 right-4 flex flex-col items-end gap-2 rounded-xl border border-white/10 bg-black/70 p-3 text-xs backdrop-blur-md">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-zinc-400">
@@ -498,9 +543,14 @@ function ControlPanel({
         <span className="rounded-full bg-amber-400/10 px-2 py-0.5 font-semibold text-amber-300">
           {seat.gold.toLocaleString("fr-FR")} OS
         </span>
-        {seat.bet > 0 && (
+        {totalStake > 0 && (
           <span className="rounded-full bg-rose-400/10 px-2 py-0.5 font-semibold text-rose-300">
-            Mise {seat.bet}
+            Mise {totalStake}
+          </span>
+        )}
+        {seat.insuranceBet > 0 && (
+          <span className="rounded-full bg-sky-400/10 px-2 py-0.5 font-semibold text-sky-300">
+            Ass. {seat.insuranceBet}
           </span>
         )}
       </div>
@@ -593,12 +643,49 @@ function ControlPanel({
 
       {phase === "betting" && seat.status === "ready" && (
         <span className="rounded-md bg-emerald-400/10 px-3 py-1.5 text-emerald-300">
-          Mise {seat.bet} OS — en attente du deal
+          Mise {seat.baseBet} OS — en attente du deal
         </span>
       )}
 
-      {phase === "playing" && isMyTurn && seat.status === "playing" && (
-        <div className="flex gap-2">
+      {phase === "insurance" &&
+        seat.baseBet > 0 &&
+        seat.insuranceBet === 0 &&
+        dealerUpRank === "A" && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-sky-300">
+              Croupier montre un As — assurance ?{" "}
+              <span className="text-zinc-500">
+                (½ mise · 2:1 si BJ croupier)
+              </span>
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onInsurance(true)}
+                disabled={seat.gold < Math.floor(seat.baseBet / 2)}
+                className="rounded-md bg-sky-500 px-3 py-1.5 font-semibold text-white shadow hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Prendre {Math.floor(seat.baseBet / 2)} OS
+              </button>
+              <button
+                onClick={() => onInsurance(false)}
+                className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-200 hover:bg-white/10"
+              >
+                Passer
+              </button>
+            </div>
+          </div>
+        )}
+
+      {phase === "insurance" && seat.insuranceBet !== 0 && (
+        <span className="rounded-md bg-sky-400/10 px-3 py-1.5 text-sky-300">
+          {seat.insuranceBet > 0
+            ? `Assurance prise (${seat.insuranceBet} OS)`
+            : "Assurance refusée"}
+        </span>
+      )}
+
+      {phase === "playing" && isMyTurn && activeHand?.status === "playing" && (
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={onHit}
             className="rounded-md bg-indigo-500 px-3 py-1.5 font-semibold text-white shadow hover:bg-indigo-400"
@@ -611,40 +698,71 @@ function ControlPanel({
           >
             Rester
           </button>
+          <button
+            onClick={onDouble}
+            disabled={!canDouble}
+            className="rounded-md bg-amber-500 px-3 py-1.5 font-semibold text-zinc-950 shadow hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            Doubler
+          </button>
+          <button
+            onClick={onSplit}
+            disabled={!canSplit}
+            className="rounded-md bg-violet-500 px-3 py-1.5 font-semibold text-white shadow hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            Split
+          </button>
         </div>
       )}
 
-      {phase === "playing" && !isMyTurn && seat.status === "playing" && (
+      {phase === "playing" && !isMyTurn && (
         <span className="rounded-md bg-zinc-500/10 px-3 py-1.5 text-zinc-400">
           En attente des autres...
         </span>
       )}
 
-      {seat.status === "blackjack" && (
-        <span className="rounded-md bg-amber-400/20 px-3 py-1.5 font-semibold text-amber-200">
-          BLACKJACK
-        </span>
+      {phase === "resolving" && seat.hands.length > 0 && (
+        <SeatOutcome hands={seat.hands} />
       )}
-      {seat.status === "busted" && (
-        <span className="rounded-md bg-rose-500/20 px-3 py-1.5 font-semibold text-rose-300">
-          Sauté (&gt; 21)
-        </span>
-      )}
-      {seat.status === "won" && (
-        <span className="rounded-md bg-emerald-500/20 px-3 py-1.5 font-semibold text-emerald-300">
-          Gagné
-        </span>
-      )}
-      {seat.status === "lost" && phase === "resolving" && (
-        <span className="rounded-md bg-rose-500/20 px-3 py-1.5 font-semibold text-rose-300">
-          Perdu
-        </span>
-      )}
-      {seat.status === "pushed" && (
-        <span className="rounded-md bg-zinc-500/20 px-3 py-1.5 font-semibold text-zinc-300">
-          Égalité
-        </span>
-      )}
+    </div>
+  );
+}
+
+function SeatOutcome({ hands }: { hands: BlackjackSeat["hands"] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {hands.map((h, i) => {
+        const tone =
+          h.status === "won"
+            ? "bg-emerald-500/20 text-emerald-300"
+            : h.status === "blackjack"
+              ? "bg-amber-400/20 text-amber-200"
+              : h.status === "lost" || h.status === "busted"
+                ? "bg-rose-500/20 text-rose-300"
+                : "bg-zinc-500/20 text-zinc-300";
+        const label =
+          h.status === "won"
+            ? "Gagné"
+            : h.status === "blackjack"
+              ? "Blackjack"
+              : h.status === "busted"
+                ? "Sauté"
+                : h.status === "lost"
+                  ? "Perdu"
+                  : h.status === "pushed"
+                    ? "Égalité"
+                    : "—";
+        return (
+          <span
+            key={i}
+            className={`rounded-md px-2 py-1 text-[11px] font-semibold ${tone}`}
+            title={`Main ${i + 1}`}
+          >
+            {hands.length > 1 ? `M${i + 1}: ` : ""}
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -664,26 +782,59 @@ function SeatCards({
   seat: BlackjackSeat;
   active: boolean;
 }) {
-  if (seat.hand.length === 0) return null;
+  if (seat.hands.length === 0) return null;
   const pos = SEAT_CARD_POSITIONS[seat.seatIndex];
   return (
     <div
       className="pointer-events-none absolute -translate-x-1/2 -translate-y-full"
       style={{ left: pos.x, top: pos.y }}
     >
-      <div
-        className={`flex flex-col items-center gap-1 ${
-          active ? "drop-shadow-[0_0_8px_rgba(250,204,21,0.7)]" : ""
-        }`}
-      >
-        <div className="flex -space-x-3">
-          {seat.hand.map((card, i) => (
-            <CardFace key={i} card={card} />
-          ))}
-        </div>
-        <div className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
-          {seat.score}
-        </div>
+      <div className="flex items-end gap-2">
+        {seat.hands.map((hand, hi) => {
+          const isActive = active && hi === seat.activeHandIndex;
+          const isDone =
+            hand.status !== "playing" && hand.status !== "stood";
+          const tone =
+            hand.status === "blackjack"
+              ? "ring-2 ring-amber-400"
+              : hand.status === "busted"
+                ? "ring-2 ring-rose-500"
+                : hand.status === "won"
+                  ? "ring-2 ring-emerald-400"
+                  : hand.status === "lost"
+                    ? "ring-2 ring-rose-500/70"
+                    : hand.status === "pushed"
+                      ? "ring-2 ring-zinc-400"
+                      : "";
+          return (
+            <div
+              key={hi}
+              className={`flex flex-col items-center gap-1 rounded-md ${
+                isActive ? "drop-shadow-[0_0_8px_rgba(250,204,21,0.7)]" : ""
+              } ${tone}`}
+              style={{
+                opacity: isDone && !active ? 0.85 : 1,
+              }}
+            >
+              <div className="flex -space-x-3">
+                {hand.cards.map((card, i) => (
+                  <CardFace key={i} card={card} />
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                  {hand.score}
+                  {hand.doubled ? " ×2" : ""}
+                </div>
+                {seat.hands.length > 1 && (
+                  <div className="rounded-full bg-black/50 px-1.5 py-0.5 text-[9px] text-zinc-300">
+                    M{hi + 1}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -771,6 +922,8 @@ function phaseLabel(phase: BlackjackState["phase"]): string {
       return "entre deux manches";
     case "betting":
       return "mises";
+    case "insurance":
+      return "assurance";
     case "playing":
       return "joueurs";
     case "dealer":

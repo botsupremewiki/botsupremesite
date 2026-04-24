@@ -29,7 +29,10 @@ export type ClientMessage =
   | { type: "ready" }
   | { type: "bet"; amount: number }
   | { type: "hit" }
-  | { type: "stand" };
+  | { type: "stand" }
+  | { type: "double" }
+  | { type: "split" }
+  | { type: "insurance"; take: boolean };
 
 export type CardSuit = "S" | "H" | "D" | "C";
 export type CardRank =
@@ -55,6 +58,7 @@ export type Card = {
 export type BlackjackPhase =
   | "idle"
   | "betting"
+  | "insurance"
   | "playing"
   | "dealer"
   | "resolving";
@@ -65,6 +69,10 @@ export type BlackjackSeatStatus =
   | "ready"
   | "betting"
   | "playing"
+  | "settled";
+
+export type BlackjackHandStatus =
+  | "playing"
   | "stood"
   | "busted"
   | "blackjack"
@@ -72,15 +80,25 @@ export type BlackjackSeatStatus =
   | "lost"
   | "pushed";
 
+export type BlackjackHand = {
+  cards: Card[];
+  score: number;
+  bet: number;
+  doubled: boolean;
+  fromSplit: boolean;
+  status: BlackjackHandStatus;
+};
+
 export type BlackjackSeat = {
   seatIndex: number;
   playerId: string | null;
   playerName: string | null;
   playerColor: string | null;
   gold: number;
-  bet: number;
-  hand: Card[];
-  score: number;
+  baseBet: number; // bet placed during betting phase
+  insuranceBet: number; // 0 unless taken when dealer shows ace
+  hands: BlackjackHand[];
+  activeHandIndex: number; // index inside hands[] currently being played
   status: BlackjackSeatStatus;
   ready: boolean;
 };
