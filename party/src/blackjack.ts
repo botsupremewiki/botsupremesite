@@ -46,12 +46,13 @@ export default class BlackjackServer implements Party.Server {
 
   private authIdToSeatIndex = new Map<string, number>();
   private connIdToSeatIndex = new Map<string, number>();
+  private connIdToGold = new Map<string, number>();
 
   constructor(readonly room: Party.Room) {}
 
   // ──────────────────────────────── connection handling ────────────────────────
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+  async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     if (this.players.size >= PLAZA_CONFIG.maxPlayers) {
       this.sendTo(conn, {
         type: "error",
@@ -67,9 +68,17 @@ export default class BlackjackServer implements Party.Server {
     const avatarUrl = sanitizeUrl(url.searchParams.get("avatarUrl"));
     const goldParam = url.searchParams.get("gold");
     const parsedGold = goldParam ? parseInt(goldParam, 10) : NaN;
-    const initialGold = Number.isFinite(parsedGold)
+    const queryGold = Number.isFinite(parsedGold)
       ? Math.max(0, Math.min(10_000_000, parsedGold))
       : 1000;
+
+    // Authenticated? Prefer Supabase as source of truth for gold.
+    let initialGold = queryGold;
+    if (authId) {
+      const supabaseGold = await this.fetchGoldFromSupabase(authId);
+      if (supabaseGold !== null) initialGold = supabaseGold;
+    }
+    this.connIdToGold.set(conn.id, initialGold);
 
     const player: Player = {
       id: conn.id,
@@ -105,6 +114,34 @@ export default class BlackjackServer implements Party.Server {
       gold: initialGold,
     });
     this.broadcast({ type: "player-joined", player }, [conn.id]);
+  }
+
+  private async fetchGoldFromSupabase(authId: string): Promise<number | null> {
+    const env = (this.room as unknown as { env?: Record<string, string> }).env;
+    const url = env?.SUPABASE_URL ?? readProcessEnv("SUPABASE_URL");
+    const key =
+      env?.SUPABASE_SERVICE_ROLE_KEY ??
+      readProcessEnv("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !key) return null;
+    try {
+      const resp = await fetch(
+        `${url}/rest/v1/profiles?id=eq.${authId}&select=gold`,
+        {
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (!resp.ok) return null;
+      const rows = (await resp.json()) as Array<{ gold: number }>;
+      if (rows.length === 0) return null;
+      const g = rows[0].gold;
+      return typeof g === "number" && Number.isFinite(g) ? g : null;
+    } catch {
+      return null;
+    }
   }
 
   onMessage(raw: string, sender: Party.Connection) {
@@ -200,6 +237,7 @@ export default class BlackjackServer implements Party.Server {
 
   onClose(conn: Party.Connection) {
     if (!this.players.delete(conn.id)) return;
+    this.connIdToGold.delete(conn.id);
 
     const seatIndex = this.connIdToSeatIndex.get(conn.id);
     if (seatIndex !== undefined) {
@@ -264,9 +302,9 @@ export default class BlackjackServer implements Party.Server {
       return;
     }
 
-    // Fetch the current gold from connection query (kept up to date via gold-update loop-back)
-    // For MVP we reuse initialGold from welcome; seat.gold is set here
-    const existingGold = seat.gold > 0 ? seat.gold : 1000;
+    // Authoritative balance comes from the onConnect cache (which itself is
+    // populated from Supabase for authenticated users).
+    const existingGold = this.connIdToGold.get(conn.id) ?? 1000;
 
     seat.playerId = conn.id;
     seat.playerName = player.name;
@@ -364,6 +402,7 @@ export default class BlackjackServer implements Party.Server {
     seat.bet = bet;
     seat.gold -= bet; // reserve the bet
     seat.status = "ready";
+    this.connIdToGold.set(connId, seat.gold);
     this.sendGoldTo(connId, seat.gold);
     this.broadcastState();
   }
@@ -544,6 +583,7 @@ export default class BlackjackServer implements Party.Server {
 
       const credit = Math.floor(seat.bet * payoutMultiplier);
       seat.gold += credit;
+      if (seat.playerId) this.connIdToGold.set(seat.playerId, seat.gold);
 
       const player = seat.playerId ? this.players.get(seat.playerId) : null;
       const label =
