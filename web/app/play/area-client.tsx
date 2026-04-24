@@ -23,6 +23,7 @@ import { UserPill } from "@/components/user-pill";
 import { ChatPanel } from "./chat-panel";
 import type { ChatChannel } from "./chat-panel";
 import { useAuxChat } from "./use-aux-chat";
+import { FitBox } from "./fit-box";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -290,15 +291,20 @@ export function AreaClient({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <main className="relative flex flex-1 items-center justify-center overflow-auto p-4">
-          <div
-            ref={hostRef}
-            className="pixi-host rounded-xl border border-white/10 shadow-2xl shadow-black/60"
-            style={{ width: sceneConfig.width, height: sceneConfig.height }}
-          />
+        <main className="relative flex-1">
+          <FitBox
+            logicalWidth={sceneConfig.width}
+            logicalHeight={sceneConfig.height}
+          >
+            <div
+              ref={hostRef}
+              className="pixi-host"
+              style={{ width: sceneConfig.width, height: sceneConfig.height }}
+            />
+          </FitBox>
 
           {status === "connecting" && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -309,7 +315,7 @@ export function AreaClient({
             </div>
           )}
           {status === "disconnected" && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
               <div className="text-center text-sm text-zinc-300">
                 Connexion perdue.{" "}
                 <button

@@ -28,6 +28,7 @@ import { BLACKJACK_SCENE } from "@/lib/game/configs";
 import { ChatPanel } from "@/app/play/chat-panel";
 import { buildChannels } from "@/app/play/area-client";
 import { useAuxChat } from "@/app/play/use-aux-chat";
+import { FitBox } from "@/app/play/fit-box";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -284,80 +285,85 @@ export function BlackjackClient({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <main className="relative flex flex-1 items-center justify-center overflow-auto p-4">
-          <div
-            className="relative rounded-xl border border-white/10 shadow-2xl shadow-black/60"
-            style={{
-              width: BLACKJACK_SCENE.width,
-              height: BLACKJACK_SCENE.height,
-            }}
+        <main className="relative flex-1">
+          <FitBox
+            logicalWidth={BLACKJACK_SCENE.width}
+            logicalHeight={BLACKJACK_SCENE.height}
           >
             <div
-              ref={hostRef}
-              className="pixi-host"
+              className="relative"
               style={{
                 width: BLACKJACK_SCENE.width,
                 height: BLACKJACK_SCENE.height,
               }}
-            />
+            >
+              <div
+                ref={hostRef}
+                className="pixi-host"
+                style={{
+                  width: BLACKJACK_SCENE.width,
+                  height: BLACKJACK_SCENE.height,
+                }}
+              />
 
-            {blackjack && (
-              <>
-                <DealerCards state={blackjack} />
-                {blackjack.seats.map((seat) => (
-                  <SeatCards
-                    key={seat.seatIndex}
-                    seat={seat}
-                    active={blackjack.activeSeatIndex === seat.seatIndex}
-                  />
-                ))}
-              </>
-            )}
+              {blackjack && (
+                <>
+                  <DealerCards state={blackjack} />
+                  {blackjack.seats.map((seat) => (
+                    <SeatCards
+                      key={seat.seatIndex}
+                      seat={seat}
+                      active={blackjack.activeSeatIndex === seat.seatIndex}
+                    />
+                  ))}
+                </>
+              )}
 
-            {status !== "connected" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                <div className="text-sm text-zinc-300">
-                  {status === "connecting" ? (
-                    "Arrivée à la table..."
-                  ) : (
-                    <>
-                      Connexion perdue.{" "}
-                      <button
-                        onClick={() => window.location.reload()}
-                        className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
-                      >
-                        Recharger
-                      </button>
-                    </>
+              {blackjack && (
+                <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
+                  {phaseLabel(blackjack.phase)}
+                  {blackjack.lastOutcome && blackjack.phase === "resolving" && (
+                    <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
+                      {blackjack.lastOutcome}
+                    </span>
                   )}
                 </div>
-              </div>
-            )}
+              )}
 
-            {blackjack && (
-              <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
-                {phaseLabel(blackjack.phase)}
-                {blackjack.lastOutcome && blackjack.phase === "resolving" && (
-                  <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
-                    {blackjack.lastOutcome}
-                  </span>
+              {selfSeat && blackjack && (
+                <ControlPanel
+                  seat={selfSeat}
+                  phase={blackjack.phase}
+                  isMyTurn={isMyTurn}
+                  onReady={setReady}
+                  onLeaveSeat={leaveSeat}
+                  onBet={placeBet}
+                  onHit={hit}
+                  onStand={stand}
+                />
+              )}
+            </div>
+          </FitBox>
+
+          {status !== "connected" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+              <div className="text-sm text-zinc-300">
+                {status === "connecting" ? (
+                  "Arrivée à la table..."
+                ) : (
+                  <>
+                    Connexion perdue.{" "}
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
+                    >
+                      Recharger
+                    </button>
+                  </>
                 )}
               </div>
-            )}
-
-            {selfSeat && blackjack && (
-              <ControlPanel
-                seat={selfSeat}
-                phase={blackjack.phase}
-                isMyTurn={isMyTurn}
-                onReady={setReady}
-                onLeaveSeat={leaveSeat}
-                onBet={placeBet}
-                onHit={hit}
-                onStand={stand}
-              />
-            )}
-          </div>
+            </div>
+          )}
         </main>
 
         <ChatPanel
