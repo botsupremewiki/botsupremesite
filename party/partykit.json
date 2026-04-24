@@ -2,5 +2,8 @@
   "$schema": "https://www.partykit.io/schema.json",
   "name": "site-ultime",
   "main": "src/server.ts",
+  "parties": {
+    "blackjack": "src/blackjack.ts"
+  },
   "compatibilityDate": "2024-09-01"
 }

@@ -28,7 +28,15 @@ export type TableLandmark = {
   href?: string;
 };
 
-export type Landmark = PortalLandmark | TableLandmark;
+export type SeatLandmark = {
+  kind: "seat";
+  id: string;
+  seatIndex: number;
+  x: number;
+  y: number;
+};
+
+export type Landmark = PortalLandmark | TableLandmark | SeatLandmark;
 
 export interface SceneConfig {
   width: number;
@@ -121,6 +129,12 @@ class PlayerSprite extends Container {
   }
 }
 
+export type SeatOccupant = {
+  playerId: string;
+  playerName: string;
+  color: string;
+};
+
 export class GameScene {
   private app: Application | null = null;
   private world = new Container();
@@ -128,9 +142,12 @@ export class GameScene {
   private landmarksLayer = new Container();
   private playersLayer = new Container();
   private sprites = new Map<string, PlayerSprite>();
+  private seatContainers = new Map<number, Container>();
   private readonly config: SceneConfig;
   private selfId: string | null = null;
   private pendingLandmark: Landmark | null = null;
+  private pendingArrivalX: number | null = null;
+  private pendingArrivalY: number | null = null;
 
   onClickMove?: (x: number, y: number) => void;
   onLandmarkArrival?: (landmark: Landmark) => void;
@@ -172,6 +189,8 @@ export class GameScene {
     this.app.stage.on("pointerdown", (e) => {
       const p = e.getLocalPosition(this.world);
       this.pendingLandmark = null;
+      this.pendingArrivalX = null;
+      this.pendingArrivalY = null;
       this.onClickMove?.(p.x, p.y);
     });
 
@@ -183,15 +202,23 @@ export class GameScene {
   }
 
   private checkLandmarkArrival() {
-    if (!this.pendingLandmark || !this.selfId) return;
+    if (
+      !this.pendingLandmark ||
+      this.pendingArrivalX === null ||
+      this.pendingArrivalY === null ||
+      !this.selfId
+    )
+      return;
     const sprite = this.sprites.get(this.selfId);
     if (!sprite) return;
     const pos = sprite.currentPosition();
-    const dx = pos.x - this.pendingLandmark.x;
-    const dy = pos.y - this.pendingLandmark.y;
+    const dx = pos.x - this.pendingArrivalX;
+    const dy = pos.y - this.pendingArrivalY;
     if (Math.hypot(dx, dy) < 6) {
       const landmark = this.pendingLandmark;
       this.pendingLandmark = null;
+      this.pendingArrivalX = null;
+      this.pendingArrivalY = null;
       this.onLandmarkArrival?.(landmark);
     }
   }
@@ -226,10 +253,119 @@ export class GameScene {
     for (const landmark of this.config.landmarks) {
       if (landmark.kind === "portal") {
         this.drawPortal(landmark);
-      } else {
+      } else if (landmark.kind === "table") {
         this.drawTable(landmark);
+      } else if (landmark.kind === "seat") {
+        this.drawSeat(landmark);
       }
     }
+  }
+
+  private drawSeat(seat: SeatLandmark) {
+    const container = new Container();
+    container.position.set(seat.x, seat.y);
+
+    const chairBack = new Graphics();
+    chairBack
+      .roundRect(-16, -22, 32, 14, 4)
+      .fill({ color: 0x3f3f46, alpha: 0.9 })
+      .stroke({ color: 0xffffff, width: 1, alpha: 0.2 });
+    container.addChild(chairBack);
+
+    const seatPad = new Graphics();
+    seatPad
+      .roundRect(-18, -10, 36, 18, 6)
+      .fill({ color: 0x27272a, alpha: 0.95 })
+      .stroke({ color: 0xffffff, width: 1, alpha: 0.25 });
+    container.addChild(seatPad);
+
+    const label = new Text({
+      text: `#${seat.seatIndex + 1}`,
+      style: {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: 9,
+        fontWeight: "700",
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 2 },
+      },
+    });
+    label.anchor.set(0.5, 0.5);
+    label.position.set(0, 0);
+    label.alpha = 0.55;
+    container.addChild(label);
+
+    container.eventMode = "static";
+    container.cursor = "pointer";
+    container.hitArea = {
+      contains: (x, y) => Math.abs(x) <= 24 && y >= -28 && y <= 14,
+    };
+    container.on("pointerdown", (e) => {
+      e.stopPropagation();
+      const approachY = seat.y + 35;
+      this.pendingLandmark = seat;
+      this.pendingArrivalX = seat.x;
+      this.pendingArrivalY = approachY;
+      this.onClickMove?.(seat.x, approachY);
+    });
+    container.on("pointerover", () => {
+      seatPad.alpha = 1;
+      chairBack.alpha = 1;
+    });
+    container.on("pointerout", () => {
+      seatPad.alpha = 0.95;
+      chairBack.alpha = 0.9;
+    });
+
+    this.landmarksLayer.addChild(container);
+    this.seatContainers.set(seat.seatIndex, container);
+  }
+
+  updateSeat(seatIndex: number, occupant: SeatOccupant | null) {
+    const container = this.seatContainers.get(seatIndex);
+    if (!container) return;
+
+    // Remove existing occupant visual (tagged via label "occupant")
+    const existing = container.children.find(
+      (c) => (c as Container & { __isOccupant?: boolean }).__isOccupant,
+    );
+    if (existing) {
+      container.removeChild(existing);
+      existing.destroy({ children: true });
+    }
+
+    if (!occupant) return;
+
+    const occupantContainer = new Container() as Container & {
+      __isOccupant: boolean;
+    };
+    occupantContainer.__isOccupant = true;
+
+    const color = parseInt(occupant.color.slice(1), 16);
+
+    const body = new Graphics();
+    body
+      .circle(0, -12, 10)
+      .fill(color)
+      .stroke({ color: 0x000000, width: 1.5, alpha: 0.5 });
+    body.circle(-3, -14, 1.5).fill(0xffffff);
+    body.circle(3, -14, 1.5).fill(0xffffff);
+    occupantContainer.addChild(body);
+
+    const nameLabel = new Text({
+      text: occupant.playerName,
+      style: {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: 10,
+        fontWeight: "600",
+        fill: 0xffffff,
+        stroke: { color: 0x000000, width: 2 },
+      },
+    });
+    nameLabel.anchor.set(0.5, 1);
+    nameLabel.position.set(0, -26);
+    occupantContainer.addChild(nameLabel);
+
+    container.addChild(occupantContainer);
   }
 
   private drawPortal(portal: PortalLandmark) {
@@ -266,6 +402,8 @@ export class GameScene {
       container.on("pointerdown", (e) => {
         e.stopPropagation();
         this.pendingLandmark = portal;
+        this.pendingArrivalX = portal.x;
+        this.pendingArrivalY = portal.y;
         this.onClickMove?.(portal.x, portal.y);
       });
       container.on("pointerover", () => {
@@ -343,8 +481,10 @@ export class GameScene {
       container.cursor = "pointer";
       container.on("pointerdown", (e) => {
         e.stopPropagation();
-        this.pendingLandmark = table;
         const approachY = table.y + table.height / 2 + 30;
+        this.pendingLandmark = table;
+        this.pendingArrivalX = table.x;
+        this.pendingArrivalY = approachY;
         this.onClickMove?.(table.x, approachY);
       });
       container.on("pointerover", () => {

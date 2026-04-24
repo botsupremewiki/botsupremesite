@@ -1,5 +1,5 @@
 import { PLAZA_CONFIG } from "@shared/types";
-import type { SceneConfig } from "./scene";
+import type { Landmark, SceneConfig } from "./scene";
 
 const W = PLAZA_CONFIG.width;
 const H = PLAZA_CONFIG.height;
@@ -84,6 +84,7 @@ export const CASINO_SCENE: SceneConfig = {
       accentColor: 0xeab308,
       label: "Blackjack",
       seats: 5,
+      href: "/play/casino/blackjack/t1",
     },
     {
       kind: "table",
@@ -147,3 +148,46 @@ export const CASINO_SCENE: SceneConfig = {
     },
   ],
 };
+
+const BJ_SEAT_Y = 480;
+const BJ_SEAT_XS = [224, 368, 512, 656, 800];
+
+export const BLACKJACK_SCENE: SceneConfig = {
+  width: W,
+  height: H,
+  backgroundColor: 0x0a1410,
+  floorColor: 0x0d1e15,
+  floorAccentColor: 0x10b981,
+  floorAccentAlpha: 0.04,
+  landmarks: [
+    {
+      kind: "portal",
+      id: "back-to-casino",
+      x: 80,
+      y: 80,
+      color: 0xef4444,
+      label: "← Casino",
+      href: "/play/casino",
+    },
+    {
+      kind: "table",
+      id: "blackjack-felt",
+      x: W / 2,
+      y: 260,
+      width: 640,
+      height: 180,
+      feltColor: 0x065f3e,
+      accentColor: 0xeab308,
+      label: "Blackjack · Dealer tire sur 16, reste sur 17",
+      seats: 5,
+    },
+    ...BJ_SEAT_XS.map<Landmark>((x, i) => ({
+      kind: "seat",
+      id: `seat-${i}`,
+      seatIndex: i,
+      x,
+      y: BJ_SEAT_Y,
+    })),
+  ],
+};
+
