@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FormEvent,
   useCallback,
@@ -9,7 +10,6 @@ import {
   useState,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { PLAZA_CONFIG } from "@shared/types";
 import type {
   ChatMessage,
   ClientMessage,
@@ -17,15 +17,30 @@ import type {
   Player,
   ServerMessage,
 } from "@shared/types";
-import type { PlazaScene } from "@/lib/game/plaza";
+import type { GameScene, SceneConfig } from "@/lib/game/scene";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
-export function PlazaClient({ profile }: { profile: Profile | null }) {
+export type AreaClientProps = {
+  profile: Profile | null;
+  sceneConfig: SceneConfig;
+  roomName: string;
+  areaLabel: string;
+  backHref?: string;
+};
+
+export function AreaClient({
+  profile,
+  sceneConfig,
+  roomName,
+  areaLabel,
+  backHref = "/",
+}: AreaClientProps) {
+  const router = useRouter();
   const hostRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<PlazaScene | null>(null);
+  const sceneRef = useRef<GameScene | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const selfIdRef = useRef<string | null>(null);
 
@@ -44,7 +59,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
     if (!host) return;
 
     let cancelled = false;
-    let scene: PlazaScene | null = null;
+    let scene: GameScene | null = null;
     let socket: WebSocket | null = null;
 
     const sendClient = (msg: ClientMessage) => {
@@ -54,10 +69,10 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
     };
 
     (async () => {
-      const mod = await import("@/lib/game/plaza");
+      const mod = await import("@/lib/game/scene");
       if (cancelled) return;
-      scene = new mod.PlazaScene();
-      await scene.init(host, PLAZA_CONFIG.width, PLAZA_CONFIG.height);
+      scene = new mod.GameScene(sceneConfig);
+      await scene.init(host);
       if (cancelled) {
         scene.destroy();
         return;
@@ -83,6 +98,14 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
         sendClient({ type: "move", x, y, direction });
       };
 
+      scene.onLandmarkArrival = (landmark) => {
+        if (landmark.kind === "portal" && landmark.href) {
+          router.push(landmark.href);
+        } else if (landmark.kind === "table" && landmark.href) {
+          router.push(landmark.href);
+        }
+      };
+
       if (cancelled) return;
 
       const partyHost =
@@ -101,7 +124,9 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
         partyHost.startsWith("192.168.")
           ? "ws"
           : "wss";
-      const url = `${scheme}://${partyHost}/parties/main/plaza${qs ? `?${qs}` : ""}`;
+      const url = `${scheme}://${partyHost}/parties/main/${roomName}${
+        qs ? `?${qs}` : ""
+      }`;
 
       socket = new WebSocket(url);
       socketRef.current = socket;
@@ -126,6 +151,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
       switch (msg.type) {
         case "welcome": {
           selfIdRef.current = msg.selfId;
+          scene.setSelfId(msg.selfId);
           for (const p of msg.players) scene.addPlayer(p);
           setPlayers(msg.players);
           setChat(msg.chat);
@@ -139,17 +165,10 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
           break;
         case "player-left":
           scene.removePlayer(msg.playerId);
-          setPlayers((prev) =>
-            prev.filter((p) => p.id !== msg.playerId),
-          );
+          setPlayers((prev) => prev.filter((p) => p.id !== msg.playerId));
           break;
         case "player-moved":
-          scene.updatePlayer(
-            msg.playerId,
-            msg.x,
-            msg.y,
-            msg.direction,
-          );
+          scene.updatePlayer(msg.playerId, msg.x, msg.y, msg.direction);
           setPlayers((prev) =>
             prev.map((p) =>
               p.id === msg.playerId
@@ -171,7 +190,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
           setChat((prev) => [...prev.slice(-29), msg.message]);
           break;
         case "error":
-          console.error("[plaza] server error:", msg.message);
+          console.error("[area] server error:", msg.message);
           break;
       }
     }
@@ -187,7 +206,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
         if (sceneRef.current === scene) sceneRef.current = null;
       }
     };
-  }, [profile]);
+  }, [profile, sceneConfig, roomName, router]);
 
   const sendChat = useCallback(
     (e?: FormEvent) => {
@@ -221,13 +240,13 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            href={backHref}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
             ← Quitter
           </Link>
           <div className="h-4 w-px bg-white/10" />
-          <span className="font-medium">Plaza</span>
+          <span className="font-medium">{areaLabel}</span>
         </div>
         <div className="flex items-center gap-4 text-zinc-400">
           <StatusIndicator status={status} />
@@ -269,10 +288,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
         <div
           ref={hostRef}
           className="pixi-host rounded-xl border border-white/10 shadow-2xl shadow-black/60"
-          style={{
-            width: PLAZA_CONFIG.width,
-            height: PLAZA_CONFIG.height,
-          }}
+          style={{ width: sceneConfig.width, height: sceneConfig.height }}
         />
 
         {status === "connecting" && (
@@ -282,7 +298,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
               animate={{ opacity: 1 }}
               className="text-sm text-zinc-300"
             >
-              Connexion à la plaza...
+              Connexion...
             </motion.div>
           </div>
         )}
@@ -305,7 +321,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
             <div className="max-h-48 overflow-y-auto px-3 py-2 text-sm">
               {chat.length === 0 ? (
                 <div className="italic text-zinc-500">
-                  Aucun message. Sois le premier à dire bonjour.
+                  Aucun message pour l&apos;instant.
                 </div>
               ) : (
                 <AnimatePresence initial={false}>
@@ -349,7 +365,7 @@ export function PlazaClient({ profile }: { profile: Profile | null }) {
             </form>
           </div>
           <div className="mt-2 px-1 text-[11px] text-zinc-500">
-            Clique sur la plaza pour te déplacer.
+            Clique pour te déplacer · clique un portail pour le traverser.
           </div>
         </div>
       </div>
