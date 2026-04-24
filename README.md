@@ -98,6 +98,48 @@ NEXT_PUBLIC_PARTYKIT_HOST=
 
 Relance `npm run dev`. Le bouton **Se connecter avec Discord** apparaît dans le nav et dans la plaza.
 
+## Persistance de l'Or Suprême (blackjack & autres jeux)
+
+Pour que les gains/pertes soient sauvegardés dans Supabase entre les sessions,
+le serveur PartyKit doit pouvoir écrire dans la table `profiles` via la
+`service_role` key (clé admin Supabase).
+
+### Récupérer la service role key
+
+Supabase dashboard → **Project Settings → API** → section **Project API keys**
+→ copie `service_role` (⚠️ clé secrète, ne JAMAIS la mettre côté client, ne
+JAMAIS la commiter).
+
+### Ajouter en dev local
+
+Crée `party/.env` (gitignored) :
+
+```env
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...  # service_role key
+```
+
+Relance `npm run dev:party`.
+
+### Ajouter en prod (PartyKit Cloud)
+
+```bash
+npx partykit env add SUPABASE_URL --workspace=party
+# colle l'URL quand demandé
+
+npx partykit env add SUPABASE_SERVICE_ROLE_KEY --workspace=party
+# colle la service_role key quand demandé
+```
+
+Puis redéploie :
+
+```bash
+npm run deploy --workspace=party
+```
+
+Sans ces variables, le jeu fonctionne mais l'or ne persiste pas entre
+sessions (chaque reload repart de la valeur enregistrée dans Supabase).
+
 ## Poster le message d'accueil dans Discord (bot)
 
 Un petit script bot one-shot poste un embed dans un salon avec un bouton
