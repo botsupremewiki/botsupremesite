@@ -25,6 +25,9 @@ import type { GameScene, SeatLandmark } from "@/lib/game/scene";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { BLACKJACK_SCENE } from "@/lib/game/configs";
+import { ChatPanel } from "@/app/play/chat-panel";
+import { buildChannels } from "@/app/play/area-client";
+import { useAuxChat } from "@/app/play/use-aux-chat";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -44,9 +47,14 @@ export function BlackjackClient({
   const [players, setPlayers] = useState<Player[]>([]);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnStatus>("connecting");
-  const [input, setInput] = useState("");
   const [blackjack, setBlackjack] = useState<BlackjackState | null>(null);
   const [gold, setGold] = useState<number>(profile?.gold ?? 1000);
+
+  const globalChat = useAuxChat({
+    partyName: "global",
+    room: "main",
+    query: { name: profile?.username },
+  });
 
   useEffect(() => {
     const host = hostRef.current;
@@ -215,17 +223,12 @@ export function BlackjackClient({
     };
   }, [profile, tableId, router]);
 
-  const sendChat = useCallback(
-    (e?: FormEvent) => {
-      e?.preventDefault();
-      const text = input.trim();
-      if (!text || !socketRef.current) return;
-      const msg: ClientMessage = { type: "chat", text };
-      socketRef.current.send(JSON.stringify(msg));
-      setInput("");
-    },
-    [input],
-  );
+  const sendRawChat = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !socketRef.current) return;
+    const msg: ClientMessage = { type: "chat", text: trimmed };
+    socketRef.current.send(JSON.stringify(msg));
+  }, []);
 
   const sendMsg = useCallback((msg: ClientMessage) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -280,135 +283,97 @@ export function BlackjackClient({
         </div>
       </header>
 
-      <div className="relative flex flex-1 items-center justify-center overflow-auto p-4">
-        <div
-          className="relative rounded-xl border border-white/10 shadow-2xl shadow-black/60"
-          style={{
-            width: BLACKJACK_SCENE.width,
-            height: BLACKJACK_SCENE.height,
-          }}
-        >
+      <div className="flex flex-1 overflow-hidden">
+        <main className="relative flex flex-1 items-center justify-center overflow-auto p-4">
           <div
-            ref={hostRef}
-            className="pixi-host"
+            className="relative rounded-xl border border-white/10 shadow-2xl shadow-black/60"
             style={{
               width: BLACKJACK_SCENE.width,
               height: BLACKJACK_SCENE.height,
             }}
-          />
+          >
+            <div
+              ref={hostRef}
+              className="pixi-host"
+              style={{
+                width: BLACKJACK_SCENE.width,
+                height: BLACKJACK_SCENE.height,
+              }}
+            />
 
-          {/* Cards & scores overlay */}
-          {blackjack && (
-            <>
-              <DealerCards state={blackjack} />
-              {blackjack.seats.map((seat) => (
-                <SeatCards
-                  key={seat.seatIndex}
-                  seat={seat}
-                  active={blackjack.activeSeatIndex === seat.seatIndex}
-                />
-              ))}
-            </>
-          )}
+            {blackjack && (
+              <>
+                <DealerCards state={blackjack} />
+                {blackjack.seats.map((seat) => (
+                  <SeatCards
+                    key={seat.seatIndex}
+                    seat={seat}
+                    active={blackjack.activeSeatIndex === seat.seatIndex}
+                  />
+                ))}
+              </>
+            )}
 
-          {status !== "connected" && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-              <div className="text-sm text-zinc-300">
-                {status === "connecting" ? (
-                  "Arrivée à la table..."
-                ) : (
-                  <>
-                    Connexion perdue.{" "}
-                    <button
-                      onClick={() => window.location.reload()}
-                      className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
-                    >
-                      Recharger
-                    </button>
-                  </>
+            {status !== "connected" && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                <div className="text-sm text-zinc-300">
+                  {status === "connecting" ? (
+                    "Arrivée à la table..."
+                  ) : (
+                    <>
+                      Connexion perdue.{" "}
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
+                      >
+                        Recharger
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {blackjack && (
+              <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
+                {phaseLabel(blackjack.phase)}
+                {blackjack.lastOutcome && blackjack.phase === "resolving" && (
+                  <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
+                    {blackjack.lastOutcome}
+                  </span>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Phase banner */}
-          {blackjack && (
-            <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
-              {phaseLabel(blackjack.phase)}
-              {blackjack.lastOutcome && blackjack.phase === "resolving" && (
-                <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
-                  {blackjack.lastOutcome}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Control panel when seated */}
-          {selfSeat && blackjack && (
-            <ControlPanel
-              seat={selfSeat}
-              phase={blackjack.phase}
-              isMyTurn={isMyTurn}
-              onReady={setReady}
-              onLeaveSeat={leaveSeat}
-              onBet={placeBet}
-              onHit={hit}
-              onStand={stand}
-            />
-          )}
-        </div>
-
-        {/* Chat overlay */}
-        <div className="pointer-events-none absolute bottom-8 left-8 w-[22rem]">
-          <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/55 backdrop-blur-md">
-            <div className="max-h-40 overflow-y-auto px-3 py-2 text-sm">
-              {chat.length === 0 ? (
-                <div className="italic text-zinc-500">Aucun message.</div>
-              ) : (
-                <AnimatePresence initial={false}>
-                  {chat.map((m) => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="py-0.5 leading-tight"
-                    >
-                      <span className="font-semibold text-indigo-300">
-                        {m.playerName}
-                      </span>
-                      <span className="text-zinc-500"> : </span>
-                      <span className="text-zinc-100">{m.text}</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              )}
-            </div>
-            <form
-              onSubmit={sendChat}
-              className="flex border-t border-white/10"
-            >
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Écris un message..."
-                maxLength={200}
-                disabled={status !== "connected"}
-                className="flex-1 bg-transparent px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none disabled:opacity-50"
+            {selfSeat && blackjack && (
+              <ControlPanel
+                seat={selfSeat}
+                phase={blackjack.phase}
+                isMyTurn={isMyTurn}
+                onReady={setReady}
+                onLeaveSeat={leaveSeat}
+                onBet={placeBet}
+                onHit={hit}
+                onStand={stand}
               />
-              <button
-                type="submit"
-                disabled={!input.trim() || status !== "connected"}
-                className="px-4 py-2 text-sm font-medium text-indigo-300 transition-colors hover:text-indigo-200 disabled:text-zinc-600"
-              >
-                Envoyer
-              </button>
-            </form>
+            )}
           </div>
-          <div className="mt-2 px-1 text-[11px] text-zinc-500">
-            Clique sur un siège pour t&apos;y asseoir.
-          </div>
-        </div>
+        </main>
+
+        <ChatPanel
+          channels={buildChannels({
+            localMessages: chat,
+            localOnSend: sendRawChat,
+            localEnabled: status === "connected",
+            globalMessages: globalChat.messages,
+            globalOnSend: globalChat.send,
+            globalEnabled: globalChat.status === "connected",
+            zoneReason: "Bientôt — canal du casino",
+            dmsReason: "Bientôt — messages privés",
+          })}
+          connected={status === "connected" || globalChat.status === "connected"}
+          hint="Entrée ouvre le chat · clique un siège pour t'asseoir"
+        />
       </div>
     </div>
   );

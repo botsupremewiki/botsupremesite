@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import type {
   ChatMessage,
   ClientMessage,
@@ -20,6 +20,9 @@ import type {
 import type { GameScene, SceneConfig } from "@/lib/game/scene";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { ChatPanel } from "./chat-panel";
+import type { ChatChannel } from "./chat-panel";
+import { useAuxChat } from "./use-aux-chat";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -47,12 +50,19 @@ export function AreaClient({
   const [players, setPlayers] = useState<Player[]>([]);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnStatus>("connecting");
-  const [input, setInput] = useState("");
   const [selfName, setSelfName] = useState<string>(
     profile?.username ?? "",
   );
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+
+  const globalChat = useAuxChat({
+    partyName: "global",
+    room: "main",
+    query: {
+      name: profile?.username,
+    },
+  });
 
   useEffect(() => {
     const host = hostRef.current;
@@ -208,17 +218,12 @@ export function AreaClient({
     };
   }, [profile, sceneConfig, roomName, router]);
 
-  const sendChat = useCallback(
-    (e?: FormEvent) => {
-      e?.preventDefault();
-      const text = input.trim();
-      if (!text || !socketRef.current) return;
-      const msg: ClientMessage = { type: "chat", text };
-      socketRef.current.send(JSON.stringify(msg));
-      setInput("");
-    },
-    [input],
-  );
+  const sendRawChat = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !socketRef.current) return;
+    const msg: ClientMessage = { type: "chat", text: trimmed };
+    socketRef.current.send(JSON.stringify(msg));
+  }, []);
 
   const startEditName = () => {
     setNameDraft(selfName);
@@ -284,93 +289,104 @@ export function AreaClient({
         </div>
       </header>
 
-      <div className="relative flex flex-1 items-center justify-center overflow-auto p-4">
-        <div
-          ref={hostRef}
-          className="pixi-host rounded-xl border border-white/10 shadow-2xl shadow-black/60"
-          style={{ width: sceneConfig.width, height: sceneConfig.height }}
+      <div className="flex flex-1 overflow-hidden">
+        <main className="relative flex flex-1 items-center justify-center overflow-auto p-4">
+          <div
+            ref={hostRef}
+            className="pixi-host rounded-xl border border-white/10 shadow-2xl shadow-black/60"
+            style={{ width: sceneConfig.width, height: sceneConfig.height }}
+          />
+
+          {status === "connecting" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-sm text-zinc-300"
+              >
+                Connexion...
+              </motion.div>
+            </div>
+          )}
+          {status === "disconnected" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="text-center text-sm text-zinc-300">
+                Connexion perdue.{" "}
+                <button
+                  onClick={() => window.location.reload()}
+                  className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
+                >
+                  Recharger
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <ChatPanel
+          channels={buildChannels({
+            localMessages: chat,
+            localOnSend: (text) => sendRawChat(text),
+            localEnabled: status === "connected",
+            globalMessages: globalChat.messages,
+            globalOnSend: globalChat.send,
+            globalEnabled: globalChat.status === "connected",
+            zoneReason: "Bientôt — canal de la zone en cours",
+            dmsReason: "Bientôt — messages privés",
+          })}
+          connected={status === "connected" || globalChat.status === "connected"}
+          hint="Entrée ouvre le chat · clique pour te déplacer"
         />
-
-        {status === "connecting" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-sm text-zinc-300"
-            >
-              Connexion...
-            </motion.div>
-          </div>
-        )}
-        {status === "disconnected" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="text-center text-sm text-zinc-300">
-              Connexion perdue.{" "}
-              <button
-                onClick={() => window.location.reload()}
-                className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
-              >
-                Recharger
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="pointer-events-none absolute bottom-8 left-8 w-[22rem]">
-          <div className="pointer-events-auto rounded-xl border border-white/10 bg-black/55 backdrop-blur-md">
-            <div className="max-h-48 overflow-y-auto px-3 py-2 text-sm">
-              {chat.length === 0 ? (
-                <div className="italic text-zinc-500">
-                  Aucun message pour l&apos;instant.
-                </div>
-              ) : (
-                <AnimatePresence initial={false}>
-                  {chat.map((m) => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="py-0.5 leading-tight"
-                    >
-                      <span className="font-semibold text-indigo-300">
-                        {m.playerName}
-                      </span>
-                      <span className="text-zinc-500"> : </span>
-                      <span className="text-zinc-100">{m.text}</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              )}
-            </div>
-            <form
-              onSubmit={sendChat}
-              className="flex border-t border-white/10"
-            >
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Écris un message..."
-                maxLength={200}
-                disabled={status !== "connected"}
-                className="flex-1 bg-transparent px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || status !== "connected"}
-                className="px-4 py-2 text-sm font-medium text-indigo-300 transition-colors hover:text-indigo-200 disabled:text-zinc-600"
-              >
-                Envoyer
-              </button>
-            </form>
-          </div>
-          <div className="mt-2 px-1 text-[11px] text-zinc-500">
-            Clique pour te déplacer · clique un portail pour le traverser.
-          </div>
-        </div>
       </div>
     </div>
   );
+}
+
+export function buildChannels({
+  localMessages,
+  localOnSend,
+  localEnabled,
+  globalMessages,
+  globalOnSend,
+  globalEnabled,
+  zoneReason,
+  dmsReason,
+}: {
+  localMessages: ChatMessage[];
+  localOnSend: (text: string) => void;
+  localEnabled: boolean;
+  globalMessages: ChatMessage[];
+  globalOnSend: (text: string) => void;
+  globalEnabled: boolean;
+  zoneReason: string;
+  dmsReason: string;
+}): ChatChannel[] {
+  return [
+    {
+      id: "local",
+      label: "Ici",
+      messages: localMessages,
+      onSend: localEnabled ? localOnSend : undefined,
+    },
+    {
+      id: "zone",
+      label: "Zone",
+      messages: [],
+      disabledReason: zoneReason,
+    },
+    {
+      id: "global",
+      label: "Site",
+      messages: globalMessages,
+      onSend: globalEnabled ? globalOnSend : undefined,
+    },
+    {
+      id: "dms",
+      label: "DMs",
+      messages: [],
+      disabledReason: dmsReason,
+    },
+  ];
 }
 
 function StatusIndicator({ status }: { status: ConnStatus }) {

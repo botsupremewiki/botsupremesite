@@ -3,7 +3,8 @@
   "name": "site-ultime",
   "main": "src/server.ts",
   "parties": {
-    "blackjack": "src/blackjack.ts"
+    "blackjack": "src/blackjack.ts",
+    "global": "src/global.ts"
   },
   "compatibilityDate": "2024-09-01"
 }
