@@ -165,15 +165,6 @@ export default class SlotsServer implements Party.Server {
       });
       return;
     }
-    if (info.authId && !info.loadedFromDb) {
-      // Authenticated player but we never managed to read their DB row —
-      // refuse to take a bet rather than risk a phantom win/loss.
-      this.sendTo(conn, {
-        type: "slots-error",
-        message: "Profil indisponible — recharge la page.",
-      });
-      return;
-    }
 
     // Deduct bet up front
     info.gold -= bet;

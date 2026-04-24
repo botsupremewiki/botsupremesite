@@ -199,13 +199,6 @@ export default class MinesServer implements Party.Server {
       });
       return;
     }
-    if (info.authId && !info.loadedFromDb) {
-      this.sendTo(conn, {
-        type: "mines-error",
-        message: "Profil indisponible — recharge la page.",
-      });
-      return;
-    }
 
     const mineSet = pickMinePositions(total, minesCount);
 

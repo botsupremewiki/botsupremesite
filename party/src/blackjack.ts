@@ -301,15 +301,9 @@ export default class BlackjackServer implements Party.Server {
     }
 
     // Authoritative balance comes from the onConnect cache (which itself is
-    // populated from Supabase for authenticated users).
+    // populated from Supabase for authenticated users — and falls back to
+    // the URL value if Supabase is briefly unreachable).
     const existingGold = this.connIdToGold.get(conn.id) ?? 0;
-    if (player.authId && !this.connIdToLoadedFromDb.get(conn.id)) {
-      this.sendTo(conn, {
-        type: "error",
-        message: "Profil indisponible — recharge la page.",
-      });
-      return;
-    }
 
     seat.playerId = conn.id;
     seat.playerName = player.name;

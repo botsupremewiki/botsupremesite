@@ -449,13 +449,6 @@ export default class RouletteServer implements Party.Server {
       });
       return;
     }
-    if (info.authId && !info.loadedFromDb) {
-      this.sendTo(conn, {
-        type: "roulette-error",
-        message: "Profil indisponible — recharge la page.",
-      });
-      return;
-    }
 
     info.gold -= amount;
     seat.gold = info.gold;
