@@ -11,13 +11,16 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type {
+  BlackjackSeat,
   BlackjackState,
+  Card,
   ChatMessage,
   ClientMessage,
   Direction,
   Player,
   ServerMessage,
 } from "@shared/types";
+import { BLACKJACK_CONFIG } from "@shared/types";
 import type { GameScene, SeatLandmark } from "@/lib/game/scene";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
@@ -224,14 +227,29 @@ export function BlackjackClient({
     [input],
   );
 
-  const leaveSeat = useCallback(() => {
-    socketRef.current?.send(
-      JSON.stringify({ type: "leave-seat" } satisfies ClientMessage),
-    );
+  const sendMsg = useCallback((msg: ClientMessage) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(msg));
+    }
   }, []);
+
+  const leaveSeat = useCallback(
+    () => sendMsg({ type: "leave-seat" }),
+    [sendMsg],
+  );
+  const setReady = useCallback(() => sendMsg({ type: "ready" }), [sendMsg]);
+  const placeBet = useCallback(
+    (amount: number) => sendMsg({ type: "bet", amount }),
+    [sendMsg],
+  );
+  const hit = useCallback(() => sendMsg({ type: "hit" }), [sendMsg]);
+  const stand = useCallback(() => sendMsg({ type: "stand" }), [sendMsg]);
 
   const selfSeat =
     blackjack?.seats.find((s) => s.playerId === selfIdRef.current) ?? null;
+  const isMyTurn =
+    blackjack?.phase === "playing" &&
+    selfSeat?.seatIndex === blackjack.activeSeatIndex;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -264,60 +282,81 @@ export function BlackjackClient({
 
       <div className="relative flex flex-1 items-center justify-center overflow-auto p-4">
         <div
-          ref={hostRef}
-          className="pixi-host rounded-xl border border-white/10 shadow-2xl shadow-black/60"
+          className="relative rounded-xl border border-white/10 shadow-2xl shadow-black/60"
           style={{
             width: BLACKJACK_SCENE.width,
             height: BLACKJACK_SCENE.height,
           }}
-        />
+        >
+          <div
+            ref={hostRef}
+            className="pixi-host"
+            style={{
+              width: BLACKJACK_SCENE.width,
+              height: BLACKJACK_SCENE.height,
+            }}
+          />
 
-        {status !== "connected" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="text-sm text-zinc-300">
-              {status === "connecting" ? (
-                "Arrivée à la table..."
-              ) : (
-                <>
-                  Connexion perdue.{" "}
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
-                  >
-                    Recharger
-                  </button>
-                </>
+          {/* Cards & scores overlay */}
+          {blackjack && (
+            <>
+              <DealerCards state={blackjack} />
+              {blackjack.seats.map((seat) => (
+                <SeatCards
+                  key={seat.seatIndex}
+                  seat={seat}
+                  active={blackjack.activeSeatIndex === seat.seatIndex}
+                />
+              ))}
+            </>
+          )}
+
+          {status !== "connected" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="text-sm text-zinc-300">
+                {status === "connecting" ? (
+                  "Arrivée à la table..."
+                ) : (
+                  <>
+                    Connexion perdue.{" "}
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="font-semibold text-indigo-300 underline-offset-4 hover:underline"
+                    >
+                      Recharger
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Phase banner */}
+          {blackjack && (
+            <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
+              {phaseLabel(blackjack.phase)}
+              {blackjack.lastOutcome && blackjack.phase === "resolving" && (
+                <span className="ml-3 text-amber-300 normal-case font-normal tracking-normal">
+                  {blackjack.lastOutcome}
+                </span>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Phase banner */}
-        {blackjack && (
-          <div className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-zinc-200 backdrop-blur-sm">
-            Phase : {phaseLabel(blackjack.phase)}
-            {selfSeat && (
-              <span className="ml-2 rounded-full bg-amber-400/20 px-2 py-0.5 text-amber-300">
-                Tu es à la place #{selfSeat.seatIndex + 1}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Seated actions */}
-        {selfSeat && blackjack?.phase === "idle" && (
-          <div className="pointer-events-auto absolute bottom-28 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-4 py-2 backdrop-blur-md">
-            <span className="text-xs text-zinc-400">
-              Tu es assis à la place #{selfSeat.seatIndex + 1}
-            </span>
-            <button
-              onClick={leaveSeat}
-              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/10"
-            >
-              Quitter la place
-            </button>
-          </div>
-        )}
+          {/* Control panel when seated */}
+          {selfSeat && blackjack && (
+            <ControlPanel
+              seat={selfSeat}
+              phase={blackjack.phase}
+              isMyTurn={isMyTurn}
+              onReady={setReady}
+              onLeaveSeat={leaveSeat}
+              onBet={placeBet}
+              onHit={hit}
+              onStand={stand}
+            />
+          )}
+        </div>
 
         {/* Chat overlay */}
         <div className="pointer-events-none absolute bottom-8 left-8 w-[22rem]">
@@ -373,6 +412,242 @@ export function BlackjackClient({
       </div>
     </div>
   );
+}
+
+function ControlPanel({
+  seat,
+  phase,
+  isMyTurn,
+  onReady,
+  onLeaveSeat,
+  onBet,
+  onHit,
+  onStand,
+}: {
+  seat: BlackjackSeat;
+  phase: BlackjackState["phase"];
+  isMyTurn: boolean;
+  onReady: () => void;
+  onLeaveSeat: () => void;
+  onBet: (amount: number) => void;
+  onHit: () => void;
+  onStand: () => void;
+}) {
+  const canBet = (amount: number) => seat.gold >= amount;
+
+  return (
+    <div className="pointer-events-auto absolute bottom-4 right-4 flex flex-col items-end gap-2 rounded-xl border border-white/10 bg-black/70 p-3 text-xs backdrop-blur-md">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-zinc-400">
+        <span>Place #{seat.seatIndex + 1}</span>
+        <span className="rounded-full bg-amber-400/10 px-2 py-0.5 font-semibold text-amber-300">
+          {seat.gold.toLocaleString("fr-FR")} OS
+        </span>
+        {seat.bet > 0 && (
+          <span className="rounded-full bg-rose-400/10 px-2 py-0.5 font-semibold text-rose-300">
+            Mise {seat.bet}
+          </span>
+        )}
+      </div>
+
+      {phase === "idle" && (
+        <div className="flex gap-2">
+          {seat.ready ? (
+            <span className="rounded-md bg-emerald-400/10 px-3 py-1.5 text-emerald-300">
+              Prêt — en attente des autres
+            </span>
+          ) : (
+            <button
+              onClick={onReady}
+              className="rounded-md bg-emerald-500 px-3 py-1.5 font-semibold text-white shadow hover:bg-emerald-400"
+            >
+              Je suis prêt
+            </button>
+          )}
+          <button
+            onClick={onLeaveSeat}
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-zinc-200 hover:bg-white/10"
+          >
+            Quitter
+          </button>
+        </div>
+      )}
+
+      {phase === "betting" && seat.status === "betting" && (
+        <div className="flex flex-col gap-2">
+          <div className="text-[11px] text-zinc-400">Choisis ta mise</div>
+          <div className="flex gap-1.5">
+            {BLACKJACK_CONFIG.betPresets.map((amount) => (
+              <button
+                key={amount}
+                disabled={!canBet(amount)}
+                onClick={() => onBet(amount)}
+                className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-zinc-900 shadow hover:bg-amber-300 disabled:opacity-40"
+              >
+                {amount}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {phase === "betting" && seat.status === "ready" && (
+        <span className="rounded-md bg-emerald-400/10 px-3 py-1.5 text-emerald-300">
+          Mise {seat.bet} OS — en attente du deal
+        </span>
+      )}
+
+      {phase === "playing" && isMyTurn && seat.status === "playing" && (
+        <div className="flex gap-2">
+          <button
+            onClick={onHit}
+            className="rounded-md bg-indigo-500 px-3 py-1.5 font-semibold text-white shadow hover:bg-indigo-400"
+          >
+            Tirer
+          </button>
+          <button
+            onClick={onStand}
+            className="rounded-md bg-zinc-700 px-3 py-1.5 font-semibold text-white shadow hover:bg-zinc-600"
+          >
+            Rester
+          </button>
+        </div>
+      )}
+
+      {phase === "playing" && !isMyTurn && seat.status === "playing" && (
+        <span className="rounded-md bg-zinc-500/10 px-3 py-1.5 text-zinc-400">
+          En attente des autres...
+        </span>
+      )}
+
+      {seat.status === "blackjack" && (
+        <span className="rounded-md bg-amber-400/20 px-3 py-1.5 font-semibold text-amber-200">
+          BLACKJACK
+        </span>
+      )}
+      {seat.status === "busted" && (
+        <span className="rounded-md bg-rose-500/20 px-3 py-1.5 font-semibold text-rose-300">
+          Sauté (&gt; 21)
+        </span>
+      )}
+      {seat.status === "won" && (
+        <span className="rounded-md bg-emerald-500/20 px-3 py-1.5 font-semibold text-emerald-300">
+          Gagné
+        </span>
+      )}
+      {seat.status === "lost" && phase === "resolving" && (
+        <span className="rounded-md bg-rose-500/20 px-3 py-1.5 font-semibold text-rose-300">
+          Perdu
+        </span>
+      )}
+      {seat.status === "pushed" && (
+        <span className="rounded-md bg-zinc-500/20 px-3 py-1.5 font-semibold text-zinc-300">
+          Égalité
+        </span>
+      )}
+    </div>
+  );
+}
+
+const SEAT_CARD_POSITIONS: { x: number; y: number }[] = [
+  { x: 224, y: 410 },
+  { x: 368, y: 410 },
+  { x: 512, y: 410 },
+  { x: 656, y: 410 },
+  { x: 800, y: 410 },
+];
+
+function SeatCards({
+  seat,
+  active,
+}: {
+  seat: BlackjackSeat;
+  active: boolean;
+}) {
+  if (seat.hand.length === 0) return null;
+  const pos = SEAT_CARD_POSITIONS[seat.seatIndex];
+  return (
+    <div
+      className="pointer-events-none absolute -translate-x-1/2 -translate-y-full"
+      style={{ left: pos.x, top: pos.y }}
+    >
+      <div
+        className={`flex flex-col items-center gap-1 ${
+          active ? "drop-shadow-[0_0_8px_rgba(250,204,21,0.7)]" : ""
+        }`}
+      >
+        <div className="flex -space-x-3">
+          {seat.hand.map((card, i) => (
+            <CardFace key={i} card={card} />
+          ))}
+        </div>
+        <div className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+          {seat.score}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DealerCards({ state }: { state: BlackjackState }) {
+  if (state.dealerHand.length === 0 && !state.dealerHoleHidden) return null;
+  if (state.phase === "idle" || state.phase === "betting") return null;
+  return (
+    <div
+      className="pointer-events-none absolute -translate-x-1/2"
+      style={{ left: 512, top: 180 }}
+    >
+      <div className="flex flex-col items-center gap-1">
+        <div className="flex -space-x-3">
+          {state.dealerHand.map((card, i) => (
+            <CardFace key={i} card={card} />
+          ))}
+          {state.dealerHoleHidden && <CardFace hidden />}
+        </div>
+        <div className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+          Croupier · {state.dealerScore}
+          {state.dealerHoleHidden ? "+" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardFace({ card, hidden }: { card?: Card; hidden?: boolean }) {
+  if (hidden || !card) {
+    return (
+      <div className="flex h-12 w-9 items-center justify-center rounded-md border border-indigo-300/40 bg-gradient-to-br from-indigo-700 to-indigo-900 shadow-lg">
+        <span className="text-xs font-bold text-indigo-300/70">?</span>
+      </div>
+    );
+  }
+  const isRed = card.suit === "H" || card.suit === "D";
+  return (
+    <div className="flex h-12 w-9 flex-col items-center justify-between rounded-md border border-zinc-300 bg-white py-1 shadow-lg">
+      <span
+        className={`text-xs font-bold leading-none ${
+          isRed ? "text-red-600" : "text-zinc-900"
+        }`}
+      >
+        {card.rank}
+      </span>
+      <span className={`text-lg leading-none ${isRed ? "text-red-600" : "text-zinc-900"}`}>
+        {suitSymbol(card.suit)}
+      </span>
+    </div>
+  );
+}
+
+function suitSymbol(suit: Card["suit"]): string {
+  switch (suit) {
+    case "S":
+      return "\u2660";
+    case "H":
+      return "\u2665";
+    case "D":
+      return "\u2666";
+    case "C":
+      return "\u2663";
+  }
 }
 
 function applySeatsToScene(scene: GameScene, state: BlackjackState) {
