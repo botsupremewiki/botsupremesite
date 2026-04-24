@@ -398,9 +398,21 @@ export function BlackjackClient({
           })}
           connected={status === "connected" || globalChat.status === "connected"}
           hint="Entrée ouvre le chat · clique un siège pour t'asseoir"
+          currentUser={
+            profile
+              ? { username: profile.username, isAdmin: profile.is_admin }
+              : undefined
+          }
           renderDm={
             profile
-              ? () => <DmView hub={dmHub} selfAuthId={profile.id} />
+              ? () => (
+                  <DmView
+                    hub={dmHub}
+                    selfAuthId={profile.id}
+                    selfIsAdmin={profile.is_admin}
+                    selfUsername={profile.username}
+                  />
+                )
               : undefined
           }
         />

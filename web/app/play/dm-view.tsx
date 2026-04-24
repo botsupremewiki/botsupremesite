@@ -13,9 +13,13 @@ import type { DmHub } from "./use-dm-hub";
 export function DmView({
   hub,
   selfAuthId,
+  selfIsAdmin = false,
+  selfUsername,
 }: {
   hub: DmHub;
   selfAuthId: string;
+  selfIsAdmin?: boolean;
+  selfUsername?: string;
 }) {
   const [activePartner, setActivePartner] = useState<{
     id: string;
@@ -123,6 +127,7 @@ export function DmView({
             <AnimatePresence initial={false}>
               {activeMessages.map((m) => {
                 const mine = m.senderId === selfAuthId;
+                const showAdmin = mine && selfIsAdmin;
                 return (
                   <motion.div
                     key={m.id}
@@ -130,6 +135,11 @@ export function DmView({
                     animate={{ opacity: 1, y: 0 }}
                     className={`mb-1.5 flex flex-col ${mine ? "items-end" : "items-start"}`}
                   >
+                    {showAdmin && (
+                      <span className="mb-0.5 text-[9px] font-bold text-rose-500">
+                        [ADMIN] {selfUsername ?? ""}
+                      </span>
+                    )}
                     <div
                       className={`max-w-[75%] rounded-2xl px-3 py-1.5 text-[13px] leading-snug ${
                         mine

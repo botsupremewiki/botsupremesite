@@ -30,11 +30,13 @@ export function ChatPanel({
   hint,
   connected,
   renderDm,
+  currentUser,
 }: {
   channels: ChatChannel[];
   hint?: string;
   connected: boolean;
   renderDm?: () => React.ReactNode;
+  currentUser?: { username: string; isAdmin: boolean };
 }) {
   const byId = new Map(channels.map((c) => [c.id, c]));
   const [active, setActive] = useState<ChatTabId>(() => {
@@ -234,28 +236,34 @@ export function ChatPanel({
                     </div>
                   ) : (
                     <AnimatePresence initial={false}>
-                      {activeChannel?.messages.map((m) => (
-                        <motion.div
-                          key={m.id}
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="py-0.5 leading-snug"
-                        >
-                          <span className="mr-1.5 font-mono text-[10px] tabular-nums text-zinc-600">
-                            {formatTime(m.timestamp)}
-                          </span>
-                          {m.isAdmin && (
-                            <span className="mr-1 font-bold text-rose-500">
-                              [ADMIN]
+                      {activeChannel?.messages.map((m) => {
+                        const showAdmin =
+                          m.isAdmin ||
+                          (currentUser?.isAdmin &&
+                            m.playerName === currentUser.username);
+                        return (
+                          <motion.div
+                            key={m.id}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="py-0.5 leading-snug"
+                          >
+                            <span className="mr-1.5 font-mono text-[10px] tabular-nums text-zinc-600">
+                              {formatTime(m.timestamp)}
                             </span>
-                          )}
-                          <span className="font-semibold text-indigo-300">
-                            {m.playerName}
-                          </span>
-                          <span className="text-zinc-500"> : </span>
-                          <span className="text-zinc-100">{m.text}</span>
-                        </motion.div>
-                      ))}
+                            {showAdmin && (
+                              <span className="mr-1 font-bold text-rose-500">
+                                [ADMIN]
+                              </span>
+                            )}
+                            <span className="font-semibold text-indigo-300">
+                              {m.playerName}
+                            </span>
+                            <span className="text-zinc-500"> : </span>
+                            <span className="text-zinc-100">{m.text}</span>
+                          </motion.div>
+                        );
+                      })}
                     </AnimatePresence>
                   )}
                 </div>
