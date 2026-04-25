@@ -40,7 +40,7 @@ export function CollectionGrid({
   const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
   const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
   const [ownedFilter, setOwnedFilter] = useState<CollectionFilter>("all");
-  const [sortMode, setSortMode] = useState<CollectionSort>("rarity");
+  const [sortMode, setSortMode] = useState<CollectionSort>("number");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -106,8 +106,8 @@ export function CollectionGrid({
             onChange={(e) => setSortMode(e.target.value as CollectionSort)}
             className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
           >
-            <option value="rarity">Tri : Rareté</option>
             <option value="number">Tri : N° Pokédex</option>
+            <option value="rarity">Tri : Rareté</option>
             <option value="name">Tri : Nom A→Z</option>
             <option value="count">Tri : Possédées</option>
           </select>

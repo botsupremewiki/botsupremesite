@@ -278,7 +278,7 @@ export function DecksClient({
             href={`/play/tcg/${gameId}`}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Collection
+            ← {game.name}
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
@@ -426,6 +426,27 @@ export function DecksClient({
 
 // ─── Collection picker ───────────────────────────────────────────────────
 
+type PickerOwned = "all" | "owned" | "missing";
+type PickerSort = "number" | "name" | "rarity" | "count";
+
+const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
+  { id: "fire", label: "🔥 Feu" },
+  { id: "water", label: "💧 Eau" },
+  { id: "grass", label: "🍃 Plante" },
+  { id: "lightning", label: "⚡ Élec" },
+  { id: "psychic", label: "🌀 Psy" },
+  { id: "fighting", label: "👊 Combat" },
+  { id: "colorless", label: "⭐ Normal" },
+];
+
+const PICKER_RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
+  { id: "holo-rare", label: "Holo" },
+  { id: "rare", label: "Rare" },
+  { id: "uncommon", label: "Peu c." },
+  { id: "common", label: "Commune" },
+  { id: "energy", label: "Énergie" },
+];
+
 function CollectionPicker({
   pool,
   collection,
@@ -437,51 +458,211 @@ function CollectionPicker({
   draftEntries: Map<string, number>;
   onAdd: (card: PokemonCardData) => void;
 }) {
-  const sorted = useMemo(() => {
-    return [...pool].sort((a, b) => {
-      const ar = RARITY_TIER[a.rarity] ?? 0;
-      const br = RARITY_TIER[b.rarity] ?? 0;
-      if (ar !== br) return br - ar;
-      return a.name.localeCompare(b.name);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
+  const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
+  // Par défaut on n'affiche que les cartes possédées (sens pour la création
+  // de deck). Les énergies de base sont toujours considérées comme acquises.
+  const [ownedFilter, setOwnedFilter] = useState<PickerOwned>("owned");
+  const [sortMode, setSortMode] = useState<PickerSort>("number");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return pool.filter((c) => {
+      const isEnergy = c.id.includes("energy");
+      const owned = collection.get(c.id) ?? 0;
+      const ownedAtAll = owned > 0 || isEnergy;
+      if (ownedFilter === "owned" && !ownedAtAll) return false;
+      if (ownedFilter === "missing" && ownedAtAll) return false;
+      if (rarityFilter && c.rarity !== rarityFilter) return false;
+      if (typeFilter) {
+        const cType = c.kind === "energy" ? c.energyType : c.type;
+        if (cType !== typeFilter) return false;
+      }
+      if (q && !c.name.toLowerCase().includes(q)) return false;
+      return true;
     });
-  }, [pool]);
+  }, [pool, collection, search, typeFilter, rarityFilter, ownedFilter]);
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      switch (sortMode) {
+        case "number":
+          return a.number - b.number;
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "rarity": {
+          const ar = RARITY_TIER[a.rarity] ?? 0;
+          const br = RARITY_TIER[b.rarity] ?? 0;
+          if (ar !== br) return br - ar;
+          return a.name.localeCompare(b.name);
+        }
+        case "count": {
+          const ca = collection.get(a.id) ?? 0;
+          const cb = collection.get(b.id) ?? 0;
+          if (ca !== cb) return cb - ca;
+          return a.name.localeCompare(b.name);
+        }
+      }
+    });
+    return arr;
+  }, [filtered, sortMode, collection]);
+
+  const filtersChanged =
+    !!search ||
+    typeFilter !== null ||
+    rarityFilter !== null ||
+    ownedFilter !== "owned"; // "owned" est le défaut
+
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-      {sorted.map((card) => {
-        const isEnergy = card.id.includes("energy");
-        const owned = collection.get(card.id) ?? 0;
-        const inDeck = draftEntries.get(card.id) ?? 0;
-        const cap = isEnergy ? Infinity : Math.min(owned, 4);
-        const canAdd = inDeck < cap;
-        const ownedAtAll = owned > 0 || isEnergy;
-        return (
-          <button
-            key={card.id}
-            disabled={!ownedAtAll || !canAdd}
-            onClick={() => onAdd(card)}
-            className={`group relative flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all ${
-              ownedAtAll
-                ? RARITY_BORDER[card.rarity] +
-                  (canAdd ? " hover:bg-white/5" : " opacity-60")
-                : "border-white/5 opacity-30"
-            } disabled:cursor-not-allowed`}
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="🔍 Rechercher par nom…"
+            className="flex-1 min-w-[180px] rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none"
+          />
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as PickerSort)}
+            className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
           >
-            <CardMini card={card} />
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-zinc-400">
-                {isEnergy ? "∞" : owned} {!isEnergy && "possédée"}
-                {!isEnergy && owned > 1 ? "s" : ""}
-              </span>
-              {inDeck > 0 && (
-                <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950">
-                  ×{inDeck}
-                </span>
-              )}
-            </div>
-          </button>
-        );
-      })}
+            <option value="number">Tri : N° Pokédex</option>
+            <option value="rarity">Tri : Rareté</option>
+            <option value="name">Tri : Nom A→Z</option>
+            <option value="count">Tri : Possédées</option>
+          </select>
+          {filtersChanged && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setTypeFilter(null);
+                setRarityFilter(null);
+                setOwnedFilter("owned");
+              }}
+              className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 hover:bg-white/10"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <PickerChip
+            active={ownedFilter === "owned"}
+            onClick={() => setOwnedFilter("owned")}
+            label="Possédées"
+          />
+          <PickerChip
+            active={ownedFilter === "missing"}
+            onClick={() => setOwnedFilter("missing")}
+            label="Manquantes"
+          />
+          <PickerChip
+            active={ownedFilter === "all"}
+            onClick={() => setOwnedFilter("all")}
+            label="Toutes"
+          />
+          <span className="mx-1 w-px self-stretch bg-white/10" />
+          {PICKER_TYPE_OPTIONS.map((t) => (
+            <PickerChip
+              key={t.id}
+              active={typeFilter === t.id}
+              onClick={() =>
+                setTypeFilter(typeFilter === t.id ? null : t.id)
+              }
+              label={t.label}
+            />
+          ))}
+          <span className="mx-1 w-px self-stretch bg-white/10" />
+          {PICKER_RARITY_OPTIONS.map((r) => (
+            <PickerChip
+              key={r.id}
+              active={rarityFilter === r.id}
+              onClick={() =>
+                setRarityFilter(rarityFilter === r.id ? null : r.id)
+              }
+              label={r.label}
+            />
+          ))}
+        </div>
+        {filtersChanged && (
+          <div className="text-[11px] text-zinc-500">
+            {sorted.length} résultat{sorted.length > 1 ? "s" : ""} sur{" "}
+            {pool.length}
+          </div>
+        )}
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-xs text-zinc-500">
+          Aucune carte ne correspond à ces filtres.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {sorted.map((card) => {
+            const isEnergy = card.id.includes("energy");
+            const owned = collection.get(card.id) ?? 0;
+            const inDeck = draftEntries.get(card.id) ?? 0;
+            const cap = isEnergy ? Infinity : Math.min(owned, 4);
+            const canAdd = inDeck < cap;
+            const ownedAtAll = owned > 0 || isEnergy;
+            return (
+              <button
+                key={card.id}
+                disabled={!ownedAtAll || !canAdd}
+                onClick={() => onAdd(card)}
+                className={`group relative flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all ${
+                  ownedAtAll
+                    ? RARITY_BORDER[card.rarity] +
+                      (canAdd ? " hover:bg-white/5" : " opacity-60")
+                    : "border-white/5 opacity-30"
+                } disabled:cursor-not-allowed`}
+              >
+                <CardMini card={card} />
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-400">
+                    {isEnergy ? "∞" : owned} {!isEnergy && "possédée"}
+                    {!isEnergy && owned > 1 ? "s" : ""}
+                  </span>
+                  {inDeck > 0 && (
+                    <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950">
+                      ×{inDeck}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+function PickerChip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+        active
+          ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
+          : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

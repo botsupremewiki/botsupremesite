@@ -67,8 +67,8 @@ export function MarketClient({
     "all",
   );
   const [sortMode, setSortMode] = useState<
-    "price-asc" | "price-desc" | "name" | "number"
-  >("price-asc");
+    "number" | "price-asc" | "price-desc" | "name"
+  >("number");
   const [activeListings] = useState<MarketListing[]>(initialActive);
   const [myListings] = useState<MarketListing[]>(initialMine);
   const [favs, setFavs] = useState<Set<string>>(new Set(favoriteIds));
@@ -385,18 +385,18 @@ export function MarketClient({
                 onChange={(e) =>
                   setSortMode(
                     e.target.value as
+                      | "number"
                       | "price-asc"
                       | "price-desc"
-                      | "name"
-                      | "number",
+                      | "name",
                   )
                 }
                 className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
               >
+                <option value="number">Tri : N° Pokédex</option>
                 <option value="price-asc">Tri : Prix croissant</option>
                 <option value="price-desc">Tri : Prix décroissant</option>
                 <option value="name">Tri : Nom A→Z</option>
-                <option value="number">Tri : N° Pokédex</option>
               </select>
               <select
                 value={rarityFilter ?? ""}
