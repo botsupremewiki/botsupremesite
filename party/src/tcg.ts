@@ -31,22 +31,25 @@ type ConnInfo = {
   freePacks: number; // boosters offerts non encore consommés
 };
 
-// Per-(game, pack-type) card pools. New sets plug a new entry here.
+// Per-(game, pack-type) card pools. For Pokémon we filter the unified Gen 1
+// pool by each card's `pack` field — energies (no pack field) are added to
+// every pack so each booster always contains some basic energy.
 function getPool(
   gameId: TcgGameId,
   packTypeId: string,
 ): PokemonCardData[] | null {
   if (gameId !== "pokemon") return null;
-  switch (packTypeId as PokemonPackTypeId) {
-    case "base-set":
-      return POKEMON_BASE_SET;
-    case "jungle":
-    case "fossil":
-    case "team-rocket":
-      return null; // pas encore peuplé
-    default:
-      return null;
+  if (!(packTypeId in POKEMON_PACK_TYPES)) return null;
+  const target = packTypeId as PokemonPackTypeId;
+  const pool: PokemonCardData[] = [];
+  for (const card of POKEMON_BASE_SET) {
+    if (card.kind === "energy") {
+      pool.push(card);
+    } else if (card.pack === target) {
+      pool.push(card);
+    }
   }
+  return pool.length > 0 ? pool : null;
 }
 
 // Pack rarity slots: 4 "regular" + 1 "rare" slot.

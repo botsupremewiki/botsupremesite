@@ -912,7 +912,7 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
   pokemon: {
     id: "pokemon",
     name: "Pokémon",
-    tagline: "Génération 1 — Sets historiques",
+    tagline: "Génération 1 — 151 Pokémon, 4 packs thématiques",
     packPrice: 10_000,
     packSize: 5,
     active: true,
@@ -984,8 +984,8 @@ export type PokemonAbility = {
 export type PokemonCardData =
   | {
       kind: "pokemon";
-      id: string; // e.g. "base1-4"
-      number: number; // card number in set
+      id: string;
+      number: number; // Pokédex number
       name: string;
       type: PokemonEnergyType;
       stage: "basic" | "stage1" | "stage2";
@@ -998,7 +998,9 @@ export type PokemonCardData =
       ability?: PokemonAbility;
       rarity: TcgRarity;
       flavorText?: string;
-      art: string; // emoji
+      art: string;
+      // Which of the 4 thematic packs this card is in.
+      pack: PokemonPackTypeId;
     }
   | {
       kind: "energy";
@@ -1006,8 +1008,9 @@ export type PokemonCardData =
       number: number;
       name: string;
       energyType: PokemonEnergyType;
-      rarity: TcgRarity; // "energy"
+      rarity: TcgRarity;
       art: string;
+      // Energies are shared across all packs — no `pack` field.
     };
 
 // What the server emits in pack openings / welcomes — keeps this small
@@ -1029,13 +1032,16 @@ export type TcgClientMessage = {
   packTypeId: string; // e.g. "base-set" for Pokémon
 };
 
-// ─── Pokémon — booster sets (Génération 1) ─────────────────────────────────
+// ─── Pokémon — boosters thématiques par mascotte (Gen 1) ──────────────────
+// 4 packs par génération = 3 starters + le légendaire emblématique. Les 151
+// Pokémon de la Gen 1 sont répartis équitablement entre ces 4 packs selon
+// leur affinité thématique.
 
 export type PokemonPackTypeId =
-  | "base-set"
-  | "jungle"
-  | "fossil"
-  | "team-rocket";
+  | "charizard"
+  | "blastoise"
+  | "venusaur"
+  | "mewtwo";
 
 export type PokemonPackType = {
   id: PokemonPackTypeId;
@@ -1043,51 +1049,50 @@ export type PokemonPackType = {
   description: string;
   glyph: string;
   active: boolean;
-  // Tailwind theme classes for the pack card.
   accent: string;
   border: string;
 };
 
 export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
-  "base-set": {
-    id: "base-set",
-    name: "Set de Base",
+  charizard: {
+    id: "charizard",
+    name: "Pack Dracaufeu",
     description:
-      "Le set originel : Dracaufeu, Tortank, Florizarre, Mewtwo, Alakazam…",
-    glyph: "🎴",
+      "Feu, Combat, Sol, Roche, Vol — Dracaufeu, Mackogneur, Onix, Aérodactyl, Sulfura…",
+    glyph: "🔥",
     active: true,
-    accent: "text-amber-200",
-    border: "border-amber-400/50",
+    accent: "text-orange-300",
+    border: "border-orange-500/50",
   },
-  jungle: {
-    id: "jungle",
-    name: "Jungle",
+  blastoise: {
+    id: "blastoise",
+    name: "Pack Tortank",
     description:
-      "Pokémon sauvages — Léviator, Pidgeot, Snorlax, Florizarre alternatif…",
-    glyph: "🌴",
-    active: false,
-    accent: "text-emerald-200",
-    border: "border-emerald-400/40",
+      "Eau, Glace — Tortank, Léviator, Lokhlass, Kabutops, Artikodin, Lippoutou…",
+    glyph: "🌊",
+    active: true,
+    accent: "text-sky-300",
+    border: "border-sky-500/50",
   },
-  fossil: {
-    id: "fossil",
-    name: "Fossile",
+  venusaur: {
+    id: "venusaur",
+    name: "Pack Florizarre",
     description:
-      "Reliques préhistoriques — Aérodactyl, Kabutops, Amonistar, Lippoutou…",
-    glyph: "🦴",
-    active: false,
-    accent: "text-stone-200",
-    border: "border-stone-400/40",
+      "Plante, Insecte, Poison — Florizarre, Rafflesia, Papilusion, Nidoking, Arbok…",
+    glyph: "🌿",
+    active: true,
+    accent: "text-emerald-300",
+    border: "border-emerald-500/50",
   },
-  "team-rocket": {
-    id: "team-rocket",
-    name: "Team Rocket",
+  mewtwo: {
+    id: "mewtwo",
+    name: "Pack Mewtwo",
     description:
-      "Pokémon Obscur de la Team Rocket — Dracaufeu obscur, Mewtwo obscur…",
-    glyph: "🅡",
-    active: false,
-    accent: "text-rose-200",
-    border: "border-rose-400/40",
+      "Psy, Spectre, Électrique, Dragon, Normal spéciaux — Mewtwo, Mew, Ectoplasma, Dracolosse…",
+    glyph: "🧠",
+    active: true,
+    accent: "text-fuchsia-300",
+    border: "border-fuchsia-500/50",
   },
 };
 
