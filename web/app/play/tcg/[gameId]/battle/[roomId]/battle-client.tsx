@@ -148,7 +148,7 @@ export function BattleClient({
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
-            href={`/play/tcg/${gameId}/battle`}
+            href={lobbyHref(gameId, roomId)}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
             ← Lobby
@@ -208,6 +208,8 @@ export function BattleClient({
               state={state}
               cardById={cardById}
               isMyTurn={isMyTurn}
+              gameId={gameId}
+              roomId={roomId}
               onSetActive={setActive}
               onAddBench={addToBench}
               onRemoveBench={removeFromBench}
@@ -255,6 +257,12 @@ export function BattleClient({
   );
 }
 
+function lobbyHref(gameId: string, roomId: string): string {
+  if (roomId.startsWith("bot-")) return `/play/tcg/${gameId}/battle/bot`;
+  if (roomId.startsWith("ranked-")) return `/play/tcg/${gameId}/battle/ranked`;
+  return `/play/tcg/${gameId}/battle/pvp`;
+}
+
 function phaseLabel(p: BattleState["phase"]): string {
   switch (p) {
     case "waiting":
@@ -274,6 +282,8 @@ function BattleBoard({
   state,
   cardById,
   isMyTurn,
+  gameId,
+  roomId,
   onSetActive,
   onAddBench,
   onRemoveBench,
@@ -289,6 +299,8 @@ function BattleBoard({
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
   isMyTurn: boolean;
+  gameId: string;
+  roomId: string;
   onSetActive: (handIndex: number) => void;
   onAddBench: (handIndex: number) => void;
   onRemoveBench: (benchIndex: number) => void;
@@ -424,7 +436,7 @@ function BattleBoard({
             🏆 {state.winner === state.selfSeat ? "Victoire !" : "Défaite"}
           </div>
           <Link
-            href={`/play/tcg/${state.opponent?.authId ? "pokemon" : "pokemon"}/battle`}
+            href={lobbyHref(gameId, roomId)}
             className="mt-2 inline-block rounded-md bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
           >
             Retour au lobby

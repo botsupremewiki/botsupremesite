@@ -13,6 +13,7 @@ import type {
 import { TCG_GAMES } from "@shared/types";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { CombatNav } from "../../_components/combat-nav";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -170,10 +171,10 @@ export function BattleLobbyClient({
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
-            href={`/play/tcg/${gameId}/battle`}
+            href={`/play/tcg/${gameId}`}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Combats
+            ← {game.name}
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
@@ -189,8 +190,9 @@ export function BattleLobbyClient({
       </header>
 
       <main
-        className={`flex flex-1 items-center justify-center p-6 ${game.gradient}`}
+        className={`flex flex-1 flex-col items-center gap-4 p-6 ${game.gradient}`}
       >
+        <CombatNav gameId={gameId} current={ranked ? "ranked" : "pvp"} />
         <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-sm">
           <h1 className="text-2xl font-bold text-zinc-100">
             {ranked ? "🏆 PvP Classé" : "⚔️ PvP Fun"}

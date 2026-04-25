@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { UserPill } from "@/components/user-pill";
+import { CombatNav } from "../../_components/combat-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -52,10 +53,10 @@ export default async function StatsPage({
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
-            href={`/play/tcg/${gameId}/battle`}
+            href={`/play/tcg/${gameId}`}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Combats
+            ← {game.name}
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
@@ -70,6 +71,9 @@ export default async function StatsPage({
 
       <main className={`flex-1 overflow-auto p-6 ${game.gradient}`}>
         <div className="mx-auto w-full max-w-3xl">
+          <div className="mb-4">
+            <CombatNav gameId={gameId} current="stats" />
+          </div>
           <h1 className="text-2xl font-bold text-zinc-100">
             📊 Stats / ELO
           </h1>

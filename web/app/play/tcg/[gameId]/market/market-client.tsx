@@ -62,6 +62,13 @@ export function MarketClient({
   const [tab, setTab] = useState<Tab>("buy");
   const [search, setSearch] = useState("");
   const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
+  const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
+  const [ownedFilter, setOwnedFilter] = useState<"all" | "owned" | "missing">(
+    "all",
+  );
+  const [sortMode, setSortMode] = useState<
+    "price-asc" | "price-desc" | "name" | "number"
+  >("price-asc");
   const [activeListings] = useState<MarketListing[]>(initialActive);
   const [myListings] = useState<MarketListing[]>(initialMine);
   const [favs, setFavs] = useState<Set<string>>(new Set(favoriteIds));
@@ -69,6 +76,13 @@ export function MarketClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Map rapide cardId → count owned, pour le filtre acquis/non.
+  const ownedMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of myCollection) m.set(r.card_id, r.count);
+    return m;
+  }, [myCollection]);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -115,21 +129,52 @@ export function MarketClient({
       const card = cardById.get(r.card_id);
       if (!card) return false;
       if (rarityFilter && card.rarity !== rarityFilter) return false;
+      if (typeFilter) {
+        const cType = card.kind === "energy" ? card.energyType : card.type;
+        if (cType !== typeFilter) return false;
+      }
+      if (ownedFilter !== "all") {
+        const owned = (ownedMap.get(r.card_id) ?? 0) > 0;
+        if (ownedFilter === "owned" && !owned) return false;
+        if (ownedFilter === "missing" && owned) return false;
+      }
       if (q && !card.name.toLowerCase().includes(q)) return false;
       return true;
     });
   }
 
+  function applySort(rows: MarketListing[]): MarketListing[] {
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      switch (sortMode) {
+        case "price-asc":
+          return a.price_os - b.price_os;
+        case "price-desc":
+          return b.price_os - a.price_os;
+        case "name": {
+          const an = cardById.get(a.card_id)?.name ?? "";
+          const bn = cardById.get(b.card_id)?.name ?? "";
+          return an.localeCompare(bn);
+        }
+        case "number": {
+          const an = cardById.get(a.card_id)?.number ?? 0;
+          const bn = cardById.get(b.card_id)?.number ?? 0;
+          return an - bn;
+        }
+      }
+    });
+    return arr;
+  }
+
   const visibleActive = useMemo(
-    () =>
-      applyFilters(activeListings).sort((a, b) => a.price_os - b.price_os),
+    () => applySort(applyFilters(activeListings)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeListings, search, rarityFilter],
+    [activeListings, search, rarityFilter, typeFilter, ownedFilter, sortMode],
   );
   const visibleMine = useMemo(
-    () => applyFilters(myListings),
+    () => applySort(applyFilters(myListings)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [myListings, search, rarityFilter],
+    [myListings, search, rarityFilter, typeFilter, ownedFilter, sortMode],
   );
 
   // Pour l'onglet Favoris : on regroupe les listings actifs par card_id
@@ -144,9 +189,9 @@ export function MarketClient({
       }
     }
     const list = Array.from(byCard.values());
-    return applyFilters(list).sort((a, b) => a.price_os - b.price_os);
+    return applySort(applyFilters(list));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeListings, favs, search, rarityFilter]);
+  }, [activeListings, favs, search, rarityFilter, typeFilter, ownedFilter, sortMode]);
 
   async function toggleFav(cardId: string) {
     if (!profile || !supabase) return;
@@ -325,29 +370,82 @@ export function MarketClient({
             />
           </div>
 
-          {/* Search + filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔍 Rechercher par nom…"
-              className="flex-1 min-w-[200px] rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none"
-            />
-            <select
-              value={rarityFilter ?? ""}
-              onChange={(e) =>
-                setRarityFilter((e.target.value as TcgRarity) || null)
-              }
-              className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
-            >
-              <option value="">Toutes raretés</option>
-              <option value="holo-rare">Holo</option>
-              <option value="rare">Rare</option>
-              <option value="uncommon">Peu commune</option>
-              <option value="common">Commune</option>
-              <option value="energy">Énergie</option>
-            </select>
+          {/* Search + filters + sort */}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 Rechercher par nom…"
+                className="flex-1 min-w-[200px] rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none"
+              />
+              <select
+                value={sortMode}
+                onChange={(e) =>
+                  setSortMode(
+                    e.target.value as
+                      | "price-asc"
+                      | "price-desc"
+                      | "name"
+                      | "number",
+                  )
+                }
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
+              >
+                <option value="price-asc">Tri : Prix croissant</option>
+                <option value="price-desc">Tri : Prix décroissant</option>
+                <option value="name">Tri : Nom A→Z</option>
+                <option value="number">Tri : N° Pokédex</option>
+              </select>
+              <select
+                value={rarityFilter ?? ""}
+                onChange={(e) =>
+                  setRarityFilter((e.target.value as TcgRarity) || null)
+                }
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
+              >
+                <option value="">Toutes raretés</option>
+                <option value="holo-rare">Holo</option>
+                <option value="rare">Rare</option>
+                <option value="uncommon">Peu commune</option>
+                <option value="common">Commune</option>
+                <option value="energy">Énergie</option>
+              </select>
+              <select
+                value={typeFilter ?? ""}
+                onChange={(e) =>
+                  setTypeFilter(
+                    (e.target.value as PokemonEnergyType) || null,
+                  )
+                }
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
+              >
+                <option value="">Tous types</option>
+                <option value="fire">🔥 Feu</option>
+                <option value="water">💧 Eau</option>
+                <option value="grass">🍃 Plante</option>
+                <option value="lightning">⚡ Élec</option>
+                <option value="psychic">🌀 Psy</option>
+                <option value="fighting">👊 Combat</option>
+                <option value="colorless">⭐ Normal</option>
+              </select>
+              {profile && (
+                <select
+                  value={ownedFilter}
+                  onChange={(e) =>
+                    setOwnedFilter(
+                      e.target.value as "all" | "owned" | "missing",
+                    )
+                  }
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
+                >
+                  <option value="all">Toutes (acquis ou non)</option>
+                  <option value="owned">Cartes que je possède déjà</option>
+                  <option value="missing">Cartes manquantes</option>
+                </select>
+              )}
+            </div>
           </div>
 
           {/* Tab content */}
