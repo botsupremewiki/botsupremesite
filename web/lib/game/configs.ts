@@ -119,12 +119,13 @@ const CASINO_RING_TABLES: CasinoTable[] = [
   },
   {
     id: "poker-1",
-    label: "Poker · Bientôt",
+    label: "Poker",
     feltColor: 0x0c4a6e,
     accentColor: 0xf59e0b,
     width: 130,
     height: 95,
     seats: 6,
+    href: "/play/casino/poker",
   },
   {
     id: "slots-inferno-galactique",

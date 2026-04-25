@@ -736,3 +736,154 @@ export type HiLoServerMessage =
   | { type: "gold-update"; gold: number }
   | { type: "hilo-error"; message: string }
   | { type: "chat"; message: ChatMessage };
+
+// ────────────────────────────── Poker ──────────────────────────────
+// Texas Hold'em across 3 stake levels.
+
+export type PokerTableId = "low" | "mid" | "high";
+
+export type PokerTableConfig = {
+  id: PokerTableId;
+  name: string;
+  smallBlind: number;
+  bigBlind: number;
+  buyinMin: number;
+  buyinMax: number;
+  seatCount: number;
+  turnDurationMs: number;
+  showdownDurationMs: number;
+  preBettingDurationMs: number; // pause between hands so readers can see results
+  // UI accent class for the lobby card.
+  accent: string;
+};
+
+export const POKER_TABLES: Record<PokerTableId, PokerTableConfig> = {
+  low: {
+    id: "low",
+    name: "Petite Table",
+    smallBlind: 5,
+    bigBlind: 10,
+    buyinMin: 200,
+    buyinMax: 1_000,
+    seatCount: 6,
+    turnDurationMs: 25_000,
+    showdownDurationMs: 4_000,
+    preBettingDurationMs: 2_500,
+    accent: "text-emerald-300",
+  },
+  mid: {
+    id: "mid",
+    name: "Table Moyenne",
+    smallBlind: 50,
+    bigBlind: 100,
+    buyinMin: 2_000,
+    buyinMax: 10_000,
+    seatCount: 6,
+    turnDurationMs: 25_000,
+    showdownDurationMs: 4_000,
+    preBettingDurationMs: 2_500,
+    accent: "text-amber-300",
+  },
+  high: {
+    id: "high",
+    name: "Haute Table",
+    smallBlind: 500,
+    bigBlind: 1_000,
+    buyinMin: 20_000,
+    buyinMax: 100_000,
+    seatCount: 6,
+    turnDurationMs: 25_000,
+    showdownDurationMs: 5_000,
+    preBettingDurationMs: 2_500,
+    accent: "text-fuchsia-300",
+  },
+};
+
+export type PokerPhase =
+  | "waiting" // not enough players to start
+  | "preflop"
+  | "flop"
+  | "turn"
+  | "river"
+  | "showdown" // hands revealed, pots being awarded
+  | "settling"; // brief pause between hands
+
+export type PokerSeatStatus =
+  | "empty"
+  | "sitting" // sat down but waiting for next hand
+  | "playing" // dealt into the current hand
+  | "folded"
+  | "all-in"
+  | "sitout"; // disconnected mid-hand or out of chips
+
+export type PokerSeat = {
+  seatIndex: number;
+  playerId: string | null;
+  playerName: string | null;
+  playerColor: string | null;
+  // Chip stack (separate from the player's gold balance).
+  chips: number;
+  // Hole cards: only revealed to self until showdown.
+  holeCards: Card[]; // length 0 or 2; visible to self always, others see []
+  // Total chips committed in the current betting round.
+  currentBet: number;
+  // Total chips committed in the entire hand (used for side-pot maths).
+  totalCommitted: number;
+  status: PokerSeatStatus;
+  // True when the seat has acted in this round AND its bet matches the
+  // current high bet (or it folded / is all-in).
+  hasActed: boolean;
+  // Filled in at showdown so winners know what they had.
+  showdownHand?: PokerShowdownHand;
+};
+
+export type PokerShowdownHand = {
+  cards: Card[]; // best 5 of 7
+  rankName: string; // e.g. "Suite", "Brelan", "Couleur"
+  score: number; // numeric score for comparison
+};
+
+export type PokerPot = {
+  amount: number;
+  // Indices of seats eligible to win this pot (filtered out by all-in cap).
+  eligibleSeats: number[];
+};
+
+export type PokerState = {
+  tableId: PokerTableId;
+  phase: PokerPhase;
+  seats: PokerSeat[];
+  community: Card[]; // 0..5 cards visible
+  dealerSeatIndex: number | null;
+  activeSeatIndex: number | null;
+  // Highest individual bet in the current round; players must match it
+  // to call.
+  highBet: number;
+  // Minimum legal raise *amount* (i.e. how much more you have to put in
+  // on top of `highBet` for it to count as a valid raise this round).
+  minRaise: number;
+  pots: PokerPot[]; // main pot first, then side pots
+  phaseEndsAt: number | null;
+  lastActionLabel: string | null;
+};
+
+export type PokerClientMessage =
+  | { type: "poker-sit"; seatIndex: number; buyin: number }
+  | { type: "poker-leave" }
+  | { type: "poker-action"; action: "fold" | "check" | "call" | "all-in" }
+  | { type: "poker-bet"; amount: number } // bet or raise total to amount
+  | { type: "chat"; text: string };
+
+export type PokerServerMessage =
+  | {
+      type: "poker-welcome";
+      selfId: string;
+      table: PokerTableConfig;
+      state: PokerState;
+      gold: number;
+      chat: ChatMessage[];
+    }
+  | { type: "poker-state"; state: PokerState }
+  | { type: "gold-update"; gold: number }
+  | { type: "poker-error"; message: string }
+  | { type: "chat"; message: ChatMessage };
