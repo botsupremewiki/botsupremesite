@@ -9,6 +9,7 @@
     "slots": "src/slots.ts",
     "hilo": "src/hilo.ts",
     "poker": "src/poker.ts",
+    "tcg": "src/tcg.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",
     "dm": "src/dm.ts"

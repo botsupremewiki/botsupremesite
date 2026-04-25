@@ -97,3 +97,74 @@ function readProcessEnv(key: string): string | undefined {
   ).process;
   return globalProc?.env?.[key];
 }
+
+export type TcgOwnedRow = { card_id: string; count: number };
+
+/** Read the user's current TCG collection for a given game. */
+export async function fetchTcgCollection(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+): Promise<TcgOwnedRow[]> {
+  const env = getSupabaseEnv(room);
+  if (!env) return [];
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/tcg_cards_owned?user_id=eq.${authId}&game_id=eq.${gameId}&select=card_id,count`,
+      {
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    if (!resp.ok) return [];
+    const rows = (await resp.json()) as TcgOwnedRow[];
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+/** Atomically increment counts for a batch of cards via the RPC defined
+ *  in supabase/tcg.sql. */
+export async function addTcgCards(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+  cards: { card_id: string; count: number }[],
+) {
+  const env = getSupabaseEnv(room);
+  if (!env) {
+    console.warn("[tcg] addTcgCards: env missing");
+    return;
+  }
+  if (cards.length === 0) return;
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/rpc/add_cards_to_tcg_collection`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          p_user_id: authId,
+          p_game_id: gameId,
+          p_cards: cards,
+        }),
+      },
+    );
+    if (!resp.ok) {
+      console.warn(
+        `[tcg] addTcgCards failed ${resp.status}:`,
+        await resp.text().catch(() => ""),
+      );
+    }
+  } catch (err) {
+    console.warn("[tcg] addTcgCards threw:", err);
+  }
+}

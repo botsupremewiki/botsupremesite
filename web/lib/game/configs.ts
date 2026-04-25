@@ -29,7 +29,7 @@ function ringPositions(
 
 const PLAZA_PORTALS = [
   { id: "casino", color: 0xef4444, label: "Casino", href: "/play/casino" },
-  { id: "tcg", color: 0x22c55e, label: "TCG · Bientôt" },
+  { id: "tcg", color: 0x22c55e, label: "TCG", href: "/play/tcg" },
   { id: "rpg", color: 0xf59e0b, label: "RPG · Bientôt" },
   { id: "medieval", color: 0x6366f1, label: "Médiéval · Bientôt" },
   { id: "tycoon", color: 0xec4899, label: "Tycoon · Bientôt" },

@@ -887,3 +887,157 @@ export type PokerServerMessage =
   | { type: "gold-update"; gold: number }
   | { type: "poker-error"; message: string }
   | { type: "chat"; message: ChatMessage };
+
+// ────────────────────────────── TCG ──────────────────────────────
+// Trading-card game shell. One PartyKit room per game; per-game card
+// data lives in shared/tcg-pokemon-base.ts (and future siblings).
+
+export type TcgGameId = "pokemon" | "onepiece" | "lol";
+
+export type TcgGameConfig = {
+  id: TcgGameId;
+  name: string;
+  tagline: string;
+  packPrice: number;
+  packSize: number;
+  active: boolean;
+  // Tailwind theme classes for the lobby card.
+  accent: string;
+  border: string;
+  glow: string;
+  gradient: string;
+};
+
+export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
+  pokemon: {
+    id: "pokemon",
+    name: "Pokémon",
+    tagline: "Base Set · Génération 1",
+    packPrice: 100,
+    packSize: 5,
+    active: true,
+    accent: "text-amber-300",
+    border: "border-amber-400/40",
+    glow: "shadow-[0_0_40px_rgba(251,191,36,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.12),rgba(220,38,38,0.08),transparent_60%)]",
+  },
+  onepiece: {
+    id: "onepiece",
+    name: "One Piece",
+    tagline: "À venir",
+    packPrice: 150,
+    packSize: 5,
+    active: false,
+    accent: "text-rose-300",
+    border: "border-rose-400/40",
+    glow: "shadow-[0_0_40px_rgba(251,113,133,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.12),transparent_60%)]",
+  },
+  lol: {
+    id: "lol",
+    name: "League of Legends",
+    tagline: "À venir",
+    packPrice: 200,
+    packSize: 5,
+    active: false,
+    accent: "text-sky-300",
+    border: "border-sky-400/40",
+    glow: "shadow-[0_0_40px_rgba(56,189,248,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.12),transparent_60%)]",
+  },
+};
+
+export type TcgRarity =
+  | "common"
+  | "uncommon"
+  | "rare"
+  | "holo-rare"
+  | "energy"; // basic energies are functionally common but visually distinct
+
+// Pokemon-specific card shape. Other TCGs will define their own and reuse
+// the same TcgCardOwned / pack flow.
+export type PokemonEnergyType =
+  | "fire"
+  | "water"
+  | "grass"
+  | "lightning"
+  | "psychic"
+  | "fighting"
+  | "colorless";
+
+export type PokemonAttack = {
+  name: string;
+  cost: PokemonEnergyType[];
+  damage?: number; // base damage; effects below may modify
+  damageSuffix?: "+" | "x" | "-"; // shown next to damage (e.g. "10×")
+  text?: string; // effect description (FR)
+};
+
+export type PokemonAbility = {
+  name: string;
+  text: string;
+};
+
+export type PokemonCardData =
+  | {
+      kind: "pokemon";
+      id: string; // e.g. "base1-4"
+      number: number; // card number in set
+      name: string;
+      type: PokemonEnergyType;
+      stage: "basic" | "stage1" | "stage2";
+      evolvesFrom?: string;
+      hp: number;
+      weakness?: PokemonEnergyType;
+      resistance?: PokemonEnergyType;
+      retreatCost: number;
+      attacks: PokemonAttack[];
+      ability?: PokemonAbility;
+      rarity: TcgRarity;
+      flavorText?: string;
+      art: string; // emoji
+    }
+  | {
+      kind: "energy";
+      id: string;
+      number: number;
+      name: string;
+      energyType: PokemonEnergyType;
+      rarity: TcgRarity; // "energy"
+      art: string;
+    };
+
+// What the server emits in pack openings / welcomes — keeps this small
+// so we can reuse for non-Pokemon games later by widening the shape.
+export type TcgCardOwned = {
+  cardId: string;
+  count: number;
+};
+
+export type TcgPackResult = {
+  id: string;
+  cards: string[]; // card ids, in reveal order
+  cost: number;
+  timestamp: number;
+};
+
+export type TcgClientMessage = { type: "tcg-buy-pack" };
+
+export type TcgServerMessage =
+  | {
+      type: "tcg-welcome";
+      selfId: string;
+      gold: number;
+      collection: TcgCardOwned[];
+      gameId: TcgGameId;
+    }
+  | {
+      type: "tcg-pack-opened";
+      pack: TcgPackResult;
+      newCounts: TcgCardOwned[]; // updated counts for the affected cards
+    }
+  | { type: "gold-update"; gold: number }
+  | { type: "tcg-error"; message: string };
