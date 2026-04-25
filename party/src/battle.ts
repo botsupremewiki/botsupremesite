@@ -444,6 +444,16 @@ export default class BattleServer implements Party.Server {
       return;
     }
     if (!seat.active) return;
+    if (
+      seat.active.statuses.includes("asleep") ||
+      seat.active.statuses.includes("paralyzed")
+    ) {
+      this.sendErrorToSeat(
+        seatId,
+        "Pokémon Endormi ou Paralysé ne peut pas battre en retraite.",
+      );
+      return;
+    }
     const newActive = seat.bench[benchIndex];
     if (!newActive) {
       this.sendErrorToSeat(seatId, "Pas de Pokémon de Banc à promouvoir.");
@@ -490,6 +500,17 @@ export default class BattleServer implements Party.Server {
       );
       return;
     }
+    if (seat.active.statuses.includes("asleep")) {
+      this.sendErrorToSeat(seatId, "Pokémon Endormi — il ne peut pas attaquer.");
+      return;
+    }
+    if (seat.active.statuses.includes("paralyzed")) {
+      this.sendErrorToSeat(
+        seatId,
+        "Pokémon Paralysé — il ne peut pas attaquer.",
+      );
+      return;
+    }
     const attackerData = getCard(seat.active.cardId);
     if (!attackerData || attackerData.kind !== "pokemon") return;
     const attack = attackerData.attacks[attackIndex];
@@ -498,6 +519,30 @@ export default class BattleServer implements Party.Server {
       this.sendErrorToSeat(seatId, "Coût en Énergies non payé.");
       return;
     }
+
+    // Confusion : pile/face avant l'attaque. Face = attaque foire +
+    // 30 dégâts à soi (pas de faiblesse/résistance pour ces dégâts).
+    if (seat.active.statuses.includes("confused")) {
+      const heads = this.coinFlip();
+      this.pushLog(
+        `${seat.username} (${attackerData.name}) Confus → pile/face : ${
+          heads ? "Pile" : "Face"
+        }.`,
+      );
+      if (!heads) {
+        seat.active.damage += 30;
+        this.pushLog(
+          `💢 ${attackerData.name} se fait 30 dégâts (Confus).`,
+        );
+        if (seat.active.damage >= attackerData.hp) {
+          this.knockOut(seatId === "p1" ? "p2" : "p1", seatId);
+        }
+        if (this.phase === "playing") this.advanceTurn();
+        else this.broadcastState();
+        return;
+      }
+    }
+
     const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
     const opp = this.seats[oppId];
     if (!opp || !opp.active) {
@@ -528,9 +573,21 @@ export default class BattleServer implements Party.Server {
         (attack.text ? ` · ${attack.text}` : ""),
     );
 
-    // Vérif KO sur le défenseur.
-    if (opp.active.damage >= defenderData.hp) {
+    // Effets structurés (status, self-damage, discard énergie, heal).
+    if (attack.effects) {
+      this.applyAttackEffects(seatId, oppId, attack.effects);
+    }
+
+    // Vérif KO sur le défenseur (puis sur l'attaquant si self-damage).
+    if (opp.active && opp.active.damage >= defenderData.hp) {
       this.knockOut(seatId, oppId);
+    }
+    if (
+      this.phase === "playing" &&
+      seat.active &&
+      seat.active.damage >= attackerData.hp
+    ) {
+      this.knockOut(oppId, seatId);
     }
 
     // Une attaque met fin au tour (sauf si KO a déjà déclaré vainqueur).
@@ -539,6 +596,100 @@ export default class BattleServer implements Party.Server {
     } else {
       this.broadcastState();
     }
+  }
+
+  /** Tirage pile/face (true = pile/heads). */
+  private coinFlip(): boolean {
+    return Math.random() < 0.5;
+  }
+
+  /** Applique chaque AttackEffect après les dégâts de base. */
+  private applyAttackEffects(
+    attackerSeatId: BattleSeatId,
+    defenderSeatId: BattleSeatId,
+    effects: import("../../shared/types").PokemonAttackEffect[],
+  ) {
+    const att = this.seats[attackerSeatId];
+    const def = this.seats[defenderSeatId];
+    if (!att || !def) return;
+    for (const effect of effects) {
+      switch (effect.kind) {
+        case "apply-status": {
+          const targetCard =
+            effect.target === "self" ? att.active : def.active;
+          const targetSeat =
+            effect.target === "self" ? att : def;
+          if (!targetCard) break;
+          if (effect.coin) {
+            const heads = this.coinFlip();
+            const wantHeads = effect.coin === "heads";
+            this.pushLog(
+              `Pile/Face pour ${effect.status} : ${heads ? "Pile" : "Face"}.`,
+            );
+            if (heads !== wantHeads) break;
+          }
+          this.applyStatus(targetCard, effect.status);
+          this.pushLog(
+            `${targetSeat.username}'s ${getCardName(targetCard.cardId)} est ${statusLabel(effect.status)}.`,
+          );
+          break;
+        }
+        case "self-damage": {
+          if (!att.active) break;
+          if (effect.coin) {
+            const heads = this.coinFlip();
+            const wantHeads = effect.coin === "heads";
+            this.pushLog(
+              `Pile/Face pour récul : ${heads ? "Pile" : "Face"}.`,
+            );
+            if (heads !== wantHeads) break;
+          }
+          att.active.damage += effect.amount;
+          this.pushLog(
+            `💢 ${getCardName(att.active.cardId)} se fait ${effect.amount} dégâts.`,
+          );
+          break;
+        }
+        case "discard-energy": {
+          if (!att.active) break;
+          const n = Math.min(effect.count, att.active.attachedEnergies.length);
+          const removed = att.active.attachedEnergies.splice(0, n);
+          for (const eId of removed) {
+            att.discard.push({
+              uid: `disc-${this.uidCounter++}`,
+              cardId: eId,
+            });
+          }
+          this.pushLog(`${att.username} défausse ${n} Énergie(s).`);
+          break;
+        }
+        case "heal": {
+          if (!att.active) break;
+          const before = att.active.damage;
+          att.active.damage = Math.max(0, before - effect.amount);
+          const healed = before - att.active.damage;
+          if (healed > 0) {
+            this.pushLog(
+              `💚 ${getCardName(att.active.cardId)} récupère ${healed} PV.`,
+            );
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  /** Applique un statut à un BattleCard, en respectant l'exclusion mutuelle
+   *  asleep/paralyzed/confused (poison se cumule). */
+  private applyStatus(
+    card: BattleCard,
+    status: import("../../shared/types").BattleStatus,
+  ) {
+    const exclusive = ["asleep", "paralyzed", "confused"];
+    if (exclusive.includes(status)) {
+      card.statuses = card.statuses.filter((s) => !exclusive.includes(s));
+    }
+    if (!card.statuses.includes(status)) card.statuses.push(status);
   }
 
   /** Promotion d'un Pokémon de Banc en Actif après KO. */
@@ -651,6 +802,56 @@ export default class BattleServer implements Party.Server {
     const seatId = this.activeSeat;
     const seat = this.seats[seatId];
     if (!seat) return;
+
+    // ─── Between-turns effects ────────────────────────────────────
+    // Poison : 10 dégâts à chaque Actif empoisonné (les deux côtés).
+    for (const sId of ["p1", "p2"] as BattleSeatId[]) {
+      const s = this.seats[sId];
+      if (!s?.active) continue;
+      if (s.active.statuses.includes("poisoned")) {
+        s.active.damage += 10;
+        this.pushLog(
+          `☠️ ${s.username}'s ${getCardName(s.active.cardId)} subit 10 dégâts (Empoisonné).`,
+        );
+        const data = getCard(s.active.cardId);
+        if (data?.kind === "pokemon" && s.active.damage >= data.hp) {
+          // KO inter-tours — l'autre joueur prend une prize.
+          const otherId: BattleSeatId = sId === "p1" ? "p2" : "p1";
+          this.knockOut(otherId, sId);
+          if (this.phase === "ended") {
+            this.broadcastState();
+            return;
+          }
+        }
+      }
+    }
+
+    // Sleep wake : pile/face en fin du tour du joueur dont c'est le tour.
+    if (seat.active && seat.active.statuses.includes("asleep")) {
+      const heads = this.coinFlip();
+      this.pushLog(
+        `💤 ${getCardName(seat.active.cardId)} → réveil ? ${heads ? "Pile (réveille)" : "Face (toujours endormi)"}.`,
+      );
+      if (heads) {
+        seat.active.statuses = seat.active.statuses.filter(
+          (s) => s !== "asleep",
+        );
+      }
+    }
+
+    // Paralysie : retirée à la fin du tour du joueur paralysé (i.e. après
+    // un tour complet d'inaction). On le fait sur l'Actif du joueur dont
+    // c'est le tour qui se termine.
+    if (seat.active && seat.active.statuses.includes("paralyzed")) {
+      seat.active.statuses = seat.active.statuses.filter(
+        (s) => s !== "paralyzed",
+      );
+      this.pushLog(
+        `⚡ ${getCardName(seat.active.cardId)} n'est plus Paralysé.`,
+      );
+    }
+
+    // Reset des flags de tour pour le joueur actif.
     for (const c of [seat.active, ...seat.bench]) {
       if (c) c.playedThisTurn = false;
     }
@@ -805,3 +1006,24 @@ function sanitizeChat(raw: unknown): string | null {
 }
 
 void fetchProfile; // placeholder pour usage futur (ratings, etc.)
+
+function getCardName(cardId: string): string {
+  const data = getCard(cardId);
+  if (!data) return "?";
+  return data.name;
+}
+
+function statusLabel(s: import("../../shared/types").BattleStatus): string {
+  switch (s) {
+    case "asleep":
+      return "Endormi";
+    case "burned":
+      return "Brûlé";
+    case "confused":
+      return "Confus";
+    case "paralyzed":
+      return "Paralysé";
+    case "poisoned":
+      return "Empoisonné";
+  }
+}

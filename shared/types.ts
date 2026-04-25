@@ -974,7 +974,34 @@ export type PokemonAttack = {
   damage?: number; // base damage; effects below may modify
   damageSuffix?: "+" | "x" | "-"; // shown next to damage (e.g. "10×")
   text?: string; // effect description (FR)
+  // Effets exécutés par le serveur après les dégâts. Pour la Gen 1 on en
+  // a peuplé ~20-30 sur les attaques les plus iconiques — on étoffera
+  // au fil de l'eau.
+  effects?: PokemonAttackEffect[];
 };
+
+export type PokemonAttackEffect =
+  // Applique une condition de statut à soi ou à l'adversaire. Coin flip
+  // optionnel : ne s'applique que sur le résultat indiqué (heads/tails).
+  | {
+      kind: "apply-status";
+      target: "self" | "opponent";
+      status: BattleStatus;
+      coin?: "heads" | "tails";
+    }
+  // Inflige X dégâts à soi-même (récul, contre-coup), avec coin
+  // optionnel pour les attaques style Tonnerre Pikachu.
+  | {
+      kind: "self-damage";
+      amount: number;
+      coin?: "heads" | "tails";
+    }
+  // Défausse N énergies attachées à soi (utilisé après les attaques style
+  // "Tempête de Feu : défausse 2 Énergies Feu"). Pour MVP on ne filtre
+  // pas par type — n'importe quelle énergie part.
+  | { kind: "discard-energy"; count: number }
+  // Soigne X dégâts à soi.
+  | { kind: "heal"; amount: number };
 
 export type PokemonAbility = {
   name: string;

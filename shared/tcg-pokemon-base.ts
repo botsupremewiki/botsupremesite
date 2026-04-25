@@ -18,7 +18,7 @@ const POKEMON: PokemonCardData[] = [
     rarity: "uncommon", art: "🔥", pack: "charizard" },
   { kind: "pokemon", id: "g1-006", number: 6, name: "Dracaufeu", type: "fire", stage: "stage2", evolvesFrom: "Reptincel", hp: 120, weakness: "water", resistance: "fighting", retreatCost: 3,
     ability: { name: "Brûlure d'Énergie", text: "Toute Énergie attachée à Dracaufeu compte comme Énergie Feu." },
-    attacks: [{ name: "Tempête de Feu", cost: ["fire", "fire", "fire", "fire"], damage: 100, text: "Défausse 2 Énergies attachées à Dracaufeu." }],
+    attacks: [{ name: "Tempête de Feu", cost: ["fire", "fire", "fire", "fire"], damage: 100, text: "Défausse 2 Énergies attachées à Dracaufeu.", effects: [{ kind: "discard-energy", count: 2 }] }],
     rarity: "holo-rare", art: "🐉", pack: "charizard" },
 
   // Oiseaux normaux/vol
@@ -172,7 +172,7 @@ const POKEMON: PokemonCardData[] = [
   // ═══════════════════════════ PACK TORTANK (34) ═══════════════════════════
   // Ligne Carapuce
   { kind: "pokemon", id: "g1-007", number: 7, name: "Carapuce", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Bulle d'O", cost: ["water"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }, { name: "Repli", cost: ["water", "colorless"], text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }],
+    attacks: [{ name: "Bulle d'O", cost: ["water"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }, { name: "Repli", cost: ["water", "colorless"], text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }],
     rarity: "common", art: "🐢", pack: "blastoise" },
   { kind: "pokemon", id: "g1-008", number: 8, name: "Carabaffe", type: "water", stage: "stage1", evolvesFrom: "Carapuce", hp: 80, weakness: "lightning", retreatCost: 1,
     attacks: [{ name: "Morsure", cost: ["water"], damage: 20 }, { name: "Détourne-Eau", cost: ["water", "colorless"], damage: 10, text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }],
@@ -195,7 +195,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Bulles d'O", cost: ["water"], damage: 10 }],
     rarity: "common", art: "🐸", pack: "blastoise" },
   { kind: "pokemon", id: "g1-061", number: 61, name: "Têtarte", type: "water", stage: "stage1", evolvesFrom: "Ptitard", hp: 60, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Hypnose", cost: ["water"], text: "Le Pokémon Adverse est Endormi." }, { name: "Bulles d'O", cost: ["water", "water"], damage: 20 }],
+    attacks: [{ name: "Hypnose", cost: ["water"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }, { name: "Bulles d'O", cost: ["water", "water"], damage: 20 }],
     rarity: "uncommon", art: "🐸", pack: "blastoise" },
   { kind: "pokemon", id: "g1-062", number: 62, name: "Tartard", type: "water", stage: "stage2", evolvesFrom: "Têtarte", hp: 90, weakness: "lightning", retreatCost: 3,
     attacks: [{ name: "Direct", cost: ["fighting", "colorless"], damage: 30 }, { name: "Hydrocanon", cost: ["water", "water", "colorless"], damage: 40 }],
@@ -310,10 +310,10 @@ const POKEMON: PokemonCardData[] = [
   // ═══════════════════════════ PACK FLORIZARRE (38) ═══════════════════════════
   // Ligne Bulbizarre
   { kind: "pokemon", id: "g1-001", number: 1, name: "Bulbizarre", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Vampigraine", cost: ["grass", "grass"], damage: 20, text: "Soigne 10 dégâts à Bulbizarre." }],
+    attacks: [{ name: "Vampigraine", cost: ["grass", "grass"], damage: 20, text: "Soigne 10 dégâts à Bulbizarre.", effects: [{ kind: "heal", amount: 10 }] }],
     rarity: "common", art: "🌱", pack: "venusaur" },
   { kind: "pokemon", id: "g1-002", number: 2, name: "Herbizarre", type: "grass", stage: "stage1", evolvesFrom: "Bulbizarre", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Vampigraine", cost: ["grass", "grass"], damage: 20, text: "Soigne 10 dégâts." }],
+    attacks: [{ name: "Vampigraine", cost: ["grass", "grass"], damage: 20, text: "Soigne 10 dégâts.", effects: [{ kind: "heal", amount: 10 }] }],
     rarity: "uncommon", art: "🌿", pack: "venusaur" },
   { kind: "pokemon", id: "g1-003", number: 3, name: "Florizarre", type: "grass", stage: "stage2", evolvesFrom: "Herbizarre", hp: 100, weakness: "fire", retreatCost: 2,
     ability: { name: "Transfert d'Énergie", text: "Déplace une Énergie Plante d'un de tes Pokémon à un autre." },
@@ -392,10 +392,10 @@ const POKEMON: PokemonCardData[] = [
 
   // Paras
   { kind: "pokemon", id: "g1-046", number: 46, name: "Paras", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Spore", cost: ["grass"], text: "Le Pokémon Adverse est Endormi." }],
+    attacks: [{ name: "Spore", cost: ["grass"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }],
     rarity: "common", art: "🍄", pack: "venusaur" },
   { kind: "pokemon", id: "g1-047", number: 47, name: "Parasect", type: "grass", stage: "stage1", evolvesFrom: "Paras", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Spore", cost: ["grass"], text: "Le Pokémon Adverse est Endormi." }, { name: "Fonce", cost: ["grass", "grass", "colorless"], damage: 40 }],
+    attacks: [{ name: "Spore", cost: ["grass"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }, { name: "Fonce", cost: ["grass", "grass", "colorless"], damage: 40 }],
     rarity: "uncommon", art: "🍄", pack: "venusaur" },
 
   // Mimitoss
@@ -467,7 +467,7 @@ const POKEMON: PokemonCardData[] = [
 
   // Pikachu
   { kind: "pokemon", id: "g1-025", number: 25, name: "Pikachu", type: "lightning", stage: "basic", hp: 40, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Mordille", cost: ["colorless"], damage: 10 }, { name: "Choc Foudre", cost: ["lightning", "colorless"], damage: 30, text: "Lance une pièce. Pile, Pikachu se fait 10 dégâts." }],
+    attacks: [{ name: "Mordille", cost: ["colorless"], damage: 10 }, { name: "Choc Foudre", cost: ["lightning", "colorless"], damage: 30, text: "Lance une pièce. Pile, Pikachu se fait 10 dégâts.", effects: [{ kind: "self-damage", amount: 10, coin: "tails" }] }],
     rarity: "common", art: "⚡", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-026", number: 26, name: "Raichu", type: "lightning", stage: "stage1", evolvesFrom: "Pikachu", hp: 80, weakness: "fighting", retreatCost: 1,
     attacks: [{ name: "Vivacité", cost: ["lightning", "colorless"], damage: 20, text: "Lance une pièce. Face, ignore les effets adverses." }, { name: "Tonnerre", cost: ["lightning", "lightning", "colorless", "colorless"], damage: 60 }],
@@ -511,7 +511,7 @@ const POKEMON: PokemonCardData[] = [
 
   // Magnéti
   { kind: "pokemon", id: "g1-081", number: 81, name: "Magnéti", type: "lightning", stage: "basic", hp: 40, weakness: "fighting", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Vis Tonnerre", cost: ["lightning"], damage: 10 }, { name: "Choc Tonnerre", cost: ["lightning", "colorless"], damage: 20, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
+    attacks: [{ name: "Vis Tonnerre", cost: ["lightning"], damage: 10 }, { name: "Choc Tonnerre", cost: ["lightning", "colorless"], damage: 20, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }],
     rarity: "common", art: "🧲", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-082", number: 82, name: "Magnéton", type: "lightning", stage: "stage1", evolvesFrom: "Magnéti", hp: 60, weakness: "fighting", resistance: "fighting", retreatCost: 1,
     attacks: [{ name: "Choc Foudre", cost: ["lightning", "lightning"], damage: 30 }, { name: "Tempête de Foudre", cost: ["lightning", "lightning", "lightning", "lightning"], damage: 80, text: "Inflige 10 dégâts à chacun de tes Pokémon de Banc." }],
@@ -532,7 +532,7 @@ const POKEMON: PokemonCardData[] = [
 
   // Fantominus
   { kind: "pokemon", id: "g1-092", number: 92, name: "Fantominus", type: "psychic", stage: "basic", hp: 30, weakness: "psychic", retreatCost: 0,
-    attacks: [{ name: "Choc Mental", cost: ["psychic"], damage: 10 }, { name: "Léchouille", cost: ["psychic"], text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
+    attacks: [{ name: "Choc Mental", cost: ["psychic"], damage: 10 }, { name: "Léchouille", cost: ["psychic"], text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }],
     rarity: "common", art: "👻", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-093", number: 93, name: "Spectrum", type: "psychic", stage: "stage1", evolvesFrom: "Fantominus", hp: 50, weakness: "psychic", retreatCost: 0,
     attacks: [{ name: "Rêve Éveillé", cost: ["psychic"], damage: 10, text: "Le Pokémon Adverse est Endormi." }, { name: "Onde Nocturne", cost: ["psychic", "psychic"], damage: 30 }],
@@ -544,10 +544,10 @@ const POKEMON: PokemonCardData[] = [
 
   // Soporifik
   { kind: "pokemon", id: "g1-096", number: 96, name: "Soporifik", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Choc Mental", cost: ["psychic"], damage: 10 }, { name: "Hypnose", cost: ["psychic", "psychic"], text: "Le Pokémon Adverse est Endormi." }],
+    attacks: [{ name: "Choc Mental", cost: ["psychic"], damage: 10 }, { name: "Hypnose", cost: ["psychic", "psychic"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }],
     rarity: "common", art: "😴", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-097", number: 97, name: "Hypnomade", type: "psychic", stage: "stage1", evolvesFrom: "Soporifik", hp: 90, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Hypnose", cost: ["psychic"], text: "Le Pokémon Adverse est Endormi." }, { name: "Prophétie", cost: ["psychic", "psychic"], text: "Regarde les 3 cartes du dessus de ton deck et réorganise-les." }],
+    attacks: [{ name: "Hypnose", cost: ["psychic"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }, { name: "Prophétie", cost: ["psychic", "psychic"], text: "Regarde les 3 cartes du dessus de ton deck et réorganise-les." }],
     rarity: "rare", art: "😴", pack: "mewtwo" },
 
   // Voltorbe
@@ -576,7 +576,7 @@ const POKEMON: PokemonCardData[] = [
 
   // Élektek
   { kind: "pokemon", id: "g1-125", number: 125, name: "Élektek", type: "lightning", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2,
-    attacks: [{ name: "Choc Foudre", cost: ["lightning", "colorless"], damage: 30 }, { name: "Tonnerre", cost: ["lightning", "lightning", "colorless"], damage: 50, text: "Lance une pièce. Pile, Élektek se fait 10 dégâts." }],
+    attacks: [{ name: "Choc Foudre", cost: ["lightning", "colorless"], damage: 30 }, { name: "Tonnerre", cost: ["lightning", "lightning", "colorless"], damage: 50, text: "Lance une pièce. Pile, Élektek se fait 10 dégâts.", effects: [{ kind: "self-damage", amount: 10, coin: "tails" }] }],
     rarity: "rare", art: "⚡", pack: "mewtwo" },
 
   // Métamorph
@@ -608,7 +608,7 @@ const POKEMON: PokemonCardData[] = [
 
   // Électhor
   { kind: "pokemon", id: "g1-145", number: 145, name: "Électhor", type: "lightning", stage: "basic", hp: 90, weakness: "fighting", resistance: "fighting", retreatCost: 3,
-    attacks: [{ name: "Choc-Mental", cost: ["lightning"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }, { name: "Tonnerre", cost: ["lightning", "lightning", "lightning", "lightning"], damage: 60, text: "Lance une pièce. Pile, Électhor se fait 30 dégâts." }],
+    attacks: [{ name: "Choc-Mental", cost: ["lightning"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }, { name: "Tonnerre", cost: ["lightning", "lightning", "lightning", "lightning"], damage: 60, text: "Lance une pièce. Pile, Électhor se fait 30 dégâts.", effects: [{ kind: "self-damage", amount: 30, coin: "tails" }] }],
     rarity: "holo-rare", art: "⚡", pack: "mewtwo" },
 
   // Minidraco
@@ -619,7 +619,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Agilité", cost: ["colorless", "colorless"], damage: 20, text: "Face, ignore les dégâts adverses." }, { name: "Ultrason", cost: ["colorless", "colorless", "colorless"], damage: 30, text: "Lance une pièce. Face, Confus." }],
     rarity: "uncommon", art: "🐉", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-149", number: 149, name: "Dracolosse", type: "colorless", stage: "stage2", evolvesFrom: "Draco", hp: 100, weakness: "colorless", retreatCost: 2,
-    attacks: [{ name: "Pic Toxik", cost: ["colorless", "colorless"], damage: 20, text: "Lance une pièce. Face, Empoisonné." }, { name: "Super Tonnerre", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 80, text: "Défausse 1 Énergie." }],
+    attacks: [{ name: "Pic Toxik", cost: ["colorless", "colorless"], damage: 20, text: "Lance une pièce. Face, Empoisonné.", effects: [{ kind: "apply-status", target: "opponent", status: "poisoned", coin: "heads" }] }, { name: "Super Tonnerre", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 80, text: "Défausse 1 Énergie.", effects: [{ kind: "discard-energy", count: 1 }] }],
     rarity: "holo-rare", art: "🐲", pack: "mewtwo" },
 
   // Mewtwo & Mew
