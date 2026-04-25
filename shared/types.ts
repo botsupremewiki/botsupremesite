@@ -1006,7 +1006,36 @@ export type PokemonAttackEffect =
 export type PokemonAbility = {
   name: string;
   text: string;
+  // Effet machine-readable. Si absent, l'ability est purement décorative
+  // pour l'instant (ex: Cri Préhistorique d'Aérodactyl).
+  effect?: PokemonAbilityEffect;
 };
+
+export type PokemonAbilityEffect =
+  // Toute Énergie attachée à ce Pokémon compte comme Feu pour le coût
+  // d'attaque (Dracaufeu — Brûlure d'Énergie).
+  | { kind: "energy-burn" }
+  // Permet d'attacher autant d'Énergies Eau que tu veux à tes Pokémon
+  // Eau (Tortank — Danse Pluie). Bypasse la limite 1/tour pour ce cas.
+  | { kind: "rain-dance" }
+  // Quand un Pokémon attaquant blesse ce Pokémon, il subit `amount`
+  // dégâts (Mackogneur — Riposte).
+  | { kind: "counter-attack"; amount: number }
+  // Tant que ce Pokémon est Endormi, ignore tous les dégâts qu'il subit
+  // (Ronflex — Sans Garde).
+  | { kind: "asleep-immunity" }
+  // Ignore tous les dégâts ≥ `threshold` infligés à ce Pokémon
+  // (M. Mime — Mur de Lumière).
+  | { kind: "damage-cap"; threshold: number }
+  // Si l'attaquant est un Pokémon évolué (stage1/2), coin flip ; face =
+  // les dégâts sont ignorés (Mew — Esquive Neutre).
+  | { kind: "evolved-attacker-coin" }
+  // Tant que ce Pokémon est sur le Banc et l'Actif adverse Endormi,
+  // inflige `amount` dégâts entre les tours (Ectoplasma — Sombre Rêve).
+  | { kind: "bench-aura-asleep"; amount: number }
+  // Après chaque attaque de ce Pokémon (en tant qu'Actif), coin flip ;
+  // face = applique `status` à l'Actif adverse (Rafflesia — Spores).
+  | { kind: "post-attack-status-coin"; status: BattleStatus };
 
 export type PokemonCardData =
   | {

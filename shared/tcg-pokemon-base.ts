@@ -17,7 +17,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Tranche", cost: ["colorless", "colorless", "colorless"], damage: 30 }, { name: "Lance-Flammes", cost: ["fire", "fire", "colorless"], damage: 50, text: "Défausse 1 Énergie Feu attachée." }],
     rarity: "uncommon", art: "🔥", pack: "charizard" },
   { kind: "pokemon", id: "g1-006", number: 6, name: "Dracaufeu", type: "fire", stage: "stage2", evolvesFrom: "Reptincel", hp: 120, weakness: "water", resistance: "fighting", retreatCost: 3,
-    ability: { name: "Brûlure d'Énergie", text: "Toute Énergie attachée à Dracaufeu compte comme Énergie Feu." },
+    ability: { name: "Brûlure d'Énergie", text: "Toute Énergie attachée à Dracaufeu compte comme Énergie Feu.", effect: { kind: "energy-burn" } },
     attacks: [{ name: "Tempête de Feu", cost: ["fire", "fire", "fire", "fire"], damage: 100, text: "Défausse 2 Énergies attachées à Dracaufeu.", effects: [{ kind: "discard-energy", count: 2 }] }],
     rarity: "holo-rare", art: "🐉", pack: "charizard" },
 
@@ -86,7 +86,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Poing Karaté", cost: ["fighting", "colorless"], damage: 20 }, { name: "Piqué Plongé", cost: ["fighting", "fighting", "colorless"], damage: 40 }],
     rarity: "uncommon", art: "💪", pack: "charizard" },
   { kind: "pokemon", id: "g1-068", number: 68, name: "Mackogneur", type: "fighting", stage: "stage2", evolvesFrom: "Machopeur", hp: 100, weakness: "psychic", retreatCost: 3,
-    ability: { name: "Riposte", text: "Quand un Pokémon attaquant blesse Mackogneur, il subit 10 dégâts." },
+    ability: { name: "Riposte", text: "Quand un Pokémon attaquant blesse Mackogneur, il subit 10 dégâts.", effect: { kind: "counter-attack", amount: 10 } },
     attacks: [{ name: "Frappe Sismique", cost: ["fighting", "fighting", "colorless", "colorless"], damage: 60 }],
     rarity: "holo-rare", art: "💪", pack: "charizard" },
 
@@ -178,7 +178,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Morsure", cost: ["water"], damage: 20 }, { name: "Détourne-Eau", cost: ["water", "colorless"], damage: 10, text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }],
     rarity: "uncommon", art: "🐢", pack: "blastoise" },
   { kind: "pokemon", id: "g1-009", number: 9, name: "Tortank", type: "water", stage: "stage2", evolvesFrom: "Carabaffe", hp: 100, weakness: "lightning", retreatCost: 3,
-    ability: { name: "Danse Pluie", text: "Tu peux attacher autant d'Énergies Eau que tu veux à tes Pokémon ⚡ Eau." },
+    ability: { name: "Danse Pluie", text: "Tu peux attacher autant d'Énergies Eau que tu veux à tes Pokémon ⚡ Eau.", effect: { kind: "rain-dance" } },
     attacks: [{ name: "Hydrocanon", cost: ["water", "water", "water"], damage: 40, damageSuffix: "+", text: "+10 par Énergie Eau supplémentaire (max +20)." }],
     rarity: "holo-rare", art: "🌊", pack: "blastoise" },
 
@@ -386,7 +386,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Poudre Soporifik", cost: ["grass", "colorless"], text: "Le Pokémon Adverse est Endormi." }, { name: "Pétale Danse", cost: ["grass", "grass", "colorless"], damage: 40 }],
     rarity: "uncommon", art: "🌺", pack: "venusaur" },
   { kind: "pokemon", id: "g1-045", number: 45, name: "Rafflesia", type: "grass", stage: "stage2", evolvesFrom: "Ortide", hp: 80, weakness: "fire", retreatCost: 2,
-    ability: { name: "Spores de Pollen", text: "Lance 1 pièce à chaque attaque de Rafflesia. Face, le Pokémon Adverse est Endormi." },
+    ability: { name: "Spores de Pollen", text: "Lance 1 pièce à chaque attaque de Rafflesia. Face, le Pokémon Adverse est Endormi.", effect: { kind: "post-attack-status-coin", status: "asleep" } },
     attacks: [{ name: "Pétale Danse", cost: ["grass", "grass", "grass"], damage: 40, damageSuffix: "x", text: "Lance 3 pièces, 40× faces. Rafflesia est Confus." }],
     rarity: "holo-rare", art: "🌺", pack: "venusaur" },
 
@@ -538,7 +538,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Rêve Éveillé", cost: ["psychic"], damage: 10, text: "Le Pokémon Adverse est Endormi." }, { name: "Onde Nocturne", cost: ["psychic", "psychic"], damage: 30 }],
     rarity: "uncommon", art: "👻", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-094", number: 94, name: "Ectoplasma", type: "psychic", stage: "stage2", evolvesFrom: "Spectrum", hp: 80, weakness: "psychic", retreatCost: 0,
-    ability: { name: "Sombre Rêve", text: "Tant qu'Ectoplasma est sur le Banc et le Pokémon Adverse Endormi, inflige 10 dégâts à l'adversaire entre les tours." },
+    ability: { name: "Sombre Rêve", text: "Tant qu'Ectoplasma est sur le Banc et le Pokémon Adverse Endormi, inflige 10 dégâts à l'adversaire entre les tours.", effect: { kind: "bench-aura-asleep", amount: 10 } },
     attacks: [{ name: "Damoclès Énergétique", cost: ["psychic", "psychic", "psychic"], damage: 50, text: "Défausse 1 Énergie Psy." }],
     rarity: "holo-rare", art: "👻", pack: "mewtwo" },
 
@@ -570,7 +570,7 @@ const POKEMON: PokemonCardData[] = [
 
   // M. Mime
   { kind: "pokemon", id: "g1-122", number: 122, name: "M. Mime", type: "psychic", stage: "basic", hp: 40, weakness: "psychic", retreatCost: 1,
-    ability: { name: "Mur de Lumière", text: "Ignore tous les dégâts ≥ 30 infligés à M. Mime." },
+    ability: { name: "Mur de Lumière", text: "Ignore tous les dégâts ≥ 30 infligés à M. Mime.", effect: { kind: "damage-cap", threshold: 30 } },
     attacks: [{ name: "Méditation", cost: ["psychic", "colorless"], damage: 10, damageSuffix: "+", text: "+10 par carte dans la main de l'adversaire." }],
     rarity: "holo-rare", art: "🤡", pack: "mewtwo" },
 
@@ -602,7 +602,7 @@ const POKEMON: PokemonCardData[] = [
 
   // Ronflex
   { kind: "pokemon", id: "g1-143", number: 143, name: "Ronflex", type: "colorless", stage: "basic", hp: 90, weakness: "fighting", retreatCost: 4,
-    ability: { name: "Sans Garde", text: "Tant que Ronflex est Endormi, ignore les dégâts qui lui sont infligés." },
+    ability: { name: "Sans Garde", text: "Tant que Ronflex est Endormi, ignore les dégâts qui lui sont infligés.", effect: { kind: "asleep-immunity" } },
     attacks: [{ name: "Frappe Lourde", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 60 }],
     rarity: "holo-rare", art: "🐻", pack: "mewtwo" },
 
@@ -627,7 +627,7 @@ const POKEMON: PokemonCardData[] = [
     attacks: [{ name: "Psy", cost: ["psychic", "psychic", "colorless"], damage: 10, damageSuffix: "+", text: "+10 par Énergie attachée au Pokémon Adverse." }, { name: "Barrière", cost: ["psychic", "psychic"], text: "Défausse 1 Énergie Psy. Ignore les dégâts adverses le tour suivant." }],
     rarity: "holo-rare", art: "🧠", pack: "mewtwo" },
   { kind: "pokemon", id: "g1-151", number: 151, name: "Mew", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    ability: { name: "Esquive Neutre", text: "Si un Pokémon évolué attaque Mew, lance une pièce. Face, les dégâts sont ignorés." },
+    ability: { name: "Esquive Neutre", text: "Si un Pokémon évolué attaque Mew, lance une pièce. Face, les dégâts sont ignorés.", effect: { kind: "evolved-attacker-coin" } },
     attacks: [{ name: "Dévoreur", cost: ["psychic"], text: "Copie 1 attaque basique d'un Pokémon du Banc adverse et utilise-la." }],
     rarity: "holo-rare", art: "💮", pack: "mewtwo" },
 
