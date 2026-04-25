@@ -203,19 +203,6 @@ export function TcgClient({
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
           <span className="text-xs text-zinc-500">{game.tagline}</span>
-          <div className="h-4 w-px bg-white/10" />
-          <Link
-            href={`/play/tcg/${gameId}/decks`}
-            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-zinc-200 transition-colors hover:bg-white/10"
-          >
-            🃏 Mes decks
-          </Link>
-          <Link
-            href={`/play/tcg/${gameId}/battle`}
-            className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20"
-          >
-            ⚔️ Battle
-          </Link>
         </div>
         <div className="flex items-center gap-4 text-zinc-400">
           <StatusIndicator status={status} />
@@ -239,61 +226,44 @@ export function TcgClient({
         )}
 
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          {/* Top bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 p-4 backdrop-blur-sm">
-            <div className="flex flex-wrap items-center gap-4">
-              <div>
-                <div className="text-[11px] uppercase tracking-widest text-zinc-400">
-                  Collection
-                </div>
-                <div className="text-xl font-semibold text-zinc-100">
-                  {stats.owned}{" "}
-                  <span className="text-sm text-zinc-500">/ {stats.total}</span>
-                </div>
-              </div>
-              <div className="hidden h-8 w-px bg-white/10 md:block" />
-              <div className="hidden md:block">
-                <div className="text-[11px] uppercase tracking-widest text-zinc-400">
-                  Doublons
-                </div>
-                <div className="text-xl font-semibold text-zinc-100">
-                  {stats.dupes}
-                </div>
-              </div>
-              {freePacks > 0 && (
-                <>
-                  <div className="hidden h-8 w-px bg-white/10 md:block" />
-                  <div className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5">
-                    <div className="text-[10px] uppercase tracking-widest text-emerald-300">
-                      Boosters offerts
-                    </div>
-                    <div className="text-base font-bold tabular-nums text-emerald-200">
-                      🎁 × {freePacks}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="text-right">
-              <div className="text-[11px] uppercase tracking-widest text-zinc-400">
-                Prix booster
-              </div>
-              <div className="text-base font-bold tabular-nums text-amber-300">
-                {game.packPrice.toLocaleString("fr-FR")} OS
-              </div>
-            </div>
+          {/* Stats banner */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile
+              label="Collection"
+              value={`${stats.owned}`}
+              suffix={`/ ${stats.total}`}
+              accent="text-zinc-100"
+            />
+            <StatTile
+              label="Doublons"
+              value={`${stats.dupes}`}
+              accent="text-zinc-100"
+            />
+            <StatTile
+              label="Or Suprême"
+              value={gold.toLocaleString("fr-FR")}
+              accent="text-amber-300"
+            />
+            <StatTile
+              label="Boosters offerts"
+              value={`🎁 ${freePacks}`}
+              accent={freePacks > 0 ? "text-emerald-300" : "text-zinc-500"}
+              highlight={freePacks > 0}
+            />
           </div>
 
-          {/* Pack types chooser */}
+          {/* 🎴 Boosters */}
           {gameId === "pokemon" && (
-            <PokemonPackChooser
-              freePacks={freePacks}
-              gold={gold}
-              packPrice={game.packPrice}
-              connected={status === "connected"}
-              hasProfile={!!profile}
-              onBuy={buyPack}
-            />
+            <SectionFrame icon="🎴" title="Boosters" accent={game.accent}>
+              <PokemonPackChooser
+                freePacks={freePacks}
+                gold={gold}
+                packPrice={game.packPrice}
+                connected={status === "connected"}
+                hasProfile={!!profile}
+                onBuy={buyPack}
+              />
+            </SectionFrame>
           )}
 
           {errorMsg && (
@@ -302,12 +272,60 @@ export function TcgClient({
             </div>
           )}
 
-          {/* Collection grid */}
-          <CollectionGrid
-            pool={pool}
-            collection={collection}
-            cardById={cardById as Map<string, PokemonCardData>}
-          />
+          {/* Sections nav grid */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <SectionCard
+              href={`/play/tcg/${gameId}/decks`}
+              icon="🛠️"
+              title="Mes Decks"
+              description="10 decks personnalisables · 60 cartes / deck · max 4 dupes."
+              accent="text-violet-200"
+              border="border-violet-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.10),transparent_70%)]"
+            />
+            <SectionCard
+              href={`/play/tcg/${gameId}/battle`}
+              icon="⚔️"
+              title="Combats"
+              description="Bot Suprême · PvP fun · PvP classé · Historique · Stats / ELO."
+              accent="text-amber-200"
+              border="border-amber-400/50"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.10),transparent_70%)]"
+              highlight
+            />
+            <SectionCard
+              icon="💱"
+              title="Marché"
+              description="Acheter / vendre les cartes · favoris · recherche."
+              accent="text-emerald-200"
+              border="border-emerald-400/30"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.08),transparent_70%)]"
+              soon
+            />
+            <SectionCard
+              icon="🎯"
+              title="Quêtes"
+              description="Bat le Bot Suprême 3 fois → 1 booster gratuit."
+              accent="text-rose-200"
+              border="border-rose-400/30"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.08),transparent_70%)]"
+              soon
+            />
+          </div>
+
+          {/* 📚 Ma Collection */}
+          <SectionFrame
+            icon="📚"
+            title="Ma Collection"
+            subtitle={`${stats.owned} / ${stats.total} cartes possédées`}
+            accent={game.accent}
+          >
+            <CollectionGrid
+              pool={pool}
+              collection={collection}
+              cardById={cardById as Map<string, PokemonCardData>}
+            />
+          </SectionFrame>
         </div>
 
         <AnimatePresence>
@@ -426,7 +444,7 @@ function PackTypeCard({
           : !pack.active
             ? "Bientôt"
             : useFree
-              ? `🎁 Ouvrir (offert)`
+              ? `🎁 GRATUIT`
               : `${packPrice.toLocaleString("fr-FR")} OS`}
       </button>
     </div>
@@ -686,6 +704,118 @@ function CardFace({
       </div>
     </div>
   );
+}
+
+// ─── Layout primitives ────────────────────────────────────────────────────
+
+function StatTile({
+  label,
+  value,
+  suffix,
+  accent,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+  accent: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-3 backdrop-blur-sm ${
+        highlight
+          ? "border-emerald-400/40 bg-emerald-400/10"
+          : "border-white/10 bg-black/40"
+      }`}
+    >
+      <div className="text-[10px] uppercase tracking-widest text-zinc-400">
+        {label}
+      </div>
+      <div className={`mt-0.5 text-lg font-semibold tabular-nums ${accent}`}>
+        {value}
+        {suffix && (
+          <span className="ml-1 text-xs font-normal text-zinc-500">
+            {suffix}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionFrame({
+  icon,
+  title,
+  subtitle,
+  accent,
+  children,
+}: {
+  icon: string;
+  title: string;
+  subtitle?: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className={`text-base font-semibold ${accent}`}>
+          <span className="mr-1.5">{icon}</span>
+          {title}
+        </h2>
+        {subtitle && (
+          <span className="text-xs text-zinc-500">{subtitle}</span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SectionCard({
+  href,
+  icon,
+  title,
+  description,
+  accent,
+  border,
+  gradient,
+  highlight,
+  soon,
+}: {
+  href?: string;
+  icon: string;
+  title: string;
+  description: string;
+  accent: string;
+  border: string;
+  gradient: string;
+  highlight?: boolean;
+  soon?: boolean;
+}) {
+  const inner = (
+    <div
+      className={`group relative flex h-full flex-col gap-2 rounded-xl border p-4 transition-colors ${
+        soon
+          ? "border-white/10 opacity-60"
+          : `${border} bg-black/40 hover:bg-white/[0.04]`
+      } ${gradient} ${highlight ? "ring-1 ring-amber-400/30" : ""}`}
+    >
+      {soon && (
+        <span className="absolute right-2 top-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-300">
+          Bientôt
+        </span>
+      )}
+      <div className="text-2xl">{icon}</div>
+      <div className={`text-sm font-semibold ${accent}`}>{title}</div>
+      <div className="text-[11px] leading-relaxed text-zinc-400">
+        {description}
+      </div>
+    </div>
+  );
+  if (soon || !href) return <div>{inner}</div>;
+  return <Link href={href}>{inner}</Link>;
 }
 
 function StatusIndicator({ status }: { status: ConnStatus }) {
