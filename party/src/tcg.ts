@@ -31,10 +31,17 @@ type ConnInfo = {
   freePacks: number; // boosters offerts non encore consommés
 };
 
-// Per-(game, pack-type) card pools. For Pokémon we filter the unified Gen 1
-// pool by each card's `pack` field — energies (no pack field) are added to
-// every pack so each booster always contains some basic energy.
-function getPool(
+// Full pool = every card of the gen, all 4 packs draw from this for the
+// "mixed" slots so collections stay equitable across pack choices.
+function getFullPool(gameId: TcgGameId): PokemonCardData[] {
+  if (gameId !== "pokemon") return [];
+  return POKEMON_BASE_SET;
+}
+
+// Thematic pool = cards tagged with `pack === packTypeId` plus the basic
+// energies. Used for the 1 guaranteed-themed slot per booster so every
+// "Pack Dracaufeu" actually feels like a Dracaufeu pack.
+function getThemedPool(
   gameId: TcgGameId,
   packTypeId: string,
 ): PokemonCardData[] | null {
@@ -43,11 +50,8 @@ function getPool(
   const target = packTypeId as PokemonPackTypeId;
   const pool: PokemonCardData[] = [];
   for (const card of POKEMON_BASE_SET) {
-    if (card.kind === "energy") {
-      pool.push(card);
-    } else if (card.pack === target) {
-      pool.push(card);
-    }
+    if (card.kind === "energy") pool.push(card);
+    else if (card.pack === target) pool.push(card);
   }
   return pool.length > 0 ? pool : null;
 }
@@ -192,8 +196,9 @@ export default class TcgServer implements Party.Server {
         return;
       }
     }
-    const pool = getPool(this.gameId, packTypeId);
-    if (!pool || pool.length === 0) {
+    const themedPool = getThemedPool(this.gameId, packTypeId);
+    const fullPool = getFullPool(this.gameId);
+    if (!themedPool || themedPool.length === 0 || fullPool.length === 0) {
       this.sendError(conn, "Ce booster n'a pas encore de cartes.");
       return;
     }
@@ -216,10 +221,21 @@ export default class TcgServer implements Party.Server {
       await patchProfileGold(this.room, info.authId, info.gold);
       this.sendTo(conn, { type: "gold-update", gold: info.gold });
     }
+    // Booster composition for Pokémon (5 cartes = 3 thématiques + 2 mixés) :
+    //   slots 0..2  : tirage dans le pool du mascot du pack (Dracaufeu &
+    //                 ses copains thème Feu/Combat/Sol/Vol pour Pack
+    //                 Dracaufeu, etc.). Donne au pack son identité.
+    //   slots 3..4  : tirage dans le pool complet des 151 — n'importe
+    //                 quelle carte de la Gen peut tomber, ce qui garde
+    //                 les 4 packs équitables en valeur espérée.
+    //   slot 4      : reste le "rare slot" (uncommon+ garanti).
+    // Pour les autres jeux (à venir : One Piece / LoL) on retombe sur le
+    // pool unique du jeu.
     const cards: PokemonCardData[] = [];
-    // Slots 1..size-1 are regular, last slot is the guaranteed rare slot.
+    const themedSlotCount = this.gameId === "pokemon" ? 3 : game.packSize;
     for (let i = 0; i < game.packSize; i++) {
       const isRareSlot = i === game.packSize - 1;
+      const pool = i < themedSlotCount ? themedPool : fullPool;
       cards.push(this.drawCard(pool, isRareSlot));
     }
 
