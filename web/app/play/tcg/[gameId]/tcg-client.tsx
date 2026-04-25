@@ -210,6 +210,12 @@ export function TcgClient({
           >
             🃏 Mes decks
           </Link>
+          <Link
+            href={`/play/tcg/${gameId}/battle`}
+            className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20"
+          >
+            ⚔️ Battle
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-zinc-400">
           <StatusIndicator status={status} />

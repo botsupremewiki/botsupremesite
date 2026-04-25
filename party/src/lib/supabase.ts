@@ -200,6 +200,33 @@ export async function fetchTcgDecks(
   }
 }
 
+/** Read a single deck by id (any user, used by the battle server which
+ *  only knows the deck id). Returns null if not found. */
+export async function fetchTcgDeckById(
+  room: Party.Room,
+  deckId: string,
+): Promise<TcgDeckRow | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,name,cards,updated_at`,
+      {
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    if (!resp.ok) return null;
+    const rows = (await resp.json()) as TcgDeckRow[];
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Save (insert or update) a deck via the validating RPC. Returns the
  *  deck id on success, or an error message string on failure. */
 export async function saveTcgDeck(

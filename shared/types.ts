@@ -1133,3 +1133,95 @@ export type TcgServerMessage =
   | { type: "tcg-decks"; decks: TcgDeck[] }
   | { type: "gold-update"; gold: number }
   | { type: "tcg-error"; message: string };
+
+// ─── Pokémon Battle (Phase 2 : matchmaking + setup) ────────────────────────
+
+export type BattleSeatId = "p1" | "p2";
+
+export type BattlePhase =
+  | "waiting" // en attente du second joueur
+  | "setup" // chacun choisit son Actif + son Banc
+  | "playing"
+  | "ended";
+
+export type BattleStatus =
+  | "asleep"
+  | "burned"
+  | "confused"
+  | "paralyzed"
+  | "poisoned";
+
+export type BattleCard = {
+  // Position relative au joueur (0..N) — utilisé comme clé d'animation côté client.
+  uid: string;
+  cardId: string; // référence vers PokemonCardData
+  attachedEnergies: string[]; // card_ids des Énergies attachées
+  damage: number; // marqueurs de dégâts cumulés
+  statuses: BattleStatus[];
+  // Ne devient false qu'au tour suivant (interdit d'attaquer le tour où on est posé).
+  playedThisTurn: boolean;
+};
+
+export type BattlePlayerPublicState = {
+  authId: string;
+  username: string;
+  deckSize: number; // nombre de cartes restantes dans le deck
+  handCount: number; // nombre de cartes en main (cachées pour l'adverse)
+  active: BattleCard | null;
+  bench: BattleCard[]; // 0..5
+  discardCount: number;
+  prizesRemaining: number;
+  hasSetup: boolean;
+};
+
+export type BattleSelfState = BattlePlayerPublicState & {
+  // Cartes de la main visibles pour soi.
+  hand: string[]; // card_ids
+  // Cartes de prize encore face cachée — on connaît juste le nombre.
+};
+
+export type BattleState = {
+  roomId: string;
+  phase: BattlePhase;
+  // Toujours envoyé depuis la perspective du destinataire : self = vous,
+  // opponent = l'autre.
+  self: BattleSelfState | null;
+  opponent: BattlePlayerPublicState | null;
+  selfSeat: BattleSeatId | null;
+  activeSeat: BattleSeatId | null; // qui joue
+  turnNumber: number;
+  winner: BattleSeatId | null;
+  log: string[]; // 20 derniers évènements
+};
+
+export type BattleClientMessage =
+  | {
+      type: "battle-set-active";
+      handIndex: number;
+    }
+  | {
+      type: "battle-add-bench";
+      handIndex: number;
+    }
+  | { type: "battle-remove-bench"; benchIndex: number }
+  | { type: "battle-confirm-setup" }
+  | { type: "battle-end-turn" }
+  | { type: "battle-concede" }
+  | { type: "chat"; text: string };
+
+export type BattleServerMessage =
+  | { type: "battle-welcome"; selfId: string; selfSeat: BattleSeatId | null }
+  | { type: "battle-state"; state: BattleState }
+  | { type: "battle-error"; message: string }
+  | { type: "chat"; message: ChatMessage };
+
+// ─── Battle lobby (matchmaking) ────────────────────────────────────────────
+
+export type BattleLobbyClientMessage =
+  | { type: "queue"; deckId: string }
+  | { type: "leave-queue" };
+
+export type BattleLobbyServerMessage =
+  | { type: "queued"; position: number }
+  | { type: "matched"; roomId: string; deckId: string }
+  | { type: "lobby-error"; message: string };
