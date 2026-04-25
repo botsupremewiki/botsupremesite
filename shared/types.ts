@@ -912,8 +912,8 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
   pokemon: {
     id: "pokemon",
     name: "Pokémon",
-    tagline: "Base Set · Génération 1",
-    packPrice: 1_000,
+    tagline: "Génération 1 — Sets historiques",
+    packPrice: 10_000,
     packSize: 5,
     active: true,
     accent: "text-amber-300",
@@ -1024,7 +1024,72 @@ export type TcgPackResult = {
   timestamp: number;
 };
 
-export type TcgClientMessage = { type: "tcg-buy-pack" };
+export type TcgClientMessage = {
+  type: "tcg-buy-pack";
+  packTypeId: string; // e.g. "base-set" for Pokémon
+};
+
+// ─── Pokémon — booster sets (Génération 1) ─────────────────────────────────
+
+export type PokemonPackTypeId =
+  | "base-set"
+  | "jungle"
+  | "fossil"
+  | "team-rocket";
+
+export type PokemonPackType = {
+  id: PokemonPackTypeId;
+  name: string;
+  description: string;
+  glyph: string;
+  active: boolean;
+  // Tailwind theme classes for the pack card.
+  accent: string;
+  border: string;
+};
+
+export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
+  "base-set": {
+    id: "base-set",
+    name: "Set de Base",
+    description:
+      "Le set originel : Dracaufeu, Tortank, Florizarre, Mewtwo, Alakazam…",
+    glyph: "🎴",
+    active: true,
+    accent: "text-amber-200",
+    border: "border-amber-400/50",
+  },
+  jungle: {
+    id: "jungle",
+    name: "Jungle",
+    description:
+      "Pokémon sauvages — Léviator, Pidgeot, Snorlax, Florizarre alternatif…",
+    glyph: "🌴",
+    active: false,
+    accent: "text-emerald-200",
+    border: "border-emerald-400/40",
+  },
+  fossil: {
+    id: "fossil",
+    name: "Fossile",
+    description:
+      "Reliques préhistoriques — Aérodactyl, Kabutops, Amonistar, Lippoutou…",
+    glyph: "🦴",
+    active: false,
+    accent: "text-stone-200",
+    border: "border-stone-400/40",
+  },
+  "team-rocket": {
+    id: "team-rocket",
+    name: "Team Rocket",
+    description:
+      "Pokémon Obscur de la Team Rocket — Dracaufeu obscur, Mewtwo obscur…",
+    glyph: "🅡",
+    active: false,
+    accent: "text-rose-200",
+    border: "border-rose-400/40",
+  },
+};
 
 export type TcgServerMessage =
   | {

@@ -19,7 +19,8 @@ import type {
   TcgRarity,
   TcgServerMessage,
 } from "@shared/types";
-import { TCG_GAMES } from "@shared/types";
+import { POKEMON_PACK_TYPES, TCG_GAMES } from "@shared/types";
+import type { PokemonPackType } from "@shared/types";
 import {
   POKEMON_BASE_SET,
   POKEMON_BASE_SET_BY_ID,
@@ -171,10 +172,13 @@ export function TcgClient({
     ws.send(JSON.stringify(msg));
   }, []);
 
-  const buyPack = useCallback(() => {
-    setErrorMsg(null);
-    send({ type: "tcg-buy-pack" });
-  }, [send]);
+  const buyPack = useCallback(
+    (packTypeId: string) => {
+      setErrorMsg(null);
+      send({ type: "tcg-buy-pack", packTypeId });
+    },
+    [send],
+  );
 
   const stats = useMemo(() => {
     const owned = Array.from(collection.values()).filter((n) => n > 0).length;
@@ -224,7 +228,7 @@ export function TcgClient({
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {/* Top bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 p-4 backdrop-blur-sm">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-zinc-400">
                   Collection
@@ -251,37 +255,33 @@ export function TcgClient({
                       Boosters offerts
                     </div>
                     <div className="text-base font-bold tabular-nums text-emerald-200">
-                      🎁 {freePacks}
+                      🎁 × {freePacks}
                     </div>
                   </div>
                 </>
               )}
             </div>
-
-            <button
-              onClick={buyPack}
-              disabled={
-                !profile ||
-                status !== "connected" ||
-                (freePacks === 0 && gold < game.packPrice)
-              }
-              className={`rounded-lg border ${
-                freePacks > 0
-                  ? "border-emerald-400/60 from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500"
-                  : `${game.border} from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500`
-              } bg-gradient-to-b px-5 py-2.5 text-sm font-bold ${
-                freePacks > 0 ? "text-emerald-950" : "text-amber-950"
-              } shadow disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              {!profile
-                ? "Connecte-toi pour ouvrir un pack"
-                : freePacks > 0
-                  ? `🎁 Ouvrir un pack offert (${freePacks} restant${
-                      freePacks > 1 ? "s" : ""
-                    })`
-                  : `Acheter un pack · ${game.packPrice.toLocaleString("fr-FR")} OS`}
-            </button>
+            <div className="text-right">
+              <div className="text-[11px] uppercase tracking-widest text-zinc-400">
+                Prix booster
+              </div>
+              <div className="text-base font-bold tabular-nums text-amber-300">
+                {game.packPrice.toLocaleString("fr-FR")} OS
+              </div>
+            </div>
           </div>
+
+          {/* Pack types chooser */}
+          {gameId === "pokemon" && (
+            <PokemonPackChooser
+              freePacks={freePacks}
+              gold={gold}
+              packPrice={game.packPrice}
+              connected={status === "connected"}
+              hasProfile={!!profile}
+              onBuy={buyPack}
+            />
+          )}
 
           {errorMsg && (
             <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
@@ -308,6 +308,114 @@ export function TcgClient({
           )}
         </AnimatePresence>
       </main>
+    </div>
+  );
+}
+
+// ─── Pokémon pack chooser ──────────────────────────────────────────────────
+
+function PokemonPackChooser({
+  freePacks,
+  gold,
+  packPrice,
+  connected,
+  hasProfile,
+  onBuy,
+}: {
+  freePacks: number;
+  gold: number;
+  packPrice: number;
+  connected: boolean;
+  hasProfile: boolean;
+  onBuy: (packTypeId: string) => void;
+}) {
+  const packs = Object.values(POKEMON_PACK_TYPES);
+  return (
+    <div>
+      <div className="mb-2 text-[11px] uppercase tracking-widest text-zinc-400">
+        Choisis ton booster
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
+        {packs.map((pack) => (
+          <PackTypeCard
+            key={pack.id}
+            pack={pack}
+            freePacks={freePacks}
+            gold={gold}
+            packPrice={packPrice}
+            connected={connected}
+            hasProfile={hasProfile}
+            onBuy={onBuy}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PackTypeCard({
+  pack,
+  freePacks,
+  gold,
+  packPrice,
+  connected,
+  hasProfile,
+  onBuy,
+}: {
+  pack: PokemonPackType;
+  freePacks: number;
+  gold: number;
+  packPrice: number;
+  connected: boolean;
+  hasProfile: boolean;
+  onBuy: (packTypeId: string) => void;
+}) {
+  const useFree = freePacks > 0;
+  const canPay = gold >= packPrice;
+  const disabled =
+    !pack.active || !hasProfile || !connected || (!useFree && !canPay);
+  return (
+    <div
+      className={`relative flex flex-col gap-2 rounded-xl border bg-gradient-to-b from-zinc-900/80 to-black/80 p-3 backdrop-blur-sm transition-opacity ${
+        pack.active ? pack.border : "border-white/10 opacity-60"
+      }`}
+    >
+      {!pack.active && (
+        <span className="absolute right-2 top-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-300">
+          Bientôt
+        </span>
+      )}
+      <div className="flex items-center justify-center pt-2">
+        <div
+          className="flex h-20 w-20 items-center justify-center rounded-xl border border-white/10 bg-black/60 text-4xl shadow-inner"
+          aria-hidden
+        >
+          {pack.glyph}
+        </div>
+      </div>
+      <div className="text-center">
+        <div className={`text-sm font-semibold ${pack.accent}`}>{pack.name}</div>
+        <div className="mt-0.5 line-clamp-2 text-[10px] text-zinc-400">
+          {pack.description}
+        </div>
+      </div>
+      <button
+        onClick={() => onBuy(pack.id)}
+        disabled={disabled}
+        className={`mt-1 rounded-md px-3 py-2 text-xs font-bold shadow disabled:cursor-not-allowed disabled:opacity-40 ${
+          useFree && pack.active
+            ? "bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
+            : "bg-amber-500 text-amber-950 hover:bg-amber-400"
+        }`}
+      >
+        {!hasProfile
+          ? "Connecte-toi"
+          : !pack.active
+            ? "Bientôt"
+            : useFree
+              ? `🎁 Ouvrir (offert)`
+              : `${packPrice.toLocaleString("fr-FR")} OS`}
+      </button>
     </div>
   );
 }

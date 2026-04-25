@@ -1,6 +1,7 @@
 import type * as Party from "partykit/server";
 import type {
   PokemonCardData,
+  PokemonPackTypeId,
   TcgCardOwned,
   TcgClientMessage,
   TcgGameId,
@@ -8,7 +9,7 @@ import type {
   TcgRarity,
   TcgServerMessage,
 } from "../../shared/types";
-import { TCG_GAMES } from "../../shared/types";
+import { POKEMON_PACK_TYPES, TCG_GAMES } from "../../shared/types";
 import { POKEMON_BASE_SET } from "../../shared/tcg-pokemon-base";
 import {
   addTcgCards,
@@ -30,10 +31,22 @@ type ConnInfo = {
   freePacks: number; // boosters offerts non encore consommés
 };
 
-// Per-game card pools. New TCGs plug a new pool here.
-function getPool(gameId: TcgGameId): PokemonCardData[] {
-  if (gameId === "pokemon") return POKEMON_BASE_SET;
-  return [];
+// Per-(game, pack-type) card pools. New sets plug a new entry here.
+function getPool(
+  gameId: TcgGameId,
+  packTypeId: string,
+): PokemonCardData[] | null {
+  if (gameId !== "pokemon") return null;
+  switch (packTypeId as PokemonPackTypeId) {
+    case "base-set":
+      return POKEMON_BASE_SET;
+    case "jungle":
+    case "fossil":
+    case "team-rocket":
+      return null; // pas encore peuplé
+    default:
+      return null;
+  }
 }
 
 // Pack rarity slots: 4 "regular" + 1 "rare" slot.
@@ -144,7 +157,7 @@ export default class TcgServer implements Party.Server {
       return;
     }
     if (data.type === "tcg-buy-pack") {
-      await this.handleBuyPack(sender, info);
+      await this.handleBuyPack(sender, info, data.packTypeId);
     }
   }
 
@@ -152,10 +165,33 @@ export default class TcgServer implements Party.Server {
     this.connInfo.delete(conn.id);
   }
 
-  private async handleBuyPack(conn: Party.Connection, info: ConnInfo) {
+  private async handleBuyPack(
+    conn: Party.Connection,
+    info: ConnInfo,
+    packTypeId: string,
+  ) {
     const game = TCG_GAMES[this.gameId];
     if (!info.authId) {
       this.sendError(conn, "Connecte-toi avec Discord pour acheter un pack.");
+      return;
+    }
+
+    // Validate pack type belongs to this game and is active with cards.
+    if (this.gameId === "pokemon") {
+      const packType =
+        POKEMON_PACK_TYPES[packTypeId as PokemonPackTypeId];
+      if (!packType) {
+        this.sendError(conn, "Type de booster inconnu.");
+        return;
+      }
+      if (!packType.active) {
+        this.sendError(conn, `${packType.name} arrive bientôt.`);
+        return;
+      }
+    }
+    const pool = getPool(this.gameId, packTypeId);
+    if (!pool || pool.length === 0) {
+      this.sendError(conn, "Ce booster n'a pas encore de cartes.");
       return;
     }
 
@@ -177,8 +213,6 @@ export default class TcgServer implements Party.Server {
       await patchProfileGold(this.room, info.authId, info.gold);
       this.sendTo(conn, { type: "gold-update", gold: info.gold });
     }
-
-    const pool = getPool(this.gameId);
     const cards: PokemonCardData[] = [];
     // Slots 1..size-1 are regular, last slot is the guaranteed rare slot.
     for (let i = 0; i < game.packSize; i++) {
