@@ -264,14 +264,28 @@ export function MarketClient({
                 sécurisé et atomique.
               </p>
             </div>
-            {profile && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setSellOpen(true)}
-                className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
+                onClick={() => startTransition(() => router.refresh())}
+                disabled={isPending}
+                title="Rafraîchir les annonces"
+                className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 transition-colors hover:bg-white/10 disabled:cursor-wait disabled:opacity-50"
               >
-                ➕ Vendre une carte
+                <span
+                  className={`inline-block ${isPending ? "animate-spin" : ""}`}
+                >
+                  🔄
+                </span>
               </button>
-            )}
+              {profile && (
+                <button
+                  onClick={() => setSellOpen(true)}
+                  className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
+                >
+                  ➕ Vendre une carte
+                </button>
+              )}
+            </div>
           </div>
 
           {!profile && (
