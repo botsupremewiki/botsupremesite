@@ -302,6 +302,106 @@ export async function deleteTcgDeck(
   }
 }
 
+/** Record a finished PvP match (fun or ranked). For ranked, ELO of both
+ *  players is updated atomically. Backed by record_battle_result in
+ *  supabase/tcg-battles.sql. */
+export async function recordBattleResult(
+  room: Party.Room,
+  args: {
+    gameId: string;
+    winnerId: string;
+    loserId: string;
+    winnerUsername: string;
+    loserUsername: string;
+    winnerDeckName: string | null;
+    loserDeckName: string | null;
+    ranked: boolean;
+    reason: string;
+  },
+): Promise<{
+  winner_elo_before: number;
+  winner_elo_after: number;
+  loser_elo_before: number;
+  loser_elo_after: number;
+} | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(`${env.url}/rest/v1/rpc/record_battle_result`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_game_id: args.gameId,
+        p_winner_id: args.winnerId,
+        p_loser_id: args.loserId,
+        p_winner_username: args.winnerUsername,
+        p_loser_username: args.loserUsername,
+        p_winner_deck_name: args.winnerDeckName,
+        p_loser_deck_name: args.loserDeckName,
+        p_ranked: args.ranked,
+        p_reason: args.reason,
+      }),
+    });
+    if (!resp.ok) {
+      console.warn(
+        `[battle] record_battle_result failed ${resp.status}:`,
+        await resp.text().catch(() => ""),
+      );
+      return null;
+    }
+    return (await resp.json()) as {
+      winner_elo_before: number;
+      winner_elo_after: number;
+      loser_elo_before: number;
+      loser_elo_after: number;
+    };
+  } catch (err) {
+    console.warn("[battle] record_battle_result threw:", err);
+    return null;
+  }
+}
+
+/** Read a player's TCG stats for a given game (ELO, winrate, totals). */
+export type TcgPlayerStats = {
+  elo: number;
+  total: number;
+  wins: number;
+  losses: number;
+  ranked_total: number;
+  ranked_wins: number;
+};
+
+export async function fetchTcgPlayerStats(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+): Promise<TcgPlayerStats | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/rpc/get_tcg_player_stats`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ p_user_id: authId, p_game_id: gameId }),
+      },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as TcgPlayerStats;
+  } catch {
+    return null;
+  }
+}
+
 /** Record a bot-win for the daily quest. Returns {bot_wins, granted} where
  *  granted=true when the player just hit 3 wins and a free pack was added.
  *  Backed by record_tcg_bot_win in supabase/tcg.sql. */

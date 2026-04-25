@@ -16,10 +16,11 @@ type Queued = {
 };
 
 /**
- * Matchmaking lobby. Une room par jeu (ex: /parties/battle-lobby/pokemon).
- * Première version : FIFO, on pair les 2 premiers joueurs en file dès
- * qu'ils sont disponibles. Le pairing crée un roomId aléatoire que les 2
- * joueurs utiliseront pour rejoindre la room de battle correspondante.
+ * Matchmaking lobby.
+ * Routes :
+ *   /parties/battlelobby/pokemon         → PvP fun (FIFO)
+ *   /parties/battlelobby/ranked-pokemon  → PvP classé (FIFO + roomId "ranked-…")
+ * Le préfixe "ranked-" du room.id détermine le mode.
  */
 export default class BattleLobbyServer implements Party.Server {
   private queue: Queued[] = [];
@@ -27,8 +28,11 @@ export default class BattleLobbyServer implements Party.Server {
     string,
     { authId: string; username: string }
   >();
+  private readonly rankedMode: boolean;
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.rankedMode = room.id.startsWith("ranked-");
+  }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url);
@@ -125,7 +129,8 @@ export default class BattleLobbyServer implements Party.Server {
         this.queue.unshift(a);
         return;
       }
-      const roomId = crypto.randomUUID();
+      const baseRoomId = crypto.randomUUID();
+      const roomId = this.rankedMode ? `ranked-${baseRoomId}` : baseRoomId;
       this.sendTo(a.conn, {
         type: "matched",
         roomId,

@@ -21,14 +21,17 @@ type LobbyState = "idle" | "queued" | "matched";
 export function BattleLobbyClient({
   profile,
   gameId,
+  ranked = false,
 }: {
   profile: Profile | null;
   gameId: TcgGameId;
+  ranked?: boolean;
 }) {
   const router = useRouter();
   const game = TCG_GAMES[gameId];
   const tcgWsRef = useRef<WebSocket | null>(null);
   const lobbyWsRef = useRef<WebSocket | null>(null);
+  const lobbyRoomId = ranked ? `ranked-${gameId}` : gameId;
 
   const [tcgStatus, setTcgStatus] = useState<ConnStatus>("connecting");
   const [decks, setDecks] = useState<TcgDeck[]>([]);
@@ -100,7 +103,7 @@ export function BattleLobbyClient({
     const params = new URLSearchParams();
     params.set("authId", profile.id);
     params.set("name", profile.username);
-    const url = `${scheme}://${partyHost}/parties/battlelobby/${gameId}?${params.toString()}`;
+    const url = `${scheme}://${partyHost}/parties/battlelobby/${lobbyRoomId}?${params.toString()}`;
     const ws = new WebSocket(url);
     lobbyWsRef.current = ws;
     ws.addEventListener("open", () => {
@@ -142,7 +145,7 @@ export function BattleLobbyClient({
       setErrorMsg("Connexion lobby perdue.");
       setLobbyState("idle");
     });
-  }, [profile, selectedDeckId, gameId, router]);
+  }, [profile, selectedDeckId, gameId, router, lobbyRoomId]);
 
   const cancelQueue = useCallback(() => {
     const ws = lobbyWsRef.current;
@@ -174,7 +177,9 @@ export function BattleLobbyClient({
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
-          <span className="text-xs text-zinc-500">PvP fun · matchmaking</span>
+          <span className="text-xs text-zinc-500">
+            {ranked ? "PvP classé · matchmaking ELO" : "PvP fun · matchmaking"}
+          </span>
         </div>
         {profile ? (
           <UserPill profile={profile} variant="play" />
@@ -187,11 +192,13 @@ export function BattleLobbyClient({
         className={`flex flex-1 items-center justify-center p-6 ${game.gradient}`}
       >
         <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-sm">
-          <h1 className="text-2xl font-bold text-zinc-100">⚔️ PvP Fun</h1>
+          <h1 className="text-2xl font-bold text-zinc-100">
+            {ranked ? "🏆 PvP Classé" : "⚔️ PvP Fun"}
+          </h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Combat amical sans classement. Choisis un deck légal (60 cartes)
-            et entre en file d&apos;attente — tu seras associé au prochain
-            joueur disponible.
+            {ranked
+              ? "Match classé : ton ELO monte ou descend selon le résultat. Choisis un deck légal (60 cartes) et entre en file."
+              : "Combat amical sans classement. Choisis un deck légal (60 cartes) et entre en file d'attente — tu seras associé au prochain joueur disponible."}
           </p>
 
           {!profile && (

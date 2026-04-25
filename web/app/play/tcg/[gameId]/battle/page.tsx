@@ -70,34 +70,34 @@ export default async function CombatsHubPage({
               highlight
             />
             <CombatCard
+              href={`/play/tcg/${gameId}/battle/ranked`}
               icon="🏆"
               title="PvP Classé"
               subtitle="Système ELO"
               description="Matchmaking par niveau. Gagner monte ton ELO, perdre le baisse."
               accent="text-rose-200"
-              border="border-rose-400/30"
-              gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.08),transparent_70%)]"
-              soon
+              border="border-rose-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.10),transparent_70%)]"
             />
             <CombatCard
+              href={`/play/tcg/${gameId}/battle/history`}
               icon="📜"
               title="Historique"
               subtitle="Tes derniers matchs"
-              description="Liste de tes combats récents avec deck et adversaire."
+              description="Liste de tes combats récents avec deck, adversaire et delta ELO."
               accent="text-sky-200"
-              border="border-sky-400/30"
-              gradient="bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.08),transparent_70%)]"
-              soon
+              border="border-sky-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.10),transparent_70%)]"
             />
             <CombatCard
+              href={`/play/tcg/${gameId}/battle/stats`}
               icon="📊"
               title="Stats / ELO"
               subtitle="Ton profil de combat"
-              description="ELO actuel, winrate, victoires totales, rang dans la saison."
+              description="ELO actuel, winrate, victoires totales, ratio classé."
               accent="text-violet-200"
-              border="border-violet-400/30"
-              gradient="bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.08),transparent_70%)]"
-              soon
+              border="border-violet-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.10),transparent_70%)]"
             />
           </div>
         </div>

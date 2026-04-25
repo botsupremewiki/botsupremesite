@@ -10,7 +10,12 @@ import type {
   BattleState,
   ChatMessage,
 } from "../../shared/types";
-import { fetchProfile, fetchTcgDeckById, recordBotWin } from "./lib/supabase";
+import {
+  fetchProfile,
+  fetchTcgDeckById,
+  recordBattleResult,
+  recordBotWin,
+} from "./lib/supabase";
 import type {
   PokemonAbilityEffect,
 } from "../../shared/types";
@@ -39,6 +44,7 @@ const BOT_ACTION_DELAY_MS = 900;
 type SeatState = {
   authId: string;
   username: string;
+  deckName: string | null;
   conn: Party.Connection | null;
   deck: DeckCard[];
   hand: DeckCard[];
@@ -69,12 +75,16 @@ export default class BattleServer implements Party.Server {
   private uidCounter = 0;
   // Bot mode (room id starts with "bot-").
   private readonly botMode: boolean;
-  private botGameId: string | null = null;
+  // Ranked PvP mode (room id starts with "ranked-").
+  private readonly rankedMode: boolean;
+  private gameId: string | null = null;
   private botActScheduled = false;
   private questRecorded = false;
+  private resultRecorded = false;
 
   constructor(readonly room: Party.Room) {
     this.botMode = room.id.startsWith("bot-");
+    this.rankedMode = room.id.startsWith("ranked-");
   }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
@@ -142,6 +152,7 @@ export default class BattleServer implements Party.Server {
       this.seats[seatId] = {
         authId,
         username,
+        deckName: deckRow.name ?? null,
         conn,
         deck,
         hand,
@@ -156,6 +167,9 @@ export default class BattleServer implements Party.Server {
         mustPromoteActive: false,
       };
       this.connToSeat.set(conn.id, seatId);
+      // On retient le gameId de la room (depuis le 1er deck reçu — les deux
+      // joueurs forcément même jeu via le matchmaking).
+      if (!this.gameId) this.gameId = deckRow.game_id;
 
       if (mulligans > 0) {
         this.pushLog(
@@ -166,7 +180,6 @@ export default class BattleServer implements Party.Server {
       // En mode bot, dès que p1 est seated on remplit p2 avec le Bot Suprême
       // (mirror du même deck pour un match équilibré).
       if (this.botMode && seatId === "p1" && !this.seats.p2) {
-        this.botGameId = deckRow.game_id;
         this.fillBotSeat(deckCards);
       }
     } else {
@@ -201,6 +214,7 @@ export default class BattleServer implements Party.Server {
     this.seats.p2 = {
       authId: BOT_AUTH_ID,
       username: BOT_USERNAME,
+      deckName: "Bot Mirror",
       conn: null,
       deck,
       hand,
@@ -1260,18 +1274,21 @@ export default class BattleServer implements Party.Server {
     this.winner = winner;
     this.pushLog(`🏆 ${this.seats[winner]?.username} gagne — ${reason}`);
     this.broadcastState();
-    // En mode bot, si le joueur humain (p1) a gagné, on enregistre la victoire
-    // pour la quête journalière (3 wins → 1 booster gratuit).
+
+    const loser: BattleSeatId = winner === "p1" ? "p2" : "p1";
+
+    // En mode bot, si le joueur humain (p1) a gagné, on enregistre la
+    // victoire pour la quête journalière (3 wins → 1 booster gratuit).
     if (
       this.botMode &&
       !this.questRecorded &&
       winner === "p1" &&
       this.seats.p1 &&
-      this.botGameId
+      this.gameId
     ) {
       this.questRecorded = true;
       const authId = this.seats.p1.authId;
-      const gameId = this.botGameId;
+      const gameId = this.gameId;
       void recordBotWin(this.room, authId, gameId)
         .then((res) => {
           if (!res) return;
@@ -1289,6 +1306,41 @@ export default class BattleServer implements Party.Server {
             );
             this.broadcastState();
           }
+        })
+        .catch(() => {});
+    }
+
+    // En PvP (fun ou ranked), on enregistre l'historique + on met à jour
+    // l'ELO si ranked.
+    if (
+      !this.botMode &&
+      !this.resultRecorded &&
+      this.seats[winner] &&
+      this.seats[loser] &&
+      this.gameId
+    ) {
+      this.resultRecorded = true;
+      const w = this.seats[winner]!;
+      const l = this.seats[loser]!;
+      const gameId = this.gameId;
+      const ranked = this.rankedMode;
+      void recordBattleResult(this.room, {
+        gameId,
+        winnerId: w.authId,
+        loserId: l.authId,
+        winnerUsername: w.username,
+        loserUsername: l.username,
+        winnerDeckName: w.deckName,
+        loserDeckName: l.deckName,
+        ranked,
+        reason,
+      })
+        .then((res) => {
+          if (!res || !ranked) return;
+          this.pushLog(
+            `📊 ELO — ${w.username} ${res.winner_elo_before}→${res.winner_elo_after} · ${l.username} ${res.loser_elo_before}→${res.loser_elo_after}.`,
+          );
+          this.broadcastState();
         })
         .catch(() => {});
     }
