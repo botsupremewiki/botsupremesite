@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   POKEMON_BASE_SET,
   POKEMON_BASE_SET_BY_ID,
@@ -10,6 +10,7 @@ import {
 import type {
   PokemonCardData,
   PokemonEnergyType,
+  TcgClientMessage,
   TcgGameId,
   TcgRarity,
 } from "@shared/types";
@@ -70,6 +71,43 @@ export function MarketClient({
   const [isPending, startTransition] = useTransition();
 
   const supabase = useMemo(() => createClient(), []);
+
+  // WebSocket persistant vers la TCG party : permet de notifier les autres
+  // onglets/joueurs (buyer + seller) après chaque transaction pour qu'ils
+  // refresh leur collection / gold en live.
+  const tcgWsRef = useRef<WebSocket | null>(null);
+  useEffect(() => {
+    if (!profile) return;
+    const partyHost =
+      process.env.NEXT_PUBLIC_PARTYKIT_HOST || "127.0.0.1:1999";
+    const scheme =
+      partyHost.startsWith("localhost") ||
+      partyHost.startsWith("127.") ||
+      partyHost.startsWith("192.168.")
+        ? "ws"
+        : "wss";
+    const params = new URLSearchParams();
+    params.set("authId", profile.id);
+    params.set("name", profile.username);
+    params.set("gold", String(profile.gold));
+    const url = `${scheme}://${partyHost}/parties/tcg/${gameId}?${params.toString()}`;
+    const ws = new WebSocket(url);
+    tcgWsRef.current = ws;
+    return () => {
+      ws.close();
+      if (tcgWsRef.current === ws) tcgWsRef.current = null;
+    };
+  }, [profile, gameId]);
+
+  function notifyTx(userIds: string[]) {
+    const ws = tcgWsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const msg: TcgClientMessage = {
+      type: "tcg-notify-tx",
+      userIds: userIds.filter((u): u is string => !!u),
+    };
+    ws.send(JSON.stringify(msg));
+  }
 
   function applyFilters(rows: MarketListing[]): MarketListing[] {
     const q = search.trim().toLowerCase();
@@ -154,6 +192,7 @@ export function MarketClient({
     setOkMsg(
       `✓ Carte achetée pour ${(r.price ?? 0).toLocaleString("fr-FR")} OS.`,
     );
+    notifyTx([profile.id, listing.seller_id]);
     startTransition(() => router.refresh());
   }
 
@@ -169,6 +208,7 @@ export function MarketClient({
       return;
     }
     setOkMsg("✓ Annonce annulée — la carte est revenue dans ta collection.");
+    notifyTx([profile.id]);
     startTransition(() => router.refresh());
   }
 
@@ -187,6 +227,7 @@ export function MarketClient({
     }
     setOkMsg("✓ Annonce créée.");
     setSellOpen(false);
+    notifyTx([profile.id]);
     startTransition(() => router.refresh());
   }
 

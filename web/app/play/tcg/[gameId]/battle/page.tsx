@@ -42,8 +42,8 @@ export default async function CombatsHubPage({
           <div>
             <h1 className="text-2xl font-bold text-zinc-100">⚔️ Combats</h1>
             <p className="mt-1 text-sm text-zinc-400">
-              Choisis ton mode de combat. Les modes classés et l&apos;historique
-              arriveront avec la Phase C.
+              Choisis ton mode de combat. Bat le Bot 3× pour gagner un booster.
+              Le mode classé met à jour ton ELO.
             </p>
           </div>
 

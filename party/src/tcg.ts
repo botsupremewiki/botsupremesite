@@ -185,7 +185,69 @@ export default class TcgServer implements Party.Server {
       await this.handleSaveDeck(sender, info, data.deckId, data.name, data.cards);
     } else if (data.type === "tcg-delete-deck") {
       await this.handleDeleteDeck(sender, info, data.deckId);
+    } else if (data.type === "tcg-refresh") {
+      await this.refreshConn(sender);
+    } else if (data.type === "tcg-notify-tx") {
+      await this.notifyTransaction(data.userIds);
     }
+  }
+
+  /** Re-fetch profile + collection + decks pour cette connexion et lui
+   *  renvoie un tcg-welcome frais (le client réutilise le même handler). */
+  private async refreshConn(conn: Party.Connection) {
+    const info = this.connInfo.get(conn.id);
+    if (!info?.authId) return;
+    const [profile, rows, deckRows] = await Promise.all([
+      fetchProfile(this.room, info.authId),
+      fetchTcgCollection(this.room, info.authId, this.gameId),
+      fetchTcgDecks(this.room, info.authId, this.gameId),
+    ]);
+    if (profile && Number.isFinite(profile.gold)) {
+      info.gold = profile.gold;
+      const raw = profile.tcg_free_packs?.[this.gameId];
+      info.freePacks =
+        typeof raw === "number" && Number.isFinite(raw) && raw > 0
+          ? Math.floor(raw)
+          : 0;
+    }
+    info.collection = new Map();
+    for (const r of rows) info.collection.set(r.card_id, r.count);
+    const decks: TcgDeck[] = deckRows.map((d) => ({
+      id: d.id,
+      name: d.name,
+      cards: (d.cards ?? []).map((c) => ({
+        cardId: c.card_id,
+        count: c.count,
+      })),
+      updatedAt: Date.parse(d.updated_at) || Date.now(),
+    }));
+    this.sendTo(conn, {
+      type: "tcg-welcome",
+      selfId: conn.id,
+      gold: info.gold,
+      collection: Array.from(info.collection.entries()).map(
+        ([cardId, count]) => ({ cardId, count }),
+      ),
+      gameId: this.gameId,
+      freePacks: info.freePacks,
+      decks,
+    });
+  }
+
+  /** Pour chaque userId impacté par une transaction marché, refresh
+   *  toutes ses connexions ouvertes sur cette room. */
+  private async notifyTransaction(userIds: string[]) {
+    if (!Array.isArray(userIds)) return;
+    const targets = new Set(userIds.filter((u) => typeof u === "string"));
+    if (targets.size === 0) return;
+    const tasks: Promise<void>[] = [];
+    for (const conn of this.room.getConnections()) {
+      const info = this.connInfo.get(conn.id);
+      if (info?.authId && targets.has(info.authId)) {
+        tasks.push(this.refreshConn(conn));
+      }
+    }
+    await Promise.all(tasks);
   }
 
   private async handleSaveDeck(

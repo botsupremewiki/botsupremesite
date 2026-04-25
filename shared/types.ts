@@ -1103,7 +1103,12 @@ export type TcgClientMessage =
       name: string;
       cards: TcgDeckEntry[];
     }
-  | { type: "tcg-delete-deck"; deckId: string };
+  | { type: "tcg-delete-deck"; deckId: string }
+  // Force re-fetch + broadcast pour soi-même.
+  | { type: "tcg-refresh" }
+  // Signale qu'une transaction (achat/vente/annulation) a impacté ces users.
+  // Le serveur re-fetch + envoie un tcg-welcome aux connexions concernées.
+  | { type: "tcg-notify-tx"; userIds: string[] };
 
 // ─── Pokémon — boosters thématiques par mascotte (Gen 1) ──────────────────
 // 4 packs par génération = 3 starters + le légendaire emblématique. Les 151
