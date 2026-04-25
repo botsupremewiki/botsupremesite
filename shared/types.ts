@@ -356,38 +356,95 @@ export const SLOTS_CONFIG = {
   reelCount: 3,
   minBet: 10,
   maxBet: 10_000_000,
-  spinDurationMs: 1800, // total time until last reel locks
-  reelStaggerMs: 350, // delay between each reel locking
+  spinDurationMs: 1800, // manual spin: total time until last reel locks
+  reelStaggerMs: 320, // delay between each reel locking
+  autoSpinDurationMs: 900, // faster animation when autospinning
+  autoSpinReelStaggerMs: 160,
+  autoSpinIntervalMs: 1100, // delay between consecutive autospins
+  autoSpinChoices: [10, 25, 50, 100] as const,
   historySize: 8,
 } as const;
 
-export type SlotsSymbol =
-  | "cherry"
-  | "lemon"
-  | "orange"
-  | "grape"
-  | "bell"
-  | "clover"
-  | "seven"
-  | "diamond";
+export type SlotsSymbolKey =
+  | "s0"
+  | "s1"
+  | "s2"
+  | "s3"
+  | "s4"
+  | "s5"
+  | "s6"
+  | "s7";
+
+export const SLOT_SYMBOL_KEYS: SlotsSymbolKey[] = [
+  "s0",
+  "s1",
+  "s2",
+  "s3",
+  "s4",
+  "s5",
+  "s6",
+  "s7",
+];
+
+export type SlotMachineId =
+  | "verger-dore"
+  | "tresor-pirates"
+  | "pharaon-mystique"
+  | "foret-enchantee"
+  | "inferno-galactique";
+
+export type SlotMachineConfig = {
+  id: SlotMachineId;
+  name: string;
+  tagline: string;
+  // Tailwind-style CSS classes used by the client to theme the cabinet.
+  theme: {
+    accent: string; // text colour for highlights
+    glow: string; // box-shadow on win
+    gradient: string; // background gradient class
+    border: string;
+  };
+  // 8 symbols low → high tier. The first one is treated as the "cherry"
+  // bonus symbol (1- and 2-leftmost mini-payouts).
+  symbols: { key: SlotsSymbolKey; glyph: string; label: string }[];
+  // Reel weights, same order as `symbols`. Higher = more frequent.
+  weights: number[];
+  // 3-of-a-kind multiplier per symbol (same order).
+  payouts3: number[];
+  // Bonus payouts for the lowest symbol on the leftmost reel.
+  cherryTwo: number;
+  cherryOne: number;
+  // Display: target RTP (informational only, math is what it is).
+  targetRtp: number;
+};
 
 export type SlotsWinKind =
   | "none"
-  | "three" // three-of-a-kind on the payline
-  | "two-cherry" // exactly two cherries from the left
-  | "one-cherry"; // a single cherry on the leftmost reel
+  | "three"
+  | "two-cherry"
+  | "one-cherry";
 
 export type SlotsSpin = {
   id: string;
-  reels: SlotsSymbol[]; // length = SLOTS_CONFIG.reelCount
+  reels: SlotsSymbolKey[]; // length = SLOTS_CONFIG.reelCount
   bet: number;
-  win: number; // total OS won (0 if lose)
-  multiplier: number; // payout multiplier applied to bet (0 if lose)
+  win: number;
+  multiplier: number;
   kind: SlotsWinKind;
   timestamp: number;
 };
 
-export type SlotsClientMessage = { type: "slots-spin"; bet: number };
+export type SlotsAutospinState = {
+  remaining: number;
+  total: number;
+  bet: number;
+  stopOnBigWin: boolean; // stop if win >= 25× bet
+};
+
+export type SlotsClientMessage =
+  | { type: "slots-spin"; bet: number }
+  | { type: "slots-autospin-start"; bet: number; count: number; stopOnBigWin: boolean }
+  | { type: "slots-autospin-stop" };
 
 export type SlotsServerMessage =
   | {
@@ -396,11 +453,162 @@ export type SlotsServerMessage =
       gold: number;
       history: SlotsSpin[];
       chat: ChatMessage[];
+      machine: SlotMachineConfig;
+      autospin: SlotsAutospinState | null;
     }
-  | { type: "slots-result"; spin: SlotsSpin }
+  | { type: "slots-result"; spin: SlotsSpin; autospin: SlotsAutospinState | null }
+  | { type: "slots-autospin-state"; autospin: SlotsAutospinState | null }
   | { type: "gold-update"; gold: number }
   | { type: "slots-error"; message: string }
   | { type: "chat"; message: ChatMessage };
+
+// ─── 5 machine configs ─────────────────────────────────────────────────────
+
+export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
+  // 1. Frequent small wins, modest jackpot — ≈ 96.5% RTP, max ×500
+  "verger-dore": {
+    id: "verger-dore",
+    name: "Verger Doré",
+    tagline: "Fruits sucrés, gains réguliers",
+    theme: {
+      accent: "text-amber-300",
+      glow: "shadow-[0_0_40px_rgba(251,191,36,0.45)]",
+      gradient:
+        "bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.15),transparent_60%)]",
+      border: "border-amber-400/40",
+    },
+    symbols: [
+      { key: "s0", glyph: "🍓", label: "Fraise" },
+      { key: "s1", glyph: "🍋", label: "Citron" },
+      { key: "s2", glyph: "🍊", label: "Orange" },
+      { key: "s3", glyph: "🍇", label: "Raisin" },
+      { key: "s4", glyph: "🍑", label: "Pêche" },
+      { key: "s5", glyph: "🍎", label: "Pomme" },
+      { key: "s6", glyph: "🍒", label: "Cerise" },
+      { key: "s7", glyph: "🏆", label: "Trophée" },
+    ],
+    weights: [8, 6, 5, 4, 3, 2, 1, 1],
+    payouts3: [6, 10, 15, 25, 50, 180, 800, 2800],
+    cherryTwo: 4,
+    cherryOne: 1.0,
+    targetRtp: 0.965,
+  },
+  // 2. Pirate, mid volatility — ≈ 96% RTP, max ×1500
+  "tresor-pirates": {
+    id: "tresor-pirates",
+    name: "Trésor des Pirates",
+    tagline: "Pillage et coffres légendaires",
+    theme: {
+      accent: "text-orange-300",
+      glow: "shadow-[0_0_40px_rgba(251,146,60,0.45)]",
+      gradient:
+        "bg-[radial-gradient(ellipse_at_center,rgba(180,83,9,0.18),transparent_60%)]",
+      border: "border-orange-500/40",
+    },
+    symbols: [
+      { key: "s0", glyph: "🦴", label: "Os" },
+      { key: "s1", glyph: "⚓", label: "Ancre" },
+      { key: "s2", glyph: "🦜", label: "Perroquet" },
+      { key: "s3", glyph: "🗡️", label: "Sabre" },
+      { key: "s4", glyph: "🗺️", label: "Carte" },
+      { key: "s5", glyph: "💀", label: "Crâne" },
+      { key: "s6", glyph: "🪙", label: "Doublon" },
+      { key: "s7", glyph: "💰", label: "Coffre" },
+    ],
+    weights: [8, 6, 5, 4, 3, 2, 1, 1],
+    payouts3: [5, 10, 15, 30, 80, 250, 1500, 3300],
+    cherryTwo: 3,
+    cherryOne: 0.8,
+    targetRtp: 0.96,
+  },
+  // 3. Egypt, med-high volatility — ≈ 96% RTP, max ×4500
+  "pharaon-mystique": {
+    id: "pharaon-mystique",
+    name: "Pharaon Mystique",
+    tagline: "Reliques d'un empire oublié",
+    theme: {
+      accent: "text-yellow-300",
+      glow: "shadow-[0_0_40px_rgba(234,179,8,0.5)]",
+      gradient:
+        "bg-[radial-gradient(ellipse_at_center,rgba(180,83,9,0.18),rgba(76,29,149,0.18),transparent_60%)]",
+      border: "border-yellow-500/40",
+    },
+    symbols: [
+      { key: "s0", glyph: "🐍", label: "Cobra" },
+      { key: "s1", glyph: "🐱", label: "Chat" },
+      { key: "s2", glyph: "🪲", label: "Scarabée" },
+      { key: "s3", glyph: "🏺", label: "Urne" },
+      { key: "s4", glyph: "📜", label: "Papyrus" },
+      { key: "s5", glyph: "👁️", label: "Œil d'Horus" },
+      { key: "s6", glyph: "🐦", label: "Ibis" },
+      { key: "s7", glyph: "🔱", label: "Sceptre" },
+    ],
+    weights: [8, 6, 5, 4, 3, 2, 1, 1],
+    payouts3: [4, 8, 14, 28, 80, 350, 1800, 4500],
+    cherryTwo: 3,
+    cherryOne: 0.6,
+    targetRtp: 0.96,
+  },
+  // 4. Forest fantasy, high volatility — ≈ 95% RTP, max ×7500
+  "foret-enchantee": {
+    id: "foret-enchantee",
+    name: "Forêt Enchantée",
+    tagline: "Esprits sylvestres et lune mystique",
+    theme: {
+      accent: "text-emerald-300",
+      glow: "shadow-[0_0_40px_rgba(52,211,153,0.45)]",
+      gradient:
+        "bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.18),rgba(76,29,149,0.12),transparent_60%)]",
+      border: "border-emerald-400/40",
+    },
+    symbols: [
+      { key: "s0", glyph: "🍃", label: "Feuille" },
+      { key: "s1", glyph: "🍄", label: "Champignon" },
+      { key: "s2", glyph: "🦌", label: "Cerf" },
+      { key: "s3", glyph: "🦊", label: "Renard" },
+      { key: "s4", glyph: "🦉", label: "Hibou" },
+      { key: "s5", glyph: "🐺", label: "Loup" },
+      { key: "s6", glyph: "🌳", label: "Arbre" },
+      { key: "s7", glyph: "🌙", label: "Lune" },
+    ],
+    weights: [8, 6, 5, 4, 3, 2, 1, 1],
+    payouts3: [3, 6, 11, 20, 80, 400, 2500, 7500],
+    cherryTwo: 2,
+    cherryOne: 0.4,
+    targetRtp: 0.95,
+  },
+  // 5. Cosmic, extreme volatility — ≈ 94% RTP. Mid-tier rocket symbol
+  // (weight 3) lands ≈ 1/1000 spins for a ×500 hit — that's the "biggest
+  // jackpot in 1000 spins" the spec asked for. The supernova (weight 1)
+  // is a rarer ×3000 super-bonus that pops up roughly 1/27000 spins.
+  "inferno-galactique": {
+    id: "inferno-galactique",
+    name: "Inferno Galactique",
+    tagline: "Risque maximum, jackpot supernova",
+    theme: {
+      accent: "text-fuchsia-300",
+      glow: "shadow-[0_0_60px_rgba(217,70,239,0.55)]",
+      gradient:
+        "bg-[radial-gradient(ellipse_at_center,rgba(126,34,206,0.25),rgba(217,70,239,0.12),transparent_60%)]",
+      border: "border-fuchsia-500/50",
+    },
+    symbols: [
+      { key: "s0", glyph: "🪐", label: "Saturne" },
+      { key: "s1", glyph: "⭐", label: "Étoile" },
+      { key: "s2", glyph: "☄️", label: "Comète" },
+      { key: "s3", glyph: "🌌", label: "Galaxie" },
+      { key: "s4", glyph: "🚀", label: "Fusée" }, // mid-tier 1/1000 hit
+      { key: "s5", glyph: "👽", label: "Alien" },
+      { key: "s6", glyph: "🛸", label: "OVNI" },
+      { key: "s7", glyph: "💫", label: "Supernova" }, // mega jackpot
+    ],
+    weights: [8, 6, 5, 4, 3, 2, 1, 1],
+    payouts3: [2, 5, 10, 18, 500, 120, 600, 3000],
+    cherryTwo: 1,
+    cherryOne: 0.3,
+    targetRtp: 0.94,
+  },
+};
 
 // ────────────────────────────── Hi-Lo ──────────────────────────────
 

@@ -1,12 +1,19 @@
 import type * as Party from "partykit/server";
 import type {
   ChatMessage,
+  SlotMachineConfig,
+  SlotMachineId,
+  SlotsAutospinState,
   SlotsClientMessage,
   SlotsServerMessage,
   SlotsSpin,
-  SlotsSymbol,
+  SlotsSymbolKey,
 } from "../../shared/types";
-import { PLAZA_CONFIG, SLOTS_CONFIG } from "../../shared/types";
+import {
+  PLAZA_CONFIG,
+  SLOTS_CONFIG,
+  SLOT_MACHINES,
+} from "../../shared/types";
 import { fetchProfile, patchProfileGold } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
 import { evaluateSpin, spinReel } from "./lib/slots-math";
@@ -14,23 +21,32 @@ import { evaluateSpin, spinReel } from "./lib/slots-math";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const GUEST_SANDBOX_GOLD = 1000;
+const BIG_WIN_THRESHOLD = 25; // multiplier ≥ 25× bet stops autospin if requested
+
 type ConnInfo = {
   authId: string | null;
   name: string;
   gold: number;
   isAdmin: boolean;
   history: SlotsSpin[];
-  spinningUntil: number; // ms epoch — 0 if idle
+  spinningUntil: number;
+  // Autospin state per connection.
+  autospin: SlotsAutospinState | null;
+  autospinTimer: ReturnType<typeof setTimeout> | null;
 };
-
-const GUEST_SANDBOX_GOLD = 1000;
 
 export default class SlotsServer implements Party.Server {
   private chat: PersistentChatHistory;
   private connInfo = new Map<string, ConnInfo>();
+  private machine: SlotMachineConfig;
 
   constructor(readonly room: Party.Room) {
     this.chat = new PersistentChatHistory(room, PLAZA_CONFIG.chatHistorySize);
+    // Room id encodes the machine id (e.g. "verger-dore"). Fall back to
+    // the first machine if an unknown room name is requested.
+    const roomId = room.id as SlotMachineId;
+    this.machine = SLOT_MACHINES[roomId] ?? SLOT_MACHINES["verger-dore"];
   }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
@@ -56,15 +72,11 @@ export default class SlotsServer implements Party.Server {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
       } else if (queryGold !== null) {
-        // DB read failed — trust the page's SSR-loaded gold so the player
-        // can keep playing. patchProfileGold below still writes back, so
-        // the DB row stays in sync.
         gold = queryGold;
       } else {
         gold = 0;
       }
     } else {
-      // Guest: sandbox value, never persisted (no authId).
       gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
 
@@ -75,6 +87,8 @@ export default class SlotsServer implements Party.Server {
       isAdmin,
       history: [],
       spinningUntil: 0,
+      autospin: null,
+      autospinTimer: null,
     });
 
     const chat = await this.chat.list();
@@ -84,6 +98,8 @@ export default class SlotsServer implements Party.Server {
       gold,
       history: [],
       chat,
+      machine: this.machine,
+      autospin: null,
     });
   }
 
@@ -114,18 +130,123 @@ export default class SlotsServer implements Party.Server {
         this.broadcast({ type: "chat", message });
         break;
       }
-
       case "slots-spin":
-        await this.handleSpin(sender, info, data.bet);
+        this.cancelAutospin(info);
+        await this.runSingleSpin(sender, info, data.bet);
+        break;
+      case "slots-autospin-start":
+        await this.startAutospin(sender, info, data);
+        break;
+      case "slots-autospin-stop":
+        this.cancelAutospin(info);
+        this.sendTo(sender, {
+          type: "slots-autospin-state",
+          autospin: null,
+        });
         break;
     }
   }
 
   onClose(conn: Party.Connection) {
+    const info = this.connInfo.get(conn.id);
+    if (info) this.cancelAutospin(info);
     this.connInfo.delete(conn.id);
   }
 
-  private async handleSpin(
+  // ──────────────────────────────── spinning ───────────────────────────────────
+
+  private async startAutospin(
+    conn: Party.Connection,
+    info: ConnInfo,
+    msg: { bet: number; count: number; stopOnBigWin: boolean },
+  ) {
+    if (info.autospin) {
+      this.sendTo(conn, {
+        type: "slots-error",
+        message: "Auto-spin déjà en cours.",
+      });
+      return;
+    }
+    const allowedCounts = SLOTS_CONFIG.autoSpinChoices as readonly number[];
+    if (!allowedCounts.includes(msg.count)) {
+      this.sendTo(conn, {
+        type: "slots-error",
+        message: "Nombre d'auto-spins invalide.",
+      });
+      return;
+    }
+    const bet = Math.floor(Number(msg.bet));
+    if (
+      !Number.isFinite(bet) ||
+      bet < SLOTS_CONFIG.minBet ||
+      bet > SLOTS_CONFIG.maxBet
+    ) {
+      this.sendTo(conn, {
+        type: "slots-error",
+        message: `Mise entre ${SLOTS_CONFIG.minBet} et ${SLOTS_CONFIG.maxBet} OS.`,
+      });
+      return;
+    }
+
+    info.autospin = {
+      remaining: msg.count,
+      total: msg.count,
+      bet,
+      stopOnBigWin: !!msg.stopOnBigWin,
+    };
+    this.sendTo(conn, {
+      type: "slots-autospin-state",
+      autospin: info.autospin,
+    });
+
+    // Kick off immediately.
+    void this.runAutospinTick(conn, info);
+  }
+
+  private async runAutospinTick(conn: Party.Connection, info: ConnInfo) {
+    const auto = info.autospin;
+    if (!auto || auto.remaining <= 0) {
+      this.cancelAutospin(info);
+      this.sendTo(conn, { type: "slots-autospin-state", autospin: null });
+      return;
+    }
+    if (info.gold < auto.bet) {
+      this.cancelAutospin(info);
+      this.sendTo(conn, { type: "slots-autospin-state", autospin: null });
+      this.sendTo(conn, {
+        type: "slots-error",
+        message: "Or Suprême insuffisant — auto-spin stoppé.",
+      });
+      return;
+    }
+
+    const spin = this.computeSpin(auto.bet, info);
+    info.history = [spin, ...info.history].slice(0, SLOTS_CONFIG.historySize);
+
+    auto.remaining -= 1;
+    const stopHere =
+      auto.remaining <= 0 ||
+      (auto.stopOnBigWin && spin.multiplier >= BIG_WIN_THRESHOLD);
+    const next = stopHere ? null : auto;
+    info.autospin = next;
+
+    await this.persistGold(info);
+    this.sendTo(conn, {
+      type: "slots-result",
+      spin,
+      autospin: next,
+    });
+    this.sendTo(conn, { type: "gold-update", gold: info.gold });
+
+    if (next) {
+      info.autospinTimer = setTimeout(() => {
+        info.autospinTimer = null;
+        void this.runAutospinTick(conn, info);
+      }, SLOTS_CONFIG.autoSpinIntervalMs);
+    }
+  }
+
+  private async runSingleSpin(
     conn: Party.Connection,
     info: ConnInfo,
     rawBet: number,
@@ -138,7 +259,6 @@ export default class SlotsServer implements Party.Server {
       });
       return;
     }
-
     const bet = Math.floor(Number(rawBet));
     if (
       !Number.isFinite(bet) ||
@@ -159,33 +279,41 @@ export default class SlotsServer implements Party.Server {
       return;
     }
 
-    // Deduct bet up front
-    info.gold -= bet;
-
-    const reels: SlotsSymbol[] = Array.from(
-      { length: SLOTS_CONFIG.reelCount },
-      () => spinReel(),
-    );
-    const { multiplier, kind } = evaluateSpin(reels);
-    const win = Math.floor(bet * multiplier);
-    if (win > 0) info.gold += win;
-
+    const spin = this.computeSpin(bet, info);
+    info.history = [spin, ...info.history].slice(0, SLOTS_CONFIG.historySize);
     info.spinningUntil = now + SLOTS_CONFIG.spinDurationMs;
 
-    const spin: SlotsSpin = {
+    await this.persistGold(info);
+    this.sendTo(conn, { type: "slots-result", spin, autospin: null });
+    this.sendTo(conn, { type: "gold-update", gold: info.gold });
+  }
+
+  private computeSpin(bet: number, info: ConnInfo): SlotsSpin {
+    info.gold -= bet;
+    const reels: SlotsSymbolKey[] = Array.from(
+      { length: SLOTS_CONFIG.reelCount },
+      () => spinReel(this.machine),
+    );
+    const { multiplier, kind } = evaluateSpin(reels, this.machine);
+    const win = Math.floor(bet * multiplier);
+    if (win > 0) info.gold += win;
+    return {
       id: crypto.randomUUID(),
       reels,
       bet,
       win,
       multiplier,
       kind,
-      timestamp: now,
+      timestamp: Date.now(),
     };
-    info.history = [spin, ...info.history].slice(0, SLOTS_CONFIG.historySize);
+  }
 
-    await this.persistGold(info);
-    this.sendTo(conn, { type: "slots-result", spin });
-    this.sendTo(conn, { type: "gold-update", gold: info.gold });
+  private cancelAutospin(info: ConnInfo) {
+    if (info.autospinTimer) {
+      clearTimeout(info.autospinTimer);
+      info.autospinTimer = null;
+    }
+    info.autospin = null;
   }
 
   private async persistGold(info: ConnInfo) {
