@@ -1172,6 +1172,12 @@ export type BattlePlayerPublicState = {
   discardCount: number;
   prizesRemaining: number;
   hasSetup: boolean;
+  // Quand l'Actif vient d'être KO, le joueur doit promouvoir un Pokémon
+  // du Banc avant que l'autre puisse jouer.
+  mustPromoteActive: boolean;
+  // Limites par tour — exposées pour que l'UI grise les actions épuisées.
+  energyAttachedThisTurn: boolean;
+  hasRetreatedThisTurn: boolean;
 };
 
 export type BattleSelfState = BattlePlayerPublicState & {
@@ -1195,16 +1201,19 @@ export type BattleState = {
 };
 
 export type BattleClientMessage =
-  | {
-      type: "battle-set-active";
-      handIndex: number;
-    }
-  | {
-      type: "battle-add-bench";
-      handIndex: number;
-    }
+  // Setup phase actions
+  | { type: "battle-set-active"; handIndex: number }
+  | { type: "battle-add-bench"; handIndex: number }
   | { type: "battle-remove-bench"; benchIndex: number }
   | { type: "battle-confirm-setup" }
+  // Playing phase actions
+  | { type: "battle-play-basic"; handIndex: number }
+  | { type: "battle-attach-energy"; handIndex: number; targetUid: string }
+  | { type: "battle-evolve"; handIndex: number; targetUid: string }
+  | { type: "battle-retreat"; benchIndex: number }
+  | { type: "battle-attack"; attackIndex: number }
+  | { type: "battle-promote-active"; benchIndex: number }
+  // Always available
   | { type: "battle-end-turn" }
   | { type: "battle-concede" }
   | { type: "chat"; text: string };
