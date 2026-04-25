@@ -165,6 +165,115 @@ export async function consumeTcgFreePack(
   }
 }
 
+// ─── TCG decks (supabase/tcg-decks.sql) ──────────────────────────────────
+
+export type TcgDeckRow = {
+  id: string;
+  name: string;
+  cards: { card_id: string; count: number }[] | null;
+  updated_at: string;
+};
+
+/** Read every saved deck for a (user, game). */
+export async function fetchTcgDecks(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+): Promise<TcgDeckRow[]> {
+  const env = getSupabaseEnv(room);
+  if (!env) return [];
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,name,cards,updated_at&order=updated_at.desc`,
+      {
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    if (!resp.ok) return [];
+    return (await resp.json()) as TcgDeckRow[];
+  } catch {
+    return [];
+  }
+}
+
+/** Save (insert or update) a deck via the validating RPC. Returns the
+ *  deck id on success, or an error message string on failure. */
+export async function saveTcgDeck(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+  deckId: string | null,
+  name: string,
+  cards: { card_id: string; count: number }[],
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const env = getSupabaseEnv(room);
+  if (!env) return { ok: false, error: "DB indisponible." };
+  try {
+    const resp = await fetch(`${env.url}/rest/v1/rpc/save_tcg_deck`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_user_id: authId,
+        p_game_id: gameId,
+        p_id: deckId,
+        p_name: name,
+        p_cards: cards,
+      }),
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      // PostgREST renvoie {"message":"..."} sur les exceptions levées
+      // par PL/pgSQL — on remonte ce message au joueur.
+      let parsed: { message?: string } | null = null;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        // pas du JSON, on garde body brut
+      }
+      const msg = parsed?.message ?? body ?? "Erreur de sauvegarde";
+      return { ok: false, error: msg };
+    }
+    const data = await resp.json();
+    const id = typeof data === "string" ? data : String(data);
+    return { ok: true, id };
+  } catch (err) {
+    console.warn("[tcg] save_tcg_deck threw:", err);
+    return { ok: false, error: "Erreur réseau." };
+  }
+}
+
+/** Delete a deck (no-op if it doesn't belong to the user). */
+export async function deleteTcgDeck(
+  room: Party.Room,
+  authId: string,
+  deckId: string,
+): Promise<boolean> {
+  const env = getSupabaseEnv(room);
+  if (!env) return false;
+  try {
+    const resp = await fetch(`${env.url}/rest/v1/rpc/delete_tcg_deck`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user_id: authId, p_id: deckId }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Atomically increment counts for a batch of cards via the RPC defined
  *  in supabase/tcg.sql. */
 export async function addTcgCards(

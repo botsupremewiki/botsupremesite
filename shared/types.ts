@@ -1027,10 +1027,27 @@ export type TcgPackResult = {
   timestamp: number;
 };
 
-export type TcgClientMessage = {
-  type: "tcg-buy-pack";
-  packTypeId: string; // e.g. "base-set" for Pokémon
+export type TcgDeckEntry = {
+  cardId: string;
+  count: number;
 };
+
+export type TcgDeck = {
+  id: string;
+  name: string;
+  cards: TcgDeckEntry[];
+  updatedAt: number;
+};
+
+export type TcgClientMessage =
+  | { type: "tcg-buy-pack"; packTypeId: string }
+  | {
+      type: "tcg-save-deck";
+      deckId: string | null; // null = create
+      name: string;
+      cards: TcgDeckEntry[];
+    }
+  | { type: "tcg-delete-deck"; deckId: string };
 
 // ─── Pokémon — boosters thématiques par mascotte (Gen 1) ──────────────────
 // 4 packs par génération = 3 starters + le légendaire emblématique. Les 151
@@ -1103,14 +1120,16 @@ export type TcgServerMessage =
       gold: number;
       collection: TcgCardOwned[];
       gameId: TcgGameId;
-      freePacks: number; // boosters offerts non encore ouverts
+      freePacks: number;
+      decks: TcgDeck[];
     }
   | {
       type: "tcg-pack-opened";
       pack: TcgPackResult;
       newCounts: TcgCardOwned[];
       freePacks: number;
-      usedFreePack: boolean; // true si ce pack n'a rien coûté en OS
+      usedFreePack: boolean;
     }
+  | { type: "tcg-decks"; decks: TcgDeck[] }
   | { type: "gold-update"; gold: number }
   | { type: "tcg-error"; message: string };

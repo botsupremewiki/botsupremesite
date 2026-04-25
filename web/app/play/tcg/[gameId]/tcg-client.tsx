@@ -203,6 +203,13 @@ export function TcgClient({
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
           <span className="text-xs text-zinc-500">{game.tagline}</span>
+          <div className="h-4 w-px bg-white/10" />
+          <Link
+            href={`/play/tcg/${gameId}/decks`}
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-zinc-200 transition-colors hover:bg-white/10"
+          >
+            🃏 Mes decks
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-zinc-400">
           <StatusIndicator status={status} />

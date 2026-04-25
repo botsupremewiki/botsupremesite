@@ -4,6 +4,7 @@ import type {
   PokemonPackTypeId,
   TcgCardOwned,
   TcgClientMessage,
+  TcgDeck,
   TcgGameId,
   TcgPackResult,
   TcgRarity,
@@ -14,9 +15,12 @@ import { POKEMON_BASE_SET } from "../../shared/tcg-pokemon-base";
 import {
   addTcgCards,
   consumeTcgFreePack,
+  deleteTcgDeck,
   fetchProfile,
   fetchTcgCollection,
+  fetchTcgDecks,
   patchProfileGold,
+  saveTcgDeck,
 } from "./lib/supabase";
 
 const UUID_RE =
@@ -110,10 +114,12 @@ export default class TcgServer implements Party.Server {
     let isAdmin = false;
     let freePacks = 0;
     let collection: Map<string, number> = new Map();
+    let decks: TcgDeck[] = [];
     if (authId) {
-      const [profile, rows] = await Promise.all([
+      const [profile, rows, deckRows] = await Promise.all([
         fetchProfile(this.room, authId),
         fetchTcgCollection(this.room, authId, this.gameId),
+        fetchTcgDecks(this.room, authId, this.gameId),
       ]);
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
@@ -128,6 +134,15 @@ export default class TcgServer implements Party.Server {
         gold = 0;
       }
       for (const r of rows) collection.set(r.card_id, r.count);
+      decks = deckRows.map((d) => ({
+        id: d.id,
+        name: d.name,
+        cards: (d.cards ?? []).map((c) => ({
+          cardId: c.card_id,
+          count: c.count,
+        })),
+        updatedAt: Date.parse(d.updated_at) || Date.now(),
+      }));
     } else {
       gold = queryGold ?? 0;
     }
@@ -151,6 +166,7 @@ export default class TcgServer implements Party.Server {
       })),
       gameId: this.gameId,
       freePacks,
+      decks,
     });
   }
 
@@ -165,7 +181,91 @@ export default class TcgServer implements Party.Server {
     }
     if (data.type === "tcg-buy-pack") {
       await this.handleBuyPack(sender, info, data.packTypeId);
+    } else if (data.type === "tcg-save-deck") {
+      await this.handleSaveDeck(sender, info, data.deckId, data.name, data.cards);
+    } else if (data.type === "tcg-delete-deck") {
+      await this.handleDeleteDeck(sender, info, data.deckId);
     }
+  }
+
+  private async handleSaveDeck(
+    conn: Party.Connection,
+    info: ConnInfo,
+    deckId: string | null,
+    name: string,
+    cards: { cardId: string; count: number }[],
+  ) {
+    if (!info.authId) {
+      this.sendError(conn, "Connecte-toi pour sauvegarder un deck.");
+      return;
+    }
+    if (!Array.isArray(cards) || cards.length === 0) {
+      this.sendError(conn, "Deck vide.");
+      return;
+    }
+    // Verify the player owns enough copies of every non-energy card.
+    for (const entry of cards) {
+      if (entry.cardId.includes("energy")) continue; // énergies illimitées
+      const owned = info.collection.get(entry.cardId) ?? 0;
+      if (entry.count > owned) {
+        this.sendError(
+          conn,
+          `Tu n'as que ${owned} ${entry.cardId} en collection.`,
+        );
+        return;
+      }
+    }
+    const result = await saveTcgDeck(
+      this.room,
+      info.authId,
+      this.gameId,
+      deckId,
+      name,
+      cards.map((c) => ({ card_id: c.cardId, count: c.count })),
+    );
+    if (!result.ok) {
+      this.sendError(conn, result.error);
+      return;
+    }
+    // Re-fetch the canonical deck list and broadcast it back.
+    const rows = await fetchTcgDecks(this.room, info.authId, this.gameId);
+    const decks: TcgDeck[] = rows.map((d) => ({
+      id: d.id,
+      name: d.name,
+      cards: (d.cards ?? []).map((c) => ({
+        cardId: c.card_id,
+        count: c.count,
+      })),
+      updatedAt: Date.parse(d.updated_at) || Date.now(),
+    }));
+    this.sendTo(conn, { type: "tcg-decks", decks });
+  }
+
+  private async handleDeleteDeck(
+    conn: Party.Connection,
+    info: ConnInfo,
+    deckId: string,
+  ) {
+    if (!info.authId) {
+      this.sendError(conn, "Connecte-toi pour gérer tes decks.");
+      return;
+    }
+    const ok = await deleteTcgDeck(this.room, info.authId, deckId);
+    if (!ok) {
+      this.sendError(conn, "Suppression échouée.");
+      return;
+    }
+    const rows = await fetchTcgDecks(this.room, info.authId, this.gameId);
+    const decks: TcgDeck[] = rows.map((d) => ({
+      id: d.id,
+      name: d.name,
+      cards: (d.cards ?? []).map((c) => ({
+        cardId: c.card_id,
+        count: c.count,
+      })),
+      updatedAt: Date.parse(d.updated_at) || Date.now(),
+    }));
+    this.sendTo(conn, { type: "tcg-decks", decks });
   }
 
   onClose(conn: Party.Connection) {
