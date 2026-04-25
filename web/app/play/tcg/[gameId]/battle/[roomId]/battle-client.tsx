@@ -19,6 +19,7 @@ import { TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { CardFace } from "../../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -322,128 +323,186 @@ function BattleBoard({
   };
   const promptPromote = state.self?.mustPromoteActive;
 
+  // Carte survolée (board ou main) → affichée en grand dans la sidebar récap.
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
+  const hoveredCard = hoveredCardId ? cardById.get(hoveredCardId) ?? null : null;
+
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Opponent zone */}
-      {state.opponent && (
-        <div className="flex-shrink-0 border-b border-white/10 bg-black/30 p-3">
-          <PlayerInfo player={state.opponent} isOpponent />
-          <div className="mt-2 flex items-center justify-center gap-3">
-            <BackRow side="opp" prizes={state.opponent.prizesRemaining} deckSize={state.opponent.deckSize} discardCount={state.opponent.discardCount} />
-            <BoardArea
-              active={state.opponent.active}
-              bench={state.opponent.bench}
-              cardById={cardById}
-              isOpponent
-            />
-            <HandHidden count={state.opponent.handCount} />
-          </div>
-        </div>
-      )}
+    <div className="flex flex-1 overflow-hidden">
+      {/* Sidebar récap : log de match OU preview de la carte survolée */}
+      <RecapSidebar log={state.log} hoveredCard={hoveredCard} />
 
-      {/* Log central */}
-      <BattleLog log={state.log} />
-
-      {promptPromote && (
-        <div className="border-y border-amber-400/40 bg-amber-400/10 p-2 text-center text-sm text-amber-200">
-          Ton Pokémon Actif a été mis K.O. Choisis un Pokémon de ton Banc.
-        </div>
-      )}
-
-      {/* Self zone */}
-      {state.self && (
-        <div className="flex-shrink-0 border-t border-white/10 bg-black/30 p-3">
-          <div className="flex items-center justify-center gap-3">
-            <BackRow side="self" prizes={state.self.prizesRemaining} deckSize={state.self.deckSize} discardCount={state.self.discardCount} />
-            <BoardArea
-              active={state.self.active}
-              bench={state.self.bench}
-              cardById={cardById}
-              isOpponent={false}
-              attachMode={
-                pendingEnergyIdx !== null
-                  ? (uid) => {
-                      onAttachEnergy(pendingEnergyIdx, uid);
-                      setPendingEnergyIdx(null);
-                    }
-                  : pendingEvolveIdx !== null
-                    ? (uid) => {
-                        onEvolve(pendingEvolveIdx, uid);
-                        setPendingEvolveIdx(null);
-                      }
-                    : null
-              }
-              promoteMode={promptPromote ?? false}
-              onPromote={onPromoteActive}
-              onRetreat={
-                state.phase === "playing" &&
-                isMyTurn &&
-                !state.self.hasRetreatedThisTurn &&
-                !state.self.mustPromoteActive
-                  ? onRetreat
-                  : null
-              }
-            />
-            <SelfControls
-              state={state}
-              isMyTurn={isMyTurn}
-              cardById={cardById}
-              onConfirmSetup={onConfirmSetup}
-              onEndTurn={onEndTurn}
-              onAttack={onAttack}
-            />
-          </div>
-          <PlayerInfo player={state.self} isOpponent={false} />
-
-          {(pendingEnergyIdx !== null || pendingEvolveIdx !== null) && (
-            <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-              {pendingEnergyIdx !== null
-                ? "Choisis un Pokémon à qui attacher cette Énergie."
-                : "Choisis le Pokémon à faire évoluer."}
-              <button
-                onClick={cancelPending}
-                className="ml-auto rounded border border-white/10 bg-white/5 px-2 py-0.5 text-zinc-200 hover:bg-white/10"
-              >
-                Annuler
-              </button>
+      {/* Centre : opponent / self zones bien centrés et plus grands */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Opponent zone */}
+        {state.opponent && (
+          <div className="flex-shrink-0 border-b border-white/10 bg-black/30 p-3">
+            <PlayerInfo player={state.opponent} isOpponent />
+            <div className="mt-2 flex items-center justify-center gap-3">
+              <BackRow side="opp" prizes={state.opponent.prizesRemaining} deckSize={state.opponent.deckSize} discardCount={state.opponent.discardCount} />
+              <BoardArea
+                active={state.opponent.active}
+                bench={state.opponent.bench}
+                cardById={cardById}
+                isOpponent
+                onHoverCard={setHoveredCardId}
+              />
+              <HandHidden count={state.opponent.handCount} />
             </div>
-          )}
-
-          {/* Hand */}
-          <SelfHand
-            state={state}
-            cardById={cardById}
-            isMyTurn={isMyTurn}
-            onSetActive={onSetActive}
-            onAddBench={onAddBench}
-            onRemoveBench={onRemoveBench}
-            onPlayBasic={onPlayBasic}
-            onSelectEnergy={(i) => {
-              setPendingEvolveIdx(null);
-              setPendingEnergyIdx(i);
-            }}
-            onSelectEvolve={(i) => {
-              setPendingEnergyIdx(null);
-              setPendingEvolveIdx(i);
-            }}
-          />
-        </div>
-      )}
-
-      {state.winner && (
-        <div className="flex-shrink-0 bg-black/80 p-4 text-center">
-          <div className="text-2xl font-bold text-amber-300">
-            🏆 {state.winner === state.selfSeat ? "Victoire !" : "Défaite"}
           </div>
-          <Link
-            href={lobbyHref(gameId, roomId)}
-            className="mt-2 inline-block rounded-md bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
-          >
-            Retour au lobby
-          </Link>
-        </div>
-      )}
+        )}
+
+        {promptPromote && (
+          <div className="border-y border-amber-400/40 bg-amber-400/10 p-2 text-center text-sm text-amber-200">
+            Ton Pokémon Actif a été mis K.O. Choisis un Pokémon de ton Banc.
+          </div>
+        )}
+
+        {/* Spacer pour pousser le self vers le bas et centrer visuellement */}
+        <div className="flex-1" />
+
+        {/* Self zone */}
+        {state.self && (
+          <div className="flex-shrink-0 border-t border-white/10 bg-black/30 p-3">
+            <div className="flex items-center justify-center gap-3">
+              <BackRow side="self" prizes={state.self.prizesRemaining} deckSize={state.self.deckSize} discardCount={state.self.discardCount} />
+              <BoardArea
+                active={state.self.active}
+                bench={state.self.bench}
+                cardById={cardById}
+                isOpponent={false}
+                onHoverCard={setHoveredCardId}
+                attachMode={
+                  pendingEnergyIdx !== null
+                    ? (uid) => {
+                        onAttachEnergy(pendingEnergyIdx, uid);
+                        setPendingEnergyIdx(null);
+                      }
+                    : pendingEvolveIdx !== null
+                      ? (uid) => {
+                          onEvolve(pendingEvolveIdx, uid);
+                          setPendingEvolveIdx(null);
+                        }
+                      : null
+                }
+                promoteMode={promptPromote ?? false}
+                onPromote={onPromoteActive}
+                onRetreat={
+                  state.phase === "playing" &&
+                  isMyTurn &&
+                  !state.self.hasRetreatedThisTurn &&
+                  !state.self.mustPromoteActive
+                    ? onRetreat
+                    : null
+                }
+              />
+              <SelfControls
+                state={state}
+                isMyTurn={isMyTurn}
+                cardById={cardById}
+                onConfirmSetup={onConfirmSetup}
+                onEndTurn={onEndTurn}
+                onAttack={onAttack}
+              />
+            </div>
+            <PlayerInfo player={state.self} isOpponent={false} />
+
+            {(pendingEnergyIdx !== null || pendingEvolveIdx !== null) && (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
+                {pendingEnergyIdx !== null
+                  ? "Choisis un Pokémon à qui attacher cette Énergie."
+                  : "Choisis le Pokémon à faire évoluer."}
+                <button
+                  onClick={cancelPending}
+                  className="ml-auto rounded border border-white/10 bg-white/5 px-2 py-0.5 text-zinc-200 hover:bg-white/10"
+                >
+                  Annuler
+                </button>
+              </div>
+            )}
+
+            {/* Hand */}
+            <SelfHand
+              state={state}
+              cardById={cardById}
+              isMyTurn={isMyTurn}
+              onSetActive={onSetActive}
+              onAddBench={onAddBench}
+              onRemoveBench={onRemoveBench}
+              onPlayBasic={onPlayBasic}
+              onHoverCard={setHoveredCardId}
+              onSelectEnergy={(i) => {
+                setPendingEvolveIdx(null);
+                setPendingEnergyIdx(i);
+              }}
+              onSelectEvolve={(i) => {
+                setPendingEnergyIdx(null);
+                setPendingEvolveIdx(i);
+              }}
+            />
+          </div>
+        )}
+
+        {state.winner && (
+          <div className="flex-shrink-0 bg-black/80 p-4 text-center">
+            <div className="text-2xl font-bold text-amber-300">
+              🏆 {state.winner === state.selfSeat ? "Victoire !" : "Défaite"}
+            </div>
+            <Link
+              href={lobbyHref(gameId, roomId)}
+              className="mt-2 inline-block rounded-md bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
+            >
+              Retour au lobby
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** Sidebar gauche du board : preview carte survolée OU log de match. */
+function RecapSidebar({
+  log,
+  hoveredCard,
+}: {
+  log: string[];
+  hoveredCard: PokemonCardData | null;
+}) {
+  return (
+    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
+      {hoveredCard ? (
+        <div className="flex flex-col gap-2 p-3">
+          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+            Aperçu
+          </div>
+          <div className="aspect-[5/7] w-full">
+            <CardFace card={hoveredCard} large />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
+            Récapitulatif du match
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            <div className="flex flex-col-reverse gap-1 text-xs text-zinc-300">
+              <AnimatePresence initial={false}>
+                {[...log].reverse().map((line, i) => (
+                  <motion.div
+                    key={`${i}-${line.slice(0, 20)}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    · {line}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+        </>
+      )}
+    </aside>
   );
 }
 
@@ -533,6 +592,7 @@ function BoardArea({
   promoteMode,
   onPromote,
   onRetreat,
+  onHoverCard,
 }: {
   active: BattleCard | null;
   bench: BattleCard[];
@@ -542,6 +602,7 @@ function BoardArea({
   promoteMode?: boolean;
   onPromote?: (benchIndex: number) => void;
   onRetreat?: ((benchIndex: number) => void) | null;
+  onHoverCard?: (cardId: string | null) => void;
 }) {
   const ownActions = !isOpponent;
   return (
@@ -559,6 +620,8 @@ function BoardArea({
           onClick={() => {
             if (attachMode && active) attachMode(active.uid);
           }}
+          onMouseEnter={() => onHoverCard?.(active.cardId)}
+          onMouseLeave={() => onHoverCard?.(null)}
           className={`disabled:cursor-default ${
             attachMode ? "ring-2 ring-amber-300 hover:ring-amber-200" : ""
           } rounded`}
@@ -594,6 +657,8 @@ function BoardArea({
                 else if (promoteMode && onPromote) onPromote(i);
                 else if (onRetreat) onRetreat(i);
               }}
+              onMouseEnter={() => onHoverCard?.(card.cardId)}
+              onMouseLeave={() => onHoverCard?.(null)}
               className={`disabled:cursor-default ${
                 attachMode || promoteMode
                   ? "ring-2 ring-amber-300 hover:ring-amber-200"
@@ -830,6 +895,7 @@ function SelfHand({
   onPlayBasic,
   onSelectEnergy,
   onSelectEvolve,
+  onHoverCard,
 }: {
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
@@ -840,6 +906,7 @@ function SelfHand({
   onPlayBasic: (handIndex: number) => void;
   onSelectEnergy: (handIndex: number) => void;
   onSelectEvolve: (handIndex: number) => void;
+  onHoverCard?: (cardId: string | null) => void;
 }) {
   const self = state.self;
   if (!self) return null;
@@ -887,6 +954,7 @@ function SelfHand({
               onPlayBench={playBench}
               onAttachEnergy={attachEnergy}
               onEvolve={evolveCard}
+              onHover={onHoverCard}
             />
           );
         })}
@@ -920,6 +988,7 @@ function HandCard({
   onPlayBench,
   onAttachEnergy,
   onEvolve,
+  onHover,
 }: {
   data: PokemonCardData;
   onSetActive?: () => void;
@@ -927,6 +996,7 @@ function HandCard({
   onPlayBench?: () => void;
   onAttachEnergy?: () => void;
   onEvolve?: () => void;
+  onHover?: (cardId: string | null) => void;
 }) {
   const isEnergyCard = data.kind === "energy";
   const bg = isEnergyCard
@@ -938,6 +1008,8 @@ function HandCard({
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
+      onMouseEnter={() => onHover?.(data.id)}
+      onMouseLeave={() => onHover?.(null)}
       className={`relative flex flex-col items-center gap-1 rounded border bg-gradient-to-b ${bg} p-1 text-zinc-100 ${
         hasAction ? "mb-5" : ""
       }`}
@@ -1000,26 +1072,6 @@ function HandCard({
         </div>
       )}
     </motion.div>
-  );
-}
-
-function BattleLog({ log }: { log: string[] }) {
-  return (
-    <div className="flex-1 overflow-y-auto bg-black/20 px-4 py-2">
-      <div className="mx-auto max-w-2xl space-y-1 text-xs text-zinc-300">
-        <AnimatePresence initial={false}>
-          {log.slice(-15).map((line, i) => (
-            <motion.div
-              key={`${i}-${line.slice(0, 20)}`}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              · {line}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-    </div>
   );
 }
 

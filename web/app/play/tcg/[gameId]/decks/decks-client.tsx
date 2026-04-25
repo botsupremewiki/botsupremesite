@@ -26,6 +26,7 @@ import {
 } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { CardFace } from "../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -622,7 +623,7 @@ function CollectionPicker({
                     : "border-white/5 opacity-30"
                 } disabled:cursor-not-allowed`}
               >
-                <CardMini card={card} />
+                <CardFace card={card} />
                 <div className="flex items-center justify-between text-[10px]">
                   <span className="text-zinc-400">
                     {isEnergy ? "∞" : owned} {!isEnergy && "possédée"}
@@ -786,44 +787,6 @@ function DeckRow({
         </button>
       </div>
     </motion.div>
-  );
-}
-
-// ─── Mini card visual (collection picker tile) ───────────────────────────
-
-function CardMini({ card }: { card: PokemonCardData }) {
-  if (card.kind === "energy") {
-    const bg = TYPE_BG[card.energyType] ?? TYPE_BG.colorless;
-    return (
-      <div
-        className={`flex aspect-[5/7] flex-col items-center justify-center gap-1 rounded-md bg-gradient-to-b ${bg} p-2`}
-      >
-        <span className="text-3xl">{card.art}</span>
-        <span className="truncate text-[10px] font-semibold text-zinc-100">
-          {card.name}
-        </span>
-      </div>
-    );
-  }
-  const bg = TYPE_BG[card.type] ?? TYPE_BG.colorless;
-  return (
-    <div
-      className={`flex aspect-[5/7] flex-col gap-1 rounded-md bg-gradient-to-b ${bg} p-1`}
-    >
-      <div className="flex items-center justify-between text-[9px]">
-        <span className="truncate font-semibold text-zinc-100">
-          {card.name}
-        </span>
-        <span className="tabular-nums text-rose-200">{card.hp}</span>
-      </div>
-      <div className="flex flex-1 items-center justify-center rounded bg-black/30">
-        <span className="text-3xl">{card.art}</span>
-      </div>
-      <div className="flex items-center justify-between text-[9px] text-zinc-300">
-        <span>{card.stage === "basic" ? "Base" : card.stage === "stage1" ? "St.1" : "St.2"}</span>
-        <span>{RARITY_LABEL[card.rarity]}</span>
-      </div>
-    </div>
   );
 }
 

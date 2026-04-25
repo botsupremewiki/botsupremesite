@@ -18,6 +18,7 @@ import { TCG_GAMES } from "@shared/types";
 import type { Profile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/client";
 import { UserPill } from "@/components/user-pill";
+import { CardFace } from "../_components/card-visuals";
 import type { MarketListing } from "./page";
 
 type Tab = "buy" | "mine" | "favs";
@@ -28,16 +29,6 @@ const RARITY_COLOR: Record<TcgRarity, string> = {
   uncommon: "border-emerald-400/50",
   rare: "border-sky-400/60",
   "holo-rare": "border-amber-300/70",
-};
-
-const TYPE_GLYPH: Record<PokemonEnergyType, string> = {
-  fire: "🔥",
-  water: "💧",
-  grass: "🍃",
-  lightning: "⚡",
-  psychic: "🌀",
-  fighting: "👊",
-  colorless: "⭐",
 };
 
 export function MarketClient({
@@ -573,7 +564,7 @@ function ListingsGrid({
               >
                 {isFav ? "⭐" : "☆"}
               </button>
-              <MiniCardFace card={card} />
+              <CardFace card={card} />
             </div>
             <div className="flex items-center justify-between gap-1 px-1 text-xs">
               <span className="truncate font-semibold text-zinc-100">
@@ -609,31 +600,6 @@ function ListingsGrid({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function MiniCardFace({ card }: { card: PokemonCardData }) {
-  if (card.kind === "energy") {
-    return (
-      <div className="flex aspect-[5/7] flex-col items-center justify-center gap-1 rounded-md bg-zinc-900/80 p-2">
-        <div className="text-3xl">{card.art}</div>
-        <div className="text-[10px] text-zinc-300">{card.name}</div>
-      </div>
-    );
-  }
-  return (
-    <div className="flex aspect-[5/7] flex-col gap-1 rounded-md bg-zinc-900/80 p-2">
-      <div className="flex items-center justify-between text-[9px]">
-        <span className="font-semibold text-zinc-100">{card.name}</span>
-        <span className="tabular-nums text-rose-300">{card.hp}</span>
-      </div>
-      <div className="flex flex-1 items-center justify-center text-3xl">
-        {card.art}
-      </div>
-      <div className="text-[8px] text-zinc-400">
-        {TYPE_GLYPH[card.type]} {card.stage}
-      </div>
     </div>
   );
 }
