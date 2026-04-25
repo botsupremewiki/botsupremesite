@@ -399,38 +399,50 @@ export type SlotMachineConfig = {
   tagline: string;
   // Tailwind-style CSS classes used by the client to theme the cabinet.
   theme: {
-    accent: string; // text colour for highlights
-    glow: string; // box-shadow on win
-    gradient: string; // background gradient class
+    accent: string;
+    glow: string;
+    gradient: string;
     border: string;
   };
-  // 8 symbols low → high tier. The first one is treated as the "cherry"
-  // bonus symbol (1- and 2-leftmost mini-payouts).
+  // 8 symbols low → high tier. The first one is the "cherry" bonus
+  // symbol (1- and 2-leftmost mini-payouts on each payline).
   symbols: { key: SlotsSymbolKey; glyph: string; label: string }[];
-  // Reel weights, same order as `symbols`. Higher = more frequent.
   weights: number[];
-  // 3-of-a-kind multiplier per symbol (same order).
+  // 3-of-a-kind base payout per symbol (paid per winning line).
   payouts3: number[];
-  // Bonus payouts for the lowest symbol on the leftmost reel.
+  // Multiplier on payouts3 for 4- and 5-of-a-kind (only applies on
+  // 5-reel grids — ignored on 3-reel grids).
+  match4Multiplier: number;
+  match5Multiplier: number;
+  // Cherry bonus payouts on the leftmost reel of any payline.
   cherryTwo: number;
   cherryOne: number;
-  // Display: target RTP (informational only, math is what it is).
+  // Grid shape & active paylines.
+  cols: number;
+  rows: number;
+  // Each payline is an array of row indices, length = cols. The line
+  // walks left-to-right; matches count from the leftmost reel.
+  paylines: number[][];
+  // Informational target RTP.
   targetRtp: number;
 };
 
-export type SlotsWinKind =
-  | "none"
-  | "three"
-  | "two-cherry"
-  | "one-cherry";
+export type SlotsWinLine = {
+  paylineIndex: number; // index into config.paylines
+  symbol: SlotsSymbolKey;
+  matchLength: number; // 3, 4 or 5 (cherry bonuses use 1 or 2)
+  payout: number; // multiplier applied to per-line bet (= bet / paylines.length)
+};
 
 export type SlotsSpin = {
   id: string;
-  reels: SlotsSymbolKey[]; // length = SLOTS_CONFIG.reelCount
+  // Grid in column-major order: grid[col][row] = symbol on reel `col` row `row`.
+  // Length = config.cols, each inner array length = config.rows.
+  grid: SlotsSymbolKey[][];
   bet: number;
   win: number;
-  multiplier: number;
-  kind: SlotsWinKind;
+  multiplier: number; // total payout / bet (sum of all winning lines)
+  lines: SlotsWinLine[]; // for highlighting on the client
   timestamp: number;
 };
 
@@ -462,6 +474,34 @@ export type SlotsServerMessage =
   | { type: "slots-error"; message: string }
   | { type: "chat"; message: ChatMessage };
 
+// ─── Reusable payline geometries ───────────────────────────────────────────
+// Each array is a payline: row index per reel, length = cols.
+
+const PL_3x1_SINGLE: number[][] = [[0, 0, 0]];
+const PL_3x3_ROWS: number[][] = [
+  [0, 0, 0],
+  [1, 1, 1],
+  [2, 2, 2],
+];
+const PL_3x3_FIVE: number[][] = [
+  [0, 0, 0],
+  [1, 1, 1],
+  [2, 2, 2],
+  [0, 1, 2],
+  [2, 1, 0],
+];
+const PL_5x3_NINE: number[][] = [
+  [0, 0, 0, 0, 0],
+  [1, 1, 1, 1, 1],
+  [2, 2, 2, 2, 2],
+  [0, 1, 2, 1, 0],
+  [2, 1, 0, 1, 2],
+  [0, 0, 1, 0, 0],
+  [2, 2, 1, 2, 2],
+  [1, 0, 0, 0, 1],
+  [1, 2, 2, 2, 1],
+];
+
 // ─── 5 machine configs ─────────────────────────────────────────────────────
 
 export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
@@ -489,11 +529,16 @@ export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
     ],
     weights: [8, 6, 5, 4, 3, 2, 1, 1],
     payouts3: [6, 10, 15, 25, 50, 180, 800, 2800],
+    match4Multiplier: 5,
+    match5Multiplier: 25,
     cherryTwo: 4,
     cherryOne: 1.0,
+    cols: 3,
+    rows: 1,
+    paylines: PL_3x1_SINGLE,
     targetRtp: 0.965,
   },
-  // 2. Pirate, mid volatility — ≈ 96% RTP, max ×1500
+  // 2. Pirate, mid volatility — 3×3 with 3 horizontal paylines, ≈ 96% RTP
   "tresor-pirates": {
     id: "tresor-pirates",
     name: "Trésor des Pirates",
@@ -517,11 +562,16 @@ export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
     ],
     weights: [8, 6, 5, 4, 3, 2, 1, 1],
     payouts3: [5, 10, 15, 30, 80, 250, 1500, 3300],
+    match4Multiplier: 5,
+    match5Multiplier: 25,
     cherryTwo: 3,
     cherryOne: 0.8,
+    cols: 3,
+    rows: 3,
+    paylines: PL_3x3_ROWS,
     targetRtp: 0.96,
   },
-  // 3. Egypt, med-high volatility — ≈ 96% RTP, max ×4500
+  // 3. Egypt — 3×3 with 5 paylines (rows + diagonals), ≈ 96% RTP
   "pharaon-mystique": {
     id: "pharaon-mystique",
     name: "Pharaon Mystique",
@@ -545,11 +595,16 @@ export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
     ],
     weights: [8, 6, 5, 4, 3, 2, 1, 1],
     payouts3: [4, 8, 14, 28, 80, 350, 1800, 4500],
+    match4Multiplier: 5,
+    match5Multiplier: 25,
     cherryTwo: 3,
     cherryOne: 0.6,
+    cols: 3,
+    rows: 3,
+    paylines: PL_3x3_FIVE,
     targetRtp: 0.96,
   },
-  // 4. Forest fantasy, high volatility — ≈ 95% RTP, max ×7500
+  // 4. Forest fantasy — 5×3 with 9 paylines, ≈ 95% RTP
   "foret-enchantee": {
     id: "foret-enchantee",
     name: "Forêt Enchantée",
@@ -572,15 +627,21 @@ export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
       { key: "s7", glyph: "🌙", label: "Lune" },
     ],
     weights: [8, 6, 5, 4, 3, 2, 1, 1],
-    payouts3: [3, 6, 11, 20, 80, 400, 2500, 7500],
+    // 5-reel paytable (4-of-a-kind = ×5 of 3-match, 5-of-a-kind = ×25).
+    payouts3: [2, 4, 7, 13, 50, 250, 1500, 4200],
+    match4Multiplier: 5,
+    match5Multiplier: 25,
     cherryTwo: 2,
     cherryOne: 0.4,
+    cols: 5,
+    rows: 3,
+    paylines: PL_5x3_NINE,
     targetRtp: 0.95,
   },
-  // 5. Cosmic, extreme volatility — ≈ 94% RTP. Mid-tier rocket symbol
-  // (weight 3) lands ≈ 1/1000 spins for a ×500 hit — that's the "biggest
-  // jackpot in 1000 spins" the spec asked for. The supernova (weight 1)
-  // is a rarer ×3000 super-bonus that pops up roughly 1/27000 spins.
+  // 5. Cosmic — 5×3 with 9 paylines, ≈ 94% RTP. Mid-tier rocket
+  // (weight 3) gives a 3-of-a-kind ≈ every 1100 spins and pays ×280;
+  // 4-of-a-kind ≈ 1/11k for ×1400 and 5-of-a-kind ≈ 1/100k for ×7000.
+  // Supernova (weight 1) is the rarer big-money symbol on top of that.
   "inferno-galactique": {
     id: "inferno-galactique",
     name: "Inferno Galactique",
@@ -603,9 +664,14 @@ export const SLOT_MACHINES: Record<SlotMachineId, SlotMachineConfig> = {
       { key: "s7", glyph: "💫", label: "Supernova" }, // mega jackpot
     ],
     weights: [8, 6, 5, 4, 3, 2, 1, 1],
-    payouts3: [2, 5, 10, 18, 500, 120, 600, 3000],
+    payouts3: [1, 3, 7, 12, 280, 80, 400, 1800],
+    match4Multiplier: 5,
+    match5Multiplier: 25,
     cherryTwo: 1,
     cherryOne: 0.3,
+    cols: 5,
+    rows: 3,
+    paylines: PL_5x3_NINE,
     targetRtp: 0.94,
   },
 };

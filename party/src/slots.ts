@@ -7,7 +7,6 @@ import type {
   SlotsClientMessage,
   SlotsServerMessage,
   SlotsSpin,
-  SlotsSymbolKey,
 } from "../../shared/types";
 import {
   PLAZA_CONFIG,
@@ -16,7 +15,7 @@ import {
 } from "../../shared/types";
 import { fetchProfile, patchProfileGold } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
-import { evaluateSpin, spinReel } from "./lib/slots-math";
+import { evaluateGrid, spinGrid } from "./lib/slots-math";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -290,20 +289,17 @@ export default class SlotsServer implements Party.Server {
 
   private computeSpin(bet: number, info: ConnInfo): SlotsSpin {
     info.gold -= bet;
-    const reels: SlotsSymbolKey[] = Array.from(
-      { length: SLOTS_CONFIG.reelCount },
-      () => spinReel(this.machine),
-    );
-    const { multiplier, kind } = evaluateSpin(reels, this.machine);
-    const win = Math.floor(bet * multiplier);
+    const grid = spinGrid(this.machine);
+    const { lines, totalMultiplier } = evaluateGrid(grid, this.machine);
+    const win = Math.floor(bet * totalMultiplier);
     if (win > 0) info.gold += win;
     return {
       id: crypto.randomUUID(),
-      reels,
+      grid,
       bet,
       win,
-      multiplier,
-      kind,
+      multiplier: totalMultiplier,
+      lines,
       timestamp: Date.now(),
     };
   }

@@ -55,13 +55,17 @@ export default class PlazaServer implements Party.Server {
     }
     this.connIdToIsAdmin.set(conn.id, isAdmin);
 
+    // Spawn at the centre of the scene — every plaza/casino layout is
+    // built around the centre point (the back portal sits there too).
+    // A small jitter avoids stacking sprites when several players land
+    // at once.
     const player: Player = {
       id: conn.id,
       authId: authId ?? undefined,
       name: providedName ?? `Invité-${conn.id.slice(0, 4)}`,
       avatarUrl: avatarUrl ?? undefined,
-      x: PLAZA_CONFIG.width / 2 + (Math.random() - 0.5) * 120,
-      y: PLAZA_CONFIG.height / 2 + (Math.random() - 0.5) * 120,
+      x: PLAZA_CONFIG.width / 2 + (Math.random() - 0.5) * 24,
+      y: PLAZA_CONFIG.height / 2 + (Math.random() - 0.5) * 24,
       direction: "down",
       color: AVATAR_COLORS[this.colorCursor++ % AVATAR_COLORS.length],
     };

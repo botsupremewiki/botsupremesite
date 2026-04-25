@@ -4,6 +4,44 @@ import type { Landmark, SceneConfig } from "./scene";
 const W = PLAZA_CONFIG.width;
 const H = PLAZA_CONFIG.height;
 
+// Distribute N positions evenly on an ellipse around (cx, cy). Index 0
+// sits at the top, then clockwise.
+function ringPositions(
+  count: number,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / count;
+    out.push({
+      x: Math.round(cx + rx * Math.cos(angle)),
+      y: Math.round(cy + ry * Math.sin(angle)),
+    });
+  }
+  return out;
+}
+
+// ─── Plaza ─────────────────────────────────────────────────────────────────
+// Player spawns at the center; the 5 portals form a ring around them.
+
+const PLAZA_PORTALS = [
+  { id: "casino", color: 0xef4444, label: "Casino", href: "/play/casino" },
+  { id: "tcg", color: 0x22c55e, label: "TCG · Bientôt" },
+  { id: "rpg", color: 0xf59e0b, label: "RPG · Bientôt" },
+  { id: "medieval", color: 0x6366f1, label: "Médiéval · Bientôt" },
+  { id: "tycoon", color: 0xec4899, label: "Tycoon · Bientôt" },
+];
+const PLAZA_RING = ringPositions(
+  PLAZA_PORTALS.length,
+  W / 2,
+  H / 2,
+  W * 0.36,
+  H * 0.34,
+);
+
 export const PLAZA_SCENE: SceneConfig = {
   width: W,
   height: H,
@@ -11,91 +49,142 @@ export const PLAZA_SCENE: SceneConfig = {
   floorColor: 0x12121c,
   floorAccentColor: 0xffffff,
   floorAccentAlpha: 0.018,
-  landmarks: [
-    {
-      kind: "portal",
-      id: "casino",
-      x: 120,
-      y: 110,
-      color: 0xef4444,
-      label: "Casino",
-      href: "/play/casino",
-    },
-    {
-      kind: "portal",
-      id: "tcg",
-      x: W - 120,
-      y: 110,
-      color: 0x22c55e,
-      label: "TCG · Bientôt",
-    },
-    {
-      kind: "portal",
-      id: "rpg",
-      x: 120,
-      y: H - 110,
-      color: 0xf59e0b,
-      label: "RPG · Bientôt",
-    },
-    {
-      kind: "portal",
-      id: "medieval",
-      x: W - 120,
-      y: H - 110,
-      color: 0x6366f1,
-      label: "Médiéval · Bientôt",
-    },
-    {
-      kind: "portal",
-      id: "tycoon",
-      x: W / 2,
-      y: 90,
-      color: 0xec4899,
-      label: "Tycoon · Bientôt",
-    },
-  ],
+  landmarks: PLAZA_PORTALS.map<Landmark>((p, i) => ({
+    kind: "portal",
+    id: p.id,
+    x: PLAZA_RING[i].x,
+    y: PLAZA_RING[i].y,
+    color: p.color,
+    label: p.label,
+    href: p.href,
+  })),
 };
 
-// 5 slot machines lined up across the top of the casino, each themed.
-const SLOT_ROW_Y = 140;
-const SLOT_MACHINES_LAYOUT = [
+// ─── Casino ────────────────────────────────────────────────────────────────
+// Back portal sits at the centre (player spawns on top of it). All
+// playable tables ring the player so they're visible at a glance.
+
+type CasinoTable = {
+  id: string;
+  label: string;
+  feltColor: number;
+  accentColor: number;
+  width: number;
+  height: number;
+  seats: number;
+  href?: string;
+};
+
+const CASINO_RING_TABLES: CasinoTable[] = [
+  // Index 0 sits at the top of the ring, then clockwise.
   {
-    id: "slots-verger-dore",
-    label: "Verger Doré",
-    feltColor: 0x422006,
-    accentColor: 0xfbbf24,
-    href: "/play/casino/slots/verger-dore",
-  },
-  {
-    id: "slots-tresor-pirates",
-    label: "Trésor des Pirates",
-    feltColor: 0x431407,
-    accentColor: 0xfb923c,
-    href: "/play/casino/slots/tresor-pirates",
-  },
-  {
-    id: "slots-pharaon-mystique",
-    label: "Pharaon Mystique",
-    feltColor: 0x44403c,
+    id: "blackjack-1",
+    label: "Blackjack",
+    feltColor: 0x065f3e,
     accentColor: 0xeab308,
-    href: "/play/casino/slots/pharaon-mystique",
+    width: 150,
+    height: 100,
+    seats: 5,
+    href: "/play/casino/blackjack/t1",
   },
   {
-    id: "slots-foret-enchantee",
-    label: "Forêt Enchantée",
+    id: "hilo-1",
+    label: "Hi-Lo",
+    feltColor: 0x7c2d12,
+    accentColor: 0xfbbf24,
+    width: 110,
+    height: 80,
+    seats: 1,
+    href: "/play/casino/hilo",
+  },
+  {
+    id: "roulette-1",
+    label: "Roulette",
     feltColor: 0x064e3b,
-    accentColor: 0x34d399,
-    href: "/play/casino/slots/foret-enchantee",
+    accentColor: 0xef4444,
+    width: 130,
+    height: 95,
+    seats: 6,
+    href: "/play/casino/roulette/r1",
+  },
+  {
+    id: "mines-1",
+    label: "Mines",
+    feltColor: 0x1e293b,
+    accentColor: 0x10b981,
+    width: 110,
+    height: 80,
+    seats: 1,
+    href: "/play/casino/mines",
+  },
+  {
+    id: "poker-1",
+    label: "Poker · Bientôt",
+    feltColor: 0x0c4a6e,
+    accentColor: 0xf59e0b,
+    width: 130,
+    height: 95,
+    seats: 6,
   },
   {
     id: "slots-inferno-galactique",
     label: "Inferno Galactique",
     feltColor: 0x3b0764,
     accentColor: 0xe879f9,
+    width: 110,
+    height: 80,
+    seats: 1,
     href: "/play/casino/slots/inferno-galactique",
   },
+  {
+    id: "slots-foret-enchantee",
+    label: "Forêt Enchantée",
+    feltColor: 0x064e3b,
+    accentColor: 0x34d399,
+    width: 110,
+    height: 80,
+    seats: 1,
+    href: "/play/casino/slots/foret-enchantee",
+  },
+  {
+    id: "slots-pharaon-mystique",
+    label: "Pharaon Mystique",
+    feltColor: 0x44403c,
+    accentColor: 0xeab308,
+    width: 110,
+    height: 80,
+    seats: 1,
+    href: "/play/casino/slots/pharaon-mystique",
+  },
+  {
+    id: "slots-tresor-pirates",
+    label: "Trésor des Pirates",
+    feltColor: 0x431407,
+    accentColor: 0xfb923c,
+    width: 110,
+    height: 80,
+    seats: 1,
+    href: "/play/casino/slots/tresor-pirates",
+  },
+  {
+    id: "slots-verger-dore",
+    label: "Verger Doré",
+    feltColor: 0x422006,
+    accentColor: 0xfbbf24,
+    width: 110,
+    height: 80,
+    seats: 1,
+    href: "/play/casino/slots/verger-dore",
+  },
 ];
-const SLOT_X_STEP = (W - 260) / (SLOT_MACHINES_LAYOUT.length - 1);
+
+const CASINO_RING = ringPositions(
+  CASINO_RING_TABLES.length,
+  W / 2,
+  H / 2,
+  W * 0.38,
+  H * 0.4,
+);
 
 export const CASINO_SCENE: SceneConfig = {
   width: W,
@@ -108,89 +197,25 @@ export const CASINO_SCENE: SceneConfig = {
     {
       kind: "portal",
       id: "back-to-plaza",
-      x: 80,
-      y: 80,
+      x: W / 2,
+      y: H / 2,
       color: 0x6366f1,
       label: "← Plaza",
       href: "/play",
     },
-    ...SLOT_MACHINES_LAYOUT.map<Landmark>((m, i) => ({
+    ...CASINO_RING_TABLES.map<Landmark>((t, i) => ({
       kind: "table",
-      id: m.id,
-      x: 130 + i * SLOT_X_STEP,
-      y: SLOT_ROW_Y,
-      width: 100,
-      height: 75,
-      feltColor: m.feltColor,
-      accentColor: m.accentColor,
-      label: m.label,
-      seats: 1,
-      href: m.href,
+      id: t.id,
+      x: CASINO_RING[i].x,
+      y: CASINO_RING[i].y,
+      width: t.width,
+      height: t.height,
+      feltColor: t.feltColor,
+      accentColor: t.accentColor,
+      label: t.label,
+      seats: t.seats,
+      href: t.href,
     })),
-    {
-      kind: "table",
-      id: "blackjack-1",
-      x: W / 2,
-      y: 320,
-      width: 220,
-      height: 130,
-      feltColor: 0x065f3e,
-      accentColor: 0xeab308,
-      label: "Blackjack",
-      seats: 5,
-      href: "/play/casino/blackjack/t1",
-    },
-    {
-      kind: "table",
-      id: "hilo-1",
-      x: 200,
-      y: 340,
-      width: 140,
-      height: 100,
-      feltColor: 0x7c2d12,
-      accentColor: 0xfbbf24,
-      label: "Hi-Lo",
-      seats: 1,
-      href: "/play/casino/hilo",
-    },
-    {
-      kind: "table",
-      id: "roulette-1",
-      x: W - 200,
-      y: 340,
-      width: 160,
-      height: 110,
-      feltColor: 0x064e3b,
-      accentColor: 0xef4444,
-      label: "Roulette",
-      seats: 6,
-      href: "/play/casino/roulette/r1",
-    },
-    {
-      kind: "table",
-      id: "mines-1",
-      x: 280,
-      y: 520,
-      width: 130,
-      height: 100,
-      feltColor: 0x1e293b,
-      accentColor: 0x10b981,
-      label: "Mines",
-      seats: 1,
-      href: "/play/casino/mines",
-    },
-    {
-      kind: "table",
-      id: "poker-1",
-      x: W - 280,
-      y: 520,
-      width: 180,
-      height: 120,
-      feltColor: 0x0c4a6e,
-      accentColor: 0xf59e0b,
-      label: "Poker · Bientôt",
-      seats: 6,
-    },
   ],
 };
 
