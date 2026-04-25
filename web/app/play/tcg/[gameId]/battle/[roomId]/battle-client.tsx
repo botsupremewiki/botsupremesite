@@ -50,6 +50,10 @@ export function BattleClient({
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [state, setState] = useState<BattleState | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [questToast, setQuestToast] = useState<{
+    botWins: number;
+    granted: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!profile) {
@@ -93,6 +97,9 @@ export function BattleClient({
           break;
         case "battle-error":
           setErrorMsg(msg.message);
+          break;
+        case "battle-quest-reward":
+          setQuestToast({ botWins: msg.botWins, granted: msg.granted });
           break;
       }
     });
@@ -218,6 +225,28 @@ export function BattleClient({
           {errorMsg && (
             <div className="border-t border-rose-500/40 bg-rose-500/10 px-3 py-2 text-center text-xs text-rose-300">
               {errorMsg}
+            </div>
+          )}
+
+          {questToast && (
+            <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 transform rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100 shadow-2xl backdrop-blur-md">
+              {questToast.granted ? (
+                <>
+                  🎁 <strong>Quête complétée !</strong> +1 booster gratuit
+                  ajouté à ta collection.
+                </>
+              ) : (
+                <>
+                  🎯 Victoire enregistrée — {questToast.botWins} / 3 wins
+                  aujourd&apos;hui.
+                </>
+              )}
+              <button
+                onClick={() => setQuestToast(null)}
+                className="ml-3 text-emerald-300 hover:text-emerald-100"
+              >
+                ✕
+              </button>
             </div>
           )}
         </main>

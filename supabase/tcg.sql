@@ -131,3 +131,79 @@ begin
   return false;
 end;
 $$;
+
+-- ───────────────────── Daily bot quests ─────────────────────
+-- Per-game quest state stored as JSONB :
+--   {"pokemon": {"date": "2026-04-25", "bot_wins": 2, "rewarded": false}}
+-- Each bot victory increments bot_wins for the day. Reaching 3 grants
+-- +1 free booster of that game (once per day, then no more rewards
+-- until the next calendar day).
+
+alter table public.profiles
+  add column if not exists tcg_quest_state jsonb not null default '{}'::jsonb;
+
+-- Records a bot win and grants 1 free pack at the 3rd win of the day.
+-- Returns {bot_wins, granted}. The PartyKit battle server calls this when
+-- the human player wins a bot match.
+create or replace function public.record_tcg_bot_win(
+  p_user_id uuid,
+  p_game_id text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  game_state jsonb;
+  today_date date := current_date;
+  state_date date;
+  wins int;
+  rewarded boolean;
+  granted boolean := false;
+begin
+  select coalesce(tcg_quest_state -> p_game_id, '{}'::jsonb) into game_state
+  from public.profiles
+  where id = p_user_id
+  for update;
+
+  state_date := nullif(game_state->>'date', '')::date;
+  wins := coalesce((game_state->>'bot_wins')::int, 0);
+  rewarded := coalesce((game_state->>'rewarded')::boolean, false);
+
+  if state_date is null or state_date <> today_date then
+    -- Nouveau jour → reset.
+    wins := 0;
+    rewarded := false;
+  end if;
+
+  wins := wins + 1;
+
+  if wins >= 3 and not rewarded then
+    update public.profiles
+    set tcg_free_packs = jsonb_set(
+      coalesce(tcg_free_packs, '{}'::jsonb),
+      array[p_game_id],
+      to_jsonb(coalesce((tcg_free_packs->>p_game_id)::int, 0) + 1)
+    )
+    where id = p_user_id;
+    granted := true;
+    rewarded := true;
+  end if;
+
+  update public.profiles
+  set
+    tcg_quest_state = jsonb_set(
+      coalesce(tcg_quest_state, '{}'::jsonb),
+      array[p_game_id],
+      jsonb_build_object(
+        'date', today_date::text,
+        'bot_wins', wins,
+        'rewarded', rewarded
+      )
+    ),
+    updated_at = now()
+  where id = p_user_id;
+
+  return jsonb_build_object('bot_wins', wins, 'granted', granted);
+end;
+$$;

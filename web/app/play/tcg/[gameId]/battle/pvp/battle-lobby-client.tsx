@@ -167,14 +167,14 @@ export function BattleLobbyClient({
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
-            href={`/play/tcg/${gameId}`}
+            href={`/play/tcg/${gameId}/battle`}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Collection
+            ← Combats
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
-          <span className="text-xs text-zinc-500">Battle · matchmaking</span>
+          <span className="text-xs text-zinc-500">PvP fun · matchmaking</span>
         </div>
         {profile ? (
           <UserPill profile={profile} variant="play" />
@@ -187,10 +187,11 @@ export function BattleLobbyClient({
         className={`flex flex-1 items-center justify-center p-6 ${game.gradient}`}
       >
         <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-sm">
-          <h1 className="text-2xl font-bold text-zinc-100">⚔️ Battle Pokémon</h1>
+          <h1 className="text-2xl font-bold text-zinc-100">⚔️ PvP Fun</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Choisis un deck légal (60 cartes) et entre en file d&apos;attente.
-            Tu seras associé au prochain joueur disponible.
+            Combat amical sans classement. Choisis un deck légal (60 cartes)
+            et entre en file d&apos;attente — tu seras associé au prochain
+            joueur disponible.
           </p>
 
           {!profile && (

@@ -10,7 +10,7 @@ import type {
   BattleState,
   ChatMessage,
 } from "../../shared/types";
-import { fetchProfile, fetchTcgDeckById } from "./lib/supabase";
+import { fetchProfile, fetchTcgDeckById, recordBotWin } from "./lib/supabase";
 import type {
   PokemonAbilityEffect,
 } from "../../shared/types";
@@ -31,6 +31,10 @@ const UUID_RE =
 const PRIZE_COUNT = 6;
 const MAX_BENCH = 5;
 const LOG_KEEP = 30;
+
+const BOT_AUTH_ID = "bot-supreme";
+const BOT_USERNAME = "Bot Suprême";
+const BOT_ACTION_DELAY_MS = 900;
 
 type SeatState = {
   authId: string;
@@ -63,8 +67,15 @@ export default class BattleServer implements Party.Server {
   private log: string[] = [];
   // Compteur d'instances pour générer des uid de cartes posées sur le board.
   private uidCounter = 0;
+  // Bot mode (room id starts with "bot-").
+  private readonly botMode: boolean;
+  private botGameId: string | null = null;
+  private botActScheduled = false;
+  private questRecorded = false;
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.botMode = room.id.startsWith("bot-");
+  }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url);
@@ -96,6 +107,13 @@ export default class BattleServer implements Party.Server {
       return;
     }
 
+    // En mode bot, p2 est réservé au Bot Suprême — un seul joueur humain.
+    if (this.botMode && seatId === "p2") {
+      this.sendError(conn, "Cette partie bot est déjà occupée.");
+      conn.close();
+      return;
+    }
+
     if (!this.seats[seatId]) {
       // Première connexion sur ce siège : load deck depuis la DB.
       const deckRow = await fetchTcgDeckById(this.room, deckId);
@@ -113,12 +131,11 @@ export default class BattleServer implements Party.Server {
         conn.close();
         return;
       }
-      const deck = expandDeck(
-        (deckRow.cards ?? []).map((c) => ({
-          cardId: c.card_id,
-          count: c.count,
-        })),
-      );
+      const deckCards = (deckRow.cards ?? []).map((c) => ({
+        cardId: c.card_id,
+        count: c.count,
+      }));
+      const deck = expandDeck(deckCards);
       shuffle(deck);
       const { hand, mulligans } = dealOpeningHand(deck);
       const prizes = takePrizes(deck, PRIZE_COUNT);
@@ -145,6 +162,13 @@ export default class BattleServer implements Party.Server {
           `${username} mulligan ×${mulligans} (aucun Pokémon de Base au départ).`,
         );
       }
+
+      // En mode bot, dès que p1 est seated on remplit p2 avec le Bot Suprême
+      // (mirror du même deck pour un match équilibré).
+      if (this.botMode && seatId === "p1" && !this.seats.p2) {
+        this.botGameId = deckRow.game_id;
+        this.fillBotSeat(deckCards);
+      }
     } else {
       // Reconnexion (même authId).
       const existing = this.seats[seatId];
@@ -164,6 +188,207 @@ export default class BattleServer implements Party.Server {
       this.pushLog("Les deux joueurs sont là. Choisissez votre Pokémon Actif.");
     }
     this.broadcastState();
+  }
+
+  // ─────────────── bot ───────────────
+
+  /** Remplit p2 avec le Bot Suprême en utilisant un mirror du deck p1. */
+  private fillBotSeat(deckCards: { cardId: string; count: number }[]) {
+    const deck = expandDeck(deckCards);
+    shuffle(deck);
+    const { hand, mulligans } = dealOpeningHand(deck);
+    const prizes = takePrizes(deck, PRIZE_COUNT);
+    this.seats.p2 = {
+      authId: BOT_AUTH_ID,
+      username: BOT_USERNAME,
+      conn: null,
+      deck,
+      hand,
+      prizes,
+      discard: [],
+      active: null,
+      bench: [],
+      hasSetup: false,
+      energyAttachedThisTurn: false,
+      hasRetreatedThisTurn: false,
+      evolvedThisTurn: new Set(),
+      mustPromoteActive: false,
+    };
+    if (mulligans > 0) {
+      this.pushLog(`${BOT_USERNAME} mulligan ×${mulligans}.`);
+    }
+    this.pushLog(`${BOT_USERNAME} se prépare au combat.`);
+  }
+
+  /** Décide si le bot doit agir maintenant et planifie son action avec
+   *  un petit délai pour la lisibilité. */
+  private maybeBotAct() {
+    if (!this.botMode) return;
+    if (this.phase === "ended") return;
+    const bot = this.seats.p2;
+    if (!bot) return;
+    if (this.botActScheduled) return;
+
+    let shouldAct = false;
+    if (this.phase === "setup" && !bot.hasSetup) {
+      shouldAct = true;
+    } else if (this.phase === "playing") {
+      if (bot.mustPromoteActive && bot.bench.length > 0) shouldAct = true;
+      else if (this.activeSeat === "p2") shouldAct = true;
+    }
+    if (!shouldAct) return;
+
+    this.botActScheduled = true;
+    setTimeout(() => {
+      this.botActScheduled = false;
+      try {
+        if (this.phase === "setup") this.botDoSetup();
+        else if (this.phase === "playing") {
+          const b = this.seats.p2;
+          if (b?.mustPromoteActive) this.botPromote();
+          else if (this.activeSeat === "p2") this.botPlayTurn();
+        }
+      } catch (err) {
+        console.warn("[bot] action threw:", err);
+      }
+    }, BOT_ACTION_DELAY_MS);
+  }
+
+  /** Setup phase : pose Actif + jusqu'à 3 Basics au Banc + confirme. */
+  private botDoSetup() {
+    const seat = this.seats.p2;
+    if (!seat || seat.hasSetup || this.phase !== "setup") return;
+    // Active : premier Basic en main
+    const basicIdx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+    if (basicIdx < 0) return;
+    this.handleSetActive("p2", basicIdx);
+    // Banc : jusqu'à 3 autres Basics
+    for (let n = 0; n < 3; n++) {
+      const idx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+      if (idx < 0) break;
+      if (seat.bench.length >= MAX_BENCH) break;
+      this.handleAddBench("p2", idx);
+    }
+    this.handleConfirmSetup("p2");
+  }
+
+  /** Promotion forcée après KO : promeut le premier Pokémon de Banc. */
+  private botPromote() {
+    const seat = this.seats.p2;
+    if (!seat?.mustPromoteActive || seat.bench.length === 0) return;
+    // Préfère un Pokémon avec le plus de PV restants
+    let bestIdx = 0;
+    let bestRemaining = -Infinity;
+    for (let i = 0; i < seat.bench.length; i++) {
+      const c = seat.bench[i];
+      const data = getCard(c.cardId);
+      if (data?.kind !== "pokemon") continue;
+      const remaining = data.hp - c.damage;
+      if (remaining > bestRemaining) {
+        bestRemaining = remaining;
+        bestIdx = i;
+      }
+    }
+    this.handlePromoteActive("p2", bestIdx);
+  }
+
+  /** Tour de jeu du bot. Stratégie naïve mais correcte :
+   *  évolue → pose Basic → attache Énergie → attaque la plus forte → end.
+   *  Chaque action déclenche un re-schedule jusqu'à attaque ou end-turn. */
+  private botPlayTurn() {
+    const seat = this.seats.p2;
+    if (!seat || this.activeSeat !== "p2" || this.phase !== "playing") return;
+    if (seat.mustPromoteActive) return; // géré par botPromote
+
+    // 1. Évolution si possible (priorité au Pokémon Actif)
+    for (let hi = 0; hi < seat.hand.length; hi++) {
+      const handCard = seat.hand[hi];
+      const evoData = getCard(handCard.cardId);
+      if (
+        !evoData ||
+        evoData.kind !== "pokemon" ||
+        evoData.stage === "basic" ||
+        !evoData.evolvesFrom
+      )
+        continue;
+      const targets: BattleCard[] = [];
+      if (seat.active) targets.push(seat.active);
+      targets.push(...seat.bench);
+      for (const target of targets) {
+        if (target.playedThisTurn) continue;
+        if (seat.evolvedThisTurn.has(target.uid)) continue;
+        const tData = getCard(target.cardId);
+        if (tData?.kind === "pokemon" && tData.name === evoData.evolvesFrom) {
+          this.handleEvolve("p2", hi, target.uid);
+          this.scheduleNextBotStep();
+          return;
+        }
+      }
+    }
+
+    // 2. Pose un Basic au Banc si banc pas plein
+    if (seat.bench.length < MAX_BENCH) {
+      const basicIdx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+      if (basicIdx >= 0) {
+        this.handlePlayBasic("p2", basicIdx);
+        this.scheduleNextBotStep();
+        return;
+      }
+    }
+
+    // 3. Attache une Énergie (priorité Actif, fallback premier sur banc)
+    if (!seat.energyAttachedThisTurn && seat.active) {
+      const energyIdx = seat.hand.findIndex((c) => isEnergy(c.cardId));
+      if (energyIdx >= 0) {
+        this.handleAttachEnergy("p2", energyIdx, seat.active.uid);
+        this.scheduleNextBotStep();
+        return;
+      }
+    }
+
+    // 4. Attaque (la plus forte payée)
+    const data = seat.active ? getCard(seat.active.cardId) : null;
+    if (
+      seat.active &&
+      data?.kind === "pokemon" &&
+      !seat.active.playedThisTurn &&
+      !seat.active.statuses.includes("asleep") &&
+      !seat.active.statuses.includes("paralyzed")
+    ) {
+      const ranked = data.attacks
+        .map((a, i) => ({ atk: a, idx: i, dmg: a.damage ?? 0 }))
+        .sort((a, b) => b.dmg - a.dmg);
+      for (const { idx } of ranked) {
+        if (
+          this.canPayAttackCost(
+            seat.active.attachedEnergies,
+            data.attacks[idx].cost,
+            seat.active,
+          )
+        ) {
+          this.handleAttack("p2", idx);
+          // handleAttack fait avancer le tour (ou termine si KO)
+          return;
+        }
+      }
+    }
+
+    // 5. Rien à faire → end turn
+    this.handleEndTurn("p2");
+  }
+
+  /** Re-schedule the next bot step (after an action that didn't end the turn). */
+  private scheduleNextBotStep() {
+    if (this.botActScheduled) return;
+    this.botActScheduled = true;
+    setTimeout(() => {
+      this.botActScheduled = false;
+      try {
+        this.botPlayTurn();
+      } catch (err) {
+        console.warn("[bot] step threw:", err);
+      }
+    }, BOT_ACTION_DELAY_MS);
   }
 
   async onMessage(raw: string, sender: Party.Connection) {
@@ -1035,6 +1260,38 @@ export default class BattleServer implements Party.Server {
     this.winner = winner;
     this.pushLog(`🏆 ${this.seats[winner]?.username} gagne — ${reason}`);
     this.broadcastState();
+    // En mode bot, si le joueur humain (p1) a gagné, on enregistre la victoire
+    // pour la quête journalière (3 wins → 1 booster gratuit).
+    if (
+      this.botMode &&
+      !this.questRecorded &&
+      winner === "p1" &&
+      this.seats.p1 &&
+      this.botGameId
+    ) {
+      this.questRecorded = true;
+      const authId = this.seats.p1.authId;
+      const gameId = this.botGameId;
+      void recordBotWin(this.room, authId, gameId)
+        .then((res) => {
+          if (!res) return;
+          const conn = this.seats.p1?.conn;
+          if (conn) {
+            this.sendTo(conn, {
+              type: "battle-quest-reward",
+              botWins: res.bot_wins,
+              granted: res.granted,
+            });
+          }
+          if (res.granted) {
+            this.pushLog(
+              `🎁 Quête remplie ! ${this.seats.p1?.username} reçoit 1 booster gratuit.`,
+            );
+            this.broadcastState();
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   // ─────────────── utils ───────────────
@@ -1108,6 +1365,9 @@ export default class BattleServer implements Party.Server {
         state: this.snapshotForSeat(seatId),
       });
     }
+    // Si un bot est en jeu et c'est son tour (ou il doit promouvoir / setup),
+    // on planifie son action après chaque mise à jour d'état.
+    this.maybeBotAct();
   }
 
   private sendError(conn: Party.Connection, message: string) {

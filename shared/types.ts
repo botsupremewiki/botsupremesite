@@ -1278,6 +1278,7 @@ export type BattleServerMessage =
   | { type: "battle-welcome"; selfId: string; selfSeat: BattleSeatId | null }
   | { type: "battle-state"; state: BattleState }
   | { type: "battle-error"; message: string }
+  | { type: "battle-quest-reward"; botWins: number; granted: boolean }
   | { type: "chat"; message: ChatMessage };
 
 // ─── Battle lobby (matchmaking) ────────────────────────────────────────────

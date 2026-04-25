@@ -169,6 +169,7 @@ export async function consumeTcgFreePack(
 
 export type TcgDeckRow = {
   id: string;
+  game_id: string;
   name: string;
   cards: { card_id: string; count: number }[] | null;
   updated_at: string;
@@ -184,7 +185,7 @@ export async function fetchTcgDecks(
   if (!env) return [];
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,name,cards,updated_at&order=updated_at.desc`,
+      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,game_id,name,cards,updated_at&order=updated_at.desc`,
       {
         headers: {
           apikey: env.key,
@@ -210,7 +211,7 @@ export async function fetchTcgDeckById(
   if (!env) return null;
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,name,cards,updated_at`,
+      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,game_id,name,cards,updated_at`,
       {
         headers: {
           apikey: env.key,
@@ -298,6 +299,47 @@ export async function deleteTcgDeck(
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+/** Record a bot-win for the daily quest. Returns {bot_wins, granted} where
+ *  granted=true when the player just hit 3 wins and a free pack was added.
+ *  Backed by record_tcg_bot_win in supabase/tcg.sql. */
+export async function recordBotWin(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+): Promise<{ bot_wins: number; granted: boolean } | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(`${env.url}/rest/v1/rpc/record_tcg_bot_win`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user_id: authId, p_game_id: gameId }),
+    });
+    if (!resp.ok) {
+      console.warn(
+        `[tcg] record_tcg_bot_win failed ${resp.status}:`,
+        await resp.text().catch(() => ""),
+      );
+      return null;
+    }
+    const data = (await resp.json()) as {
+      bot_wins?: number;
+      granted?: boolean;
+    };
+    return {
+      bot_wins: data?.bot_wins ?? 0,
+      granted: !!data?.granted,
+    };
+  } catch (err) {
+    console.warn("[tcg] record_tcg_bot_win threw:", err);
+    return null;
   }
 }
 
