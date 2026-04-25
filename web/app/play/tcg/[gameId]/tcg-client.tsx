@@ -93,6 +93,7 @@ export function TcgClient({
   const [collection, setCollection] = useState<Map<string, number>>(
     new Map(),
   );
+  const [freePacks, setFreePacks] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [revealing, setRevealing] = useState<TcgPackResult | null>(null);
 
@@ -138,6 +139,7 @@ export function TcgClient({
           setCollection(
             new Map(msg.collection.map((c) => [c.cardId, c.count])),
           );
+          setFreePacks(msg.freePacks);
           break;
         case "tcg-pack-opened":
           setRevealing(msg.pack);
@@ -146,6 +148,7 @@ export function TcgClient({
             for (const c of msg.newCounts) next.set(c.cardId, c.count);
             return next;
           });
+          setFreePacks(msg.freePacks);
           break;
         case "gold-update":
           setGold(msg.gold);
@@ -240,16 +243,43 @@ export function TcgClient({
                   {stats.dupes}
                 </div>
               </div>
+              {freePacks > 0 && (
+                <>
+                  <div className="hidden h-8 w-px bg-white/10 md:block" />
+                  <div className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5">
+                    <div className="text-[10px] uppercase tracking-widest text-emerald-300">
+                      Boosters offerts
+                    </div>
+                    <div className="text-base font-bold tabular-nums text-emerald-200">
+                      🎁 {freePacks}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <button
               onClick={buyPack}
-              disabled={!profile || status !== "connected" || gold < game.packPrice}
-              className={`rounded-lg border ${game.border} bg-gradient-to-b from-amber-500 to-amber-600 px-5 py-2.5 text-sm font-bold text-amber-950 shadow hover:from-amber-400 hover:to-amber-500 disabled:cursor-not-allowed disabled:opacity-40`}
+              disabled={
+                !profile ||
+                status !== "connected" ||
+                (freePacks === 0 && gold < game.packPrice)
+              }
+              className={`rounded-lg border ${
+                freePacks > 0
+                  ? "border-emerald-400/60 from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500"
+                  : `${game.border} from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500`
+              } bg-gradient-to-b px-5 py-2.5 text-sm font-bold ${
+                freePacks > 0 ? "text-emerald-950" : "text-amber-950"
+              } shadow disabled:cursor-not-allowed disabled:opacity-40`}
             >
               {!profile
-                ? "Connecte-toi pour acheter"
-                : `Acheter un pack · ${game.packPrice.toLocaleString("fr-FR")} OS`}
+                ? "Connecte-toi pour ouvrir un pack"
+                : freePacks > 0
+                  ? `🎁 Ouvrir un pack offert (${freePacks} restant${
+                      freePacks > 1 ? "s" : ""
+                    })`
+                  : `Acheter un pack · ${game.packPrice.toLocaleString("fr-FR")} OS`}
             </button>
           </div>
 

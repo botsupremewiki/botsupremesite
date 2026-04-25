@@ -913,7 +913,7 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
     id: "pokemon",
     name: "Pokémon",
     tagline: "Base Set · Génération 1",
-    packPrice: 100,
+    packPrice: 1_000,
     packSize: 5,
     active: true,
     accent: "text-amber-300",
@@ -1033,11 +1033,14 @@ export type TcgServerMessage =
       gold: number;
       collection: TcgCardOwned[];
       gameId: TcgGameId;
+      freePacks: number; // boosters offerts non encore ouverts
     }
   | {
       type: "tcg-pack-opened";
       pack: TcgPackResult;
-      newCounts: TcgCardOwned[]; // updated counts for the affected cards
+      newCounts: TcgCardOwned[];
+      freePacks: number;
+      usedFreePack: boolean; // true si ce pack n'a rien coûté en OS
     }
   | { type: "gold-update"; gold: number }
   | { type: "tcg-error"; message: string };

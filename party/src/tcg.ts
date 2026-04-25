@@ -12,6 +12,7 @@ import { TCG_GAMES } from "../../shared/types";
 import { POKEMON_BASE_SET } from "../../shared/tcg-pokemon-base";
 import {
   addTcgCards,
+  consumeTcgFreePack,
   fetchProfile,
   fetchTcgCollection,
   patchProfileGold,
@@ -26,6 +27,7 @@ type ConnInfo = {
   gold: number;
   isAdmin: boolean;
   collection: Map<string, number>; // card_id → count
+  freePacks: number; // boosters offerts non encore consommés
 };
 
 // Per-game card pools. New TCGs plug a new pool here.
@@ -86,6 +88,7 @@ export default class TcgServer implements Party.Server {
 
     let gold: number;
     let isAdmin = false;
+    let freePacks = 0;
     let collection: Map<string, number> = new Map();
     if (authId) {
       const [profile, rows] = await Promise.all([
@@ -95,6 +98,10 @@ export default class TcgServer implements Party.Server {
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
+        const raw = profile.tcg_free_packs?.[this.gameId];
+        if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+          freePacks = Math.floor(raw);
+        }
       } else if (queryGold !== null) {
         gold = queryGold;
       } else {
@@ -111,6 +118,7 @@ export default class TcgServer implements Party.Server {
       gold,
       isAdmin,
       collection,
+      freePacks,
     });
 
     this.sendTo(conn, {
@@ -122,6 +130,7 @@ export default class TcgServer implements Party.Server {
         count,
       })),
       gameId: this.gameId,
+      freePacks,
     });
   }
 
@@ -149,14 +158,25 @@ export default class TcgServer implements Party.Server {
       this.sendError(conn, "Connecte-toi avec Discord pour acheter un pack.");
       return;
     }
-    if (info.gold < game.packPrice) {
-      this.sendError(conn, "Or Suprême insuffisant pour ce pack.");
-      return;
-    }
 
-    info.gold -= game.packPrice;
-    await patchProfileGold(this.room, info.authId, info.gold);
-    this.sendTo(conn, { type: "gold-update", gold: info.gold });
+    // Try a free pack first; otherwise charge OS.
+    let usedFreePack = false;
+    if (info.freePacks > 0) {
+      const ok = await consumeTcgFreePack(this.room, info.authId, this.gameId);
+      if (ok) {
+        info.freePacks = Math.max(0, info.freePacks - 1);
+        usedFreePack = true;
+      }
+    }
+    if (!usedFreePack) {
+      if (info.gold < game.packPrice) {
+        this.sendError(conn, "Or Suprême insuffisant pour ce pack.");
+        return;
+      }
+      info.gold -= game.packPrice;
+      await patchProfileGold(this.room, info.authId, info.gold);
+      this.sendTo(conn, { type: "gold-update", gold: info.gold });
+    }
 
     const pool = getPool(this.gameId);
     const cards: PokemonCardData[] = [];
@@ -199,7 +219,13 @@ export default class TcgServer implements Party.Server {
         count: info.collection.get(cardId) ?? 0,
       }),
     );
-    this.sendTo(conn, { type: "tcg-pack-opened", pack, newCounts });
+    this.sendTo(conn, {
+      type: "tcg-pack-opened",
+      pack,
+      newCounts,
+      freePacks: info.freePacks,
+      usedFreePack,
+    });
   }
 
   private drawCard(

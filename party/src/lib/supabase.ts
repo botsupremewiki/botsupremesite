@@ -5,6 +5,7 @@ export type ProfileRow = {
   is_admin: boolean;
   username: string;
   avatar_url: string | null;
+  tcg_free_packs?: Record<string, number> | null;
 };
 
 export function getSupabaseEnv(room: Party.Room) {
@@ -25,7 +26,7 @@ export async function fetchProfile(
   if (!env) return null;
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=gold,is_admin,username,avatar_url`,
+      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=gold,is_admin,username,avatar_url,tcg_free_packs`,
       {
         headers: {
           apikey: env.key,
@@ -124,6 +125,43 @@ export async function fetchTcgCollection(
     return rows;
   } catch {
     return [];
+  }
+}
+
+/** Atomically consume one free TCG pack for the user.
+ *  Returns true when a free pack was decremented, false when there's none. */
+export async function consumeTcgFreePack(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+): Promise<boolean> {
+  const env = getSupabaseEnv(room);
+  if (!env) return false;
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/rpc/consume_tcg_free_pack`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ p_user_id: authId, p_game_id: gameId }),
+      },
+    );
+    if (!resp.ok) {
+      console.warn(
+        `[tcg] consume_tcg_free_pack failed ${resp.status}:`,
+        await resp.text().catch(() => ""),
+      );
+      return false;
+    }
+    const data = (await resp.json()) as boolean | { result?: boolean };
+    return typeof data === "boolean" ? data : !!data?.result;
+  } catch (err) {
+    console.warn("[tcg] consume_tcg_free_pack threw:", err);
+    return false;
   }
 }
 

@@ -53,3 +53,81 @@ begin
   end loop;
 end;
 $$;
+
+-- ───────────────────── Free starter packs ─────────────────────
+-- A per-game counter of "free packs" stored as JSONB on the profile so we
+-- can grant boosters to brand-new users (and existing ones, retroactively)
+-- without bumping their gold balance.
+
+alter table public.profiles
+  add column if not exists tcg_free_packs jsonb not null default '{}'::jsonb;
+
+-- Grant 10 free Pokémon packs to every account that doesn't already have
+-- a counter (covers existing users on first migration; safe to re-run).
+update public.profiles
+set tcg_free_packs = jsonb_set(
+  coalesce(tcg_free_packs, '{}'::jsonb),
+  array['pokemon'],
+  to_jsonb(10)
+)
+where not (coalesce(tcg_free_packs, '{}'::jsonb) ? 'pokemon');
+
+-- Update the new-user trigger so freshly signed-up players get the same
+-- 10 free Pokémon packs at signup.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, username, avatar_url, tcg_free_packs)
+  values (
+    new.id,
+    coalesce(
+      new.raw_user_meta_data ->> 'full_name',
+      new.raw_user_meta_data ->> 'name',
+      new.raw_user_meta_data ->> 'user_name',
+      'Joueur-' || substring(new.id::text, 1, 6)
+    ),
+    new.raw_user_meta_data ->> 'avatar_url',
+    '{"pokemon": 10}'::jsonb
+  );
+  return new;
+end;
+$$;
+
+-- Atomic consume helper: subtracts 1 from the counter when there's stock,
+-- returns true if a free pack was used, false otherwise. The PartyKit
+-- server calls this *before* deducting OS so we never burn both.
+create or replace function public.consume_tcg_free_pack(
+  p_user_id uuid,
+  p_game_id text
+) returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  free_count int;
+begin
+  select coalesce((tcg_free_packs->>p_game_id)::int, 0) into free_count
+  from public.profiles
+  where id = p_user_id
+  for update;
+
+  if free_count > 0 then
+    update public.profiles
+    set
+      tcg_free_packs = jsonb_set(
+        coalesce(tcg_free_packs, '{}'::jsonb),
+        array[p_game_id],
+        to_jsonb(free_count - 1)
+      ),
+      updated_at = now()
+    where id = p_user_id;
+    return true;
+  end if;
+  return false;
+end;
+$$;
