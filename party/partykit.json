@@ -10,7 +10,7 @@
     "hilo": "src/hilo.ts",
     "poker": "src/poker.ts",
     "tcg": "src/tcg.ts",
-    "battle-lobby": "src/battle-lobby.ts",
+    "battlelobby": "src/battle-lobby.ts",
     "battle": "src/battle.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",

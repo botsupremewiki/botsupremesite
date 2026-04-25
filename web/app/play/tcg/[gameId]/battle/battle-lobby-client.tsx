@@ -100,7 +100,7 @@ export function BattleLobbyClient({
     const params = new URLSearchParams();
     params.set("authId", profile.id);
     params.set("name", profile.username);
-    const url = `${scheme}://${partyHost}/parties/battle-lobby/${gameId}?${params.toString()}`;
+    const url = `${scheme}://${partyHost}/parties/battlelobby/${gameId}?${params.toString()}`;
     const ws = new WebSocket(url);
     lobbyWsRef.current = ws;
     ws.addEventListener("open", () => {
