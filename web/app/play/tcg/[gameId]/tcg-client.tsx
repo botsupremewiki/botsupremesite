@@ -294,13 +294,13 @@ export function TcgClient({
               highlight
             />
             <SectionCard
+              href={`/play/tcg/${gameId}/market`}
               icon="💱"
               title="Marché"
               description="Acheter / vendre les cartes · favoris · recherche."
               accent="text-emerald-200"
-              border="border-emerald-400/30"
-              gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.08),transparent_70%)]"
-              soon
+              border="border-emerald-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
             />
             <SectionCard
               icon="🎯"

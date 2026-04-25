@@ -1,0 +1,619 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
+import {
+  POKEMON_BASE_SET,
+  POKEMON_BASE_SET_BY_ID,
+} from "@shared/tcg-pokemon-base";
+import type {
+  PokemonCardData,
+  PokemonEnergyType,
+  TcgGameId,
+  TcgRarity,
+} from "@shared/types";
+import { TCG_GAMES } from "@shared/types";
+import type { Profile } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/client";
+import { UserPill } from "@/components/user-pill";
+import type { MarketListing } from "./page";
+
+type Tab = "buy" | "mine" | "favs";
+
+const RARITY_COLOR: Record<TcgRarity, string> = {
+  common: "border-zinc-500/40",
+  energy: "border-zinc-500/40",
+  uncommon: "border-emerald-400/50",
+  rare: "border-sky-400/60",
+  "holo-rare": "border-amber-300/70",
+};
+
+const TYPE_GLYPH: Record<PokemonEnergyType, string> = {
+  fire: "🔥",
+  water: "💧",
+  grass: "🍃",
+  lightning: "⚡",
+  psychic: "🌀",
+  fighting: "👊",
+  colorless: "⭐",
+};
+
+export function MarketClient({
+  profile,
+  gameId,
+  initialActive,
+  initialMine,
+  myCollection,
+  favoriteIds,
+}: {
+  profile: Profile | null;
+  gameId: TcgGameId;
+  initialActive: MarketListing[];
+  initialMine: MarketListing[];
+  myCollection: { card_id: string; count: number }[];
+  favoriteIds: string[];
+}) {
+  const router = useRouter();
+  const game = TCG_GAMES[gameId];
+  const cardById = POKEMON_BASE_SET_BY_ID;
+
+  const [tab, setTab] = useState<Tab>("buy");
+  const [search, setSearch] = useState("");
+  const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
+  const [activeListings] = useState<MarketListing[]>(initialActive);
+  const [myListings] = useState<MarketListing[]>(initialMine);
+  const [favs, setFavs] = useState<Set<string>>(new Set(favoriteIds));
+  const [sellOpen, setSellOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const supabase = useMemo(() => createClient(), []);
+
+  function applyFilters(rows: MarketListing[]): MarketListing[] {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      const card = cardById.get(r.card_id);
+      if (!card) return false;
+      if (rarityFilter && card.rarity !== rarityFilter) return false;
+      if (q && !card.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  const visibleActive = useMemo(
+    () =>
+      applyFilters(activeListings).sort((a, b) => a.price_os - b.price_os),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeListings, search, rarityFilter],
+  );
+  const visibleMine = useMemo(
+    () => applyFilters(myListings),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [myListings, search, rarityFilter],
+  );
+
+  // Pour l'onglet Favoris : on regroupe les listings actifs par card_id
+  // pour ne montrer que les cartes en favoris, avec la meilleure offre.
+  const favListings = useMemo(() => {
+    const byCard = new Map<string, MarketListing>();
+    for (const l of activeListings) {
+      if (!favs.has(l.card_id)) continue;
+      const existing = byCard.get(l.card_id);
+      if (!existing || l.price_os < existing.price_os) {
+        byCard.set(l.card_id, l);
+      }
+    }
+    const list = Array.from(byCard.values());
+    return applyFilters(list).sort((a, b) => a.price_os - b.price_os);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeListings, favs, search, rarityFilter]);
+
+  async function toggleFav(cardId: string) {
+    if (!profile || !supabase) return;
+    const isFav = favs.has(cardId);
+    const next = new Set(favs);
+    if (isFav) next.delete(cardId);
+    else next.add(cardId);
+    setFavs(next);
+    if (isFav) {
+      await supabase
+        .from("tcg_card_favorites")
+        .delete()
+        .eq("user_id", profile.id)
+        .eq("game_id", gameId)
+        .eq("card_id", cardId);
+    } else {
+      await supabase
+        .from("tcg_card_favorites")
+        .insert({
+          user_id: profile.id,
+          game_id: gameId,
+          card_id: cardId,
+        });
+    }
+  }
+
+  async function buyListing(listing: MarketListing) {
+    if (!profile || !supabase) return;
+    setErrorMsg(null);
+    setOkMsg(null);
+    const { data, error } = await supabase.rpc("buy_tcg_listing", {
+      p_listing_id: listing.id,
+    });
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    const r = data as { ok?: boolean; error?: string; price?: number };
+    if (!r?.ok) {
+      setErrorMsg(r?.error ?? "Achat impossible.");
+      return;
+    }
+    setOkMsg(
+      `✓ Carte achetée pour ${(r.price ?? 0).toLocaleString("fr-FR")} OS.`,
+    );
+    startTransition(() => router.refresh());
+  }
+
+  async function cancelListing(listing: MarketListing) {
+    if (!profile || !supabase) return;
+    setErrorMsg(null);
+    setOkMsg(null);
+    const { error } = await supabase.rpc("cancel_tcg_listing", {
+      p_listing_id: listing.id,
+    });
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setOkMsg("✓ Annonce annulée — la carte est revenue dans ta collection.");
+    startTransition(() => router.refresh());
+  }
+
+  async function createListing(cardId: string, price: number) {
+    if (!profile || !supabase) return;
+    setErrorMsg(null);
+    setOkMsg(null);
+    const { error } = await supabase.rpc("create_tcg_listing", {
+      p_game_id: gameId,
+      p_card_id: cardId,
+      p_price_os: price,
+    });
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setOkMsg("✓ Annonce créée.");
+    setSellOpen(false);
+    startTransition(() => router.refresh());
+  }
+
+  return (
+    <div className="flex flex-1 flex-col">
+      <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/play/tcg/${gameId}`}
+            className="text-zinc-400 transition-colors hover:text-zinc-100"
+          >
+            ← {game.name}
+          </Link>
+          <div className="h-4 w-px bg-white/10" />
+          <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+          <span className="text-xs text-zinc-500">💱 Marché</span>
+        </div>
+        {profile ? (
+          <UserPill profile={profile} variant="play" />
+        ) : (
+          <span className="text-xs text-zinc-500">Invité</span>
+        )}
+      </header>
+
+      <main className={`flex-1 overflow-auto p-6 ${game.gradient}`}>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100">
+                💱 Marché
+              </h1>
+              <p className="mt-1 text-sm text-zinc-400">
+                Achète ou vends des cartes contre Or Suprême. Échange
+                sécurisé et atomique.
+              </p>
+            </div>
+            {profile && (
+              <button
+                onClick={() => setSellOpen(true)}
+                className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
+              >
+                ➕ Vendre une carte
+              </button>
+            )}
+          </div>
+
+          {!profile && (
+            <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
+              Connecte-toi pour acheter / vendre.
+            </div>
+          )}
+
+          {(errorMsg || okMsg) && (
+            <div
+              className={`rounded-md border px-3 py-2 text-sm ${
+                errorMsg
+                  ? "border-rose-500/40 bg-rose-500/10 text-rose-300"
+                  : "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"
+              }`}
+            >
+              {errorMsg ?? okMsg}
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex flex-wrap gap-2 border-b border-white/10 pb-2">
+            <TabButton
+              active={tab === "buy"}
+              onClick={() => setTab("buy")}
+              label={`🛒 Acheter (${activeListings.length})`}
+            />
+            <TabButton
+              active={tab === "mine"}
+              onClick={() => setTab("mine")}
+              label={`💰 Mes ventes (${myListings.length})`}
+            />
+            <TabButton
+              active={tab === "favs"}
+              onClick={() => setTab("favs")}
+              label={`⭐ Favoris (${favs.size})`}
+            />
+          </div>
+
+          {/* Search + filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Rechercher par nom…"
+              className="flex-1 min-w-[200px] rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none"
+            />
+            <select
+              value={rarityFilter ?? ""}
+              onChange={(e) =>
+                setRarityFilter((e.target.value as TcgRarity) || null)
+              }
+              className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
+            >
+              <option value="">Toutes raretés</option>
+              <option value="holo-rare">Holo</option>
+              <option value="rare">Rare</option>
+              <option value="uncommon">Peu commune</option>
+              <option value="common">Commune</option>
+              <option value="energy">Énergie</option>
+            </select>
+          </div>
+
+          {/* Tab content */}
+          {tab === "buy" && (
+            <ListingsGrid
+              listings={visibleActive}
+              cardById={cardById}
+              favs={favs}
+              onToggleFav={toggleFav}
+              onBuy={buyListing}
+              isPending={isPending}
+              isSelfId={profile?.id ?? null}
+              empty="Aucune annonce active. Sois le premier à vendre !"
+            />
+          )}
+          {tab === "mine" && (
+            <ListingsGrid
+              listings={visibleMine}
+              cardById={cardById}
+              favs={favs}
+              onToggleFav={toggleFav}
+              onCancel={cancelListing}
+              isPending={isPending}
+              isSelfId={profile?.id ?? null}
+              empty="Tu n'as aucune annonce active."
+            />
+          )}
+          {tab === "favs" && (
+            <ListingsGrid
+              listings={favListings}
+              cardById={cardById}
+              favs={favs}
+              onToggleFav={toggleFav}
+              onBuy={buyListing}
+              isPending={isPending}
+              isSelfId={profile?.id ?? null}
+              empty="Aucun favori (clique l'étoile sur une carte pour l'ajouter), ou aucune annonce active sur tes favoris."
+            />
+          )}
+        </div>
+
+        {sellOpen && profile && (
+          <SellModal
+            myCollection={myCollection}
+            cardById={cardById}
+            onCancel={() => setSellOpen(false)}
+            onSubmit={createListing}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+        active
+          ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
+          : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ListingsGrid({
+  listings,
+  cardById,
+  favs,
+  onToggleFav,
+  onBuy,
+  onCancel,
+  isPending,
+  isSelfId,
+  empty,
+}: {
+  listings: MarketListing[];
+  cardById: Map<string, PokemonCardData>;
+  favs: Set<string>;
+  onToggleFav: (cardId: string) => void;
+  onBuy?: (listing: MarketListing) => void;
+  onCancel?: (listing: MarketListing) => void;
+  isPending: boolean;
+  isSelfId: string | null;
+  empty: string;
+}) {
+  if (listings.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">
+        {empty}
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {listings.map((l) => {
+        const card = cardById.get(l.card_id);
+        if (!card) return null;
+        const isMine = l.seller_id === isSelfId;
+        const isFav = favs.has(l.card_id);
+        return (
+          <div
+            key={l.id}
+            className={`flex flex-col gap-2 rounded-xl border bg-black/40 p-2 ${
+              RARITY_COLOR[card.rarity] ?? RARITY_COLOR.common
+            }`}
+          >
+            <div className="relative">
+              <button
+                onClick={() => onToggleFav(l.card_id)}
+                className="absolute right-1 top-1 z-10 rounded-full bg-black/60 px-1 text-sm hover:bg-black/80"
+                title={isFav ? "Retirer des favoris" : "Ajouter aux favoris"}
+              >
+                {isFav ? "⭐" : "☆"}
+              </button>
+              <MiniCardFace card={card} />
+            </div>
+            <div className="flex items-center justify-between gap-1 px-1 text-xs">
+              <span className="truncate font-semibold text-zinc-100">
+                {card.name}
+              </span>
+              <span className="tabular-nums font-bold text-amber-300">
+                {l.price_os.toLocaleString("fr-FR")} OS
+              </span>
+            </div>
+            {onBuy && !isMine && (
+              <button
+                onClick={() => onBuy(l)}
+                disabled={isPending}
+                className="rounded-md bg-emerald-500 px-2 py-1 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+              >
+                Acheter
+              </button>
+            )}
+            {onBuy && isMine && (
+              <div className="rounded-md bg-white/5 px-2 py-1 text-center text-[10px] text-zinc-400">
+                ta vente
+              </div>
+            )}
+            {onCancel && (
+              <button
+                onClick={() => onCancel(l)}
+                disabled={isPending}
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+              >
+                Annuler
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MiniCardFace({ card }: { card: PokemonCardData }) {
+  if (card.kind === "energy") {
+    return (
+      <div className="flex aspect-[5/7] flex-col items-center justify-center gap-1 rounded-md bg-zinc-900/80 p-2">
+        <div className="text-3xl">{card.art}</div>
+        <div className="text-[10px] text-zinc-300">{card.name}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex aspect-[5/7] flex-col gap-1 rounded-md bg-zinc-900/80 p-2">
+      <div className="flex items-center justify-between text-[9px]">
+        <span className="font-semibold text-zinc-100">{card.name}</span>
+        <span className="tabular-nums text-rose-300">{card.hp}</span>
+      </div>
+      <div className="flex flex-1 items-center justify-center text-3xl">
+        {card.art}
+      </div>
+      <div className="text-[8px] text-zinc-400">
+        {TYPE_GLYPH[card.type]} {card.stage}
+      </div>
+    </div>
+  );
+}
+
+function SellModal({
+  myCollection,
+  cardById,
+  onCancel,
+  onSubmit,
+}: {
+  myCollection: { card_id: string; count: number }[];
+  cardById: Map<string, PokemonCardData>;
+  onCancel: () => void;
+  onSubmit: (cardId: string, price: number) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
+  const [price, setPrice] = useState<number>(500);
+
+  const sellable = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...POKEMON_BASE_SET]
+      .filter((c) => {
+        const owned = myCollection.find((row) => row.card_id === c.id);
+        if (!owned || owned.count <= 0) return false;
+        if (q && !c.name.toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [myCollection, search]);
+
+  const pickedCard = picked ? cardById.get(picked) : null;
+  const pickedCount =
+    myCollection.find((c) => c.card_id === picked)?.count ?? 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-zinc-100">
+            ➕ Vendre une carte
+          </h2>
+          <button
+            onClick={onCancel}
+            className="text-zinc-400 hover:text-zinc-100"
+          >
+            ✕
+          </button>
+        </div>
+
+        {!picked ? (
+          <>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Rechercher dans ma collection…"
+              className="rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none"
+            />
+            <div className="flex flex-1 flex-col gap-1.5 overflow-auto">
+              {sellable.length === 0 ? (
+                <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-sm text-zinc-500">
+                  Aucune carte disponible à vendre. Ouvre des boosters !
+                </div>
+              ) : (
+                sellable.map((c) => {
+                  const count =
+                    myCollection.find((row) => row.card_id === c.id)?.count ??
+                    0;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setPicked(c.id)}
+                      className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/10"
+                    >
+                      <span className="font-semibold">
+                        {c.art} {c.name}
+                      </span>
+                      <span className="text-xs text-zinc-500">×{count}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-sm text-zinc-200">
+              <span className="font-semibold">
+                {pickedCard?.art} {pickedCard?.name}
+              </span>{" "}
+              <span className="text-xs text-zinc-500">
+                · {pickedCount} en stock
+              </span>
+            </div>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs uppercase tracking-widest text-zinc-400">
+                Prix (Or Suprême — min 100)
+              </span>
+              <input
+                type="number"
+                min={100}
+                step={100}
+                value={price}
+                onChange={(e) =>
+                  setPrice(Math.max(100, Number(e.target.value) || 0))
+                }
+                className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-zinc-100 focus:border-amber-400/50 focus:outline-none"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setPicked(null)}
+                className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300 hover:bg-white/10"
+              >
+                ← Choisir une autre
+              </button>
+              <button
+                onClick={() => onSubmit(picked, price)}
+                className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
+              >
+                Mettre en vente
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
