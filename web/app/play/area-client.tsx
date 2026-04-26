@@ -368,19 +368,29 @@ export function AreaClient({
 
         <ChatPanel
           channels={buildChannels({
-            localMessages: chat,
-            localOnSend: (text) => sendRawChat(text),
-            localEnabled: status === "connected",
+            // L'aire actuelle (plaza / casino) devient l'onglet ZONE :
+            // chat persistant scopé à cette section, partagé entre le hub
+            // et tous les sous-écrans (tables BJ, etc.). Pas de
+            // "proximity" pour les hubs (réservée au multijoueur
+            // spécifique : table BJ, combat Pokémon…).
+            zone: zoneId
+              ? {
+                  label: zoneLabel ?? areaLabel,
+                  messages: zoneChat.messages,
+                  onSend: zoneChat.send,
+                  enabled: zoneChat.status === "connected",
+                }
+              : {
+                  // Pas de zone aux configurée → on retombe sur le chat
+                  // de la room main (cas plaza pour l'instant).
+                  label: areaLabel,
+                  messages: chat,
+                  onSend: (text) => sendRawChat(text),
+                  enabled: status === "connected",
+                },
             globalMessages: globalChat.messages,
             globalOnSend: globalChat.send,
             globalEnabled: globalChat.status === "connected",
-            zoneMessages: zoneId ? zoneChat.messages : undefined,
-            zoneOnSend: zoneId ? zoneChat.send : undefined,
-            zoneEnabled: zoneId ? zoneChat.status === "connected" : false,
-            zoneLabel,
-            zoneReason: zoneId
-              ? undefined
-              : "Aucune zone sur la plaza",
             dmsReason: profile
               ? undefined
               : "Connecte-toi avec Discord pour les DMs",
@@ -410,60 +420,71 @@ export function AreaClient({
   );
 }
 
+/** Construit les channels du chat. Chaque entrée est optionnelle :
+ *  - proximity : chat éphémère pour ce qu'on est en train de faire en
+ *    multijoueur (table BJ, combat Pokémon…). Disparaît quand tout le
+ *    monde quitte la room.
+ *  - zone : chat persistant pour la section du site (Plaza / Casino / TCG…).
+ *  - global : chat site-wide, toujours présent.
+ *  - dms : direct messages.
+ */
 export function buildChannels({
-  localMessages,
-  localOnSend,
-  localEnabled,
+  proximity,
+  zone,
   globalMessages,
   globalOnSend,
   globalEnabled,
-  zoneMessages,
-  zoneOnSend,
-  zoneEnabled,
-  zoneLabel,
-  zoneReason,
   dmsReason,
 }: {
-  localMessages: ChatMessage[];
-  localOnSend: (text: string) => void;
-  localEnabled: boolean;
+  proximity?: {
+    label: string;
+    messages: ChatMessage[];
+    onSend: (text: string) => void;
+    enabled: boolean;
+  };
+  zone?: {
+    label: string;
+    messages: ChatMessage[];
+    onSend: (text: string) => void;
+    enabled: boolean;
+    disabledReason?: string;
+  };
   globalMessages: ChatMessage[];
   globalOnSend: (text: string) => void;
   globalEnabled: boolean;
-  zoneMessages?: ChatMessage[];
-  zoneOnSend?: (text: string) => void;
-  zoneEnabled: boolean;
-  zoneLabel?: string;
-  zoneReason?: string;
   dmsReason?: string;
 }): ChatChannel[] {
-  return [
-    {
-      id: "local",
-      label: "Ici",
-      messages: localMessages,
-      onSend: localEnabled ? localOnSend : undefined,
-    },
-    {
+  const channels: ChatChannel[] = [];
+  if (proximity) {
+    channels.push({
+      id: "proximity",
+      label: proximity.label,
+      messages: proximity.messages,
+      onSend: proximity.enabled ? proximity.onSend : undefined,
+    });
+  }
+  if (zone) {
+    channels.push({
       id: "zone",
-      label: zoneLabel ?? "Zone",
-      messages: zoneMessages ?? [],
-      onSend: zoneEnabled && zoneOnSend ? zoneOnSend : undefined,
-      disabledReason: zoneMessages ? undefined : zoneReason,
-    },
-    {
-      id: "global",
-      label: "Site",
-      messages: globalMessages,
-      onSend: globalEnabled ? globalOnSend : undefined,
-    },
-    {
-      id: "dms",
-      label: "DMs",
-      messages: [],
-      disabledReason: dmsReason,
-    },
-  ];
+      label: zone.label,
+      messages: zone.messages,
+      onSend: zone.enabled && zone.onSend ? zone.onSend : undefined,
+      disabledReason: zone.disabledReason,
+    });
+  }
+  channels.push({
+    id: "global",
+    label: "Global",
+    messages: globalMessages,
+    onSend: globalEnabled ? globalOnSend : undefined,
+  });
+  channels.push({
+    id: "dms",
+    label: "DMs",
+    messages: [],
+    disabledReason: dmsReason,
+  });
+  return channels;
 }
 
 function StatusIndicator({ status }: { status: ConnStatus }) {

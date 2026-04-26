@@ -11,6 +11,7 @@ import type {
   BattleSelfState,
   BattleServerMessage,
   BattleState,
+  ChatMessage,
   PokemonCardData,
   PokemonEnergyType,
   TcgGameId,
@@ -19,6 +20,7 @@ import { TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { useRegisterProximityChat } from "@/app/play/proximity-chat-context";
 import { CardFace } from "../../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
@@ -55,6 +57,9 @@ export function BattleClient({
     botWins: number;
     granted: boolean;
   } | null>(null);
+  // Chat propre à la table de combat — éphémère (la room PartyKit
+  // hiberne quand vide). Exposé en "proximity" via le sidebar global.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     if (!profile) {
@@ -102,6 +107,9 @@ export function BattleClient({
         case "battle-quest-reward":
           setQuestToast({ botWins: msg.botWins, granted: msg.granted });
           break;
+        case "chat":
+          setChatMessages((prev) => [...prev.slice(-49), msg.message]);
+          break;
       }
     });
     return () => {
@@ -137,6 +145,19 @@ export function BattleClient({
   const promoteActive = (benchIndex: number) =>
     send({ type: "battle-promote-active", benchIndex });
   const endTurn = () => send({ type: "battle-end-turn" });
+  const sendChat = useCallback(
+    (text: string) => send({ type: "chat", text }),
+    [send],
+  );
+
+  // Pousse le chat de la table dans le sidebar global (onglet "Combat").
+  useRegisterProximityChat({
+    label: "Combat",
+    messages: chatMessages,
+    onSend: sendChat,
+    enabled: status === "connected",
+  });
+
   const concede = () => {
     if (!confirm("Abandonner la partie ?")) return;
     send({ type: "battle-concede" });

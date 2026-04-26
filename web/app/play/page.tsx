@@ -16,6 +16,8 @@ export default async function PlayPage() {
       roomName="plaza"
       areaLabel="Plaza"
       backHref="/"
+      zoneId="plaza"
+      zoneLabel="Plaza"
     />
   );
 }

@@ -391,16 +391,16 @@ export function SlotsClient({
 
         <ChatPanel
           channels={buildChannels({
-            localMessages: chat,
-            localOnSend: sendRawChat,
-            localEnabled: status === "connected",
+            // Slots est un jeu solo : pas de proximity.
+            zone: {
+              label: "Casino",
+              messages: zoneChat.messages,
+              onSend: zoneChat.send,
+              enabled: zoneChat.status === "connected",
+            },
             globalMessages: globalChat.messages,
             globalOnSend: globalChat.send,
             globalEnabled: globalChat.status === "connected",
-            zoneMessages: zoneChat.messages,
-            zoneOnSend: zoneChat.send,
-            zoneEnabled: zoneChat.status === "connected",
-            zoneLabel: "Casino",
             dmsReason: profile
               ? undefined
               : "Connecte-toi avec Discord pour les DMs",

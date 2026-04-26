@@ -1,21 +1,27 @@
 import { getProfile } from "@/lib/auth";
-import { GlobalChatSidebar } from "./global-chat-sidebar";
+import { WithGlobalChatInner } from "./with-global-chat-inner";
 
-/** Shared layout wrapper : zone de jeu (children) à gauche en flex-1,
- *  chat sidebar globale (Global + DMs) à droite. À utiliser dans les
- *  layouts /play/{tcg,casino,…}/layout.tsx pour uniformiser. */
+/** Layout wrapper : zone de jeu (children) à gauche en flex-1, chat
+ *  sidebar (Proximity? · Zone · Global · DMs) à droite. */
 export async function WithGlobalChat({
   children,
+  zoneId,
+  zoneLabel,
 }: {
   children: React.ReactNode;
+  /** Identifiant pour le chat zone (party "zone" room=zoneId). */
+  zoneId?: string;
+  /** Libellé d'onglet pour la zone (ex "TCG"). Requis avec zoneId. */
+  zoneLabel?: string;
 }) {
   const profile = await getProfile();
   return (
-    <div className="flex h-full flex-1 overflow-hidden">
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {children}
-      </div>
-      <GlobalChatSidebar profile={profile} />
-    </div>
+    <WithGlobalChatInner
+      profile={profile}
+      zoneId={zoneId}
+      zoneLabel={zoneLabel}
+    >
+      {children}
+    </WithGlobalChatInner>
   );
 }

@@ -7,5 +7,9 @@ export default async function TcgLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <WithGlobalChat>{children}</WithGlobalChat>;
+  return (
+    <WithGlobalChat zoneId="tcg" zoneLabel="TCG">
+      {children}
+    </WithGlobalChat>
+  );
 }

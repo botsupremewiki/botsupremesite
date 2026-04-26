@@ -8,13 +8,28 @@ import { useDmHub } from "./use-dm-hub";
 import { DmView } from "./dm-view";
 
 /**
- * Sidebar chat panel disponible sur toutes les pages /play hors plaza.
- * 2 canaux : Global (toutes les rooms) + DM (privés).
+ * Sidebar chat dispo sur les pages "interface" (TCG, RPG…) — zones sans
+ * avatars. 3-4 onglets selon le contexte :
+ *  - proximity : injecté par certaines pages (combat Pokémon, etc.)
+ *  - zone : chat persistant pour la section (TCG, …) si zoneId fourni
+ *  - global : chat site-wide
+ *  - dms : direct messages
  */
 export function GlobalChatSidebar({
   profile,
+  zoneId,
+  zoneLabel,
+  proximity,
 }: {
   profile: Profile | null;
+  zoneId?: string;
+  zoneLabel?: string;
+  proximity?: {
+    label: string;
+    messages: import("@shared/types").ChatMessage[];
+    onSend: (text: string) => void;
+    enabled: boolean;
+  };
 }) {
   const globalChat = useAuxChat({
     partyName: "global",
@@ -26,6 +41,16 @@ export function GlobalChatSidebar({
     enabled: !!profile,
   });
 
+  const zoneChat = useAuxChat({
+    partyName: "zone",
+    room: zoneId ?? "disabled",
+    query: {
+      name: profile?.username,
+      authId: profile?.id,
+    },
+    enabled: !!profile && !!zoneId,
+  });
+
   const dmHub = useDmHub({
     authId: profile?.id ?? null,
     username: profile?.username ?? null,
@@ -33,24 +58,56 @@ export function GlobalChatSidebar({
   });
 
   const channels = useMemo<ChatChannel[]>(() => {
-    return [
-      {
-        id: "global",
-        label: "Global",
-        messages: globalChat.messages,
-        onSend: globalChat.send,
+    const list: ChatChannel[] = [];
+    if (proximity) {
+      list.push({
+        id: "proximity",
+        label: proximity.label,
+        messages: proximity.messages,
+        onSend: proximity.enabled ? proximity.onSend : undefined,
+      });
+    }
+    if (zoneId && zoneLabel) {
+      list.push({
+        id: "zone",
+        label: zoneLabel,
+        messages: zoneChat.messages,
+        onSend:
+          zoneChat.status === "connected" ? zoneChat.send : undefined,
         disabledReason: !profile
           ? "Connecte-toi pour discuter."
           : undefined,
-      },
-      {
-        id: "dms",
-        label: "DMs",
-        messages: [],
-        disabledReason: !profile ? "Connecte-toi pour discuter." : undefined,
-      },
-    ];
-  }, [globalChat.messages, globalChat.send, profile]);
+      });
+    }
+    list.push({
+      id: "global",
+      label: "Global",
+      messages: globalChat.messages,
+      onSend: globalChat.send,
+      disabledReason: !profile ? "Connecte-toi pour discuter." : undefined,
+    });
+    list.push({
+      id: "dms",
+      label: "DMs",
+      messages: [],
+      disabledReason: !profile ? "Connecte-toi pour discuter." : undefined,
+    });
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    globalChat.messages,
+    globalChat.send,
+    zoneChat.messages,
+    zoneChat.send,
+    zoneChat.status,
+    proximity?.messages,
+    proximity?.onSend,
+    proximity?.enabled,
+    proximity?.label,
+    zoneId,
+    zoneLabel,
+    profile,
+  ]);
 
   return (
     <ChatPanel

@@ -10,7 +10,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import type { ChatMessage } from "@shared/types";
 
-export type ChatTabId = "local" | "zone" | "global" | "dms";
+export type ChatTabId = "proximity" | "zone" | "global" | "dms";
 
 export type ChatChannel = {
   id: ChatTabId;
@@ -20,7 +20,7 @@ export type ChatChannel = {
   disabledReason?: string;
 };
 
-const TAB_ORDER: ChatTabId[] = ["local", "zone", "global", "dms"];
+const TAB_ORDER: ChatTabId[] = ["proximity", "zone", "global", "dms"];
 
 const EXPANDED_WIDTH = 320;
 const COLLAPSED_WIDTH = 36;
@@ -41,7 +41,7 @@ export function ChatPanel({
   const byId = new Map(channels.map((c) => [c.id, c]));
   const [active, setActive] = useState<ChatTabId>(() => {
     const first = channels.find((c) => !c.disabledReason);
-    return first?.id ?? "local";
+    return first?.id ?? "global";
   });
   const [collapsed, setCollapsed] = useState(false);
   const activeChannel = byId.get(active);
