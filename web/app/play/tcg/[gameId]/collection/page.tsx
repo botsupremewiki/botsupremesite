@@ -42,8 +42,8 @@ export default async function CollectionPage({
   const owned = Array.from(collection.values()).filter((n) => n > 0).length;
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
             href={`/play/tcg/${gameId}`}
