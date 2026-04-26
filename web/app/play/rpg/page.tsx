@@ -75,7 +75,6 @@ export default async function EternumHub() {
               accent="text-violet-200"
               border="border-violet-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.10),transparent_70%)]"
-              soon
             />
             <MenuButton
               href="/play/rpg/aventure"
