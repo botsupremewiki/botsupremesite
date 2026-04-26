@@ -1296,3 +1296,345 @@ export type BattleLobbyServerMessage =
   | { type: "queued"; position: number }
   | { type: "matched"; roomId: string; deckId: string }
   | { type: "lobby-error"; message: string };
+
+// ────────────────────────────── ETERNUM (RPG idle) ──────────────────────────
+// 4ᵉ univers. Héros + classe + élément + collection familiers + idle + combat
+// tour-par-tour. Voir memory/project_eternum_rpg.md pour la spec complète.
+
+export type EternumClassId =
+  | "warrior"
+  | "paladin"
+  | "assassin"
+  | "mage"
+  | "priest"
+  | "vampire";
+
+export type EternumElementId =
+  | "fire"
+  | "water"
+  | "wind"
+  | "earth"
+  | "light"
+  | "dark";
+
+export type EternumJobId =
+  | "blacksmith"
+  | "tanner"
+  | "weaver"
+  | "jeweler"
+  | "armorer"
+  | "baker";
+
+export type EternumRarity =
+  | "common"
+  | "rare"
+  | "epic"
+  | "legendary"
+  | "prismatic";
+
+export type EternumClassConfig = {
+  id: EternumClassId;
+  name: string;
+  glyph: string;
+  short: string;
+  role: string;
+  // Stats de base au niveau 1 — équilibrées pour qu'aucune classe ne
+  // domine (somme similaire ~282, profils variés).
+  baseStats: { hp: number; atk: number; def: number; spd: number };
+  // Croissance par niveau (linéaire).
+  growth: { hp: number; atk: number; def: number; spd: number };
+  // Sorts / passif décrits côté UI seulement pour MVP — les implémentations
+  // réelles (avec damage formulas) arriveront en Phase 4 (combat engine).
+  passiveName: string;
+  passiveText: string;
+  spell1Name: string;
+  spell2Name: string;
+  ultimateName: string;
+  // Tailwind theme.
+  accent: string;
+  border: string;
+  gradient: string;
+};
+
+export const ETERNUM_CLASSES: Record<EternumClassId, EternumClassConfig> = {
+  warrior: {
+    id: "warrior",
+    name: "Guerrier",
+    glyph: "⚔️",
+    short: "Tank physique",
+    role: "Tank mêlée — encaisse, immobilise les ennemis.",
+    baseStats: { hp: 220, atk: 28, def: 22, spd: 12 },
+    growth: { hp: 18, atk: 2.5, def: 2.0, spd: 0.6 },
+    passiveName: "Endurance",
+    passiveText: "+15% HP max et 10% de chance d'ignorer un coup critique.",
+    spell1Name: "Frappe lourde",
+    spell2Name: "Provocation (taunt)",
+    ultimateName: "Tornade d'acier",
+    accent: "text-amber-200",
+    border: "border-amber-400/40",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.10),transparent_70%)]",
+  },
+  paladin: {
+    id: "paladin",
+    name: "Paladin",
+    glyph: "🛡️",
+    short: "Tank-soigneur",
+    role: "Hybride tank/heal — protège l'équipe et restaure les PV.",
+    baseStats: { hp: 200, atk: 22, def: 24, spd: 13 },
+    growth: { hp: 16, atk: 2.0, def: 2.2, spd: 0.7 },
+    passiveName: "Aura sacrée",
+    passiveText: "Heal de 3% HP max à toute l'équipe début de tour.",
+    spell1Name: "Bouclier de foi",
+    spell2Name: "Lumière purifiante",
+    ultimateName: "Jugement divin",
+    accent: "text-yellow-100",
+    border: "border-yellow-300/40",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(254,240,138,0.10),transparent_70%)]",
+  },
+  assassin: {
+    id: "assassin",
+    name: "Assassin",
+    glyph: "🗡️",
+    short: "Burst phys mêlée",
+    role: "Furtif — élimine les cibles fragiles en 1 ou 2 coups.",
+    baseStats: { hp: 150, atk: 36, def: 12, spd: 22 },
+    growth: { hp: 12, atk: 3.2, def: 1.0, spd: 1.2 },
+    passiveName: "Frappe sournoise",
+    passiveText: "+30% dégâts critiques et +10% chance crit.",
+    spell1Name: "Lame ombre",
+    spell2Name: "Esquive (1 tour invisible)",
+    ultimateName: "Dance des lames",
+    accent: "text-violet-200",
+    border: "border-violet-400/40",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.10),transparent_70%)]",
+  },
+  mage: {
+    id: "mage",
+    name: "Mage",
+    glyph: "🔥",
+    short: "DPS magique AoE",
+    role: "Sorts de zone — gros dégâts à toute l'équipe ennemie.",
+    baseStats: { hp: 140, atk: 38, def: 10, spd: 16 },
+    growth: { hp: 10, atk: 3.5, def: 0.8, spd: 0.9 },
+    passiveName: "Maîtrise élémentaire",
+    passiveText: "+20% dégâts du sort élémentaire correspondant à ton élément.",
+    spell1Name: "Boule de feu",
+    spell2Name: "Mur élémentaire",
+    ultimateName: "Cataclysme",
+    accent: "text-rose-200",
+    border: "border-rose-400/40",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.10),transparent_70%)]",
+  },
+  priest: {
+    id: "priest",
+    name: "Prêtre",
+    glyph: "✨",
+    short: "Buff / debuff",
+    role: "Support — booste l'équipe, affaiblit les ennemis.",
+    baseStats: { hp: 160, atk: 18, def: 14, spd: 18 },
+    growth: { hp: 13, atk: 1.6, def: 1.2, spd: 1.0 },
+    passiveName: "Bénédiction",
+    passiveText:
+      "Au début de chaque tour, +5% atk à un allié au hasard pour 2 tours.",
+    spell1Name: "Bénir (buff atk équipe)",
+    spell2Name: "Malédiction (debuff def ennemi)",
+    ultimateName: "Sermon divin",
+    accent: "text-sky-200",
+    border: "border-sky-400/40",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(125,211,252,0.10),transparent_70%)]",
+  },
+  vampire: {
+    id: "vampire",
+    name: "Vampire",
+    glyph: "🩸",
+    short: "Lifesteal",
+    role: "Soutenu par le sang — soigne en infligeant des dégâts.",
+    baseStats: { hp: 180, atk: 30, def: 14, spd: 17 },
+    growth: { hp: 14, atk: 2.6, def: 1.3, spd: 0.9 },
+    passiveName: "Soif éternelle",
+    passiveText: "Récupère 25% des dégâts infligés en HP.",
+    spell1Name: "Morsure",
+    spell2Name: "Brume sanguine (heal AoE alliés)",
+    ultimateName: "Réveil du Comte",
+    accent: "text-rose-300",
+    border: "border-rose-500/40",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(225,29,72,0.10),transparent_70%)]",
+  },
+};
+
+export type EternumElementConfig = {
+  id: EternumElementId;
+  name: string;
+  glyph: string;
+  beats: EternumElementId | null; // bat (cycle base)
+  unlockable: boolean; // true pour Lumière/Ombre — verrouillés au début
+  accent: string;
+};
+
+export const ETERNUM_ELEMENTS: Record<EternumElementId, EternumElementConfig> =
+  {
+    fire: {
+      id: "fire",
+      name: "Feu",
+      glyph: "🔥",
+      beats: "wind",
+      unlockable: false,
+      accent: "text-orange-300",
+    },
+    wind: {
+      id: "wind",
+      name: "Vent",
+      glyph: "🌪️",
+      beats: "earth",
+      unlockable: false,
+      accent: "text-emerald-200",
+    },
+    earth: {
+      id: "earth",
+      name: "Terre",
+      glyph: "🌍",
+      beats: "water",
+      unlockable: false,
+      accent: "text-amber-300",
+    },
+    water: {
+      id: "water",
+      name: "Eau",
+      glyph: "💧",
+      beats: "fire",
+      unlockable: false,
+      accent: "text-sky-300",
+    },
+    light: {
+      id: "light",
+      name: "Lumière",
+      glyph: "✨",
+      beats: "dark",
+      unlockable: true,
+      accent: "text-yellow-100",
+    },
+    dark: {
+      id: "dark",
+      name: "Ombre",
+      glyph: "🌑",
+      beats: "light",
+      unlockable: true,
+      accent: "text-violet-300",
+    },
+  };
+
+/** Matchup élémentaire : 1.5 = avantage, 0.7 = désavantage, 1.0 = neutre.
+ *  Light ↔ Dark se contrent mutuellement, neutres face aux 4 base. */
+export function eternumElementMultiplier(
+  attacker: EternumElementId,
+  defender: EternumElementId,
+): number {
+  const att = ETERNUM_ELEMENTS[attacker];
+  const def = ETERNUM_ELEMENTS[defender];
+  if (att.beats === defender) return 1.5;
+  if (def.beats === attacker) return 0.7;
+  return 1.0;
+}
+
+/** Stats calculées d'un héros à un niveau donné (sans équipement). */
+export function eternumHeroStats(
+  classId: EternumClassId,
+  level: number,
+): { hp: number; atk: number; def: number; spd: number } {
+  const c = ETERNUM_CLASSES[classId];
+  const lv = Math.max(1, Math.min(100, level));
+  return {
+    hp: Math.round(c.baseStats.hp + c.growth.hp * (lv - 1)),
+    atk: Math.round(c.baseStats.atk + c.growth.atk * (lv - 1)),
+    def: Math.round(c.baseStats.def + c.growth.def * (lv - 1)),
+    spd: Math.round(c.baseStats.spd + c.growth.spd * (lv - 1)),
+  };
+}
+
+/** Courbe XP : XP requis pour passer du niveau N → N+1.
+ *  Formule : 100 * N^1.6 (douce au début, plus raide à haut niveau). */
+export function eternumXpForNextLevel(currentLevel: number): number {
+  return Math.round(100 * Math.pow(currentLevel, 1.6));
+}
+
+export type EternumHero = {
+  classId: EternumClassId;
+  elementId: EternumElementId;
+  jobId: EternumJobId | null;
+  level: number;
+  xp: number;
+  evolutionStage: number;
+  prestigeCount: number;
+  energy: number;
+  energyUpdatedAt: number; // ms epoch
+  idleStage: number;
+  idleUpdatedAt: number; // ms epoch
+};
+
+export type EternumIdleCollection = {
+  osGained: number;
+  xpGained: number;
+  stage: number;
+  ticks: number;
+};
+
+// Métiers — config UI.
+export type EternumJobConfig = {
+  id: EternumJobId;
+  name: string;
+  glyph: string;
+  description: string;
+  classes: EternumClassId[]; // pour qui le métier crafte (vide = toutes)
+};
+
+export const ETERNUM_JOBS: Record<EternumJobId, EternumJobConfig> = {
+  blacksmith: {
+    id: "blacksmith",
+    name: "Forgeron",
+    glyph: "🔨",
+    description: "Crafte les armures lourdes (casque/plastron/pantalon/chaussures).",
+    classes: ["warrior", "paladin"],
+  },
+  tanner: {
+    id: "tanner",
+    name: "Tanneur",
+    glyph: "🐉",
+    description: "Crafte les armures de cuir.",
+    classes: ["assassin", "vampire"],
+  },
+  weaver: {
+    id: "weaver",
+    name: "Tisserand",
+    glyph: "🧵",
+    description: "Crafte les robes et armures en tissu.",
+    classes: ["mage", "priest"],
+  },
+  jeweler: {
+    id: "jeweler",
+    name: "Bijoutier",
+    glyph: "💍",
+    description: "Crafte anneaux et amulettes.",
+    classes: [],
+  },
+  armorer: {
+    id: "armorer",
+    name: "Maître d'armes",
+    glyph: "⚒️",
+    description: "Crafte toutes les armes du jeu.",
+    classes: [],
+  },
+  baker: {
+    id: "baker",
+    name: "Boulanger",
+    glyph: "🍞",
+    description:
+      "Crafte du pain qui rend de l'énergie (cooldown / cap journalier).",
+    classes: [],
+  },
+};
