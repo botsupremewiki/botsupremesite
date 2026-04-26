@@ -87,7 +87,7 @@ end;
 $$;
 
 -- Consomme N énergie (recalcule d'abord, puis check si suffisant).
--- Retourne true si OK, false sinon.
+-- Retourne true si OK, false sinon. Utilise auth.uid() pour sécurité.
 create or replace function public.eternum_consume_energy(
   p_user_id uuid,
   p_amount int
@@ -107,6 +107,21 @@ begin
       updated_at = now()
   where user_id = p_user_id;
   return true;
+end;
+$$;
+
+-- Wrapper safe : utilise auth.uid() automatiquement.
+create or replace function public.eternum_consume_my_energy(
+  p_amount int
+) returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare caller uuid := auth.uid();
+begin
+  if caller is null then return false; end if;
+  return public.eternum_consume_energy(caller, p_amount);
 end;
 $$;
 
