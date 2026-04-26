@@ -93,7 +93,6 @@ export default async function EternumHub() {
               accent="text-rose-200"
               border="border-rose-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.10),transparent_70%)]"
-              soon
             />
             <MenuButton
               href="/play/rpg/social"
