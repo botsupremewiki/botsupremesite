@@ -190,7 +190,7 @@ export function BattleLobbyClient({
       </header>
 
       <main
-        className={`flex flex-1 flex-col items-center gap-4 p-6 ${game.gradient}`}
+        className={`flex flex-1 flex-col items-center gap-4 overflow-y-auto p-6 ${game.gradient}`}
       >
         <CombatNav gameId={gameId} current={ranked ? "ranked" : "pvp"} />
         <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-sm">

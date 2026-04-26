@@ -288,9 +288,11 @@ export function MarketClient({
         )}
       </header>
 
-      <main className={`flex-1 overflow-auto p-6 ${game.gradient}`}>
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <main
+        className={`flex flex-1 flex-col overflow-hidden p-6 ${game.gradient}`}
+      >
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold text-zinc-100">
                 💱 Marché
@@ -343,7 +345,7 @@ export function MarketClient({
           )}
 
           {/* Tabs */}
-          <div className="flex flex-wrap gap-2 border-b border-white/10 pb-2">
+          <div className="flex shrink-0 flex-wrap gap-2 border-b border-white/10 pb-2">
             <TabButton
               active={tab === "buy"}
               onClick={() => setTab("buy")}
@@ -362,7 +364,7 @@ export function MarketClient({
           </div>
 
           {/* Search + filters + sort */}
-          <div className="flex flex-col gap-2">
+          <div className="flex shrink-0 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
@@ -439,43 +441,45 @@ export function MarketClient({
             </div>
           </div>
 
-          {/* Tab content */}
-          {tab === "buy" && (
-            <ListingsGrid
-              listings={visibleActive}
-              cardById={cardById}
-              favs={favs}
-              onToggleFav={toggleFav}
-              onBuy={buyListing}
-              isPending={isPending}
-              isSelfId={profile?.id ?? null}
-              empty="Aucune annonce active. Sois le premier à vendre !"
-            />
-          )}
-          {tab === "mine" && (
-            <ListingsGrid
-              listings={visibleMine}
-              cardById={cardById}
-              favs={favs}
-              onToggleFav={toggleFav}
-              onCancel={cancelListing}
-              isPending={isPending}
-              isSelfId={profile?.id ?? null}
-              empty="Tu n'as aucune annonce active."
-            />
-          )}
-          {tab === "favs" && (
-            <ListingsGrid
-              listings={favListings}
-              cardById={cardById}
-              favs={favs}
-              onToggleFav={toggleFav}
-              onBuy={buyListing}
-              isPending={isPending}
-              isSelfId={profile?.id ?? null}
-              empty="Aucun favori (clique l'étoile sur une carte pour l'ajouter), ou aucune annonce active sur tes favoris."
-            />
-          )}
+          {/* Tab content (only this scrolls) */}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {tab === "buy" && (
+              <ListingsGrid
+                listings={visibleActive}
+                cardById={cardById}
+                favs={favs}
+                onToggleFav={toggleFav}
+                onBuy={buyListing}
+                isPending={isPending}
+                isSelfId={profile?.id ?? null}
+                empty="Aucune annonce active. Sois le premier à vendre !"
+              />
+            )}
+            {tab === "mine" && (
+              <ListingsGrid
+                listings={visibleMine}
+                cardById={cardById}
+                favs={favs}
+                onToggleFav={toggleFav}
+                onCancel={cancelListing}
+                isPending={isPending}
+                isSelfId={profile?.id ?? null}
+                empty="Tu n'as aucune annonce active."
+              />
+            )}
+            {tab === "favs" && (
+              <ListingsGrid
+                listings={favListings}
+                cardById={cardById}
+                favs={favs}
+                onToggleFav={toggleFav}
+                onBuy={buyListing}
+                isPending={isPending}
+                isSelfId={profile?.id ?? null}
+                empty="Aucun favori (clique l'étoile sur une carte pour l'ajouter), ou aucune annonce active sur tes favoris."
+              />
+            )}
+          </div>
         </div>
 
         {sellOpen && profile && (
@@ -665,7 +669,7 @@ function SellModal({
               placeholder="🔍 Rechercher dans ma collection…"
               className="rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400/50 focus:outline-none"
             />
-            <div className="flex flex-1 flex-col gap-1.5 overflow-auto">
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
               {sellable.length === 0 ? (
                 <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-sm text-zinc-500">
                   Aucune carte disponible à vendre. Ouvre des boosters !

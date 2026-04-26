@@ -36,7 +36,7 @@ export default async function TcgHub() {
           <span className="text-xs text-zinc-500">Invité</span>
         )}
       </header>
-      <main className="flex flex-1 items-center justify-center bg-[radial-gradient(ellipse_at_center,rgba(34,197,94,0.06),transparent_60%)] p-6">
+      <main className="flex flex-1 items-center justify-center overflow-y-auto bg-[radial-gradient(ellipse_at_center,rgba(34,197,94,0.06),transparent_60%)] p-6">
         <div className="grid w-full max-w-5xl grid-cols-1 gap-4 md:grid-cols-3">
           {games.map((g) => (
             <GameCard key={g.id} game={g} />

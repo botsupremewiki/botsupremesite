@@ -919,7 +919,7 @@ function SelfHand({
       <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">
         Ta main ({self.hand.length})
       </div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex gap-1 overflow-x-auto pb-1">
         {self.hand.map((cardId, i) => {
           const data = cardById.get(cardId);
           if (!data) return null;

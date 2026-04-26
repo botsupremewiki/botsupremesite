@@ -71,7 +71,9 @@ export default async function HistoryPage({
         )}
       </header>
 
-      <main className={`flex-1 overflow-auto p-6 ${game.gradient}`}>
+      <main
+        className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}
+      >
         <div className="mx-auto w-full max-w-4xl">
           <div className="mb-4">
             <CombatNav gameId={gameId} current="history" />

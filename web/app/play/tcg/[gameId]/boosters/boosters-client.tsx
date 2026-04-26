@@ -127,7 +127,9 @@ export function BoostersClient({
         )}
       </header>
 
-      <main className={`relative flex-1 overflow-auto p-6 ${game.gradient}`}>
+      <main
+        className={`relative flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}
+      >
         {status !== "connected" && !revealing && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="text-sm text-zinc-300">

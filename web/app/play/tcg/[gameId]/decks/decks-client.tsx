@@ -295,17 +295,17 @@ export function DecksClient({
 
       <main className={`flex flex-1 overflow-hidden ${game.gradient}`}>
         {/* Sidebar — list of decks */}
-        <aside className="flex w-64 shrink-0 flex-col border-r border-white/5 bg-black/30 p-3">
+        <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-white/5 bg-black/30 p-3">
           <button
             onClick={startNewDraft}
-            className="mb-3 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
+            className="mb-3 shrink-0 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
           >
             + Nouveau deck
           </button>
-          <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
+          <div className="mb-2 shrink-0 text-[10px] uppercase tracking-widest text-zinc-500">
             Mes decks ({decks.length})
           </div>
-          <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
             {decks.length === 0 && (
               <div className="rounded-md border border-dashed border-white/10 p-3 text-xs text-zinc-500">
                 Aucun deck pour l&apos;instant. Crée ton premier !
@@ -398,8 +398,8 @@ export function DecksClient({
 
               <div className="flex flex-1 overflow-hidden">
                 {/* Collection (cliquer pour add) */}
-                <div className="flex-1 overflow-y-auto p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-400">
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
+                  <div className="mb-2 shrink-0 text-[10px] uppercase tracking-widest text-zinc-400">
                     Ta collection · clique pour ajouter
                   </div>
                   <CollectionPicker
@@ -517,8 +517,8 @@ function CollectionPicker({
     ownedFilter !== "owned"; // "owned" est le défaut
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="flex shrink-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -598,48 +598,50 @@ function CollectionPicker({
         )}
       </div>
 
-      {sorted.length === 0 ? (
-        <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-xs text-zinc-500">
-          Aucune carte ne correspond à ces filtres.
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {sorted.map((card) => {
-            const isEnergy = card.id.includes("energy");
-            const owned = collection.get(card.id) ?? 0;
-            const inDeck = draftEntries.get(card.id) ?? 0;
-            const cap = isEnergy ? Infinity : Math.min(owned, 4);
-            const canAdd = inDeck < cap;
-            const ownedAtAll = owned > 0 || isEnergy;
-            return (
-              <button
-                key={card.id}
-                disabled={!ownedAtAll || !canAdd}
-                onClick={() => onAdd(card)}
-                className={`group relative flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all ${
-                  ownedAtAll
-                    ? RARITY_BORDER[card.rarity] +
-                      (canAdd ? " hover:bg-white/5" : " opacity-60")
-                    : "border-white/5 opacity-30"
-                } disabled:cursor-not-allowed`}
-              >
-                <CardFace card={card} />
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="text-zinc-400">
-                    {isEnergy ? "∞" : owned} {!isEnergy && "possédée"}
-                    {!isEnergy && owned > 1 ? "s" : ""}
-                  </span>
-                  {inDeck > 0 && (
-                    <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950">
-                      ×{inDeck}
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {sorted.length === 0 ? (
+          <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-xs text-zinc-500">
+            Aucune carte ne correspond à ces filtres.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {sorted.map((card) => {
+              const isEnergy = card.id.includes("energy");
+              const owned = collection.get(card.id) ?? 0;
+              const inDeck = draftEntries.get(card.id) ?? 0;
+              const cap = isEnergy ? Infinity : Math.min(owned, 4);
+              const canAdd = inDeck < cap;
+              const ownedAtAll = owned > 0 || isEnergy;
+              return (
+                <button
+                  key={card.id}
+                  disabled={!ownedAtAll || !canAdd}
+                  onClick={() => onAdd(card)}
+                  className={`group relative flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all ${
+                    ownedAtAll
+                      ? RARITY_BORDER[card.rarity] +
+                        (canAdd ? " hover:bg-white/5" : " opacity-60")
+                      : "border-white/5 opacity-30"
+                  } disabled:cursor-not-allowed`}
+                >
+                  <CardFace card={card} />
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-zinc-400">
+                      {isEnergy ? "∞" : owned} {!isEnergy && "possédée"}
+                      {!isEnergy && owned > 1 ? "s" : ""}
                     </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                    {inDeck > 0 && (
+                      <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950">
+                        ×{inDeck}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -702,14 +704,14 @@ function DeckSummary({
   const pokemonTotal = grouped.pokemon.reduce((s, e) => s + e.count, 0);
   const energyTotal = grouped.energies.reduce((s, e) => s + e.count, 0);
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-white/5 bg-black/40">
-      <div className="flex items-center justify-between border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400">
+    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-white/5 bg-black/40">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400">
         <span>Deck</span>
         <span>
           🐾 {pokemonTotal} · 🔋 {energyTotal}
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {draftEntries.size === 0 && (
           <div className="rounded-md border border-dashed border-white/10 p-3 text-center text-xs text-zinc-500">
             Vide. Clique sur les cartes à gauche pour les ajouter.

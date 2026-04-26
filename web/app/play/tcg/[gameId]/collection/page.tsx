@@ -62,9 +62,11 @@ export default async function CollectionPage({
         )}
       </header>
 
-      <main className={`flex-1 overflow-auto p-6 ${game.gradient}`}>
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <div>
+      <main
+        className={`flex flex-1 flex-col overflow-hidden p-6 ${game.gradient}`}
+      >
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-hidden">
+          <div className="shrink-0">
             <h1 className="text-2xl font-bold text-zinc-100">
               📚 Ma Collection
             </h1>

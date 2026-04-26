@@ -91,8 +91,8 @@ export function CollectionGrid({
     ownedFilter !== "all";
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+      <div className="flex shrink-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -177,18 +177,20 @@ export function CollectionGrid({
         )}
       </div>
 
-      {sorted.length === 0 ? (
-        <div className="rounded-md border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">
-          Aucune carte ne correspond à ces filtres.
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {sorted.map((c) => {
-            const count = collection.get(c.id) ?? 0;
-            return <CardSlot key={c.id} card={c} count={count} />;
-          })}
-        </div>
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {sorted.length === 0 ? (
+          <div className="rounded-md border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">
+            Aucune carte ne correspond à ces filtres.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 pr-1">
+            {sorted.map((c) => {
+              const count = collection.get(c.id) ?? 0;
+              return <CardSlot key={c.id} card={c} count={count} />;
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
