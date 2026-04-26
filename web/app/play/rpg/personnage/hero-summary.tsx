@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   ETERNUM_CLASSES,
   ETERNUM_ELEMENTS,
@@ -103,13 +104,16 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
       </section>
 
       {/* Métier */}
-      <section className="rounded-xl border border-white/10 bg-black/40 p-4">
+      <Link
+        href="/play/rpg/personnage/metiers"
+        className="block rounded-xl border border-white/10 bg-black/40 p-4 transition-colors hover:bg-white/[0.04]"
+      >
         <div className="mb-3 flex items-center justify-between">
           <div className="text-[11px] uppercase tracking-widest text-zinc-400">
             Métier
           </div>
-          <span className="text-[10px] text-zinc-500">
-            (changeable au Prestige)
+          <span className="text-[10px] text-amber-300">
+            Cliquer pour gérer →
           </span>
         </div>
         {job ? (
@@ -124,10 +128,10 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-white/10 p-4 text-center text-xs text-zinc-500">
-            Aucun métier choisi — disponible en Phase 3.
+            Aucun métier choisi — clique pour en sélectionner un.
           </div>
         )}
-      </section>
+      </Link>
 
       {/* Quêtes / Pass / Profil — placeholders Phase 11 */}
       <section className="grid grid-cols-1 gap-2 sm:grid-cols-3">
