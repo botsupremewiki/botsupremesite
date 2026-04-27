@@ -1,5 +1,5 @@
 import { PLAZA_CONFIG } from "@shared/types";
-import type { Landmark, SceneConfig } from "./scene";
+import type { Landmark, PortalStyle, SceneConfig } from "./scene";
 
 const W = PLAZA_CONFIG.width;
 const H = PLAZA_CONFIG.height;
@@ -27,12 +27,48 @@ function ringPositions(
 // ─── Plaza ─────────────────────────────────────────────────────────────────
 // Player spawns at the center; the 5 portals form a ring around them.
 
-const PLAZA_PORTALS = [
-  { id: "casino", color: 0xef4444, label: "Casino", href: "/play/casino" },
-  { id: "tcg", color: 0x22c55e, label: "TCG · Bientôt" },
-  { id: "rpg", color: 0xf59e0b, label: "Eternum", href: "/play/rpg" },
-  { id: "medieval", color: 0x6366f1, label: "Imperium", href: "/play/imperium" },
-  { id: "tycoon", color: 0xec4899, label: "Skyline", href: "/play/skyline" },
+const PLAZA_PORTALS: {
+  id: string;
+  color: number;
+  label: string;
+  href: string;
+  style: PortalStyle;
+}[] = [
+  {
+    id: "casino",
+    color: 0xef4444,
+    label: "Casino",
+    href: "/play/casino",
+    style: "casino",
+  },
+  {
+    id: "tcg",
+    color: 0x22c55e,
+    label: "TCG",
+    href: "/play/tcg",
+    style: "tcg",
+  },
+  {
+    id: "rpg",
+    color: 0xf59e0b,
+    label: "Eternum",
+    href: "/play/rpg",
+    style: "rpg",
+  },
+  {
+    id: "medieval",
+    color: 0x6366f1,
+    label: "Imperium",
+    href: "/play/imperium",
+    style: "imperium",
+  },
+  {
+    id: "tycoon",
+    color: 0xec4899,
+    label: "Skyline",
+    href: "/play/skyline",
+    style: "skyline",
+  },
 ];
 const PLAZA_RING = ringPositions(
   PLAZA_PORTALS.length,
@@ -49,6 +85,7 @@ export const PLAZA_SCENE: SceneConfig = {
   floorColor: 0x12121c,
   floorAccentColor: 0xffffff,
   floorAccentAlpha: 0.018,
+  ambiance: "plaza",
   landmarks: PLAZA_PORTALS.map<Landmark>((p, i) => ({
     kind: "portal",
     id: p.id,
@@ -57,6 +94,7 @@ export const PLAZA_SCENE: SceneConfig = {
     color: p.color,
     label: p.label,
     href: p.href,
+    style: p.style,
   })),
 };
 
@@ -194,6 +232,7 @@ export const CASINO_SCENE: SceneConfig = {
   floorColor: 0x1f0a0a,
   floorAccentColor: 0xef4444,
   floorAccentAlpha: 0.05,
+  ambiance: "casino",
   landmarks: [
     {
       kind: "portal",
@@ -203,6 +242,7 @@ export const CASINO_SCENE: SceneConfig = {
       color: 0x6366f1,
       label: "← Plaza",
       href: "/play",
+      style: "back",
     },
     ...CASINO_RING_TABLES.map<Landmark>((t, i) => ({
       kind: "table",
@@ -239,6 +279,7 @@ export const BLACKJACK_SCENE: SceneConfig = {
       color: 0xef4444,
       label: "← Casino",
       href: "/play/casino",
+      style: "back",
     },
     {
       kind: "table",

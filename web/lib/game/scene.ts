@@ -4,6 +4,15 @@ import type { Direction, Player } from "@shared/types";
 const SPEED_PX_PER_SEC = 180;
 const TILE = 32;
 
+export type PortalStyle =
+  | "default"
+  | "casino"
+  | "rpg"
+  | "tcg"
+  | "imperium"
+  | "skyline"
+  | "back";
+
 export type PortalLandmark = {
   kind: "portal";
   id: string;
@@ -12,6 +21,7 @@ export type PortalLandmark = {
   color: number;
   label: string;
   href?: string;
+  style?: PortalStyle;
 };
 
 export type TableLandmark = {
@@ -38,6 +48,8 @@ export type SeatLandmark = {
 
 export type Landmark = PortalLandmark | TableLandmark | SeatLandmark;
 
+export type AmbianceStyle = "plaza" | "casino" | "neutral";
+
 export interface SceneConfig {
   width: number;
   height: number;
@@ -46,14 +58,81 @@ export interface SceneConfig {
   floorAccentColor: number;
   floorAccentAlpha: number;
   landmarks: Landmark[];
+  ambiance?: AmbianceStyle;
+}
+
+// Convert 0xRRGGBB → {h, s, l} in [0,360], [0,1], [0,1].
+function hexToHsl(hex: number): { h: number; s: number; l: number } {
+  const r = ((hex >> 16) & 0xff) / 255;
+  const g = ((hex >> 8) & 0xff) / 255;
+  const b = (hex & 0xff) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+  }
+  return { h, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number): number {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s));
+  l = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const ir = Math.round((r + m) * 255);
+  const ig = Math.round((g + m) * 255);
+  const ib = Math.round((b + m) * 255);
+  return (ir << 16) | (ig << 8) | ib;
+}
+
+function shiftColor(hex: number, dh: number, dl: number): number {
+  const { h, s, l } = hexToHsl(hex);
+  return hslToHex(h + dh, s, l + dl);
 }
 
 class PlayerSprite extends Container {
-  private body = new Graphics();
   private shadow = new Graphics();
+  private halo = new Graphics();
+  private bodyRoot = new Container();
+  private leftLeg = new Graphics();
+  private rightLeg = new Graphics();
+  private leftArm = new Graphics();
+  private rightArm = new Graphics();
+  private torso = new Graphics();
+  private head = new Graphics();
+  private face = new Graphics();
   private nameLabel: Text;
+  private nameBg: Graphics;
+
   private targetX: number;
   private targetY: number;
+  private walkPhase = 0;
+  private isMoving = false;
+  private haloPhase = Math.random() * Math.PI * 2;
+
+  private readonly bodyColor: number;
+  private readonly accentColor: number;
+  private readonly skinColor = 0xfde4cf;
+  private readonly hairColor: number;
+
   public direction: Direction;
   public readonly playerId: string;
 
@@ -65,35 +144,45 @@ class PlayerSprite extends Container {
     this.targetY = player.y;
     this.direction = player.direction;
 
-    const color = parseInt(player.color.slice(1), 16);
+    this.bodyColor = parseInt(player.color.slice(1), 16);
+    this.accentColor = shiftColor(this.bodyColor, -25, -0.12);
+    this.hairColor = shiftColor(this.bodyColor, 35, -0.25);
 
-    this.shadow.ellipse(0, 6, 14, 5).fill({ color: 0x000000, alpha: 0.35 });
+    // Subtle ground halo pulses with the avatar.
+    this.addChild(this.halo);
+
+    // Hard ellipse shadow.
+    this.shadow.ellipse(0, 8, 16, 5).fill({ color: 0x000000, alpha: 0.45 });
     this.addChild(this.shadow);
 
-    this.body
-      .circle(0, 0, 13)
-      .fill(color)
-      .stroke({ width: 2, color: 0x000000, alpha: 0.5 });
-    this.body
-      .circle(-4, -3, 2)
-      .fill(0xffffff)
-      .circle(4, -3, 2)
-      .fill(0xffffff);
-    this.addChild(this.body);
+    this.bodyRoot.addChild(this.leftLeg);
+    this.bodyRoot.addChild(this.rightLeg);
+    this.bodyRoot.addChild(this.leftArm);
+    this.bodyRoot.addChild(this.rightArm);
+    this.bodyRoot.addChild(this.torso);
+    this.bodyRoot.addChild(this.head);
+    this.bodyRoot.addChild(this.face);
+    this.addChild(this.bodyRoot);
+
+    this.nameBg = new Graphics();
+    this.addChild(this.nameBg);
 
     this.nameLabel = new Text({
       text: player.name,
       style: {
         fontFamily: "system-ui, sans-serif",
         fontSize: 11,
-        fontWeight: "600",
+        fontWeight: "700",
         fill: 0xffffff,
         stroke: { color: 0x000000, width: 3 },
       },
     });
     this.nameLabel.anchor.set(0.5, 1);
-    this.nameLabel.position.set(0, -20);
+    this.nameLabel.position.set(0, -28);
     this.addChild(this.nameLabel);
+
+    this.redrawNameBg();
+    this.redrawBody(0, 0);
   }
 
   setTarget(x: number, y: number, direction: Direction) {
@@ -104,24 +193,189 @@ class PlayerSprite extends Container {
 
   setName(name: string) {
     this.nameLabel.text = name;
+    this.redrawNameBg();
+  }
+
+  private redrawNameBg() {
+    const w = this.nameLabel.width + 10;
+    const h = 14;
+    this.nameBg.clear();
+    this.nameBg
+      .roundRect(-w / 2, -28 - h, w, h, 4)
+      .fill({ color: 0x000000, alpha: 0.55 })
+      .stroke({ color: 0xffffff, width: 1, alpha: 0.15 });
+  }
+
+  /**
+   * Redraw the avatar according to `direction` and walk phase.
+   * `legSwing` and `armSwing` are added/subtracted from neutral so the
+   * limbs visibly swing while moving.
+   */
+  private redrawBody(legSwing: number, armSwing: number) {
+    const dir = this.direction;
+    const facingSide = dir === "left" || dir === "right";
+    const flipX = dir === "left" ? -1 : 1;
+
+    // ── Legs ──────────────────────────────────────────────────────────────
+    this.leftLeg.clear();
+    this.rightLeg.clear();
+    if (facingSide) {
+      // Side view: one leg forward, one back.
+      this.leftLeg
+        .roundRect(-3, -1, 6, 11, 2)
+        .fill(this.accentColor);
+      this.leftLeg.position.set(-2 * flipX, 4 + legSwing);
+      this.rightLeg
+        .roundRect(-3, -1, 6, 11, 2)
+        .fill(this.accentColor);
+      this.rightLeg.position.set(2 * flipX, 4 - legSwing);
+    } else {
+      this.leftLeg
+        .roundRect(-3.5, 0, 7, 11, 2)
+        .fill(this.accentColor);
+      this.leftLeg.position.set(-3, 4 + (legSwing > 0 ? legSwing : 0));
+      this.rightLeg
+        .roundRect(-3.5, 0, 7, 11, 2)
+        .fill(this.accentColor);
+      this.rightLeg.position.set(3, 4 - (legSwing > 0 ? legSwing : 0));
+    }
+
+    // ── Torso ────────────────────────────────────────────────────────────
+    this.torso.clear();
+    this.torso
+      .roundRect(-8, -4, 16, 14, 5)
+      .fill(this.bodyColor)
+      .stroke({ color: 0x000000, width: 1.2, alpha: 0.35 });
+
+    // Subtle shoulder highlight band.
+    this.torso
+      .roundRect(-7, -3, 14, 3, 2)
+      .fill({ color: 0xffffff, alpha: 0.18 });
+
+    // ── Arms ─────────────────────────────────────────────────────────────
+    this.leftArm.clear();
+    this.rightArm.clear();
+    if (facingSide) {
+      // Single visible arm in profile, swinging.
+      this.rightArm
+        .roundRect(-2.5, -1, 5, 9, 2)
+        .fill(this.bodyColor)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.3 });
+      this.rightArm.position.set(0, -1 + armSwing * 0.5);
+      this.rightArm.rotation = (armSwing / 6) * flipX;
+      this.leftArm.visible = false;
+    } else {
+      this.leftArm.visible = true;
+      this.leftArm
+        .roundRect(-2.5, -1, 5, 11, 2)
+        .fill(this.bodyColor)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.3 });
+      this.leftArm.position.set(-9, -1);
+      this.leftArm.rotation = (armSwing / 8);
+      this.rightArm
+        .roundRect(-2.5, -1, 5, 11, 2)
+        .fill(this.bodyColor)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.3 });
+      this.rightArm.position.set(9, -1);
+      this.rightArm.rotation = -(armSwing / 8);
+    }
+
+    // ── Head ─────────────────────────────────────────────────────────────
+    this.head.clear();
+    this.head
+      .circle(0, -12, 7)
+      .fill(this.skinColor)
+      .stroke({ color: 0x000000, width: 1.2, alpha: 0.35 });
+
+    // Hair cap — varies per direction.
+    if (dir === "up") {
+      this.head.circle(0, -12, 7).fill(this.hairColor);
+    } else if (dir === "down") {
+      this.head
+        .arc(0, -12, 7, Math.PI, 2 * Math.PI)
+        .lineTo(7, -12)
+        .lineTo(-7, -12)
+        .closePath()
+        .fill(this.hairColor);
+      this.head
+        .roundRect(-7, -14, 14, 4, 2)
+        .fill(this.hairColor);
+    } else {
+      // Side: half cap on the back.
+      const back = -flipX;
+      this.head
+        .roundRect(back * 0 - 7, -19, 14, 7, 4)
+        .fill(this.hairColor);
+      this.head
+        .roundRect(back * 4 - 1, -16, 4, 6, 2)
+        .fill(this.hairColor);
+    }
+
+    // ── Face ─────────────────────────────────────────────────────────────
+    this.face.clear();
+    if (dir === "down") {
+      this.face.circle(-2.5, -12, 1.1).fill(0x111111);
+      this.face.circle(2.5, -12, 1.1).fill(0x111111);
+      this.face
+        .moveTo(-1.5, -9.5)
+        .lineTo(1.5, -9.5)
+        .stroke({ color: 0x111111, width: 1, alpha: 0.7 });
+    } else if (dir === "up") {
+      // back of head — no face.
+    } else {
+      // Single visible eye on the facing side.
+      this.face.circle(2.4 * flipX, -12, 1.2).fill(0x111111);
+    }
   }
 
   tick(dtMs: number) {
     const dx = this.targetX - this.position.x;
     const dy = this.targetY - this.position.y;
     const dist = Math.hypot(dx, dy);
+    const wasMoving = this.isMoving;
+
     if (dist < 0.25) {
       this.position.set(this.targetX, this.targetY);
-      return;
-    }
-    const move = (SPEED_PX_PER_SEC * dtMs) / 1000;
-    if (move >= dist) {
-      this.position.set(this.targetX, this.targetY);
+      this.isMoving = false;
     } else {
-      this.position.x += (dx / dist) * move;
-      this.position.y += (dy / dist) * move;
+      const move = (SPEED_PX_PER_SEC * dtMs) / 1000;
+      if (move >= dist) {
+        this.position.set(this.targetX, this.targetY);
+        this.isMoving = false;
+      } else {
+        this.position.x += (dx / dist) * move;
+        this.position.y += (dy / dist) * move;
+        this.isMoving = true;
+      }
+      this.zIndex = this.position.y;
     }
-    this.zIndex = this.position.y;
+
+    // Walk phase progresses while moving, decays when idle.
+    if (this.isMoving) {
+      this.walkPhase += dtMs * 0.012;
+    } else {
+      this.walkPhase *= Math.max(0, 1 - dtMs * 0.008);
+    }
+
+    // Halo pulse independent of motion.
+    this.haloPhase += dtMs * 0.002;
+
+    const legSwing = Math.sin(this.walkPhase) * 3;
+    const armSwing = Math.sin(this.walkPhase) * 4;
+    const bounce = -Math.abs(Math.sin(this.walkPhase)) * 1.2;
+
+    this.bodyRoot.y = bounce;
+    this.redrawBody(legSwing, armSwing);
+
+    // Halo redraw — cheap, single ring.
+    const halo = 0.55 + Math.sin(this.haloPhase) * 0.1;
+    this.halo.clear();
+    this.halo
+      .ellipse(0, 6, 22, 8)
+      .fill({ color: this.bodyColor, alpha: 0.18 * halo });
+    this.halo
+      .ellipse(0, 6, 32, 11)
+      .fill({ color: this.bodyColor, alpha: 0.08 * halo });
   }
 
   currentPosition() {
@@ -135,12 +389,33 @@ export type SeatOccupant = {
   color: string;
 };
 
+type AnimatedPortal = {
+  ring: Graphics;
+  glow: Graphics;
+  inner: Graphics | null;
+  particles: Graphics | null;
+  baseColor: number;
+  phase: number;
+};
+
+type AmbianceParticle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  alpha: number;
+  drift: number;
+};
+
 export class GameScene {
   private app: Application | null = null;
   private world = new Container();
   private floor = new Graphics();
+  private ambianceLayer = new Graphics();
   private landmarksLayer = new Container();
   private playersLayer = new Container();
+  private particlesLayer = new Graphics();
   private sprites = new Map<string, PlayerSprite>();
   private seatContainers = new Map<number, Container>();
   private readonly config: SceneConfig;
@@ -148,6 +423,11 @@ export class GameScene {
   private pendingLandmark: Landmark | null = null;
   private pendingArrivalX: number | null = null;
   private pendingArrivalY: number | null = null;
+
+  // Animated portal effects (pulse + particle motion).
+  private animatedPortals: AnimatedPortal[] = [];
+  private ambianceParticles: AmbianceParticle[] = [];
+  private elapsedMs = 0;
 
   onClickMove?: (x: number, y: number) => void;
   onLandmarkArrival?: (landmark: Landmark) => void;
@@ -175,14 +455,18 @@ export class GameScene {
     host.appendChild(this.app.canvas);
 
     this.drawFloor();
+    this.drawAmbianceBase();
+    this.spawnAmbianceParticles();
     this.drawLandmarks();
 
     this.playersLayer.sortableChildren = true;
 
     this.app.stage.addChild(this.floor);
+    this.app.stage.addChild(this.ambianceLayer);
     this.app.stage.addChild(this.world);
     this.world.addChild(this.landmarksLayer);
     this.world.addChild(this.playersLayer);
+    this.app.stage.addChild(this.particlesLayer);
 
     this.app.stage.eventMode = "static";
     this.app.stage.hitArea = this.app.screen;
@@ -196,7 +480,10 @@ export class GameScene {
 
     this.app.ticker.add(() => {
       const dt = this.app!.ticker.deltaMS;
+      this.elapsedMs += dt;
       for (const sprite of this.sprites.values()) sprite.tick(dt);
+      this.tickPortals(dt);
+      this.tickAmbiance(dt);
       this.checkLandmarkArrival();
     });
   }
@@ -247,6 +534,149 @@ export class GameScene {
       alpha: 0.05,
       width: 1,
     });
+  }
+
+  private drawAmbianceBase() {
+    const g = this.ambianceLayer;
+    const { width, height, ambiance } = this.config;
+    const cx = width / 2;
+    const cy = height / 2;
+    g.clear();
+
+    if (ambiance === "plaza") {
+      // Soft circular glow at the spawn centre — concentric rings give
+      // depth without a single heavy gradient.
+      const baseRadius = Math.min(width, height) * 0.42;
+      for (let i = 0; i < 6; i++) {
+        const t = i / 6;
+        g.circle(cx, cy, baseRadius * (1 - t * 0.85)).fill({
+          color: 0xa78bfa,
+          alpha: 0.012 + t * 0.018,
+        });
+      }
+
+      // Central spawn ring — visual anchor the player lands on.
+      const ringR = 64;
+      g.circle(cx, cy, ringR).fill({ color: 0x1a1830, alpha: 0.55 });
+      g.circle(cx, cy, ringR).stroke({
+        color: 0x8b5cf6,
+        width: 2,
+        alpha: 0.6,
+      });
+      g.circle(cx, cy, ringR - 8).stroke({
+        color: 0xc4b5fd,
+        width: 1,
+        alpha: 0.35,
+      });
+      // Inner crosshair pattern.
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        const x1 = cx + Math.cos(a) * 18;
+        const y1 = cy + Math.sin(a) * 18;
+        const x2 = cx + Math.cos(a) * 30;
+        const y2 = cy + Math.sin(a) * 30;
+        g.moveTo(x1, y1)
+          .lineTo(x2, y2)
+          .stroke({ color: 0xc4b5fd, width: 1, alpha: 0.45 });
+      }
+      // Tiny rune star at exact centre.
+      g.circle(cx, cy, 4).fill({ color: 0xfde68a, alpha: 0.85 });
+      g.circle(cx, cy, 8).stroke({
+        color: 0xfde68a,
+        width: 1,
+        alpha: 0.4,
+      });
+
+      // Vignette at corners — 4 dark filled wedges.
+      const vignetteAlpha = 0.32;
+      g.rect(0, 0, width, height).stroke({
+        color: 0x000000,
+        width: 80,
+        alpha: vignetteAlpha,
+      });
+    } else if (ambiance === "casino") {
+      // Warm radial glow.
+      const baseRadius = Math.min(width, height) * 0.5;
+      for (let i = 0; i < 5; i++) {
+        const t = i / 5;
+        g.circle(cx, cy, baseRadius * (1 - t * 0.8)).fill({
+          color: 0xef4444,
+          alpha: 0.015 + t * 0.022,
+        });
+      }
+      g.rect(0, 0, width, height).stroke({
+        color: 0x000000,
+        width: 80,
+        alpha: 0.32,
+      });
+    }
+  }
+
+  private spawnAmbianceParticles() {
+    const { width, height, ambiance } = this.config;
+    if (ambiance !== "plaza" && ambiance !== "casino") return;
+    const count = ambiance === "plaza" ? 36 : 24;
+    for (let i = 0; i < count; i++) {
+      this.ambianceParticles.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.05,
+        vy: -0.03 - Math.random() * 0.04,
+        r: 0.6 + Math.random() * 1.4,
+        alpha: 0.2 + Math.random() * 0.4,
+        drift: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  private tickAmbiance(dtMs: number) {
+    if (this.ambianceParticles.length === 0) return;
+    const { width, height, ambiance } = this.config;
+    const color = ambiance === "casino" ? 0xfca5a5 : 0xc4b5fd;
+    const g = this.particlesLayer;
+    g.clear();
+
+    for (const p of this.ambianceParticles) {
+      p.drift += dtMs * 0.001;
+      p.x += p.vx * dtMs + Math.sin(p.drift) * 0.05;
+      p.y += p.vy * dtMs;
+      if (p.y < -5) {
+        p.y = height + 5;
+        p.x = Math.random() * width;
+      }
+      if (p.x < -5) p.x = width + 5;
+      if (p.x > width + 5) p.x = -5;
+      const flicker = 0.7 + Math.sin(p.drift * 3) * 0.3;
+      g.circle(p.x, p.y, p.r).fill({
+        color,
+        alpha: p.alpha * flicker,
+      });
+    }
+  }
+
+  private tickPortals(dtMs: number) {
+    for (const p of this.animatedPortals) {
+      p.phase += dtMs * 0.003;
+      const pulse = 0.5 + Math.sin(p.phase) * 0.5;
+      p.glow.alpha = 0.55 + pulse * 0.45;
+      p.ring.alpha = 0.7 + pulse * 0.3;
+      if (p.inner) {
+        p.inner.rotation += dtMs * 0.0008;
+      }
+      if (p.particles) {
+        // Particles redrawn each tick to orbit the portal.
+        p.particles.clear();
+        for (let i = 0; i < 5; i++) {
+          const a = (p.phase * 0.7) + (i / 5) * Math.PI * 2;
+          const r = 26 + Math.sin(p.phase * 2 + i) * 4;
+          const x = Math.cos(a) * r;
+          const y = Math.sin(a) * r * 0.55;
+          p.particles
+            .circle(x, y, 1.6)
+            .fill({ color: p.baseColor, alpha: 0.85 });
+        }
+      }
+    }
   }
 
   private drawLandmarks() {
@@ -324,7 +754,6 @@ export class GameScene {
     const container = this.seatContainers.get(seatIndex);
     if (!container) return;
 
-    // Remove existing occupant visual (tagged via label "occupant")
     const existing = container.children.find(
       (c) => (c as Container & { __isOccupant?: boolean }).__isOccupant,
     );
@@ -341,28 +770,42 @@ export class GameScene {
     occupantContainer.__isOccupant = true;
 
     const color = parseInt(occupant.color.slice(1), 16);
+    const accent = shiftColor(color, -25, -0.12);
 
-    const body = new Graphics();
-    body
-      .circle(0, -12, 10)
+    const torso = new Graphics();
+    torso
+      .roundRect(-7, -16, 14, 12, 5)
       .fill(color)
-      .stroke({ color: 0x000000, width: 1.5, alpha: 0.5 });
-    body.circle(-3, -14, 1.5).fill(0xffffff);
-    body.circle(3, -14, 1.5).fill(0xffffff);
-    occupantContainer.addChild(body);
+      .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+    occupantContainer.addChild(torso);
+
+    const head = new Graphics();
+    head
+      .circle(0, -22, 6)
+      .fill(0xfde4cf)
+      .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+    head
+      .arc(0, -22, 6, Math.PI, 2 * Math.PI)
+      .lineTo(6, -22)
+      .lineTo(-6, -22)
+      .closePath()
+      .fill(accent);
+    head.circle(-2, -22, 0.9).fill(0x111111);
+    head.circle(2, -22, 0.9).fill(0x111111);
+    occupantContainer.addChild(head);
 
     const nameLabel = new Text({
       text: occupant.playerName,
       style: {
         fontFamily: "system-ui, sans-serif",
         fontSize: 10,
-        fontWeight: "600",
+        fontWeight: "700",
         fill: 0xffffff,
         stroke: { color: 0x000000, width: 2 },
       },
     });
     nameLabel.anchor.set(0.5, 1);
-    nameLabel.position.set(0, -26);
+    nameLabel.position.set(0, -32);
     occupantContainer.addChild(nameLabel);
 
     container.addChild(occupantContainer);
@@ -372,33 +815,30 @@ export class GameScene {
     const container = new Container();
     container.position.set(portal.x, portal.y);
 
-    const glow = new Graphics();
-    glow.circle(0, 0, 36).fill({ color: portal.color, alpha: 0.12 });
-    glow.circle(0, 0, 26).fill({ color: portal.color, alpha: 0.2 });
-    container.addChild(glow);
+    const style = portal.style ?? "default";
 
-    const ring = new Graphics();
-    ring.circle(0, 0, 22).stroke({ color: portal.color, width: 3, alpha: 0.8 });
-    container.addChild(ring);
+    // Each style returns its own (glow, ring, inner, particles, hitR).
+    const built = this.buildPortalArt(container, portal, style);
 
     const label = new Text({
       text: portal.label,
       style: {
         fontFamily: "system-ui, sans-serif",
-        fontSize: 11,
-        fontWeight: "700",
+        fontSize: 12,
+        fontWeight: "800",
         fill: portal.href ? 0xffffff : 0x999999,
         stroke: { color: 0x000000, width: 3 },
       },
     });
     label.anchor.set(0.5, 0.5);
-    label.position.set(0, 40);
+    label.position.set(0, built.labelY);
     container.addChild(label);
 
     if (portal.href) {
       container.eventMode = "static";
       container.cursor = "pointer";
-      container.hitArea = { contains: (x, y) => x * x + y * y <= 32 * 32 };
+      const r = built.hitRadius;
+      container.hitArea = { contains: (x, y) => x * x + y * y <= r * r };
       container.on("pointerdown", (e) => {
         e.stopPropagation();
         this.pendingLandmark = portal;
@@ -407,18 +847,354 @@ export class GameScene {
         this.onClickMove?.(portal.x, portal.y);
       });
       container.on("pointerover", () => {
-        ring.alpha = 1;
-        glow.alpha = 1.3;
+        built.ring.alpha = 1;
+        built.glow.alpha = 1.2;
       });
       container.on("pointerout", () => {
-        ring.alpha = 1;
-        glow.alpha = 1;
+        built.ring.alpha = 1;
+        built.glow.alpha = 1;
+      });
+
+      this.animatedPortals.push({
+        ring: built.ring,
+        glow: built.glow,
+        inner: built.inner,
+        particles: built.particles,
+        baseColor: portal.color,
+        phase: Math.random() * Math.PI * 2,
       });
     } else {
-      container.alpha = 0.45;
+      container.alpha = 0.5;
     }
 
     this.landmarksLayer.addChild(container);
+  }
+
+  private buildPortalArt(
+    container: Container,
+    portal: PortalLandmark,
+    style: PortalStyle,
+  ): {
+    glow: Graphics;
+    ring: Graphics;
+    inner: Graphics | null;
+    particles: Graphics | null;
+    labelY: number;
+    hitRadius: number;
+  } {
+    const c = portal.color;
+
+    const glow = new Graphics();
+    const ring = new Graphics();
+    let inner: Graphics | null = null;
+    let particles: Graphics | null = null;
+    const labelY = 50;
+
+    if (style === "casino") {
+      // Wide arch + neon star bursts.
+      glow.circle(0, 0, 50).fill({ color: c, alpha: 0.12 });
+      glow.circle(0, 0, 36).fill({ color: c, alpha: 0.2 });
+      glow
+        .ellipse(0, 14, 38, 10)
+        .fill({ color: 0x000000, alpha: 0.45 });
+      container.addChild(glow);
+
+      // Arch frame.
+      ring.roundRect(-26, -28, 52, 44, 26).stroke({
+        color: c,
+        width: 3,
+        alpha: 0.9,
+      });
+      ring.roundRect(-22, -24, 44, 38, 22).stroke({
+        color: 0xfde68a,
+        width: 1.5,
+        alpha: 0.7,
+      });
+      // Tiny crown "C" on top.
+      ring
+        .circle(-10, -32, 1.8)
+        .fill(0xfde68a)
+        .circle(0, -34, 2.2)
+        .fill(0xfde68a)
+        .circle(10, -32, 1.8)
+        .fill(0xfde68a);
+      container.addChild(ring);
+
+      inner = new Graphics();
+      // Spinning star inside the arch.
+      const star = inner;
+      const points = 5;
+      for (let i = 0; i < points * 2; i++) {
+        const a = (i * Math.PI) / points - Math.PI / 2;
+        const r = i % 2 === 0 ? 9 : 4;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r - 4;
+        if (i === 0) star.moveTo(x, y);
+        else star.lineTo(x, y);
+      }
+      star.closePath().fill({ color: 0xfde68a, alpha: 0.9 });
+      container.addChild(inner);
+
+      particles = new Graphics();
+      container.addChild(particles);
+
+      return { glow, ring, inner, particles, labelY: 32, hitRadius: 36 };
+    }
+
+    if (style === "rpg") {
+      // Stone arch + flame.
+      glow.circle(0, 0, 44).fill({ color: c, alpha: 0.18 });
+      glow.circle(0, 0, 30).fill({ color: c, alpha: 0.25 });
+      container.addChild(glow);
+
+      // Stone arch — two pillars + arch top.
+      ring.roundRect(-22, -10, 8, 36, 2).fill(0x52525b).stroke({
+        color: 0x000000,
+        width: 1,
+        alpha: 0.5,
+      });
+      ring.roundRect(14, -10, 8, 36, 2).fill(0x52525b).stroke({
+        color: 0x000000,
+        width: 1,
+        alpha: 0.5,
+      });
+      ring
+        .arc(0, -10, 22, Math.PI, 2 * Math.PI)
+        .lineTo(22, -10)
+        .lineTo(-22, -10)
+        .closePath()
+        .fill(0x52525b)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+      // Brick lines.
+      ring
+        .moveTo(-22, 0)
+        .lineTo(-14, 0)
+        .moveTo(-22, 12)
+        .lineTo(-14, 12)
+        .moveTo(14, 0)
+        .lineTo(22, 0)
+        .moveTo(14, 12)
+        .lineTo(22, 12)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.45 });
+      // Inner glow tinted by portal color.
+      ring
+        .arc(0, -10, 14, Math.PI, 2 * Math.PI)
+        .lineTo(14, -10)
+        .lineTo(-14, -10)
+        .closePath()
+        .fill({ color: c, alpha: 0.5 });
+      container.addChild(ring);
+
+      inner = new Graphics();
+      // Flame.
+      inner
+        .moveTo(0, 8)
+        .quadraticCurveTo(-7, -2, -2, -8)
+        .quadraticCurveTo(0, -4, 2, -8)
+        .quadraticCurveTo(7, -2, 0, 8)
+        .fill({ color: 0xfb923c, alpha: 0.95 });
+      inner
+        .moveTo(0, 4)
+        .quadraticCurveTo(-3, -1, -1, -4)
+        .quadraticCurveTo(0, -2, 1, -4)
+        .quadraticCurveTo(3, -1, 0, 4)
+        .fill({ color: 0xfde68a, alpha: 0.9 });
+      container.addChild(inner);
+
+      particles = new Graphics();
+      container.addChild(particles);
+
+      return { glow, ring, inner, particles, labelY: 42, hitRadius: 32 };
+    }
+
+    if (style === "tcg") {
+      // Rune portal with floating cards.
+      glow.circle(0, 0, 46).fill({ color: c, alpha: 0.12 });
+      glow.circle(0, 0, 30).fill({ color: c, alpha: 0.22 });
+      container.addChild(glow);
+
+      // Hexagonal rune frame.
+      const sides = 6;
+      const rad = 24;
+      ring.moveTo(rad, 0);
+      for (let i = 1; i <= sides; i++) {
+        const a = (i * Math.PI * 2) / sides;
+        ring.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      }
+      ring.stroke({ color: c, width: 3, alpha: 0.9 });
+      // Inner hex.
+      ring.moveTo(rad - 6, 0);
+      for (let i = 1; i <= sides; i++) {
+        const a = (i * Math.PI * 2) / sides;
+        ring.lineTo(Math.cos(a) * (rad - 6), Math.sin(a) * (rad - 6));
+      }
+      ring.stroke({ color: 0xc4b5fd, width: 1, alpha: 0.5 });
+      container.addChild(ring);
+
+      inner = new Graphics();
+      // 3 mini-cards fanned in centre.
+      const drawCard = (x: number, y: number, rot: number, fillCol: number) => {
+        const before = inner!.children;
+        inner!
+          .roundRect(-5, -7, 10, 14, 1.5)
+          .fill(0xffffff)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+        inner!
+          .roundRect(-4, -6, 8, 4, 1)
+          .fill(fillCol);
+        // We can't apply per-shape transforms easily — fake fan via individual
+        // graphics children would be nicer; skip rotation for simplicity.
+        void before;
+        void x;
+        void y;
+        void rot;
+      };
+      drawCard(0, 0, 0, c);
+      container.addChild(inner);
+
+      particles = new Graphics();
+      container.addChild(particles);
+
+      return { glow, ring, inner, particles, labelY: 42, hitRadius: 30 };
+    }
+
+    if (style === "imperium") {
+      // Castle gate — battlements on top.
+      glow.circle(0, 0, 42).fill({ color: c, alpha: 0.15 });
+      glow.circle(0, 0, 26).fill({ color: c, alpha: 0.22 });
+      container.addChild(glow);
+
+      // Tower base (rectangle).
+      ring.roundRect(-24, -8, 48, 32, 2).fill(0x44403c).stroke({
+        color: 0x000000,
+        width: 1,
+        alpha: 0.5,
+      });
+      // Battlements (3 crenels on top).
+      ring
+        .rect(-22, -16, 8, 8)
+        .fill(0x44403c)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+      ring
+        .rect(-4, -16, 8, 8)
+        .fill(0x44403c)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+      ring
+        .rect(14, -16, 8, 8)
+        .fill(0x44403c)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+      // Gate opening with portal-color glow.
+      ring
+        .arc(0, 18, 12, Math.PI, 2 * Math.PI)
+        .lineTo(12, 18)
+        .lineTo(-12, 18)
+        .closePath()
+        .fill({ color: c, alpha: 0.6 });
+      // Iron bars on the gate.
+      for (const bx of [-7, 0, 7]) {
+        ring
+          .moveTo(bx, 6)
+          .lineTo(bx, 18)
+          .stroke({ color: 0x000000, width: 1.2, alpha: 0.6 });
+      }
+      container.addChild(ring);
+
+      inner = new Graphics();
+      // Banner.
+      inner
+        .moveTo(-6, -14)
+        .lineTo(6, -14)
+        .lineTo(6, -2)
+        .lineTo(0, 1)
+        .lineTo(-6, -2)
+        .closePath()
+        .fill(c);
+      inner.circle(0, -8, 1.6).fill(0xfde68a);
+      container.addChild(inner);
+
+      particles = null;
+      return { glow, ring, inner, particles, labelY: 38, hitRadius: 32 };
+    }
+
+    if (style === "skyline") {
+      // Skyscraper silhouette + window lights.
+      glow.circle(0, 0, 44).fill({ color: c, alpha: 0.15 });
+      glow.circle(0, 0, 28).fill({ color: c, alpha: 0.22 });
+      container.addChild(glow);
+
+      // 3 building silhouettes of varying heights.
+      const buildings = [
+        { x: -20, w: 12, h: 28 },
+        { x: -4, w: 14, h: 38 },
+        { x: 12, w: 12, h: 24 },
+      ];
+      for (const b of buildings) {
+        ring.rect(b.x, 14 - b.h, b.w, b.h).fill(0x1f2937).stroke({
+          color: c,
+          width: 1,
+          alpha: 0.5,
+        });
+        // Windows.
+        for (let row = 0; row < Math.floor(b.h / 6); row++) {
+          for (let col = 0; col < Math.floor(b.w / 4); col++) {
+            const wx = b.x + 1 + col * 4;
+            const wy = 14 - b.h + 2 + row * 6;
+            const lit = Math.random() > 0.4;
+            ring.rect(wx, wy, 2, 2).fill({
+              color: lit ? 0xfef08a : 0x0f172a,
+              alpha: lit ? 0.85 : 1,
+            });
+          }
+        }
+      }
+      // Antenna with red blink.
+      ring
+        .moveTo(3, -24)
+        .lineTo(3, -32)
+        .stroke({ color: 0x71717a, width: 1.5 });
+      container.addChild(ring);
+
+      inner = new Graphics();
+      inner.circle(3, -32, 1.8).fill({ color: 0xef4444, alpha: 1 });
+      container.addChild(inner);
+
+      particles = null;
+      return { glow, ring, inner, particles, labelY: 36, hitRadius: 32 };
+    }
+
+    if (style === "back") {
+      // Compact back portal — small ring, low profile.
+      glow.circle(0, 0, 26).fill({ color: c, alpha: 0.18 });
+      container.addChild(glow);
+      ring.circle(0, 0, 16).stroke({ color: c, width: 2, alpha: 0.85 });
+      ring.circle(0, 0, 10).stroke({ color: 0xffffff, width: 1, alpha: 0.4 });
+      container.addChild(ring);
+      return {
+        glow,
+        ring,
+        inner: null,
+        particles: null,
+        labelY: 28,
+        hitRadius: 24,
+      };
+    }
+
+    // Default — original look.
+    glow.circle(0, 0, 36).fill({ color: c, alpha: 0.12 });
+    glow.circle(0, 0, 26).fill({ color: c, alpha: 0.2 });
+    container.addChild(glow);
+
+    ring.circle(0, 0, 22).stroke({ color: c, width: 3, alpha: 0.8 });
+    container.addChild(ring);
+
+    return {
+      glow,
+      ring,
+      inner: null,
+      particles: null,
+      labelY: 40,
+      hitRadius: 32,
+    };
   }
 
   private drawTable(table: TableLandmark) {
@@ -533,5 +1309,7 @@ export class GameScene {
     this.app.destroy(true, { children: true, texture: true });
     this.app = null;
     this.sprites.clear();
+    this.animatedPortals = [];
+    this.ambianceParticles = [];
   }
 }
