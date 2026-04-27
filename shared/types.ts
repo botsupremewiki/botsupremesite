@@ -43,7 +43,10 @@ export type ChatMessage = {
   playerName: string;
   text: string;
   timestamp: number;
+  // Badges dérivés des rôles Discord du joueur. Le rendu côté UI fait
+  // gagner le plus haut : ADMIN > BOOSTER. Cf. `web/app/play/chat-panel.tsx`.
   isAdmin?: boolean;
+  isBooster?: boolean;
 };
 
 export type ClientMessage =
@@ -382,9 +385,9 @@ export const SLOTS_CONFIG = {
   maxBet: 10_000_000,
   spinDurationMs: 1800, // manual spin: total time until last reel locks
   reelStaggerMs: 320, // delay between each reel locking
-  autoSpinDurationMs: 900, // faster animation when autospinning
-  autoSpinReelStaggerMs: 160,
-  autoSpinIntervalMs: 1100, // delay between consecutive autospins
+  autoSpinDurationMs: 1800, // moitié plus lent qu'avant : on voit les gains
+  autoSpinReelStaggerMs: 320,
+  autoSpinIntervalMs: 2200, // delay between consecutive autospins
   autoSpinChoices: [10, 25, 50, 100] as const,
   historySize: 8,
 } as const;
