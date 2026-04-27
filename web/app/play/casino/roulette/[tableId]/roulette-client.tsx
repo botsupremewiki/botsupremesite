@@ -540,7 +540,11 @@ function BettingGrid({
   };
 
   return (
-    <div className="w-full max-w-5xl rounded-xl border border-white/10 bg-black/30 p-3">
+    <div
+      className={`w-full max-w-5xl rounded-xl border border-white/10 bg-black/30 p-3 ${
+        state.phase === "spinning" ? "roulette-flying" : ""
+      }`}
+    >
       <div style={numberGridStyle}>
         {/* 0 spans all three rows on the first column */}
         <div style={{ gridRow: "1 / span 3", gridColumn: "1 / 2" }}>
@@ -770,14 +774,12 @@ function BetCell({
         />
       )}
       {mineAmount > 0 && (
-        <motion.span
+        <span
           key={mineAmount}
-          initial={{ scale: 0.3, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="pointer-events-none absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-zinc-900 shadow"
+          className="chip-badge pointer-events-none absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-zinc-900 shadow"
         >
           {formatShort(mineAmount)}
-        </motion.span>
+        </span>
       )}
       {totalAmount > 0 && mineAmount === 0 && (
         <span className="pointer-events-none absolute -left-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white/30 px-1 text-[8px] font-bold text-white">

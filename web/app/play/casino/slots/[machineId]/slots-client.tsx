@@ -661,13 +661,33 @@ function Reel({
         className="flex flex-col"
         style={{ gap: REEL_CELL_GAP }}
         initial={isSpinning ? { y: 0 } : false}
-        animate={isSpinning ? { y: [0, -translateEnd * 0.85, -translateEnd * 1.012, -translateEnd] } : { y: 0 }}
+        // 5-keyframe spin: subtle wobble back (anticipation), then full
+        // travel, then overshoot, then settle. The wobble adds a tiny
+        // physical feel — like the reel coiling before launch.
+        animate={
+          isSpinning
+            ? {
+                y: [
+                  0,
+                  +cellPitch * 0.25,
+                  -translateEnd * 0.85,
+                  -translateEnd * 1.012,
+                  -translateEnd,
+                ],
+              }
+            : { y: 0 }
+        }
         transition={
           isSpinning
             ? {
                 duration: durationMs / 1000,
-                times: [0, 0.7, 0.92, 1],
-                ease: ["linear", [0.2, 0.5, 0.2, 1], [0.5, 0, 0.5, 1]],
+                times: [0, 0.06, 0.7, 0.92, 1],
+                ease: [
+                  "easeOut",
+                  "linear",
+                  [0.2, 0.5, 0.2, 1],
+                  [0.5, 0, 0.5, 1],
+                ],
               }
             : { duration: 0 }
         }

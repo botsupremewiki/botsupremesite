@@ -110,3 +110,33 @@ body {
     opacity: 0;
   }
 }
+
+/* Roulette chip badges: drop-in animation when a bet is placed, and a
+   "fly toward the wheel" animation when the spin starts (the wheel is
+   rendered above the betting grid, so chips drift up + shrink + fade). */
+@keyframes chip-place {
+  from {
+    transform: scale(0.3) rotate(-12deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+@keyframes chip-fly {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, -240px) scale(0.4) rotate(28deg);
+    opacity: 0;
+  }
+}
+.chip-badge {
+  animation: chip-place 240ms cubic-bezier(0.2, 0.8, 0.3, 1.05) forwards;
+}
+.roulette-flying .chip-badge {
+  animation: chip-fly 720ms cubic-bezier(0.45, 0, 0.7, 0.6) forwards;
+}

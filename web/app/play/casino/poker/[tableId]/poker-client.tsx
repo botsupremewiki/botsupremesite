@@ -804,13 +804,35 @@ function ActionBar({
               </button>
             </div>
           )}
-          <button
+          {/* Pulse the all-in button only when it's the player's most
+              meaningful aggressive option : either they don't have enough
+              to call (so it's all-in or fold), or they can't even cover
+              the min raise. Outside of those tight spots all-in is just
+              one option among others — pulsing it then would be noise. */}
+          <motion.button
             onClick={onAllIn}
             disabled={!canBet}
+            animate={
+              canBet && (!canCall || maxBet < minBet)
+                ? {
+                    boxShadow: [
+                      "0 0 0 0 rgba(244,63,94,0)",
+                      "0 0 14px 4px rgba(244,63,94,0.55)",
+                      "0 0 0 0 rgba(244,63,94,0)",
+                    ],
+                    scale: [1, 1.05, 1],
+                  }
+                : { boxShadow: "0 0 0 0 rgba(244,63,94,0)", scale: 1 }
+            }
+            transition={{
+              duration: 1.4,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
             className="rounded-md bg-rose-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             All-in
-          </button>
+          </motion.button>
         </div>
       ) : (
         <div className="text-xs text-zinc-400">
