@@ -67,27 +67,31 @@ export function SlotsClient({
   const [autospin, setAutospin] = useState<SlotsAutospinState | null>(null);
   const [stopOnBigWin, setStopOnBigWin] = useState<boolean>(true);
 
-  // Reel animation state. Each entry is either an array of symbols
-  // (locked grid column) or null (still spinning — the ticker fills it
-  // with random symbols).
-  const initialGrid = useMemo<(SlotsSymbolKey[] | null)[]>(
+  // Reel animation state.
+  // Each reel is in one of two phases:
+  //   • idle    → renders the symbols from `targetGrid[c]` directly
+  //   • spinning → translates a strip of random symbols ending with the
+  //                target column. The strip is regenerated every spin via
+  //                `spinId` (the framer-motion key resets the animation).
+  const initialGrid = useMemo<SlotsSymbolKey[][]>(
     () =>
       Array.from({ length: machine.cols }, () =>
         Array.from({ length: machine.rows }, () => machine.symbols[0].key),
       ),
     [machine],
   );
-  const [reels, setReels] =
-    useState<(SlotsSymbolKey[] | null)[]>(initialGrid);
+  const [targetGrid, setTargetGrid] =
+    useState<SlotsSymbolKey[][]>(initialGrid);
+  const [spinId, setSpinId] = useState(0);
+  const [reelDurations, setReelDurations] = useState<number[]>([]);
   const [pendingSpin, setPendingSpin] = useState<SlotsSpin | null>(null);
   const [resolvedSpin, setResolvedSpin] = useState<SlotsSpin | null>(null);
-  const tickerRef = useRef<number | null>(null);
-  const lockTimeoutsRef = useRef<number[]>([]);
+  const finishTimerRef = useRef<number | null>(null);
 
   // Reset the grid when the machine config changes (e.g. welcome arrived
   // with a different shape than the static fallback we started with).
   useEffect(() => {
-    setReels(initialGrid);
+    setTargetGrid(initialGrid);
   }, [initialGrid]);
 
   const isSpinning = pendingSpin !== null;
@@ -183,8 +187,8 @@ export function SlotsClient({
 
   useEffect(() => {
     return () => {
-      if (tickerRef.current !== null) window.clearInterval(tickerRef.current);
-      for (const t of lockTimeoutsRef.current) window.clearTimeout(t);
+      if (finishTimerRef.current !== null)
+        window.clearTimeout(finishTimerRef.current);
     };
   }, []);
 
@@ -193,31 +197,8 @@ export function SlotsClient({
       setErrorMsg(null);
       setResolvedSpin(null);
       setPendingSpin(spin);
-      // All reels start spinning (null).
-      setReels(Array.from({ length: spin.grid.length }, () => null));
+      setTargetGrid(spin.grid);
 
-      // Random-symbol ticker for the still-spinning reels.
-      if (tickerRef.current !== null) window.clearInterval(tickerRef.current);
-      const rows = machine.rows;
-      tickerRef.current = window.setInterval(() => {
-        setReels((prev) =>
-          prev.map((col) =>
-            col === null
-              ? Array.from(
-                  { length: rows },
-                  () =>
-                    allSymbolKeys[
-                      Math.floor(Math.random() * allSymbolKeys.length)
-                    ],
-                )
-              : col,
-          ),
-        );
-      }, 60);
-
-      // Stagger reel locks left → right.
-      for (const t of lockTimeoutsRef.current) window.clearTimeout(t);
-      lockTimeoutsRef.current = [];
       const total = fastMode
         ? SLOTS_CONFIG.autoSpinDurationMs
         : SLOTS_CONFIG.spinDurationMs;
@@ -225,35 +206,33 @@ export function SlotsClient({
         ? SLOTS_CONFIG.autoSpinReelStaggerMs
         : SLOTS_CONFIG.reelStaggerMs;
       const reelCount = spin.grid.length;
-      // First reel locks earlier, last one at `total`.
-      const lockTimes: number[] = [];
+      // Each reel decelerates over its own duration; reel 0 stops first,
+      // last reel stops at `total`. Identical average linear speed across
+      // reels means longer reels just spin past more symbols before
+      // landing — no visual mismatch in spin velocity.
+      const durations: number[] = [];
       for (let i = 0; i < reelCount; i++) {
-        lockTimes.push(total - stagger * (reelCount - 1 - i));
+        durations.push(total - stagger * (reelCount - 1 - i));
       }
-      for (let i = 0; i < reelCount; i++) {
-        const idx = i;
-        const t = window.setTimeout(() => {
-          setReels((prev) => {
-            const next = [...prev];
-            next[idx] = spin.grid[idx];
-            return next;
-          });
-          if (idx === reelCount - 1) {
-            if (tickerRef.current !== null) {
-              window.clearInterval(tickerRef.current);
-              tickerRef.current = null;
-            }
-            setPendingSpin(null);
-            setResolvedSpin(spin);
-            setHistory((prev) =>
-              [spin, ...prev].slice(0, SLOTS_CONFIG.historySize),
-            );
-          }
-        }, lockTimes[idx]);
-        lockTimeoutsRef.current.push(t);
-      }
+      setReelDurations(durations);
+      // New `spinId` = remount the spinning strips so framer-motion
+      // restarts each animation from y=0.
+      setSpinId((id) => id + 1);
+
+      // Last reel finishes at `total`; clear pending state shortly after
+      // so the result chip + history append fire when the bounce settles.
+      if (finishTimerRef.current !== null)
+        window.clearTimeout(finishTimerRef.current);
+      finishTimerRef.current = window.setTimeout(() => {
+        setPendingSpin(null);
+        setResolvedSpin(spin);
+        setHistory((prev) =>
+          [spin, ...prev].slice(0, SLOTS_CONFIG.historySize),
+        );
+        finishTimerRef.current = null;
+      }, total + 80);
     },
-    [allSymbolKeys, machine.rows],
+    [],
   );
 
   const send = useCallback(
@@ -354,10 +333,13 @@ export function SlotsClient({
           <div className="flex w-full max-w-2xl flex-col items-center gap-5">
             <SlotMachineView
               machine={machine}
-              reels={reels}
+              targetGrid={targetGrid}
+              spinId={spinId}
+              reelDurations={reelDurations}
               isSpinning={isSpinning}
               resolved={resolvedSpin}
               symbolGlyph={symbolGlyph}
+              allSymbolKeys={allSymbolKeys}
             />
 
             <BetControls
@@ -432,16 +414,22 @@ export function SlotsClient({
 
 function SlotMachineView({
   machine,
-  reels,
+  targetGrid,
+  spinId,
+  reelDurations,
   isSpinning,
   resolved,
   symbolGlyph,
+  allSymbolKeys,
 }: {
   machine: SlotMachineConfig;
-  reels: (SlotsSymbolKey[] | null)[];
+  targetGrid: SlotsSymbolKey[][];
+  spinId: number;
+  reelDurations: number[];
   isSpinning: boolean;
   resolved: SlotsSpin | null;
   symbolGlyph: (key: SlotsSymbolKey) => string;
+  allSymbolKeys: SlotsSymbolKey[];
 }) {
   const winning = !!resolved && resolved.win > 0;
   const isBigWin = winning && resolved!.multiplier >= BIG_WIN_MULTIPLIER;
@@ -474,7 +462,7 @@ function SlotMachineView({
         } bg-gradient-to-b from-zinc-900 via-black to-zinc-950`}
       >
         <div className="flex gap-2">
-          {reels.map((col, c) => (
+          {targetGrid.map((col, c) => (
             <Reel
               key={c}
               column={col}
@@ -482,8 +470,11 @@ function SlotMachineView({
               rows={machine.rows}
               cellSize={cellSize}
               symbolGlyph={symbolGlyph}
-              fallback={machine.symbols[0].key}
               highlightedCells={highlightedCells}
+              isSpinning={isSpinning}
+              spinId={spinId}
+              durationMs={reelDurations[c] ?? 0}
+              allSymbolKeys={allSymbolKeys}
             />
           ))}
         </div>
@@ -548,41 +539,99 @@ function BigWinFlash({
   );
 }
 
+// Vertical gap between cells (matches the gap-1 = 4px on the static grid).
+const REEL_CELL_GAP = 4;
+
 function Reel({
   column,
   colIndex,
   rows,
   cellSize,
   symbolGlyph,
-  fallback,
   highlightedCells,
+  isSpinning,
+  spinId,
+  durationMs,
+  allSymbolKeys,
 }: {
-  column: SlotsSymbolKey[] | null;
+  column: SlotsSymbolKey[];
   colIndex: number;
   rows: number;
   cellSize: number;
   symbolGlyph: (k: SlotsSymbolKey) => string;
-  fallback: SlotsSymbolKey;
   highlightedCells: Map<string, number>;
+  isSpinning: boolean;
+  spinId: number;
+  durationMs: number;
+  allSymbolKeys: SlotsSymbolKey[];
 }) {
+  // Window we look through. Includes the inter-cell gaps between rows.
+  const cellPitch = cellSize + REEL_CELL_GAP;
+  const windowH = rows * cellPitch - REEL_CELL_GAP;
+
+  // Strip = enough random padding for a fast-spinning blur, then the
+  // target column at the very bottom. Strip length scales with the reel
+  // duration so each reel keeps the same average linear speed regardless
+  // of when it locks (≈ 36 symbols per second, classic slot feel).
+  const strip = useMemo(() => {
+    if (!isSpinning) return column;
+    const symbolsPerSec = 36;
+    const padding = Math.max(
+      8,
+      Math.round((durationMs / 1000) * symbolsPerSec),
+    );
+    const random: SlotsSymbolKey[] = [];
+    for (let i = 0; i < padding; i++) {
+      random.push(
+        allSymbolKeys[Math.floor(Math.random() * allSymbolKeys.length)],
+      );
+    }
+    return [...random, ...column];
+    // `spinId` re-runs the memo every spin so the random padding is fresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinId, isSpinning, column, allSymbolKeys, durationMs]);
+
+  // Distance the strip must travel so that its last `rows` symbols sit in
+  // the visible window. We translate the inner stack by -translateEnd.
+  const translateEnd = (strip.length - rows) * cellPitch;
+
   return (
     <div
-      className="flex flex-col gap-1 rounded-lg border border-white/10 bg-zinc-950/80 p-1"
+      className="overflow-hidden rounded-lg border border-white/10 bg-zinc-950/80 p-1"
+      style={{ height: windowH + 8 /* padding */ }}
     >
-      {Array.from({ length: rows }, (_, r) => {
-        const sym = column ? column[r] : null;
-        const highlighted = highlightedCells.has(`${colIndex}:${r}`);
-        return (
-          <Cell
-            key={r}
-            symbol={sym}
-            cellSize={cellSize}
-            highlighted={highlighted}
-            symbolGlyph={symbolGlyph}
-            fallback={fallback}
-          />
-        );
-      })}
+      <motion.div
+        key={isSpinning ? `spin-${spinId}-${colIndex}` : `idle-${colIndex}`}
+        className="flex flex-col"
+        style={{ gap: REEL_CELL_GAP }}
+        initial={isSpinning ? { y: 0 } : false}
+        animate={isSpinning ? { y: [0, -translateEnd * 0.85, -translateEnd * 1.012, -translateEnd] } : { y: 0 }}
+        transition={
+          isSpinning
+            ? {
+                duration: durationMs / 1000,
+                times: [0, 0.7, 0.92, 1],
+                ease: ["linear", [0.2, 0.5, 0.2, 1], [0.5, 0, 0.5, 1]],
+              }
+            : { duration: 0 }
+        }
+      >
+        {strip.map((sym, i) => {
+          // Highlight only applies to the resolved (idle) state, where
+          // `strip` is exactly the target column — so i === row index.
+          const highlighted =
+            !isSpinning && highlightedCells.has(`${colIndex}:${i}`);
+          return (
+            <Cell
+              key={i}
+              symbol={sym}
+              cellSize={cellSize}
+              highlighted={highlighted}
+              symbolGlyph={symbolGlyph}
+            />
+          );
+        })}
+      </motion.div>
     </div>
   );
 }
@@ -592,41 +641,25 @@ function Cell({
   cellSize,
   highlighted,
   symbolGlyph,
-  fallback,
 }: {
-  symbol: SlotsSymbolKey | null;
+  symbol: SlotsSymbolKey;
   cellSize: number;
   highlighted: boolean;
   symbolGlyph: (k: SlotsSymbolKey) => string;
-  fallback: SlotsSymbolKey;
 }) {
   const fontSize = Math.round(cellSize * 0.7);
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-md transition-colors ${
+      className={`relative flex shrink-0 items-center justify-center rounded-md ${
         highlighted
           ? "bg-amber-500/25 ring-2 ring-amber-400/60"
           : "bg-zinc-900/60"
       }`}
       style={{ width: cellSize, height: cellSize }}
     >
-      <motion.div
-        key={symbol ?? "spin"}
-        initial={
-          symbol === null
-            ? { y: -cellSize * 0.4, opacity: 0.7 }
-            : { y: cellSize * 0.3, opacity: 0, scale: 0.85 }
-        }
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{
-          duration: symbol === null ? 0.06 : 0.22,
-          ease: symbol === null ? "linear" : [0.18, 0.86, 0.18, 1.05],
-        }}
-        className="select-none leading-none"
-        style={{ fontSize }}
-      >
-        {symbolGlyph(symbol ?? fallback)}
-      </motion.div>
+      <span className="select-none leading-none" style={{ fontSize }}>
+        {symbolGlyph(symbol)}
+      </span>
     </div>
   );
 }
