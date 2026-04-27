@@ -42,37 +42,39 @@ const EMPTY_DRAFT = {
 };
 
 const RARITY_TIER: Record<TcgRarity, number> = {
-  common: 0,
-  energy: 0,
-  uncommon: 1,
-  rare: 2,
-  "holo-rare": 3,
+  promo: 0,
+  "diamond-1": 1,
+  "diamond-2": 2,
+  "diamond-3": 3,
+  "diamond-4": 4,
+  "star-1": 5,
+  "star-2": 6,
+  "star-3": 7,
+  crown: 8,
 };
 
 const RARITY_LABEL: Record<TcgRarity, string> = {
-  common: "Commune",
-  energy: "Énergie",
-  uncommon: "Peu commune",
-  rare: "Rare",
-  "holo-rare": "Holo rare",
+  promo: "Sans rareté",
+  "diamond-1": "Commune ◆",
+  "diamond-2": "Peu commune ◆◆",
+  "diamond-3": "Rare ◆◆◆",
+  "diamond-4": "Rare ex ◆◆◆◆",
+  "star-1": "Full Art ★",
+  "star-2": "Full Art ★★",
+  "star-3": "Immersive ★★★",
+  crown: "Couronne 👑",
 };
 
 const RARITY_BORDER: Record<TcgRarity, string> = {
-  common: "border-zinc-700/50",
-  energy: "border-zinc-700/50",
-  uncommon: "border-emerald-500/50",
-  rare: "border-sky-500/60",
-  "holo-rare": "border-amber-300/70",
-};
-
-const TYPE_BG: Record<PokemonEnergyType, string> = {
-  fire: "from-orange-500/30 to-red-700/40",
-  water: "from-blue-400/30 to-blue-700/40",
-  grass: "from-emerald-400/30 to-emerald-700/40",
-  lightning: "from-yellow-400/30 to-yellow-600/40",
-  psychic: "from-fuchsia-400/30 to-purple-700/40",
-  fighting: "from-amber-700/30 to-stone-700/40",
-  colorless: "from-zinc-300/20 to-zinc-500/30",
+  promo: "border-zinc-700/50",
+  "diamond-1": "border-zinc-700/50",
+  "diamond-2": "border-emerald-500/50",
+  "diamond-3": "border-sky-500/60",
+  "diamond-4": "border-amber-300/70",
+  "star-1": "border-fuchsia-400/70",
+  "star-2": "border-rose-400/70",
+  "star-3": "border-orange-300/80",
+  crown: "border-yellow-200/90",
 };
 
 export function DecksClient({
@@ -439,15 +441,21 @@ const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "lightning", label: "⚡ Élec" },
   { id: "psychic", label: "🌀 Psy" },
   { id: "fighting", label: "👊 Combat" },
-  { id: "colorless", label: "⭐ Normal" },
+  { id: "darkness", label: "🌑 Obscurité" },
+  { id: "metal", label: "⚙️ Métal" },
+  { id: "dragon", label: "🐉 Dragon" },
+  { id: "colorless", label: "⭐ Incolore" },
 ];
 
 const PICKER_RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
-  { id: "holo-rare", label: "Holo" },
-  { id: "rare", label: "Rare" },
-  { id: "uncommon", label: "Peu c." },
-  { id: "common", label: "Commune" },
-  { id: "energy", label: "Énergie" },
+  { id: "crown", label: "👑 Couronne" },
+  { id: "star-3", label: "★★★" },
+  { id: "star-2", label: "★★" },
+  { id: "star-1", label: "★" },
+  { id: "diamond-4", label: "◆◆◆◆ ex" },
+  { id: "diamond-3", label: "◆◆◆" },
+  { id: "diamond-2", label: "◆◆" },
+  { id: "diamond-1", label: "◆" },
 ];
 
 function CollectionPicker({
@@ -476,10 +484,7 @@ function CollectionPicker({
       if (ownedFilter === "owned" && owned <= 0) return false;
       if (ownedFilter === "missing" && owned > 0) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
-      if (typeFilter) {
-        const cType = c.kind === "energy" ? c.energyType : c.type;
-        if (cType !== typeFilter) return false;
-      }
+      if (typeFilter && c.type !== typeFilter) return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -682,12 +687,10 @@ function DeckSummary({
 }) {
   const grouped = useMemo(() => {
     const pokemon: { card: PokemonCardData; count: number }[] = [];
-    const energies: { card: PokemonCardData; count: number }[] = [];
     for (const [cardId, count] of draftEntries) {
       const card = cardById.get(cardId);
       if (!card) continue;
-      if (card.kind === "energy") energies.push({ card, count });
-      else pokemon.push({ card, count });
+      pokemon.push({ card, count });
     }
     pokemon.sort((a, b) => {
       const ar = RARITY_TIER[a.card.rarity] ?? 0;
@@ -695,19 +698,15 @@ function DeckSummary({
       if (ar !== br) return br - ar;
       return a.card.name.localeCompare(b.card.name);
     });
-    energies.sort((a, b) => a.card.name.localeCompare(b.card.name));
-    return { pokemon, energies };
+    return { pokemon };
   }, [draftEntries, cardById]);
 
   const pokemonTotal = grouped.pokemon.reduce((s, e) => s + e.count, 0);
-  const energyTotal = grouped.energies.reduce((s, e) => s + e.count, 0);
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-white/5 bg-black/40">
       <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400">
         <span>Deck</span>
-        <span>
-          🐾 {pokemonTotal} · 🔋 {energyTotal}
-        </span>
+        <span>🐾 {pokemonTotal}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {draftEntries.size === 0 && (
@@ -726,24 +725,6 @@ function DeckSummary({
             />
           ))}
         </AnimatePresence>
-        {grouped.energies.length > 0 && (
-          <div className="mt-3 border-t border-white/5 pt-2">
-            <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">
-              Énergies
-            </div>
-            <AnimatePresence initial={false}>
-              {grouped.energies.map(({ card, count }) => (
-                <DeckRow
-                  key={card.id}
-                  card={card}
-                  count={count}
-                  onRemove={() => onRemove(card.id)}
-                  onAdd={() => onAdd(card)}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
       </div>
     </aside>
   );
@@ -767,7 +748,6 @@ function DeckRow({
       exit={{ opacity: 0, x: -6 }}
       className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-white/5"
     >
-      <span className="text-lg">{card.art}</span>
       <span className="flex-1 truncate text-xs text-zinc-200">{card.name}</span>
       <div className="flex items-center gap-1">
         <button

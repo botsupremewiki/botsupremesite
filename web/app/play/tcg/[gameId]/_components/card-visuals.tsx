@@ -2,29 +2,61 @@
 
 import type { PokemonCardData, PokemonEnergyType, TcgRarity } from "@shared/types";
 
+// Tier numérique pour le tri par rareté (du plus commun au plus rare).
 export const RARITY_TIER: Record<TcgRarity, number> = {
-  common: 0,
-  energy: 0,
-  uncommon: 1,
-  rare: 2,
-  "holo-rare": 3,
+  promo: 0,
+  "diamond-1": 1,
+  "diamond-2": 2,
+  "diamond-3": 3,
+  "diamond-4": 4,
+  "star-1": 5,
+  "star-2": 6,
+  "star-3": 7,
+  crown: 8,
 };
 
+// Glyph affiché à côté de la carte / dans les filtres.
+export const RARITY_GLYPH: Record<TcgRarity, string> = {
+  promo: "·",
+  "diamond-1": "◆",
+  "diamond-2": "◆◆",
+  "diamond-3": "◆◆◆",
+  "diamond-4": "◆◆◆◆",
+  "star-1": "★",
+  "star-2": "★★",
+  "star-3": "★★★",
+  crown: "👑",
+};
+
+// Label FR humain.
 export const RARITY_LABEL: Record<TcgRarity, string> = {
-  common: "Commune",
-  energy: "Énergie",
-  uncommon: "Peu commune",
-  rare: "Rare",
-  "holo-rare": "Holo rare",
+  promo: "Sans rareté",
+  "diamond-1": "Commune ◆",
+  "diamond-2": "Peu commune ◆◆",
+  "diamond-3": "Rare ◆◆◆",
+  "diamond-4": "Rare ex ◆◆◆◆",
+  "star-1": "Full Art ★",
+  "star-2": "Full Art ★★",
+  "star-3": "Immersive ★★★",
+  crown: "Couronne 👑",
 };
 
+// Border + glow Tailwind pour souligner la rareté autour d'une carte.
 export const RARITY_COLOR: Record<TcgRarity, string> = {
-  common: "border-zinc-500/40 text-zinc-200",
-  energy: "border-zinc-500/40 text-zinc-200",
-  uncommon: "border-emerald-400/50 text-emerald-200",
-  rare: "border-sky-400/60 text-sky-200",
-  "holo-rare":
+  promo: "border-zinc-500/40 text-zinc-200",
+  "diamond-1": "border-zinc-500/40 text-zinc-200",
+  "diamond-2": "border-emerald-400/40 text-emerald-200",
+  "diamond-3": "border-sky-400/60 text-sky-200",
+  "diamond-4":
     "border-amber-300/70 text-amber-100 shadow-[0_0_24px_rgba(252,211,77,0.45)]",
+  "star-1":
+    "border-fuchsia-400/70 text-fuchsia-100 shadow-[0_0_24px_rgba(232,121,249,0.45)]",
+  "star-2":
+    "border-rose-400/70 text-rose-100 shadow-[0_0_28px_rgba(251,113,133,0.5)]",
+  "star-3":
+    "border-orange-300/80 text-orange-100 shadow-[0_0_36px_rgba(253,186,116,0.6)]",
+  crown:
+    "border-yellow-200/90 text-yellow-50 shadow-[0_0_44px_rgba(254,240,138,0.7)]",
 };
 
 export const TYPE_GLYPH: Record<PokemonEnergyType, string> = {
@@ -34,6 +66,10 @@ export const TYPE_GLYPH: Record<PokemonEnergyType, string> = {
   lightning: "⚡",
   psychic: "🌀",
   fighting: "👊",
+  darkness: "🌑",
+  metal: "⚙️",
+  dragon: "🐉",
+  fairy: "🧚",
   colorless: "⭐",
 };
 
@@ -44,22 +80,43 @@ export const TYPE_BG: Record<PokemonEnergyType, string> = {
   lightning: "from-yellow-400/30 to-yellow-600/40",
   psychic: "from-fuchsia-400/30 to-purple-700/40",
   fighting: "from-amber-700/30 to-stone-700/40",
+  darkness: "from-zinc-700/40 to-slate-900/60",
+  metal: "from-slate-300/20 to-slate-500/30",
+  dragon: "from-amber-400/30 to-violet-700/40",
+  fairy: "from-pink-300/30 to-rose-500/40",
   colorless: "from-zinc-300/20 to-zinc-500/30",
+};
+
+export const TYPE_LABEL_FR: Record<PokemonEnergyType, string> = {
+  fire: "Feu",
+  water: "Eau",
+  grass: "Plante",
+  lightning: "Électrique",
+  psychic: "Psy",
+  fighting: "Combat",
+  darkness: "Obscurité",
+  metal: "Métal",
+  dragon: "Dragon",
+  fairy: "Fée",
+  colorless: "Incolore",
 };
 
 export function CardSlot({
   card,
   count,
+  onClick,
 }: {
   card: PokemonCardData;
   count: number;
+  onClick?: () => void;
 }) {
   const owned = count > 0;
   return (
     <div
+      onClick={onClick}
       className={`relative flex flex-col gap-1 rounded-xl border bg-black/40 p-2 transition-opacity ${
         owned ? RARITY_COLOR[card.rarity] : "border-white/5 opacity-30"
-      }`}
+      } ${onClick ? "cursor-pointer" : ""}`}
     >
       <CardFace card={card} faded={!owned} />
       {count > 1 && (
@@ -71,6 +128,9 @@ export function CardSlot({
   );
 }
 
+/** Affiche la vraie carte officielle (image full-card tcgdex en FR).
+ *  HP, attaques, faiblesse, illustrateur, etc. sont déjà dessinés sur l'image
+ *  — pas besoin d'overlay HTML. */
 export function CardFace({
   card,
   faded,
@@ -80,104 +140,72 @@ export function CardFace({
   faded?: boolean;
   large?: boolean;
 }) {
-  if (card.kind === "energy") {
-    // Cartes énergie (legacy) — rendu emoji centré.
-    const bg = TYPE_BG[card.energyType] ?? TYPE_BG.colorless;
-    return (
-      <div
-        className={`flex flex-col items-center justify-center gap-2 rounded-md bg-gradient-to-b ${bg} ${
-          large ? "h-full" : "aspect-[5/7]"
-        } p-3 ${faded ? "grayscale" : ""}`}
-      >
-        <div className={large ? "text-7xl" : "text-4xl"}>{card.art}</div>
-        <div className="text-center text-xs font-semibold text-zinc-100">
-          {card.name}
-        </div>
-      </div>
-    );
-  }
+  const glow =
+    card.rarity === "crown"
+      ? "shadow-[0_0_36px_rgba(254,240,138,0.7)]"
+      : card.rarity === "star-3"
+        ? "shadow-[0_0_28px_rgba(253,186,116,0.55)]"
+        : card.rarity === "star-2"
+          ? "shadow-[0_0_22px_rgba(251,113,133,0.45)]"
+          : card.rarity === "star-1"
+            ? "shadow-[0_0_18px_rgba(232,121,249,0.4)]"
+            : card.rarity === "diamond-4"
+              ? "shadow-[0_0_14px_rgba(252,211,77,0.4)]"
+              : "";
+  return (
+    <div
+      className={`relative overflow-hidden rounded-md ${
+        large ? "h-full" : "aspect-[5/7]"
+      } ${glow} ${faded ? "grayscale opacity-50" : ""}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={card.image}
+        alt={card.name}
+        className="h-full w-full object-contain"
+        loading="lazy"
+      />
+    </div>
+  );
+}
 
-  // Pokémon : vraies cartes officielles (URL pokemontcg.io). On affiche
-  // l'image full-card — HP, attacks, weakness sont déjà dessinés dessus.
-  const isUrl = card.art?.startsWith("http");
-  if (isUrl) {
-    const glow =
-      card.rarity === "holo-rare"
-        ? "shadow-[0_0_20px_rgba(252,211,77,0.55)]"
-        : card.rarity === "rare"
-          ? "shadow-[0_0_12px_rgba(125,211,252,0.4)]"
-          : "";
-    return (
+/** Modal plein écran pour zoomer une carte. Click outside ou Esc pour fermer. */
+export function CardZoomModal({
+  card,
+  onClose,
+}: {
+  card: PokemonCardData | null;
+  onClose: () => void;
+}) {
+  if (!card) return null;
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
       <div
-        className={`relative overflow-hidden rounded-md ${
-          large ? "h-full" : "aspect-[5/7]"
-        } ${glow} ${faded ? "grayscale opacity-50" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-h-[92vh] w-auto"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={card.art}
+          src={card.image}
           alt={card.name}
-          className="h-full w-full object-contain"
-          loading="lazy"
+          className="h-[88vh] w-auto rounded-lg object-contain"
         />
-      </div>
-    );
-  }
-
-  // Fallback rendu HTML (legacy emoji-based) — pour cartes anciennes encore en base.
-  const bg = TYPE_BG[card.type] ?? TYPE_BG.colorless;
-  return (
-    <div
-      className={`flex flex-col gap-1 rounded-md bg-gradient-to-b ${bg} ${
-        large ? "h-full" : "aspect-[5/7]"
-      } p-2 ${faded ? "grayscale" : ""}`}
-    >
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="font-semibold text-zinc-100">{card.name}</span>
-        <span className="tabular-nums text-rose-200">PV {card.hp}</span>
-      </div>
-      <div className="flex items-center justify-center rounded bg-black/30 py-3">
-        <span className={large ? "text-6xl" : "text-4xl"}>{card.art}</span>
-      </div>
-      {card.ability && (
-        <div className="rounded bg-black/40 px-1.5 py-1 text-[8px] leading-tight text-zinc-100">
-          <span className="text-amber-300">★ {card.ability.name}</span>
-          {large ? ` — ${card.ability.text}` : ""}
+        <button
+          onClick={onClose}
+          className="absolute -right-3 -top-3 rounded-full bg-zinc-900 p-2 text-zinc-200 shadow-lg ring-1 ring-white/20 hover:bg-zinc-800"
+          aria-label="Fermer"
+        >
+          ✕
+        </button>
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/20 bg-zinc-900/95 px-3 py-1 text-xs text-zinc-200">
+          {card.name} · {RARITY_LABEL[card.rarity]}
+          {card.illustrator ? ` · 🎨 ${card.illustrator}` : ""}
         </div>
-      )}
-      <div className="flex flex-col gap-0.5 text-[8px] leading-tight">
-        {card.attacks.slice(0, large ? 2 : 1).map((a, i) => (
-          <div key={i} className="rounded bg-black/40 px-1.5 py-1 text-zinc-100">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-0.5">
-                {a.cost.map((c, j) => (
-                  <span key={j}>{TYPE_GLYPH[c]}</span>
-                ))}
-                <span className="ml-1 font-semibold">{a.name}</span>
-              </span>
-              {a.damage !== undefined && (
-                <span className="font-bold text-rose-200">
-                  {a.damage}
-                  {a.damageSuffix ?? ""}
-                </span>
-              )}
-            </div>
-            {large && a.text && (
-              <div className="mt-0.5 text-[7px] text-zinc-300">{a.text}</div>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="mt-auto flex items-center justify-between text-[8px] text-zinc-300">
-        <span>
-          {card.weakness && (
-            <>
-              <span className="text-rose-300">Faiblesse</span>{" "}
-              {TYPE_GLYPH[card.weakness]}×2
-            </>
-          )}
-        </span>
-        <span>{RARITY_LABEL[card.rarity]}</span>
       </div>
     </div>
   );

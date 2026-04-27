@@ -24,11 +24,15 @@ import type { MarketListing } from "./page";
 type Tab = "buy" | "mine" | "favs";
 
 const RARITY_COLOR: Record<TcgRarity, string> = {
-  common: "border-zinc-500/40",
-  energy: "border-zinc-500/40",
-  uncommon: "border-emerald-400/50",
-  rare: "border-sky-400/60",
-  "holo-rare": "border-amber-300/70",
+  promo: "border-zinc-500/40",
+  "diamond-1": "border-zinc-500/40",
+  "diamond-2": "border-emerald-400/50",
+  "diamond-3": "border-sky-400/60",
+  "diamond-4": "border-amber-300/70",
+  "star-1": "border-fuchsia-400/70",
+  "star-2": "border-rose-400/70",
+  "star-3": "border-orange-300/80",
+  crown: "border-yellow-200/90",
 };
 
 export function MarketClient({
@@ -120,10 +124,7 @@ export function MarketClient({
       const card = cardById.get(r.card_id);
       if (!card) return false;
       if (rarityFilter && card.rarity !== rarityFilter) return false;
-      if (typeFilter) {
-        const cType = card.kind === "energy" ? card.energyType : card.type;
-        if (cType !== typeFilter) return false;
-      }
+      if (typeFilter && card.type !== typeFilter) return false;
       if (ownedFilter !== "all") {
         const owned = (ownedMap.get(r.card_id) ?? 0) > 0;
         if (ownedFilter === "owned" && !owned) return false;
@@ -557,7 +558,7 @@ function ListingsGrid({
           <div
             key={l.id}
             className={`flex flex-col gap-2 rounded-xl border bg-black/40 p-2 ${
-              RARITY_COLOR[card.rarity] ?? RARITY_COLOR.common
+              RARITY_COLOR[card.rarity] ?? RARITY_COLOR["diamond-1"]
             }`}
           >
             <div className="relative">
@@ -685,9 +686,7 @@ function SellModal({
                       onClick={() => setPicked(c.id)}
                       className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/10"
                     >
-                      <span className="font-semibold">
-                        {c.art} {c.name}
-                      </span>
+                      <span className="font-semibold">{c.name}</span>
                       <span className="text-xs text-zinc-500">×{count}</span>
                     </button>
                   );
@@ -698,9 +697,7 @@ function SellModal({
         ) : (
           <div className="flex flex-col gap-4">
             <div className="rounded-md border border-white/10 bg-white/5 p-3 text-sm text-zinc-200">
-              <span className="font-semibold">
-                {pickedCard?.art} {pickedCard?.name}
-              </span>{" "}
+              <span className="font-semibold">{pickedCard?.name}</span>{" "}
               <span className="text-xs text-zinc-500">
                 · {pickedCount} en stock
               </span>

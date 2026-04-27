@@ -6,7 +6,7 @@ import type {
   PokemonEnergyType,
   TcgRarity,
 } from "@shared/types";
-import { CardSlot, RARITY_TIER } from "./card-visuals";
+import { CardSlot, CardZoomModal, RARITY_TIER } from "./card-visuals";
 
 type CollectionFilter = "all" | "owned" | "missing" | "dupes";
 type CollectionSort = "number" | "name" | "rarity" | "count";
@@ -18,15 +18,21 @@ const TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "lightning", label: "⚡ Élec" },
   { id: "psychic", label: "🌀 Psy" },
   { id: "fighting", label: "👊 Combat" },
-  { id: "colorless", label: "⭐ Normal" },
+  { id: "darkness", label: "🌑 Obscurité" },
+  { id: "metal", label: "⚙️ Métal" },
+  { id: "dragon", label: "🐉 Dragon" },
+  { id: "colorless", label: "⭐ Incolore" },
 ];
 
 const RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
-  { id: "holo-rare", label: "Holo" },
-  { id: "rare", label: "Rare" },
-  { id: "uncommon", label: "Peu c." },
-  { id: "common", label: "Commune" },
-  { id: "energy", label: "Énergie" },
+  { id: "crown", label: "👑 Couronne" },
+  { id: "star-3", label: "★★★ Immersive" },
+  { id: "star-2", label: "★★ Full Art" },
+  { id: "star-1", label: "★ Full Art" },
+  { id: "diamond-4", label: "◆◆◆◆ ex" },
+  { id: "diamond-3", label: "◆◆◆ Rare" },
+  { id: "diamond-2", label: "◆◆ Peu c." },
+  { id: "diamond-1", label: "◆ Commune" },
 ];
 
 export function CollectionGrid({
@@ -41,6 +47,7 @@ export function CollectionGrid({
   const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
   const [ownedFilter, setOwnedFilter] = useState<CollectionFilter>("all");
   const [sortMode, setSortMode] = useState<CollectionSort>("number");
+  const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -50,10 +57,7 @@ export function CollectionGrid({
       if (ownedFilter === "missing" && count > 0) return false;
       if (ownedFilter === "dupes" && count < 2) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
-      if (typeFilter) {
-        const cType = c.kind === "energy" ? c.energyType : c.type;
-        if (cType !== typeFilter) return false;
-      }
+      if (typeFilter && c.type !== typeFilter) return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -186,11 +190,19 @@ export function CollectionGrid({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 pr-1">
             {sorted.map((c) => {
               const count = collection.get(c.id) ?? 0;
-              return <CardSlot key={c.id} card={c} count={count} />;
+              return (
+                <CardSlot
+                  key={c.id}
+                  card={c}
+                  count={count}
+                  onClick={() => setZoomedCard(c)}
+                />
+              );
             })}
           </div>
         )}
       </div>
+      <CardZoomModal card={zoomedCard} onClose={() => setZoomedCard(null)} />
     </div>
   );
 }

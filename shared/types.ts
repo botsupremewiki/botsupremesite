@@ -936,7 +936,7 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
   pokemon: {
     id: "pokemon",
     name: "Pokémon",
-    tagline: "Génération 1 — 151 Pokémon, 4 packs thématiques",
+    tagline: "Pokémon TCG Pocket — set Puissance Génétique (266 cartes)",
     packPrice: 10_000,
     packSize: 5,
     active: true,
@@ -974,15 +974,28 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
   },
 };
 
+// Raretés Pokémon TCG Pocket. Du plus commun au plus rare :
+//   diamond-1 ◆          (commune)
+//   diamond-2 ◆◆         (peu commune)
+//   diamond-3 ◆◆◆        (rare)
+//   diamond-4 ◆◆◆◆       (rare ex)
+//   star-1    ★          (full art)
+//   star-2    ★★         (full art alt)
+//   star-3    ★★★        (immersive art)
+//   crown     👑         (couronne brillante)
+//   promo                (sans rareté / variantes)
 export type TcgRarity =
-  | "common"
-  | "uncommon"
-  | "rare"
-  | "holo-rare"
-  | "energy"; // basic energies are functionally common but visually distinct
+  | "diamond-1"
+  | "diamond-2"
+  | "diamond-3"
+  | "diamond-4"
+  | "star-1"
+  | "star-2"
+  | "star-3"
+  | "crown"
+  | "promo";
 
-// Pokemon-specific card shape. Other TCGs will define their own and reuse
-// the same TcgCardOwned / pack flow.
+// Types Pokémon TCG (incluant les types Pocket récents).
 export type PokemonEnergyType =
   | "fire"
   | "water"
@@ -990,108 +1003,48 @@ export type PokemonEnergyType =
   | "lightning"
   | "psychic"
   | "fighting"
+  | "darkness"
+  | "metal"
+  | "dragon"
+  | "fairy"
   | "colorless";
 
 export type PokemonAttack = {
-  name: string;
+  name: string; // FR ex: "Danse Flammes"
   cost: PokemonEnergyType[];
-  damage?: number; // base damage; effects below may modify
-  damageSuffix?: "+" | "x" | "-"; // shown next to damage (e.g. "10×")
-  text?: string; // effect description (FR)
-  // Effets exécutés par le serveur après les dégâts. Pour la Gen 1 on en
-  // a peuplé ~20-30 sur les attaques les plus iconiques — on étoffera
-  // au fil de l'eau.
-  effects?: PokemonAttackEffect[];
+  damage?: number;
+  damageSuffix?: "+" | "x" | "-";
+  text?: string | null; // effet en FR (descriptif uniquement, pas exécuté par le moteur MVP)
 };
 
-export type PokemonAttackEffect =
-  // Applique une condition de statut à soi ou à l'adversaire. Coin flip
-  // optionnel : ne s'applique que sur le résultat indiqué (heads/tails).
-  | {
-      kind: "apply-status";
-      target: "self" | "opponent";
-      status: BattleStatus;
-      coin?: "heads" | "tails";
-    }
-  // Inflige X dégâts à soi-même (récul, contre-coup), avec coin
-  // optionnel pour les attaques style Tonnerre Pikachu.
-  | {
-      kind: "self-damage";
-      amount: number;
-      coin?: "heads" | "tails";
-    }
-  // Défausse N énergies attachées à soi (utilisé après les attaques style
-  // "Tempête de Feu : défausse 2 Énergies Feu"). Pour MVP on ne filtre
-  // pas par type — n'importe quelle énergie part.
-  | { kind: "discard-energy"; count: number }
-  // Soigne X dégâts à soi.
-  | { kind: "heal"; amount: number };
+// Note : ability + attack effects machine-readable retirés avec la refonte
+// Pocket. Le moteur exécute juste le damage. Les effets descriptifs vivent
+// dans `attack.text` pour info au joueur. Réintroduire si besoin plus tard.
 
-export type PokemonAbility = {
-  name: string;
-  text: string;
-  // Effet machine-readable. Si absent, l'ability est purement décorative
-  // pour l'instant (ex: Cri Préhistorique d'Aérodactyl).
-  effect?: PokemonAbilityEffect;
+export type PokemonCardData = {
+  kind: "pokemon";
+  id: string; // ex "A1-035"
+  number: number; // localId dans le set (pour tri d'affichage)
+  pokedexId: number | null;
+  name: string; // ex "Dracaufeu" (FR)
+  type: PokemonEnergyType;
+  stage: "basic" | "stage1" | "stage2";
+  evolvesFrom?: string | null;
+  hp: number;
+  weakness?: PokemonEnergyType | null;
+  retreatCost: number;
+  attacks: PokemonAttack[];
+  rarity: TcgRarity;
+  image: string; // URL high.webp tcgdex.net
+  description?: string | null;
+  illustrator?: string | null;
+  isEx: boolean;
+  // Booster thématique principal de la carte. Une carte peut apparaître dans
+  // plusieurs boosters (ex Couronnes), on garde le premier.
+  pack: PokemonPackTypeId;
+  // Boosters supplémentaires si carte multi-pack (sinon array vide).
+  extraPacks?: PokemonPackTypeId[];
 };
-
-export type PokemonAbilityEffect =
-  // Toute Énergie attachée à ce Pokémon compte comme Feu pour le coût
-  // d'attaque (Dracaufeu — Brûlure d'Énergie).
-  | { kind: "energy-burn" }
-  // Permet d'attacher autant d'Énergies Eau que tu veux à tes Pokémon
-  // Eau (Tortank — Danse Pluie). Bypasse la limite 1/tour pour ce cas.
-  | { kind: "rain-dance" }
-  // Quand un Pokémon attaquant blesse ce Pokémon, il subit `amount`
-  // dégâts (Mackogneur — Riposte).
-  | { kind: "counter-attack"; amount: number }
-  // Tant que ce Pokémon est Endormi, ignore tous les dégâts qu'il subit
-  // (Ronflex — Sans Garde).
-  | { kind: "asleep-immunity" }
-  // Ignore tous les dégâts ≥ `threshold` infligés à ce Pokémon
-  // (M. Mime — Mur de Lumière).
-  | { kind: "damage-cap"; threshold: number }
-  // Si l'attaquant est un Pokémon évolué (stage1/2), coin flip ; face =
-  // les dégâts sont ignorés (Mew — Esquive Neutre).
-  | { kind: "evolved-attacker-coin" }
-  // Tant que ce Pokémon est sur le Banc et l'Actif adverse Endormi,
-  // inflige `amount` dégâts entre les tours (Ectoplasma — Sombre Rêve).
-  | { kind: "bench-aura-asleep"; amount: number }
-  // Après chaque attaque de ce Pokémon (en tant qu'Actif), coin flip ;
-  // face = applique `status` à l'Actif adverse (Rafflesia — Spores).
-  | { kind: "post-attack-status-coin"; status: BattleStatus };
-
-export type PokemonCardData =
-  | {
-      kind: "pokemon";
-      id: string;
-      number: number; // Pokédex number
-      name: string;
-      type: PokemonEnergyType;
-      stage: "basic" | "stage1" | "stage2";
-      evolvesFrom?: string;
-      hp: number;
-      weakness?: PokemonEnergyType;
-      resistance?: PokemonEnergyType;
-      retreatCost: number;
-      attacks: PokemonAttack[];
-      ability?: PokemonAbility;
-      rarity: TcgRarity;
-      flavorText?: string;
-      art: string;
-      // Which of the 4 thematic packs this card is in.
-      pack: PokemonPackTypeId;
-    }
-  | {
-      kind: "energy";
-      id: string;
-      number: number;
-      name: string;
-      energyType: PokemonEnergyType;
-      rarity: TcgRarity;
-      art: string;
-      // Energies are shared across all packs — no `pack` field.
-    };
 
 // What the server emits in pack openings / welcomes — keeps this small
 // so we can reuse for non-Pokemon games later by widening the shape.
@@ -1134,12 +1087,11 @@ export type TcgClientMessage =
   // Le serveur re-fetch + envoie un tcg-welcome aux connexions concernées.
   | { type: "tcg-notify-tx"; userIds: string[] };
 
-// ─── Pokémon — pack unique "Kanto" (Gen 1) ───────────────────────────────
-// Un seul pack pour les 151 Pokémon Gen 1. Chaque Pokémon existe en 3 raretés
-// (common / rare / holo-rare) avec stats identiques mais visuels différents.
-// Visuels = vraies cartes officielles via pokemontcg.io.
+// ─── Boosters Pokémon TCG Pocket — set A1 "Puissance Génétique" ───────────
+// 3 boosters thématiques officiels comme dans l'app Pocket. Chaque carte
+// appartient à 1 booster principal (et parfois plusieurs : ex. les couronnes).
 
-export type PokemonPackTypeId = "kanto";
+export type PokemonPackTypeId = "mewtwo" | "charizard" | "pikachu";
 
 export type PokemonPackType = {
   id: PokemonPackTypeId;
@@ -1152,15 +1104,35 @@ export type PokemonPackType = {
 };
 
 export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
-  kanto: {
-    id: "kanto",
-    name: "Pack Kanto",
+  mewtwo: {
+    id: "mewtwo",
+    name: "Pack Mewtwo",
     description:
-      "Génération 1 — les 151 Pokémon de Kanto, chacun en 3 raretés (common, rare, très rare).",
-    glyph: "🌳",
+      "Booster Mewtwo — Psy, Plante, Combat dominants (Mewtwo, Florizarre, Mackogneur, Aérodactyl…).",
+    glyph: "🧠",
     active: true,
-    accent: "text-amber-300",
-    border: "border-amber-400/50",
+    accent: "text-fuchsia-300",
+    border: "border-fuchsia-500/50",
+  },
+  charizard: {
+    id: "charizard",
+    name: "Pack Dracaufeu",
+    description:
+      "Booster Dracaufeu — Feu, Métal, Ténèbres dominants (Dracaufeu, Magnéton, Gengar, Onix…).",
+    glyph: "🔥",
+    active: true,
+    accent: "text-orange-300",
+    border: "border-orange-500/50",
+  },
+  pikachu: {
+    id: "pikachu",
+    name: "Pack Pikachu",
+    description:
+      "Booster Pikachu — Électrique, Eau, Incolore dominants (Pikachu, Tortank, Léviator, Roucarnage…).",
+    glyph: "⚡",
+    active: true,
+    accent: "text-yellow-300",
+    border: "border-yellow-500/50",
   },
 };
 

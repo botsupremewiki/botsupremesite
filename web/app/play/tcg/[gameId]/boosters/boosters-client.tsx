@@ -354,7 +354,7 @@ function RevealCard({
   onClick: () => void;
   clickable: boolean;
 }) {
-  const accent = RARITY_COLOR[card.rarity] ?? RARITY_COLOR.common;
+  const accent = RARITY_COLOR[card.rarity] ?? RARITY_COLOR["diamond-1"];
   return (
     <button
       onClick={clickable ? onClick : undefined}

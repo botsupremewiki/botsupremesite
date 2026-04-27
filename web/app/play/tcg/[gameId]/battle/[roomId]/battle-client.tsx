@@ -21,7 +21,7 @@ import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { useRegisterProximityChat } from "@/app/play/proximity-chat-context";
-import { CardFace } from "../../_components/card-visuals";
+import { CardFace, CardZoomModal } from "../../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -32,6 +32,10 @@ const TYPE_BG: Record<PokemonEnergyType, string> = {
   lightning: "from-yellow-400/30 to-yellow-600/40",
   psychic: "from-fuchsia-400/30 to-purple-700/40",
   fighting: "from-amber-700/30 to-stone-700/40",
+  darkness: "from-zinc-700/40 to-slate-900/60",
+  metal: "from-slate-300/20 to-slate-500/30",
+  dragon: "from-amber-400/30 to-violet-700/40",
+  fairy: "from-pink-300/30 to-rose-500/40",
   colorless: "from-zinc-300/20 to-zinc-500/30",
 };
 
@@ -341,20 +345,17 @@ function BattleBoard({
   // (Actif ou Banc) afin d'y attacher l'énergie.
   const [attachEnergyMode, setAttachEnergyMode] = useState(false);
   const [pendingEvolveIdx, setPendingEvolveIdx] = useState<number | null>(null);
+  const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
   const cancelPending = () => {
     setAttachEnergyMode(false);
     setPendingEvolveIdx(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
 
-  // Carte survolée (board ou main) → affichée en grand dans la sidebar récap.
-  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
-  const hoveredCard = hoveredCardId ? cardById.get(hoveredCardId) ?? null : null;
-
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Sidebar récap : log de match OU preview de la carte survolée */}
-      <RecapSidebar log={state.log} hoveredCard={hoveredCard} />
+      {/* Sidebar récap : log de match (text only — preview se fait via zoom modal) */}
+      <RecapSidebar log={state.log} />
 
       {/* Centre : opponent / self zones bien centrés et plus grands */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -362,14 +363,14 @@ function BattleBoard({
         {state.opponent && (
           <div className="flex-shrink-0 border-b border-white/10 bg-black/30 p-3">
             <PlayerInfo player={state.opponent} isOpponent />
-            <div className="mt-2 flex items-center justify-center gap-3">
+            <div className="mt-2 flex items-center justify-center gap-4">
               <BackRow side="opp" koCount={state.opponent.koCount} deckSize={state.opponent.deckSize} discardCount={state.opponent.discardCount} />
               <BoardArea
                 active={state.opponent.active}
                 bench={state.opponent.bench}
                 cardById={cardById}
                 isOpponent
-                onHoverCard={setHoveredCardId}
+                onZoomCard={setZoomedCard}
               />
               <HandHidden count={state.opponent.handCount} />
             </div>
@@ -388,14 +389,14 @@ function BattleBoard({
         {/* Self zone */}
         {state.self && (
           <div className="flex-shrink-0 border-t border-white/10 bg-black/30 p-3">
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-4">
               <BackRow side="self" koCount={state.self.koCount} deckSize={state.self.deckSize} discardCount={state.self.discardCount} />
               <BoardArea
                 active={state.self.active}
                 bench={state.self.bench}
                 cardById={cardById}
                 isOpponent={false}
-                onHoverCard={setHoveredCardId}
+                onZoomCard={setZoomedCard}
                 attachMode={
                   attachEnergyMode
                     ? (uid) => {
@@ -431,14 +432,35 @@ function BattleBoard({
             </div>
             <PlayerInfo player={state.self} isOpponent={false} />
 
-            {/* Énergie auto Pocket : bouton "Attacher ⚡{type}" si pendingEnergy. */}
+            {/* Énergie auto Pocket : "ball" draggable + bouton "Attacher". */}
             {state.self.pendingEnergy &&
               !state.self.energyAttachedThisTurn &&
               isMyTurn &&
               !attachEnergyMode &&
               pendingEvolveIdx === null && (
                 <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-                  ⚡ Énergie disponible : <strong>{state.self.pendingEnergy}</strong>
+                  <span
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/x-tcg-energy", "1");
+                      e.dataTransfer.effectAllowed = "link";
+                      // Important : active le mode pendant le drag pour que les
+                      // dropzones s'arment (sinon makeDropProps retourne {}).
+                      setAttachEnergyMode(true);
+                    }}
+                    onDragEnd={() => {
+                      // Si on a drop avec succès, attachEnergyMode est passé à
+                      // false par le handler. Sinon on le repasse à false ici.
+                      setAttachEnergyMode(false);
+                    }}
+                    className="cursor-grab select-none rounded-full bg-amber-300 px-2 py-0.5 text-base text-amber-950 shadow active:cursor-grabbing"
+                    title="Glisse cette énergie sur un Pokémon"
+                  >
+                    ⚡ {state.self.pendingEnergy}
+                  </span>
+                  <span className="text-zinc-300">
+                    Glisse-la sur un Pokémon, ou clique « Attacher ».
+                  </span>
                   <button
                     onClick={() => setAttachEnergyMode(true)}
                     className="ml-auto rounded border border-amber-400/40 bg-amber-400/20 px-2 py-0.5 text-amber-100 hover:bg-amber-400/30"
@@ -471,7 +493,7 @@ function BattleBoard({
               onAddBench={onAddBench}
               onRemoveBench={onRemoveBench}
               onPlayBasic={onPlayBasic}
-              onHoverCard={setHoveredCardId}
+              onZoomCard={setZoomedCard}
               onSelectEvolve={(i) => {
                 setAttachEnergyMode(false);
                 setPendingEvolveIdx(i);
@@ -479,6 +501,9 @@ function BattleBoard({
             />
           </div>
         )}
+
+        {/* Modal zoom carte (combat board ou main) */}
+        <CardZoomModal card={zoomedCard} onClose={() => setZoomedCard(null)} />
 
         {state.winner && (
           <div className="flex-shrink-0 bg-black/80 p-4 text-center">
@@ -498,47 +523,28 @@ function BattleBoard({
   );
 }
 
-/** Sidebar gauche du board : preview carte survolée OU log de match. */
-function RecapSidebar({
-  log,
-  hoveredCard,
-}: {
-  log: string[];
-  hoveredCard: PokemonCardData | null;
-}) {
+/** Sidebar gauche du board : log de match (preview cartes via zoom modal). */
+function RecapSidebar({ log }: { log: string[] }) {
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
-      {hoveredCard ? (
-        <div className="flex flex-col gap-2 p-3">
-          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-            Aperçu
-          </div>
-          <div className="aspect-[5/7] w-full">
-            <CardFace card={hoveredCard} large />
-          </div>
+      <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
+        Récapitulatif du match
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex flex-col-reverse gap-1 text-xs text-zinc-300">
+          <AnimatePresence initial={false}>
+            {[...log].reverse().map((line, i) => (
+              <motion.div
+                key={`${i}-${line.slice(0, 20)}`}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                · {line}
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
-      ) : (
-        <>
-          <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
-            Récapitulatif du match
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            <div className="flex flex-col-reverse gap-1 text-xs text-zinc-300">
-              <AnimatePresence initial={false}>
-                {[...log].reverse().map((line, i) => (
-                  <motion.div
-                    key={`${i}-${line.slice(0, 20)}`}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    · {line}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          </div>
-        </>
-      )}
+      </div>
     </aside>
   );
 }
@@ -633,7 +639,7 @@ function BoardArea({
   promoteMode,
   onPromote,
   onRetreat,
-  onHoverCard,
+  onZoomCard,
 }: {
   active: BattleCard | null;
   bench: BattleCard[];
@@ -643,76 +649,122 @@ function BoardArea({
   promoteMode?: boolean;
   onPromote?: (benchIndex: number) => void;
   onRetreat?: ((benchIndex: number) => void) | null;
-  onHoverCard?: (cardId: string | null) => void;
+  onZoomCard?: (card: PokemonCardData) => void;
 }) {
   const ownActions = !isOpponent;
+
+  // Build le handler de click sur une carte du board (Actif ou Banc).
+  // Priorité : attachMode > promoteMode > retreat > zoom.
+  function makeCardHandler(
+    battleCard: BattleCard,
+    cardData: PokemonCardData,
+    benchIndex: number | null,
+  ) {
+    return () => {
+      if (ownActions && attachMode) {
+        attachMode(battleCard.uid);
+        return;
+      }
+      if (ownActions && promoteMode && onPromote && benchIndex !== null) {
+        onPromote(benchIndex);
+        return;
+      }
+      if (ownActions && onRetreat && benchIndex !== null) {
+        onRetreat(benchIndex);
+        return;
+      }
+      // Default : zoom modal pour voir la carte en grand.
+      onZoomCard?.(cardData);
+    };
+  }
+
+  // Drag & drop énergie : tout BattleCard est une dropzone, le drop appelle
+  // attachMode (qui se charge du check côté Pocket).
+  function makeDropProps(battleCard: BattleCard) {
+    if (!ownActions || !attachMode) return {};
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "link";
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        if (e.dataTransfer.getData("text/x-tcg-energy") === "1") {
+          attachMode(battleCard.uid);
+        }
+      },
+    };
+  }
+
   return (
     <div
-      className={`flex flex-col items-center gap-2 rounded-lg border-2 px-4 py-2 ${
+      className={`flex flex-col items-center gap-3 rounded-xl border-2 px-6 py-4 ${
         isOpponent
           ? "border-rose-400/30 bg-rose-950/20"
           : "border-emerald-400/30 bg-emerald-950/20"
       }`}
     >
       {/* Active */}
-      {active ? (
-        <button
-          disabled={!ownActions || !attachMode}
-          onClick={() => {
-            if (attachMode && active) attachMode(active.uid);
-          }}
-          onMouseEnter={() => onHoverCard?.(active.cardId)}
-          onMouseLeave={() => onHoverCard?.(null)}
-          className={`disabled:cursor-default ${
-            attachMode ? "ring-2 ring-amber-300 hover:ring-amber-200" : ""
-          } rounded`}
-        >
-          <BoardCard card={active} cardById={cardById} large />
-        </button>
-      ) : (
-        <div className="flex h-24 w-20 items-center justify-center rounded border border-dashed border-white/10 text-[10px] text-zinc-500">
-          Actif
-        </div>
-      )}
+      {active
+        ? (() => {
+            const data = cardById.get(active.cardId);
+            if (!data || data.kind !== "pokemon") return null;
+            const handler = makeCardHandler(active, data, null);
+            return (
+              <button
+                onClick={handler}
+                {...makeDropProps(active)}
+                className={`rounded-lg transition-all ${
+                  ownActions && attachMode
+                    ? "ring-2 ring-amber-300 hover:ring-amber-200"
+                    : "hover:ring-2 hover:ring-white/30"
+                }`}
+                title={data.name}
+              >
+                <BoardCard card={active} cardById={cardById} large />
+              </button>
+            );
+          })()
+        : (
+          <div className="flex h-44 w-32 items-center justify-center rounded border border-dashed border-white/10 text-xs text-zinc-500">
+            Actif
+          </div>
+        )}
       {/* Bench (Pocket : max 3 slots) */}
-      <div className="flex gap-1">
+      <div className="flex gap-2">
         {Array.from({ length: BATTLE_CONFIG.maxBench }, (_, i) => {
           const card = bench[i];
           if (!card) {
             return (
               <div
                 key={i}
-                className="flex h-16 w-12 items-center justify-center rounded border border-dashed border-white/10 text-[8px] text-zinc-500"
+                className="flex h-28 w-20 items-center justify-center rounded border border-dashed border-white/10 text-[10px] text-zinc-500"
               >
                 Banc
               </div>
             );
           }
-          const interactive = ownActions && (attachMode || promoteMode || onRetreat);
+          const data = cardById.get(card.cardId);
+          if (!data || data.kind !== "pokemon") return null;
+          const handler = makeCardHandler(card, data, i);
           return (
             <button
               key={i}
-              disabled={!interactive}
-              onClick={() => {
-                if (attachMode) attachMode(card.uid);
-                else if (promoteMode && onPromote) onPromote(i);
-                else if (onRetreat) onRetreat(i);
-              }}
-              onMouseEnter={() => onHoverCard?.(card.cardId)}
-              onMouseLeave={() => onHoverCard?.(null)}
-              className={`disabled:cursor-default ${
-                attachMode || promoteMode
+              onClick={handler}
+              {...makeDropProps(card)}
+              className={`rounded-lg transition-all ${
+                ownActions && (attachMode || promoteMode)
                   ? "ring-2 ring-amber-300 hover:ring-amber-200"
-                  : onRetreat
+                  : ownActions && onRetreat
                     ? "hover:ring-2 hover:ring-sky-300"
-                    : ""
-              } rounded`}
+                    : "hover:ring-2 hover:ring-white/30"
+              }`}
               title={
                 promoteMode
                   ? "Promouvoir comme Actif"
-                  : onRetreat
+                  : onRetreat && ownActions
                     ? "Battre en retraite vers ce Pokémon"
-                    : undefined
+                    : data.name
               }
             >
               <BoardCard card={card} cardById={cardById} />
@@ -735,32 +787,39 @@ function BoardCard({
 }) {
   const data = cardById.get(card.cardId);
   if (!data || data.kind !== "pokemon") return null;
-  const bg = TYPE_BG[data.type] ?? TYPE_BG.colorless;
-  const w = large ? 80 : 48;
-  const h = large ? 96 : 64;
+  // Format Pocket : carte officielle FR (image tcgdex) en ratio 5:7 +
+  // overlays HP courant, énergies attachées, statuses.
+  const w = large ? 110 : 72;
+  const h = large ? 154 : 100;
   const remainingHp = Math.max(0, data.hp - card.damage);
+  const damaged = card.damage > 0;
   return (
     <div
-      className={`relative flex flex-col items-center justify-between rounded border bg-gradient-to-b ${bg} p-1 text-zinc-100`}
+      className="relative overflow-hidden rounded-md border border-white/10 bg-black/40"
       style={{ width: w, height: h }}
+      title={data.name}
     >
-      <span
-        className="self-start text-[9px] font-bold leading-none"
-        title={data.name}
-      >
-        {data.name.slice(0, large ? 8 : 5)}
-      </span>
-      <span style={{ fontSize: large ? 28 : 18 }}>{data.art}</span>
-      <div className="flex w-full items-center justify-between text-[8px] tabular-nums">
-        <span className="text-rose-200">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={data.image}
+        alt={data.name}
+        className="h-full w-full object-contain"
+        loading="lazy"
+      />
+
+      {/* Overlay HP courant en bas (toujours visible) */}
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/85 to-transparent px-1 py-0.5 text-[10px] tabular-nums">
+        <span className={damaged ? "font-bold text-rose-300" : "text-zinc-200"}>
           {remainingHp}/{data.hp}
         </span>
-        <span className="text-zinc-300">
-          {card.attachedEnergies.length > 0 && `⚡${card.attachedEnergies.length}`}
-        </span>
+        {card.attachedEnergies.length > 0 && (
+          <span className="text-amber-200">⚡{card.attachedEnergies.length}</span>
+        )}
       </div>
+
+      {/* Statuses en haut à droite */}
       {card.statuses.length > 0 && (
-        <div className="absolute right-0 top-0 rounded-bl bg-black/70 px-0.5 text-[8px]">
+        <div className="absolute right-0 top-0 rounded-bl bg-black/70 px-1 py-0.5 text-[10px]">
           {card.statuses.map((s) => statusEmoji(s)).join("")}
         </div>
       )}
@@ -895,22 +954,29 @@ function energyEmoji(t: PokemonEnergyType): string {
       return "🌀";
     case "fighting":
       return "👊";
+    case "darkness":
+      return "🌑";
+    case "metal":
+      return "⚙️";
+    case "dragon":
+      return "🐉";
+    case "fairy":
+      return "🧚";
     case "colorless":
       return "⭐";
   }
 }
 
-/** Reproduit côté client la logique serveur du paiement de coût. */
+/** Reproduit côté client la logique serveur du paiement de coût.
+ *  Pocket : `attached` contient directement les types ("fire", "water"…). */
 function canPayCost(
   attached: string[],
   cost: PokemonEnergyType[],
-  cardById: Map<string, PokemonCardData>,
+  _cardById: Map<string, PokemonCardData>,
 ): boolean {
   const pool = new Map<string, number>();
-  for (const id of attached) {
-    const data = cardById.get(id);
-    if (data?.kind !== "energy") continue;
-    pool.set(data.energyType, (pool.get(data.energyType) ?? 0) + 1);
+  for (const energyType of attached) {
+    pool.set(energyType, (pool.get(energyType) ?? 0) + 1);
   }
   let colorlessNeeded = 0;
   for (const c of cost) {
@@ -935,7 +1001,7 @@ function SelfHand({
   onRemoveBench,
   onPlayBasic,
   onSelectEvolve,
-  onHoverCard,
+  onZoomCard,
 }: {
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
@@ -945,7 +1011,7 @@ function SelfHand({
   onRemoveBench: (benchIndex: number) => void;
   onPlayBasic: (handIndex: number) => void;
   onSelectEvolve: (handIndex: number) => void;
-  onHoverCard?: (cardId: string | null) => void;
+  onZoomCard?: (card: PokemonCardData) => void;
 }) {
   const self = state.self;
   if (!self) return null;
@@ -988,7 +1054,7 @@ function SelfHand({
               onAddBench={setupAddBench}
               onPlayBench={playBench}
               onEvolve={evolveCard}
-              onHover={onHoverCard}
+              onZoom={onZoomCard}
             />
           );
         })}
@@ -1004,8 +1070,7 @@ function SelfHand({
                 onClick={() => onRemoveBench(i)}
                 className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-rose-500/20"
               >
-                {data?.art}
-                {data?.kind === "pokemon" ? data.name.slice(0, 6) : ""} ✕
+                {data?.kind === "pokemon" ? data.name.slice(0, 8) : ""} ✕
               </button>
             );
           })}
@@ -1021,38 +1086,35 @@ function HandCard({
   onAddBench,
   onPlayBench,
   onEvolve,
-  onHover,
+  onZoom,
 }: {
   data: PokemonCardData;
   onSetActive?: () => void;
   onAddBench?: () => void;
   onPlayBench?: () => void;
   onEvolve?: () => void;
-  onHover?: (cardId: string | null) => void;
+  onZoom?: (card: PokemonCardData) => void;
 }) {
-  const isEnergyCard = data.kind === "energy";
-  const bg = isEnergyCard
-    ? TYPE_BG[data.energyType]
-    : TYPE_BG[data.type] ?? TYPE_BG.colorless;
   const hasAction = onSetActive || onAddBench || onPlayBench || onEvolve;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      onMouseEnter={() => onHover?.(data.id)}
-      onMouseLeave={() => onHover?.(null)}
-      className={`relative flex flex-col items-center gap-1 rounded border bg-gradient-to-b ${bg} p-1 text-zinc-100 ${
+      onClick={() => onZoom?.(data)}
+      className={`relative cursor-pointer overflow-hidden rounded border border-white/10 transition-all hover:ring-2 hover:ring-white/30 ${
         hasAction ? "mb-5" : ""
       }`}
-      style={{ width: 56, height: 80 }}
+      style={{ width: 80, height: 112 }}
+      title={data.name}
     >
-      <span className="text-[8px] font-bold leading-tight">
-        {data.name.slice(0, 8)}
-      </span>
-      <span className="text-2xl">{data.art}</span>
-      {!isEnergyCard && (
-        <span className="text-[8px] text-rose-200">PV {data.hp}</span>
-      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={data.image}
+        alt={data.name}
+        className="h-full w-full object-contain"
+        loading="lazy"
+        draggable={false}
+      />
       {hasAction && (
         <div className="absolute inset-x-0 -bottom-5 flex justify-center gap-0.5">
           {onSetActive && (

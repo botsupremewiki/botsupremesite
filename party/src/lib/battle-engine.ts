@@ -21,10 +21,6 @@ export function isBasicPokemon(cardId: string): boolean {
   return c?.kind === "pokemon" && c.stage === "basic";
 }
 
-export function isEnergy(cardId: string): boolean {
-  return getCard(cardId)?.kind === "energy";
-}
-
 export function isPokemon(cardId: string): boolean {
   return getCard(cardId)?.kind === "pokemon";
 }

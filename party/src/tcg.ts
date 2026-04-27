@@ -42,9 +42,9 @@ function getFullPool(gameId: TcgGameId): PokemonCardData[] {
   return POKEMON_BASE_SET;
 }
 
-// Thematic pool = cards tagged with `pack === packTypeId` plus the basic
-// energies. Used for the 1 guaranteed-themed slot per booster so every
-// "Pack Dracaufeu" actually feels like a Dracaufeu pack.
+// Thematic pool = toutes les cartes du booster (pack principal ou
+// extraPacks) Pocket. "Pack Dracaufeu" tire dans toutes les cartes
+// disponibles dans ce booster.
 function getThemedPool(
   gameId: TcgGameId,
   packTypeId: string,
@@ -54,31 +54,41 @@ function getThemedPool(
   const target = packTypeId as PokemonPackTypeId;
   const pool: PokemonCardData[] = [];
   for (const card of POKEMON_BASE_SET) {
-    if (card.kind === "energy") pool.push(card);
-    else if (card.pack === target) pool.push(card);
+    if (card.kind !== "pokemon") continue;
+    if (card.pack === target || card.extraPacks?.includes(target)) {
+      pool.push(card);
+    }
   }
   return pool.length > 0 ? pool : null;
 }
 
-// Pack rarity slots : 4 "regular" + 1 "rare" slot. Distribution calquée sur
-// Pokémon TCG Pocket — sur un pack de 5, en moyenne ~3.5 commons + ~1.2 rares
-// + ~0.3 très rares. uncommon/energy sont à 0 car le set Gen 1 n'utilise plus
-// ces raretés (Pocket-style : 3 raretés common/rare/holo-rare uniquement).
+// Pack rarity slots : 4 slots "regular" + 1 slot "rare" (5 cartes/pack).
+// Distribution calquée sur Pokémon TCG Pocket — slots 1-4 piochent dans les
+// raretés diamond, slot 5 (rare slot) peut taper plus haut (★, 👑).
 const REGULAR_SLOT_WEIGHTS: Record<TcgRarity, number> = {
-  common: 88,
-  rare: 10,
-  "holo-rare": 2,
-  uncommon: 0,
-  energy: 0,
+  "diamond-1": 75,
+  "diamond-2": 20,
+  "diamond-3": 5,
+  // Slots réguliers ne piochent jamais ces raretés.
+  "diamond-4": 0,
+  "star-1": 0,
+  "star-2": 0,
+  "star-3": 0,
+  crown: 0,
+  promo: 0,
 };
 
 const RARE_SLOT_WEIGHTS: Record<TcgRarity, number> = {
-  rare: 80,
-  "holo-rare": 20,
-  // Rare slot ne tire jamais de common.
-  common: 0,
-  uncommon: 0,
-  energy: 0,
+  "diamond-3": 60,
+  "diamond-4": 25,
+  "star-1": 10,
+  "star-2": 3,
+  "star-3": 1.5,
+  crown: 0.5,
+  // Rare slot ne pioche jamais en dessous de diamond-3.
+  "diamond-1": 0,
+  "diamond-2": 0,
+  promo: 0,
 };
 
 export default class TcgServer implements Party.Server {
@@ -466,10 +476,9 @@ export default class TcgServer implements Party.Server {
     isRareSlot: boolean,
   ): PokemonCardData {
     const weights = isRareSlot ? RARE_SLOT_WEIGHTS : REGULAR_SLOT_WEIGHTS;
-    // Pick a rarity tier first.
     const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
-    let chosen: TcgRarity = "common";
+    let chosen: TcgRarity = "diamond-1";
     for (const [tier, w] of Object.entries(weights) as [
       TcgRarity,
       number,
@@ -480,25 +489,30 @@ export default class TcgServer implements Party.Server {
       }
       r -= w;
     }
-    // Filter pool by chosen rarity. If empty (e.g. no rare slots in pool),
-    // fall back through tiers.
-    const fallbackOrder: TcgRarity[] =
-      chosen === "holo-rare"
-        ? ["holo-rare", "rare", "uncommon", "common", "energy"]
-        : chosen === "rare"
-          ? ["rare", "uncommon", "holo-rare", "common", "energy"]
-          : chosen === "uncommon"
-            ? ["uncommon", "common", "energy", "rare", "holo-rare"]
-            : chosen === "energy"
-              ? ["energy", "common", "uncommon", "rare", "holo-rare"]
-              : ["common", "energy", "uncommon", "rare", "holo-rare"];
-    for (const tier of fallbackOrder) {
+    // Fallback : si la rareté tirée n'a pas de carte dans le pool, descendre
+    // vers les tiers proches (du plus rare au plus commun).
+    const fullOrder: TcgRarity[] = [
+      "crown",
+      "star-3",
+      "star-2",
+      "star-1",
+      "diamond-4",
+      "diamond-3",
+      "diamond-2",
+      "diamond-1",
+      "promo",
+    ];
+    const startIdx = fullOrder.indexOf(chosen);
+    const order = [
+      ...fullOrder.slice(startIdx),
+      ...fullOrder.slice(0, startIdx),
+    ];
+    for (const tier of order) {
       const subset = pool.filter((c) => c.rarity === tier);
       if (subset.length > 0) {
         return subset[Math.floor(Math.random() * subset.length)];
       }
     }
-    // Should be unreachable as long as the pool isn't empty.
     return pool[0];
   }
 

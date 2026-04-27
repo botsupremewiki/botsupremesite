@@ -18,9 +18,6 @@ import {
   recordBattleResult,
   recordBotWin,
 } from "./lib/supabase";
-import type {
-  PokemonAbilityEffect,
-} from "../../shared/types";
 import {
   type DeckCard,
   dealOpeningHand,
@@ -388,7 +385,6 @@ export default class BattleServer implements Party.Server {
           this.canPayAttackCost(
             seat.active.attachedEnergies,
             data.attacks[idx].cost,
-            seat.active,
           )
         ) {
           this.handleAttack("p2", idx);
@@ -762,7 +758,7 @@ export default class BattleServer implements Party.Server {
     if (!attackerData || attackerData.kind !== "pokemon") return;
     const attack = attackerData.attacks[attackIndex];
     if (!attack) return;
-    if (!this.canPayAttackCost(seat.active.attachedEnergies, attack.cost, seat.active)) {
+    if (!this.canPayAttackCost(seat.active.attachedEnergies, attack.cost)) {
       this.sendErrorToSeat(seatId, "Coût en Énergies non payé.");
       return;
     }
@@ -800,57 +796,14 @@ export default class BattleServer implements Party.Server {
     if (!defenderData || defenderData.kind !== "pokemon") return;
 
     let damage = attack.damage ?? 0;
+    // Pocket : weakness = +20 (pas ×2). Pour MVP on simplifie en +20 fixe
+    // si type matche. Pas de système de résistance dans Pocket.
     if (
+      damage > 0 &&
       defenderData.weakness &&
       defenderData.weakness === attackerData.type
     ) {
-      damage *= 2;
-    }
-    if (
-      defenderData.resistance &&
-      defenderData.resistance === attackerData.type
-    ) {
-      damage = Math.max(0, damage - 30);
-    }
-
-    // ─── Abilities défensives sur le défenseur ───
-    const defAbility = this.getAbilityEffect(opp.active);
-    // Sans Garde (Ronflex) : si Endormi, ignore tous les dégâts.
-    if (
-      defAbility?.kind === "asleep-immunity" &&
-      opp.active.statuses.includes("asleep") &&
-      damage > 0
-    ) {
-      this.pushLog(
-        `🛡️ ${defenderData.name} ignore les dégâts (Sans Garde).`,
-      );
-      damage = 0;
-    }
-    // Mur de Lumière (M. Mime) : ignore les dégâts ≥ threshold.
-    if (
-      defAbility?.kind === "damage-cap" &&
-      damage >= defAbility.threshold
-    ) {
-      this.pushLog(
-        `🛡️ ${defenderData.name} ignore les dégâts ≥ ${defAbility.threshold} (Mur de Lumière).`,
-      );
-      damage = 0;
-    }
-    // Esquive Neutre (Mew) : si attaquant évolué, coin/face ignore.
-    if (
-      defAbility?.kind === "evolved-attacker-coin" &&
-      attackerData.stage !== "basic" &&
-      damage > 0
-    ) {
-      const flip = this.coinFlip();
-      this.pushLog(
-        `🍃 Esquive Neutre — ${flip ? "Face" : "Pile"}.`,
-      );
-      if (!flip) {
-        // Pile (tails) → dégâts ignorés
-        damage = 0;
-        this.pushLog(`🛡️ ${defenderData.name} esquive l'attaque.`);
-      }
+      damage += 20;
     }
 
     opp.active.damage += damage;
@@ -861,47 +814,9 @@ export default class BattleServer implements Party.Server {
         (attack.text ? ` · ${attack.text}` : ""),
     );
 
-    // Riposte (Mackogneur) : si dégâts effectivement reçus, contre-attaque.
-    if (damage > 0 && defAbility?.kind === "counter-attack" && seat.active) {
-      seat.active.damage += defAbility.amount;
-      this.pushLog(
-        `💢 Riposte — ${attackerData.name} subit ${defAbility.amount} dégâts.`,
-      );
-    }
-
-    // Effets structurés de l'attaque (status, self-damage, discard, heal).
-    if (attack.effects) {
-      this.applyAttackEffects(seatId, oppId, attack.effects);
-    }
-
-    // Spores de Pollen (Rafflesia) : après chaque attaque, coin face → endormi.
-    const attackerAbility = this.getAbilityEffect(seat.active);
-    if (
-      attackerAbility?.kind === "post-attack-status-coin" &&
-      opp.active
-    ) {
-      const flip = this.coinFlip();
-      this.pushLog(
-        `🌺 ${attackerData.name} — ${flip ? "Face" : "Pile"} (Spores).`,
-      );
-      if (flip) {
-        this.applyStatus(opp.active, attackerAbility.status);
-        this.pushLog(
-          `${defenderData.name} est ${statusLabel(attackerAbility.status)}.`,
-        );
-      }
-    }
-
-    // Vérif KO sur le défenseur (puis sur l'attaquant si self-damage / riposte).
+    // Vérif KO sur le défenseur.
     if (opp.active && opp.active.damage >= defenderData.hp) {
       this.knockOut(seatId, oppId);
-    }
-    if (
-      this.phase === "playing" &&
-      seat.active &&
-      seat.active.damage >= attackerData.hp
-    ) {
-      this.knockOut(oppId, seatId);
     }
 
     // Une attaque met fin au tour (sauf si KO a déjà déclaré vainqueur).
@@ -915,120 +830,6 @@ export default class BattleServer implements Party.Server {
   /** Tirage pile/face. true = "Face" (heads en anglais), false = "Pile" (tails). */
   private coinFlip(): boolean {
     return Math.random() < 0.5;
-  }
-
-  // ─────────────── ability helpers ───────────────
-
-  /** Retourne l'effect d'ability d'un BattleCard si la carte sous-jacente
-   *  en a une avec un effet machine-readable, sinon null. */
-  private getAbilityEffect(
-    card: BattleCard | null | undefined,
-  ): PokemonAbilityEffect | null {
-    if (!card) return null;
-    const data = getCard(card.cardId);
-    if (data?.kind !== "pokemon") return null;
-    return data.ability?.effect ?? null;
-  }
-
-  /** Cherche une ability d'un kind donné parmi les Pokémon d'un siège.
-   *  `slot` filtre où chercher : 'active', 'bench' ou 'any'. */
-  private findAbility(
-    seat: SeatState,
-    kind: PokemonAbilityEffect["kind"],
-    slot: "active" | "bench" | "any" = "any",
-  ): { card: BattleCard; effect: PokemonAbilityEffect } | null {
-    const candidates: BattleCard[] = [];
-    if (slot !== "bench" && seat.active) candidates.push(seat.active);
-    if (slot !== "active") candidates.push(...seat.bench);
-    for (const c of candidates) {
-      const eff = this.getAbilityEffect(c);
-      if (eff && eff.kind === kind) return { card: c, effect: eff };
-    }
-    return null;
-  }
-
-  /** Applique chaque AttackEffect après les dégâts de base. */
-  private applyAttackEffects(
-    attackerSeatId: BattleSeatId,
-    defenderSeatId: BattleSeatId,
-    effects: import("../../shared/types").PokemonAttackEffect[],
-  ) {
-    const att = this.seats[attackerSeatId];
-    const def = this.seats[defenderSeatId];
-    if (!att || !def) return;
-    for (const effect of effects) {
-      switch (effect.kind) {
-        case "apply-status": {
-          const targetCard =
-            effect.target === "self" ? att.active : def.active;
-          const targetSeat =
-            effect.target === "self" ? att : def;
-          if (!targetCard) break;
-          if (effect.coin) {
-            const heads = this.coinFlip();
-            const wantHeads = effect.coin === "heads";
-            this.pushLog(
-              `Pile/Face pour ${effect.status} : ${heads ? "Face" : "Pile"}.`,
-            );
-            if (heads !== wantHeads) break;
-          }
-          this.applyStatus(targetCard, effect.status);
-          this.pushLog(
-            `${targetSeat.username}'s ${getCardName(targetCard.cardId)} est ${statusLabel(effect.status)}.`,
-          );
-          break;
-        }
-        case "self-damage": {
-          if (!att.active) break;
-          if (effect.coin) {
-            const heads = this.coinFlip();
-            const wantHeads = effect.coin === "heads";
-            this.pushLog(
-              `Pile/Face pour récul : ${heads ? "Face" : "Pile"}.`,
-            );
-            if (heads !== wantHeads) break;
-          }
-          att.active.damage += effect.amount;
-          this.pushLog(
-            `💢 ${getCardName(att.active.cardId)} se fait ${effect.amount} dégâts.`,
-          );
-          break;
-        }
-        case "discard-energy": {
-          if (!att.active) break;
-          // Pocket : énergies non-cartes, retirées sans discard physique.
-          const n = Math.min(effect.count, att.active.attachedEnergies.length);
-          att.active.attachedEnergies.splice(0, n);
-          this.pushLog(`${att.username} défausse ${n} Énergie(s).`);
-          break;
-        }
-        case "heal": {
-          if (!att.active) break;
-          const before = att.active.damage;
-          att.active.damage = Math.max(0, before - effect.amount);
-          const healed = before - att.active.damage;
-          if (healed > 0) {
-            this.pushLog(
-              `💚 ${getCardName(att.active.cardId)} récupère ${healed} PV.`,
-            );
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  /** Applique un statut à un BattleCard, en respectant l'exclusion mutuelle
-   *  asleep/paralyzed/confused (poison se cumule). */
-  private applyStatus(
-    card: BattleCard,
-    status: import("../../shared/types").BattleStatus,
-  ) {
-    const exclusive = ["asleep", "paralyzed", "confused"];
-    if (exclusive.includes(status)) {
-      card.statuses = card.statuses.filter((s) => !exclusive.includes(s));
-    }
-    if (!card.statuses.includes(status)) card.statuses.push(status);
   }
 
   /** Promotion d'un Pokémon de Banc en Actif après KO. */
@@ -1060,19 +861,15 @@ export default class BattleServer implements Party.Server {
 
   /** Vérifie qu'on peut payer le coût d'une attaque avec les énergies
    *  attachées. "colorless" peut être payé par n'importe quelle énergie.
-   *  Avec Energy Burn (Dracaufeu), toute Énergie attachée compte comme Feu.
-   *  Pocket : attachedEnergies contient directement les types ("fire", "water"…)
-   *  au lieu de card_ids — pas de cartes énergie en deck. */
+   *  Pocket : attachedEnergies contient directement les types ("fire",
+   *  "water"…) au lieu de card_ids — pas de cartes énergie en deck. */
   private canPayAttackCost(
     attached: string[],
     cost: PokemonEnergyType[],
-    attacker: BattleCard | null = null,
   ): boolean {
-    const energyBurn = this.getAbilityEffect(attacker)?.kind === "energy-burn";
     const pool = new Map<string, number>();
     for (const energyType of attached) {
-      const effectiveType = energyBurn ? "fire" : energyType;
-      pool.set(effectiveType, (pool.get(effectiveType) ?? 0) + 1);
+      pool.set(energyType, (pool.get(energyType) ?? 0) + 1);
     }
     let colorlessNeeded = 0;
     for (const c of cost) {
@@ -1137,32 +934,6 @@ export default class BattleServer implements Party.Server {
     if (!seat) return;
 
     // ─── Between-turns effects ────────────────────────────────────
-    // Sombre Rêve (Ectoplasma sur Banc + Actif adverse Endormi → 10 dmg).
-    for (const sId of ["p1", "p2"] as BattleSeatId[]) {
-      const s = this.seats[sId];
-      if (!s) continue;
-      const aura = this.findAbility(s, "bench-aura-asleep", "bench");
-      if (!aura) continue;
-      const oppId: BattleSeatId = sId === "p1" ? "p2" : "p1";
-      const opp = this.seats[oppId];
-      if (!opp?.active) continue;
-      if (!opp.active.statuses.includes("asleep")) continue;
-      const amount =
-        aura.effect.kind === "bench-aura-asleep" ? aura.effect.amount : 0;
-      opp.active.damage += amount;
-      this.pushLog(
-        `👻 Sombre Rêve — ${opp.username}'s ${getCardName(opp.active.cardId)} subit ${amount} dégâts.`,
-      );
-      const oppData = getCard(opp.active.cardId);
-      if (oppData?.kind === "pokemon" && opp.active.damage >= oppData.hp) {
-        this.knockOut(sId, oppId);
-        if (this.phase === "ended") {
-          this.broadcastState();
-          return;
-        }
-      }
-    }
-
     // Poison : 10 dégâts à chaque Actif empoisonné (les deux côtés).
     for (const sId of ["p1", "p2"] as BattleSeatId[]) {
       const s = this.seats[sId];
