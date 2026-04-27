@@ -11,6 +11,7 @@ import {
   type EternumClassId,
   type EternumElementId,
 } from "@shared/types";
+import { elementTintFilter } from "@shared/eternum-familiers";
 import {
   actionInfo,
   aliveEnemies,
@@ -145,6 +146,9 @@ export type AtbBattleProps = {
   rewards?: AtbBattleRewards;
   /** Map id → rareté pour stylet précisément les cadres. Fallback heuristique. */
   unitRarities?: Record<string, RarityKey>;
+  /** Map id → glyph emoji custom (ex: glyph du familier au lieu du glyph classe).
+   *  Permet d'avoir 90 sprites uniques par familier de base, tintés selon élément. */
+  unitDisplayGlyphs?: Record<string, string>;
   /** Theme du décor : donjon (rouge sombre), tower (bleu cosmos),
    *  dream (violet onirique), pvp (neutre). Default neutral. */
   ambiance?: "neutral" | "dungeon" | "tower" | "dream" | "pvp" | "boss";
@@ -187,6 +191,7 @@ export function AtbBattle({
   title,
   rewards,
   unitRarities,
+  unitDisplayGlyphs,
   ambiance = "neutral",
   onComplete,
   closeLabel = "Continuer →",
@@ -387,6 +392,7 @@ export function AtbBattle({
           activeId={state.awaitingAction}
           impact={impact}
           unitRarities={unitRarities}
+          unitDisplayGlyphs={unitDisplayGlyphs}
           pickingTargetForKind={null}
           onToggleAuto={toggleUnitAuto}
           onPickTarget={() => {}}
@@ -398,6 +404,7 @@ export function AtbBattle({
           activeId={state.awaitingAction}
           impact={impact}
           unitRarities={unitRarities}
+          unitDisplayGlyphs={unitDisplayGlyphs}
           pickingTargetForKind={picking ? selectedAction : null}
           onToggleAuto={() => {}}
           onPickTarget={pickTarget}
@@ -510,6 +517,7 @@ function TeamColumn({
   activeId,
   impact,
   unitRarities,
+  unitDisplayGlyphs,
   pickingTargetForKind,
   onToggleAuto,
   onPickTarget,
@@ -520,6 +528,7 @@ function TeamColumn({
   activeId: string | null;
   impact: ImpactEvent | null;
   unitRarities?: Record<string, RarityKey>;
+  unitDisplayGlyphs?: Record<string, string>;
   pickingTargetForKind: AtbActionKind | null;
   onToggleAuto: (id: string) => void;
   onPickTarget: (id: string) => void;
@@ -538,6 +547,7 @@ function TeamColumn({
             isActive={u.id === activeId}
             isTargetable={pickingTargetForKind !== null && u.alive}
             rarity={unitRarities?.[u.id] ?? defaultRarityFor(u)}
+            displayGlyph={unitDisplayGlyphs?.[u.id]}
             impact={impact}
             onToggleAuto={onToggleAuto}
             onPickTarget={onPickTarget}
@@ -557,6 +567,7 @@ function UnitCard({
   isActive,
   isTargetable,
   rarity,
+  displayGlyph,
   impact,
   onToggleAuto,
   onPickTarget,
@@ -565,6 +576,7 @@ function UnitCard({
   isActive: boolean;
   isTargetable: boolean;
   rarity: RarityKey;
+  displayGlyph?: string;
   impact: ImpactEvent | null;
   onToggleAuto: (id: string) => void;
   onPickTarget: (id: string) => void;
@@ -574,6 +586,10 @@ function UnitCard({
   const accent = CLASS_ACCENT[unit.classId];
   const hpPct = (unit.hp / unit.hpMax) * 100;
   const atbPct = (unit.atbGauge / 1000) * 100;
+  // Glyph affiché : familier custom si fourni, sinon glyph de classe.
+  const glyph = displayGlyph ?? cls.glyph;
+  // Tint CSS selon élément (transforme un emoji 🐺 gris en loup rouge feu, etc.)
+  const tintFilter = elementTintFilter(unit.element);
 
   // Animations basées sur l'event impact
   const isAttacking = impact?.actorId === unit.id;
@@ -661,20 +677,35 @@ function UnitCard({
         </div>
       )}
 
-      <div className="relative flex items-center gap-2">
-        {/* Sprite glyph + élément */}
-        <div className="relative flex flex-col items-center">
+      <div className="relative flex items-center gap-3">
+        {/* Sprite : glyph familier en grand + tint selon élément.
+            Le hue-rotate transforme un emoji 🐺 gris en loup rouge (feu),
+            bleu (eau), vert (vent), etc. — exactement le pattern Summoners
+            War où chaque monstre a 6 variantes-couleurs par élément. */}
+        <div className="relative flex h-16 w-16 shrink-0 flex-col items-center justify-center">
+          {/* Halo arrière selon élément (renforce la lecture de l'élément) */}
+          <div
+            className="pointer-events-none absolute inset-0 rounded-full opacity-50 blur-md"
+            style={{ background: ELEMENT_AURA[unit.element] }}
+          />
           <span
-            className="text-3xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+            className="relative text-5xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] atb-emoji"
             style={{
-              filter: isHit ? "brightness(2)" : undefined,
-              transform: isAttacking ? "scale(1.15) rotate(-8deg)" : "scale(1)",
+              filter: `${tintFilter}${isHit ? " brightness(2)" : ""}`,
+              transform: isAttacking
+                ? "scale(1.18) rotate(-8deg)"
+                : "scale(1)",
               transition: "transform 200ms ease-out, filter 150ms",
+              lineHeight: 1,
             }}
           >
-            {cls.glyph}
+            {glyph}
           </span>
-          <span className="absolute -bottom-1 -right-1 text-base drop-shadow">
+          {/* Glyph élément en overlay coin (lisibilité gameplay) */}
+          <span
+            className="absolute -bottom-0.5 -right-0.5 rounded-full bg-black/70 px-1 text-sm leading-none ring-1 ring-white/10 backdrop-blur-sm"
+            title={elt.name}
+          >
             {elt.glyph}
           </span>
         </div>
@@ -870,6 +901,11 @@ function ActionBtn({
 function AtbStyles() {
   return (
     <style>{`
+      .atb-emoji {
+        font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+          "EmojiOne Color", sans-serif;
+        font-feature-settings: normal;
+      }
       @keyframes atb-hit-flash {
         0% { opacity: 1; transform: scale(1); }
         100% { opacity: 0; transform: scale(1.4); }

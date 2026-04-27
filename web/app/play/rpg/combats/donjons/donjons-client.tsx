@@ -7,7 +7,10 @@ import {
   type EternumElementId,
   type EternumHero,
 } from "@shared/types";
-import { ETERNUM_FAMILIERS_BY_ID } from "@shared/eternum-familiers";
+import {
+  ETERNUM_FAMILIERS_BY_ID,
+  familierDisplayName,
+} from "@shared/eternum-familiers";
 import {
   ETERNUM_DUNGEONS,
   type DungeonConfig,
@@ -27,6 +30,7 @@ type FightSession = {
   teamB: CombatUnit[];
   forcedWinner: "A" | "B";
   unitRarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic">;
+  unitDisplayGlyphs: Record<string, string>;
   rewards?: { os: number; xp: number; resources: string[] };
 };
 
@@ -65,12 +69,13 @@ export function DonjonsClient({
     for (const f of team) {
       const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
       if (!base) continue;
+      const elt = f.element_id as EternumElementId;
       units.push(
         buildFamilierUnit(
           `fam-${f.id}`,
-          base.name,
+          familierDisplayName(base, elt), // "Loup-Alpha igné", "Tigron glacial", etc.
           base.classId,
-          f.element_id as EternumElementId,
+          elt,
           f.level,
           base.baseStats,
           "A",
@@ -125,13 +130,17 @@ export function DonjonsClient({
       return;
     }
 
-    // Map id → rareté pour cadres précis
+    // Map id → rareté pour cadres précis + glyph familier custom
     const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
       hero: "legendary",
     };
+    const glyphs: Record<string, string> = {};
     for (const f of team) {
       const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (base) rarities[`fam-${f.id}`] = base.rarity;
+      if (base) {
+        rarities[`fam-${f.id}`] = base.rarity;
+        glyphs[`fam-${f.id}`] = base.glyph; // 🐺 🐉 🦁 ... unique par familier_id
+      }
     }
 
     // Lance le combat ATB tactique avec le résultat serveur en input.
@@ -141,6 +150,7 @@ export function DonjonsClient({
       teamB: buildEnemyTeam(d),
       forcedWinner: r.won ? "A" : "B",
       unitRarities: rarities,
+      unitDisplayGlyphs: glyphs,
       rewards: r.won
         ? {
             os: r.os_gained ?? 0,
@@ -214,6 +224,7 @@ export function DonjonsClient({
         forcedWinner={session?.forcedWinner}
         ambiance="dungeon"
         unitRarities={session?.unitRarities}
+        unitDisplayGlyphs={session?.unitDisplayGlyphs}
         title={session ? `${session.dungeon.glyph} ${session.dungeon.name}` : ""}
         rewards={
           session?.rewards

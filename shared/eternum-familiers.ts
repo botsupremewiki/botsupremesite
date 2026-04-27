@@ -57,6 +57,85 @@ export const RARITY_ACCENT: Record<EternumRarity, string> = {
     "text-fuchsia-200 border-fuchsia-400/60 shadow-[0_0_24px_rgba(232,121,249,0.45)]",
 };
 
+// ─── Naming variants par élément ─────────────────────────────────────
+// 90 noms de base × 6 éléments = 540 noms uniques en composant
+// "{nom_de_base} {qualificatif_élément}".
+export const ELEMENT_QUALIFIER: Record<EternumElementId, string> = {
+  fire: "igné",
+  water: "glacial",
+  wind: "vif",
+  earth: "tellurique",
+  light: "rayonnant",
+  dark: "ténébreux",
+};
+
+/**
+ * Renvoie le nom complet d'un familier en composant le nom de base et
+ * un qualificatif élémentaire. Ex : "Loup-Alpha igné", "Tigron glacial".
+ *
+ * Stratégie : féminisation simple — on n'essaie pas de gérer les genres
+ * grammaticaux dans Eternum (ce sont des appellations magiques).
+ */
+export function familierDisplayName(
+  base: FamilierBase,
+  element: EternumElementId,
+): string {
+  return `${base.name} ${ELEMENT_QUALIFIER[element]}`;
+}
+
+// Lookup rapide par (familier_id, element_id) → nom affiché.
+export function familierDisplayNameById(
+  familierId: string,
+  element: EternumElementId,
+): string {
+  const base = ETERNUM_FAMILIERS_BY_ID.get(familierId);
+  if (!base) return familierId;
+  return familierDisplayName(base, element);
+}
+
+// CSS hue-rotate à appliquer APRÈS sepia(0.7).
+// Le sepia(0.7) part d'une teinte brun-jaune (~30°). Les valeurs ici sont
+// les rotations relatives nécessaires pour atteindre la cible visuelle :
+// - fire : rouge/orange chaud
+// - water : bleu cyan
+// - wind : vert clair
+// - earth : ambre/brun (proche de la base sepia, peu de rotation)
+// - light : jaune doré
+// - dark : violet/magenta
+export const ELEMENT_HUE_ROTATE: Record<EternumElementId, number> = {
+  fire: 340,      // pousse vers rouge
+  water: 180,     // pousse vers cyan/bleu
+  wind: 75,       // pousse vers vert frais
+  earth: 5,       // proche de la base sepia (brun/ambre)
+  light: 25,      // jaune lumineux
+  dark: 245,      // violet sombre
+};
+
+// Saturation à combiner avec hue-rotate. Plus haut = couleur plus marquée.
+export const ELEMENT_SATURATE: Record<EternumElementId, number> = {
+  fire: 1.4,
+  water: 1.5,
+  wind: 1.3,
+  earth: 1.2,
+  light: 1.6,
+  dark: 1.4,
+};
+
+/**
+ * CSS filter complet pour teindre un emoji selon l'élément.
+ *
+ * Trick : les emojis "neutres" (gris) ne réagissent pas bien à hue-rotate
+ * seul (faible saturation native). On applique d'abord `sepia(0.7)` qui
+ * force une teinte jaune-brun chaude, puis on déplace vers la couleur
+ * cible avec hue-rotate. Résultat : l'emoji 🐺 (gris) devient un vrai
+ * loup rouge / bleu / vert / violet selon l'élément.
+ */
+export function elementTintFilter(element: EternumElementId): string {
+  const hue = ELEMENT_HUE_ROTATE[element];
+  const sat = ELEMENT_SATURATE[element];
+  return `sepia(0.7) hue-rotate(${hue}deg) saturate(${sat}) brightness(1.05)`;
+}
+
 // Templates de stats par classe (en base, niveau 1, rareté commune).
 const CLASS_STAT_TEMPLATES: Record<
   EternumClassId,

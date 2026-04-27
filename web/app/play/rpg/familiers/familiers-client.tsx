@@ -15,6 +15,8 @@ import {
   RARITY_ACCENT,
   RARITY_INVOCATION_PRICE,
   RARITY_LABEL,
+  elementTintFilter,
+  familierDisplayName,
   familiersOfRarity,
 } from "@shared/eternum-familiers";
 import { createClient } from "@/lib/supabase/client";
@@ -423,10 +425,17 @@ function FamilierCard({
   return (
     <div className={`flex flex-col gap-1 rounded-xl border bg-black/40 p-3 ${rarityCls}`}>
       <div className="flex items-start justify-between text-[10px]">
-        <span className="font-semibold">{base.name}</span>
+        <span className="font-semibold">
+          {familierDisplayName(base, owned.element_id as EternumElementId)}
+        </span>
         <span className={elt.accent}>{elt.glyph}</span>
       </div>
-      <div className="flex items-center justify-center text-4xl">{base.glyph}</div>
+      <div
+        className="flex items-center justify-center text-4xl"
+        style={{ filter: elementTintFilter(owned.element_id as EternumElementId) }}
+      >
+        {base.glyph}
+      </div>
       <div className="text-[10px] text-zinc-400">
         Niv {owned.level} · ⭐{owned.star}
       </div>
@@ -532,9 +541,14 @@ function TeamView({
                 <span className="font-semibold">Slot {slot + 1}</span>
                 <span className={elt.accent}>{elt.glyph}</span>
               </div>
-              <div className="text-center text-5xl">{base.glyph}</div>
+              <div
+                className="text-center text-5xl"
+                style={{ filter: elementTintFilter(f.element_id as EternumElementId) }}
+              >
+                {base.glyph}
+              </div>
               <div className="text-center text-xs font-semibold">
-                {base.name}
+                {familierDisplayName(base, f.element_id as EternumElementId)}
               </div>
               <div className="text-center text-[10px] text-zinc-400">
                 Niv {f.level} · {RARITY_LABEL[base.rarity]}
@@ -645,9 +659,14 @@ function AubergeView({
                 key={f.id}
                 className={`flex flex-col gap-2 rounded-xl border p-3 ${RARITY_ACCENT[base.rarity]} bg-black/40`}
               >
-                <div className="text-center text-4xl">{base.glyph}</div>
+                <div
+                  className="text-center text-4xl"
+                  style={{ filter: elementTintFilter(f.element_id as EternumElementId) }}
+                >
+                  {base.glyph}
+                </div>
                 <div className="text-center text-xs font-semibold">
-                  {base.name}
+                  {familierDisplayName(base, f.element_id as EternumElementId)}
                 </div>
                 <button
                   onClick={() => onToggleAuberge(f.id, true)}
@@ -692,8 +711,15 @@ function RevealOverlay({
         <div className="text-[10px] uppercase tracking-widest text-zinc-400">
           Invocation réussie !
         </div>
-        <div className="text-7xl">{base.glyph}</div>
-        <div className="text-2xl font-bold">{base.name}</div>
+        <div
+          className="text-7xl"
+          style={{ filter: elementTintFilter(element_id as EternumElementId) }}
+        >
+          {base.glyph}
+        </div>
+        <div className="text-2xl font-bold">
+          {familierDisplayName(base, element_id as EternumElementId)}
+        </div>
         <div className="flex items-center gap-2 text-sm">
           <span>{RARITY_LABEL[rarity]}</span>
           <span className="text-zinc-500">·</span>

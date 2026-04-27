@@ -7,7 +7,10 @@ import {
   type EternumElementId,
   type EternumHero,
 } from "@shared/types";
-import { ETERNUM_FAMILIERS_BY_ID } from "@shared/eternum-familiers";
+import {
+  ETERNUM_FAMILIERS_BY_ID,
+  familierDisplayName,
+} from "@shared/eternum-familiers";
 import { ETERNUM_DREAMS, type DreamConfig } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
@@ -23,6 +26,8 @@ type FightSession = {
   teamA: CombatUnit[];
   teamB: CombatUnit[];
   forcedWinner: "A" | "B";
+  unitRarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic">;
+  unitDisplayGlyphs: Record<string, string>;
   shards?: { resource_id: string; count: number }[];
 };
 
@@ -42,7 +47,7 @@ export function DreamClient({
     const units: CombatUnit[] = [
       buildHeroUnit(
         "hero",
-        ETERNUM_CLASSES[hero.classId].name,
+        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
         hero.classId,
         hero.elementId,
         hero.level,
@@ -52,12 +57,13 @@ export function DreamClient({
     for (const f of team) {
       const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
       if (!base) continue;
+      const elt = f.element_id as EternumElementId;
       units.push(
         buildFamilierUnit(
           `fam-${f.id}`,
-          base.name,
+          familierDisplayName(base, elt),
           base.classId,
-          f.element_id as EternumElementId,
+          elt,
           f.level,
           base.baseStats,
           "A",
@@ -103,11 +109,25 @@ export function DreamClient({
       return;
     }
 
+    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
+      hero: "legendary",
+    };
+    const glyphs: Record<string, string> = {};
+    for (const f of team) {
+      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
+      if (base) {
+        rarities[`fam-${f.id}`] = base.rarity;
+        glyphs[`fam-${f.id}`] = base.glyph;
+      }
+    }
+
     setSession({
       dream: d,
       teamA: buildPlayerTeam(),
       teamB: buildEnemy(d),
       forcedWinner: r.won ? "A" : "B",
+      unitRarities: rarities,
+      unitDisplayGlyphs: glyphs,
       shards: r.won ? r.shards ?? [] : undefined,
     });
   }
@@ -157,6 +177,8 @@ export function DreamClient({
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
         ambiance="dream"
+        unitRarities={session?.unitRarities}
+        unitDisplayGlyphs={session?.unitDisplayGlyphs}
         title={session ? `${session.dream.glyph} ${session.dream.name}` : ""}
         rewards={
           session?.shards

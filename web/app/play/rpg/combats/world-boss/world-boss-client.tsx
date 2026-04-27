@@ -7,6 +7,7 @@ import {
 } from "@shared/eternum-content";
 import {
   ETERNUM_FAMILIERS_BY_ID,
+  familierDisplayName,
 } from "@shared/eternum-familiers";
 import {
   buildFamilierUnit,
@@ -23,6 +24,8 @@ type FightSession = {
   teamB: CombatUnit[];
   damage: number;
   osGained: number;
+  unitRarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic">;
+  unitDisplayGlyphs: Record<string, string>;
 };
 
 export function WorldBossClient({
@@ -47,12 +50,13 @@ export function WorldBossClient({
     for (const f of team) {
       const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
       if (!base) continue;
+      const elt = f.element_id as EternumElementId;
       units.push(
         buildFamilierUnit(
           `fam-${f.id}`,
-          base.name,
+          familierDisplayName(base, elt),
           base.classId,
-          f.element_id as EternumElementId,
+          elt,
           f.level,
           base.baseStats,
           "A",
@@ -104,6 +108,17 @@ export function WorldBossClient({
     }
 
     setAttempts(r.attempts_used);
+
+    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {};
+    const glyphs: Record<string, string> = {};
+    for (const f of team) {
+      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
+      if (base) {
+        rarities[`fam-${f.id}`] = base.rarity;
+        glyphs[`fam-${f.id}`] = base.glyph;
+      }
+    }
+
     // Le boss "gagne" toujours côté narratif (HP énorme), on inflige juste
     // un score de dégâts côté serveur.
     setSession({
@@ -111,6 +126,8 @@ export function WorldBossClient({
       teamB: buildBoss(),
       damage: r.damage,
       osGained: r.os_gained,
+      unitRarities: rarities,
+      unitDisplayGlyphs: glyphs,
     });
   }
 
@@ -194,6 +211,8 @@ export function WorldBossClient({
         teamB={session?.teamB ?? []}
         forcedWinner="B"
         ambiance="boss"
+        unitRarities={session?.unitRarities}
+        unitDisplayGlyphs={session?.unitDisplayGlyphs}
         title={session ? `🤖 ${ETERNUM_WORLD_BOSS.name}` : ""}
         rewards={
           session

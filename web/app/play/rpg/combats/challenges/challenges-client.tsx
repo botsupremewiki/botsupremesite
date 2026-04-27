@@ -7,7 +7,10 @@ import {
   type EternumElementId,
   type EternumHero,
 } from "@shared/types";
-import { ETERNUM_FAMILIERS_BY_ID } from "@shared/eternum-familiers";
+import {
+  ETERNUM_FAMILIERS_BY_ID,
+  familierDisplayName,
+} from "@shared/eternum-familiers";
 import {
   ETERNUM_WEEKLY_CHALLENGES,
   type ChallengeConfig,
@@ -26,6 +29,8 @@ type FightSession = {
   teamA: CombatUnit[];
   teamB: CombatUnit[];
   forcedWinner: "A" | "B";
+  unitRarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic">;
+  unitDisplayGlyphs: Record<string, string>;
   rewards?: { os: number; resources: string[] };
 };
 
@@ -89,12 +94,13 @@ export function ChallengesClient({
           error: "Restriction : pas de familier avec heal (Vampire / Paladin).",
         };
       }
+      const elt = f.element_id as EternumElementId;
       units.push(
         buildFamilierUnit(
           `fam-${f.id}`,
-          base.name,
+          familierDisplayName(base, elt),
           base.classId,
-          f.element_id as EternumElementId,
+          elt,
           f.level,
           base.baseStats,
           "A",
@@ -152,11 +158,26 @@ export function ChallengesClient({
     }
 
     if (r.won) setDone([...done, c.id]);
+
+    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
+      hero: "legendary",
+    };
+    const glyphs: Record<string, string> = {};
+    for (const f of team) {
+      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
+      if (base) {
+        rarities[`fam-${f.id}`] = base.rarity;
+        glyphs[`fam-${f.id}`] = base.glyph;
+      }
+    }
+
     setSession({
       challenge: c,
       teamA: built.units,
       teamB: buildEnemy(),
       forcedWinner: r.won ? "A" : "B",
+      unitRarities: rarities,
+      unitDisplayGlyphs: glyphs,
       rewards: r.won
         ? {
             os: r.os_gained ?? c.rewardOs,
@@ -223,6 +244,8 @@ export function ChallengesClient({
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
         ambiance="boss"
+        unitRarities={session?.unitRarities}
+        unitDisplayGlyphs={session?.unitDisplayGlyphs}
         title={session ? `${session.challenge.glyph} ${session.challenge.name}` : ""}
         rewards={session?.rewards}
         onComplete={() => {
