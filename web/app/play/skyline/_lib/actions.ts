@@ -388,3 +388,85 @@ export async function placeMarketOrderAction(
   revalidatePath(`/play/skyline/${companyId}`);
   return { ok: true, data };
 }
+
+// ───── P7 : Bourse ─────
+
+export async function ipoCompanyAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const totalShares = Number(formData.get("total_shares") ?? 0);
+  const keepPct = Number(formData.get("keep_pct") ?? 60);
+  if (!companyId || totalShares <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_ipo_company", {
+    p_company_id: companyId,
+    p_total_shares: totalShares,
+    p_keep_pct: keepPct,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/bourse");
+  revalidatePath(`/play/skyline/${companyId}`);
+  revalidatePath("/play/skyline");
+  return { ok: true, data };
+}
+
+export async function placeShareOrderAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const side = String(formData.get("side") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!companyId || !side || quantity <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_place_share_order", {
+    p_company_id: companyId,
+    p_side: side,
+    p_quantity: quantity,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/bourse");
+  revalidatePath("/play/skyline");
+  return { ok: true, data };
+}
+
+export async function payDividendAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const amount = Number(formData.get("amount") ?? 0);
+  if (!companyId || amount <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_pay_dividend", {
+    p_company_id: companyId,
+    p_total_amount: amount,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  revalidatePath("/play/skyline/bourse");
+  return { ok: true, data };
+}
+
+// ───── P8 : Matières premières ─────
+
+export async function buyRawMachineAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const level = String(formData.get("level") ?? "");
+  if (!companyId || !level)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_buy_raw_machine", {
+    p_company_id: companyId,
+    p_level: level,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}

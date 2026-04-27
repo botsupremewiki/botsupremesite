@@ -14,6 +14,7 @@ import {
   SKYLINE_PERMITS,
   SKYLINE_PRODUCTS,
   SKYLINE_RAW_MATERIALS,
+  SKYLINE_RAW_SECTORS,
   SKYLINE_SECTOR_REQUIRED_PERMITS,
   SKYLINE_SKILLS,
   skylineFormatCashFR,
@@ -31,6 +32,7 @@ import {
   type SkylinePermitRow,
   type SkylineProductId,
   type SkylineRawMaterialId,
+  type SkylineRawSector,
   type SkylineSkill,
   type SkylineTransactionRow,
 } from "@shared/skyline";
@@ -38,8 +40,11 @@ import {
   acquirePermitAction,
   buyFurnitureAction,
   buyMachineAction,
+  buyRawMachineAction,
   cleanCompanyAction,
   fireEmployeeAction,
+  ipoCompanyAction,
+  payDividendAction,
   placeFurnitureAction,
   placeMarketOrderAction,
   purchaseRawMaterialAction,
@@ -59,7 +64,19 @@ type Tab =
   | "compta"
   | "machines"
   | "production"
-  | "market";
+  | "extraction"
+  | "market"
+  | "bourse";
+
+type ShareInfo = {
+  id: string;
+  total_shares: number;
+  ipo_price: number;
+  current_price: number;
+  market_cap: number;
+  is_listed: boolean;
+  ipo_at: string | null;
+} | null;
 
 export function CompanyView({
   company,
@@ -69,6 +86,7 @@ export function CompanyView({
   employees,
   permits,
   machines,
+  share,
   cash,
 }: {
   company: SkylineCompanyRow;
@@ -78,17 +96,25 @@ export function CompanyView({
   employees: SkylineEmployeeRow[];
   permits: SkylinePermitRow[];
   machines: SkylineMachineRow[];
+  share: ShareInfo;
   cash: number;
 }) {
   const isFactory = company.category === "factory";
-  const [tab, setTab] = useState<Tab>(isFactory ? "production" : "stocks");
-  const commerceSectorMeta = isFactory
-    ? null
-    : SKYLINE_COMMERCE_SECTORS[company.sector as SkylineCommerceSector];
+  const isRaw = company.category === "raw";
+  const isCommerce = company.category === "commerce";
+  const [tab, setTab] = useState<Tab>(
+    isFactory ? "production" : isRaw ? "extraction" : "stocks",
+  );
+  const commerceSectorMeta = isCommerce
+    ? SKYLINE_COMMERCE_SECTORS[company.sector as SkylineCommerceSector]
+    : null;
   const factorySectorMeta = isFactory
     ? SKYLINE_FACTORY_SECTORS[company.sector as SkylineFactorySector]
     : null;
-  const sectorMeta = commerceSectorMeta ?? factorySectorMeta;
+  const rawSectorMeta = isRaw
+    ? SKYLINE_RAW_SECTORS[company.sector as SkylineRawSector]
+    : null;
+  const sectorMeta = commerceSectorMeta ?? factorySectorMeta ?? rawSectorMeta;
   const districtMeta = SKYLINE_DISTRICTS[company.district];
   const sizeMeta = SKYLINE_LOCAL_SIZES[company.local_size];
   const rent = skylineRentMonthly(company.district, company.local_size);
@@ -150,6 +176,21 @@ export function CompanyView({
                 📈 Marché B2B
               </TabButton>
             </>
+          ) : isRaw ? (
+            <>
+              <TabButton current={tab} value="extraction" onClick={setTab}>
+                🌾 Extraction
+              </TabButton>
+              <TabButton current={tab} value="machines" onClick={setTab}>
+                ⚙️ Machines ({machines.length})
+              </TabButton>
+              <TabButton current={tab} value="stocks" onClick={setTab}>
+                📦 Stocks
+              </TabButton>
+              <TabButton current={tab} value="market" onClick={setTab}>
+                📈 Marché B2B
+              </TabButton>
+            </>
           ) : (
             <>
               <TabButton current={tab} value="stocks" onClick={setTab}>
@@ -175,6 +216,9 @@ export function CompanyView({
           <TabButton current={tab} value="permits" onClick={setTab}>
             📜 Permis
           </TabButton>
+          <TabButton current={tab} value="bourse" onClick={setTab}>
+            📈 Bourse
+          </TabButton>
           <TabButton current={tab} value="compta" onClick={setTab}>
             📊 Compta
           </TabButton>
@@ -188,6 +232,12 @@ export function CompanyView({
               inventory={inventory}
               recipe={factoryRecipe}
               cash={cash}
+            />
+          ) : isRaw && rawSectorMeta ? (
+            <RawStocksTab
+              companyId={company.id}
+              inventory={inventory}
+              sectorMeta={rawSectorMeta}
             />
           ) : (
             <StocksTab
@@ -215,10 +265,34 @@ export function CompanyView({
             cash={cash}
           />
         ) : null}
+        {tab === "machines" && rawSectorMeta ? (
+          <RawMachinesTab
+            companyId={company.id}
+            machineKind={rawSectorMeta.machineKind}
+            machines={machines}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "extraction" && rawSectorMeta ? (
+          <ExtractionTab
+            inventory={inventory}
+            sectorMeta={rawSectorMeta}
+            machines={machines}
+          />
+        ) : null}
         {tab === "market" ? (
           <MarketTab
             companyId={company.id}
             inventory={inventory}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "bourse" ? (
+          <BourseTab
+            companyId={company.id}
+            companyName={company.name}
+            share={share}
+            isOwner={true}
             cash={cash}
           />
         ) : null}
@@ -1789,6 +1863,555 @@ function MarketSellRow({
       {error ? (
         <div className="w-full text-[10px] text-rose-300">{error}</div>
       ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglets P8 : MATIÈRES PREMIÈRES (RAW)
+// ──────────────────────────────────────────────────────────────────
+
+type RawSectorMeta = (typeof SKYLINE_RAW_SECTORS)[SkylineRawSector];
+
+function RawStocksTab({
+  inventory,
+  sectorMeta,
+}: {
+  companyId: string;
+  inventory: SkylineInventoryRow[];
+  sectorMeta: RawSectorMeta;
+}) {
+  const outputId = sectorMeta.output;
+  const outputStock = inventory.find((i) => i.product_id === outputId);
+  const matMeta = SKYLINE_RAW_MATERIALS[outputId];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-emerald-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-emerald-200">
+          📦 Production accumulée
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Cette source produit directement {matMeta?.name}. Le stock s&apos;accumule
+          tant que les machines tournent. Vends sur le marché B2B.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Stock {matMeta?.name}
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-emerald-200 tabular-nums">
+              {(outputStock?.quantity ?? 0).toLocaleString("fr-FR")}
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Coût moyen{" "}
+              {skylineFormatCashFR(Number(outputStock?.avg_buy_price ?? 0))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Prix de référence marché
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-cyan-200 tabular-nums">
+              {skylineFormatCashFR(matMeta?.refBuyPrice ?? 0)}
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Indicatif — le marché commun fait fluctuer
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExtractionTab({
+  inventory,
+  sectorMeta,
+  machines,
+}: {
+  inventory: SkylineInventoryRow[];
+  sectorMeta: RawSectorMeta;
+  machines: SkylineMachineRow[];
+}) {
+  const totalCapacity = machines.reduce(
+    (s, m) => s + Number(m.capacity_per_day),
+    0,
+  );
+  const matMeta = SKYLINE_RAW_MATERIALS[sectorMeta.output];
+  const outputStock = inventory.find((i) => i.product_id === sectorMeta.output);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-emerald-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-emerald-200">
+          🌾 Production primaire
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Pas d&apos;inputs. Les machines extraient la matière directement.
+          Plus tu mets de capacité, plus tu produis en volume — base solide pour
+          tout l&apos;empire vertical.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Capacité totale"
+            value={`${totalCapacity.toLocaleString("fr-FR")}/jour`}
+            accent="text-emerald-200"
+          />
+          <Stat
+            label="Machines"
+            value={String(machines.length)}
+            accent="text-zinc-200"
+          />
+          <Stat
+            label={`Stock ${matMeta?.name}`}
+            value={(outputStock?.quantity ?? 0).toLocaleString("fr-FR")}
+            accent="text-cyan-200"
+          />
+        </div>
+
+        <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs">
+          <div className="text-zinc-400">Production directe</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-emerald-200">
+              {matMeta?.glyph} {matMeta?.name}
+            </span>
+            <span className="text-zinc-500">
+              · {sectorMeta.machineKind === "agri" ? "agricole" :
+                 sectorMeta.machineKind === "livestock" ? "élevage" :
+                 sectorMeta.machineKind === "forestry" ? "sylviculture" :
+                 sectorMeta.machineKind === "mining" ? "extraction minière" :
+                 sectorMeta.machineKind === "oil" ? "extraction pétrolière" : ""}
+            </span>
+          </div>
+        </div>
+
+        {totalCapacity === 0 ? (
+          <div className="mt-3 rounded-md border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-200">
+            ⚠️ Aucune machine installée. Va dans l&apos;onglet{" "}
+            <strong>Machines</strong> pour démarrer la production.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const RAW_MACHINE_COSTS: Record<
+  string,
+  Record<SkylineMachineLevel, number>
+> = {
+  agri: { basic: 25000, pro: 100000, elite: 400000, hightech: 1500000 },
+  livestock: { basic: 30000, pro: 120000, elite: 500000, hightech: 2000000 },
+  forestry: { basic: 40000, pro: 150000, elite: 600000, hightech: 2500000 },
+  mining: { basic: 200000, pro: 1000000, elite: 5000000, hightech: 25000000 },
+  oil: { basic: 5000000, pro: 30000000, elite: 200000000, hightech: 1000000000 },
+};
+
+function RawMachinesTab({
+  companyId,
+  machineKind,
+  machines,
+  cash,
+}: {
+  companyId: string;
+  machineKind: string;
+  machines: SkylineMachineRow[];
+  cash: number;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          ⚙️ Machines {machineKind}
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Plus la machine est haut de gamme, plus elle extrait en volume — mais
+          elle exige des employés avec compétence Utilisation machines plus élevée.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {SKYLINE_MACHINE_LEVELS.map((lvl) => (
+            <RawMachineCard
+              key={lvl.id}
+              companyId={companyId}
+              kind={machineKind}
+              level={lvl.id}
+              levelName={lvl.name}
+              skillRequired={lvl.skillRequired}
+              multiplier={lvl.multiplier}
+              cash={cash}
+            />
+          ))}
+        </div>
+      </div>
+
+      {machines.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Mes machines ({machines.length})
+          </h3>
+          <ul className="mt-3 space-y-1 text-xs">
+            {machines.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded border border-white/5 bg-white/[0.02] px-3 py-2"
+              >
+                <span className="text-zinc-200">
+                  ⚙️ {m.kind} · niveau {m.level}
+                </span>
+                <span className="text-zinc-400 tabular-nums">
+                  {m.capacity_per_day}/jour · état {m.condition}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RawMachineCard({
+  companyId,
+  kind,
+  level,
+  levelName,
+  skillRequired,
+  multiplier,
+  cash,
+}: {
+  companyId: string;
+  kind: string;
+  level: SkylineMachineLevel;
+  levelName: string;
+  skillRequired: number;
+  multiplier: string;
+  cash: number;
+}) {
+  const cost = RAW_MACHINE_COSTS[kind]?.[level] ?? 0;
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canAfford = cash >= cost;
+
+  const handleBuy = () => {
+    if (!canAfford || pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("level", level);
+    startTransition(async () => {
+      const res = await buyRawMachineAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-zinc-100">
+          ⚙️ {levelName} ({multiplier})
+        </div>
+        <div className="text-xs text-zinc-400">
+          Comp. ≥ {skillRequired}
+        </div>
+      </div>
+      <button
+        onClick={handleBuy}
+        disabled={!canAfford || pending}
+        className="rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending ? "..." : `Acheter · ${skylineFormatCashFR(cost)}`}
+      </button>
+      {error ? (
+        <div className="text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglet P7 : BOURSE (IPO + dividendes pour le fondateur)
+// ──────────────────────────────────────────────────────────────────
+
+function BourseTab({
+  companyId,
+  companyName,
+  share,
+  isOwner,
+  cash,
+}: {
+  companyId: string;
+  companyName: string;
+  share: ShareInfo;
+  isOwner: boolean;
+  cash: number;
+}) {
+  if (!share) {
+    return (
+      <NotListedView
+        companyId={companyId}
+        companyName={companyName}
+        isOwner={isOwner}
+      />
+    );
+  }
+  return (
+    <ListedView
+      companyId={companyId}
+      share={share}
+      isOwner={isOwner}
+      cash={cash}
+    />
+  );
+}
+
+function NotListedView({
+  companyId,
+  companyName,
+  isOwner,
+}: {
+  companyId: string;
+  companyName: string;
+  isOwner: boolean;
+}) {
+  const [totalShares, setTotalShares] = useState(1000000);
+  const [keepPct, setKeepPct] = useState(60);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const handleIPO = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("total_shares", String(totalShares));
+    fd.set("keep_pct", String(keepPct));
+    startTransition(async () => {
+      const res = await ipoCompanyAction(fd);
+      if (res.ok) setDone(true);
+      else setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-purple-400/40 bg-black/40 p-4">
+      <h3 className="text-sm font-semibold text-purple-200">
+        📈 Introduction en bourse (IPO)
+      </h3>
+      <p className="mt-1 text-xs text-zinc-400">
+        Introduis {companyName} en bourse pour récupérer du cash en vendant des
+        actions. Valorisation requise &gt; 5M$ (basée sur trésorerie + revenus
+        × 12 + actifs).
+      </p>
+
+      {!isOwner ? (
+        <div className="mt-3 rounded-md border border-zinc-400/30 bg-zinc-500/5 p-3 text-xs text-zinc-400">
+          Seul le fondateur peut introduire son entreprise en bourse.
+        </div>
+      ) : done ? (
+        <div className="mt-3 rounded-md border border-emerald-400/40 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+          ✓ IPO réussie. Recharge la page pour voir la cotation.
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500">
+                Nombre total d&apos;actions
+              </label>
+              <input
+                type="number"
+                min={100000}
+                max={100000000}
+                step={100000}
+                value={totalShares}
+                onChange={(e) =>
+                  setTotalShares(Math.max(0, Number(e.target.value)))
+                }
+                className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/50"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500">
+                Tu gardes (%)
+              </label>
+              <input
+                type="number"
+                min={30}
+                max={90}
+                value={keepPct}
+                onChange={(e) =>
+                  setKeepPct(Math.max(30, Math.min(90, Number(e.target.value))))
+                }
+                className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/50"
+              />
+              <div className="mt-1 text-[10px] text-zinc-500">
+                Tu vends donc {100 - keepPct}% au marché
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleIPO}
+            disabled={pending}
+            className="mt-3 w-full rounded-md border border-purple-400/50 bg-purple-500/15 px-4 py-2 text-sm font-semibold text-purple-100 transition-colors hover:bg-purple-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {pending ? "Introduction..." : "📈 Introduire en bourse"}
+          </button>
+          {error ? (
+            <div className="mt-2 text-xs text-rose-300">{error}</div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ListedView({
+  companyId,
+  share,
+  isOwner,
+  cash,
+}: {
+  companyId: string;
+  share: NonNullable<ShareInfo>;
+  isOwner: boolean;
+  cash: number;
+}) {
+  const drift =
+    ((Number(share.current_price) - Number(share.ipo_price)) /
+      Number(share.ipo_price)) *
+    100;
+  const [divAmount, setDivAmount] = useState(10000);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  const handleDividend = () => {
+    if (pending || divAmount <= 0 || divAmount > cash) return;
+    setError(null);
+    setResult(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("amount", String(divAmount));
+    startTransition(async () => {
+      const res = await payDividendAction(fd);
+      if (res.ok) {
+        const d = res.data as {
+          per_share?: number;
+          total_paid?: number;
+          holders?: number;
+        };
+        setResult(
+          `✓ ${skylineFormatCashFR(d?.total_paid ?? 0)} versés à ${d?.holders ?? 0} actionnaire(s) (${(
+            d?.per_share ?? 0
+          ).toFixed(4)}$/action)`,
+        );
+      } else {
+        setError(res.error);
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-purple-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-purple-200">
+          🏛️ Cotation actuelle
+        </h3>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Cours actuel"
+            value={skylineFormatCashFR(Number(share.current_price))}
+            accent="text-purple-200"
+          />
+          <Stat
+            label="Prix IPO"
+            value={skylineFormatCashFR(Number(share.ipo_price))}
+            accent="text-zinc-300"
+          />
+          <Stat
+            label="Capitalisation"
+            value={skylineFormatCashFR(Number(share.market_cap))}
+            accent="text-emerald-200"
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Drift vs IPO
+            </div>
+            <div
+              className={`mt-1 text-base font-semibold tabular-nums ${
+                drift >= 0 ? "text-emerald-300" : "text-rose-300"
+              }`}
+            >
+              {drift >= 0 ? "+" : ""}
+              {drift.toFixed(2)}%
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Actions totales
+            </div>
+            <div className="mt-1 text-base text-zinc-200 tabular-nums">
+              {Number(share.total_shares).toLocaleString("fr-FR")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isOwner ? (
+        <div className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-amber-200">
+            💰 Verser un dividende
+          </h3>
+          <p className="mt-1 text-xs text-zinc-400">
+            Ce montant est réparti au prorata du nombre d&apos;actions détenues
+            par chaque actionnaire (toi inclus). Bon pour ta réputation et
+            attractif pour les investisseurs.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="number"
+              min={1000}
+              max={Math.floor(cash)}
+              step={1000}
+              value={divAmount}
+              onChange={(e) => setDivAmount(Math.max(0, Number(e.target.value)))}
+              className="w-32 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/50"
+            />
+            <span className="text-[11px] text-zinc-500">
+              ÷ {Number(share.total_shares).toLocaleString("fr-FR")} actions
+            </span>
+            <button
+              onClick={handleDividend}
+              disabled={pending || divAmount <= 0 || divAmount > cash}
+              className="ml-auto rounded-md border border-amber-400/50 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {pending ? "..." : "Verser"}
+            </button>
+          </div>
+          {result ? (
+            <div className="mt-2 text-xs text-emerald-300">{result}</div>
+          ) : null}
+          {error ? (
+            <div className="mt-2 text-xs text-rose-300">{error}</div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="text-xs text-zinc-500">
+        →{" "}
+        <Link
+          href="/play/skyline/bourse"
+          className="text-purple-300 hover:text-purple-200"
+        >
+          Voir la bourse complète
+        </Link>{" "}
+        pour acheter/vendre des actions.
+      </div>
     </div>
   );
 }

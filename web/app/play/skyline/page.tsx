@@ -187,13 +187,12 @@ export default async function SkylineHub() {
                 border="border-cyan-400/40"
               />
               <MenuButton
-                href="/play/skyline"
+                href="/play/skyline/bourse"
                 icon="📈"
                 title="Bourse"
-                description="IPO + trading actions (P7 — bientôt)"
-                accent="text-zinc-300"
-                border="border-zinc-400/30"
-                disabled
+                description="IPO, trading actions, dividendes"
+                accent="text-purple-200"
+                border="border-purple-400/40"
               />
             </div>
           </section>

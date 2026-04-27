@@ -5,6 +5,7 @@ import {
   fetchEmployeesForCompany,
   fetchMachinesForCompany,
   fetchPermitsForCompany,
+  fetchShareForCompany,
   fetchSkylineCompany,
   fetchSkylineFurniture,
   fetchSkylineInventory,
@@ -31,15 +32,23 @@ export default async function CompanyPage({
     redirect("/play/skyline");
   }
 
-  const [furniture, inventory, transactions, employees, permits, machines] =
-    await Promise.all([
-      fetchSkylineFurniture(companyId),
-      fetchSkylineInventory(companyId),
-      fetchSkylineTransactions(profile.id, companyId, 30),
-      fetchEmployeesForCompany(companyId),
-      fetchPermitsForCompany(companyId),
-      fetchMachinesForCompany(companyId),
-    ]);
+  const [
+    furniture,
+    inventory,
+    transactions,
+    employees,
+    permits,
+    machines,
+    share,
+  ] = await Promise.all([
+    fetchSkylineFurniture(companyId),
+    fetchSkylineInventory(companyId),
+    fetchSkylineTransactions(profile.id, companyId, 30),
+    fetchEmployeesForCompany(companyId),
+    fetchPermitsForCompany(companyId),
+    fetchMachinesForCompany(companyId),
+    fetchShareForCompany(companyId),
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -59,6 +68,7 @@ export default async function CompanyPage({
         employees={employees}
         permits={permits}
         machines={machines}
+        share={share}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>

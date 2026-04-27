@@ -3,10 +3,13 @@
 import { useState, useTransition } from "react";
 import {
   SKYLINE_FACTORY_SECTORS,
+  SKYLINE_RAW_MATERIALS,
+  SKYLINE_RAW_SECTORS,
   type SkylineCommerceSector,
   type SkylineDistrict,
   type SkylineFactorySector,
   type SkylineLocalSize,
+  type SkylineRawSector,
   skylineRentMonthly,
   skylinePurchaseCost,
   skylineFormatCashFR,
@@ -37,9 +40,12 @@ type Size = {
   sqm: number;
 };
 
-type Category = "commerce" | "factory";
+type Category = "commerce" | "factory" | "raw";
 
 const FACTORY_SECTORS = Object.values(SKYLINE_FACTORY_SECTORS).sort(
+  (a, b) => a.minStartCash - b.minStartCash,
+);
+const RAW_SECTORS = Object.values(SKYLINE_RAW_SECTORS).sort(
   (a, b) => a.minStartCash - b.minStartCash,
 );
 
@@ -61,6 +67,9 @@ export function CreationForm({
   const [factorySector, setFactorySector] = useState<SkylineFactorySector>(
     FACTORY_SECTORS[0].id,
   );
+  const [rawSector, setRawSector] = useState<SkylineRawSector>(
+    RAW_SECTORS[0].id,
+  );
   const [name, setName] = useState("");
   const [district, setDistrict] = useState<SkylineDistrict>("populaire");
   const [size, setSize] = useState<SkylineLocalSize>("xs");
@@ -69,10 +78,19 @@ export function CreationForm({
 
   const commerceSectorMeta = sectors.find((s) => s.id === commerceSector)!;
   const factorySectorMeta = SKYLINE_FACTORY_SECTORS[factorySector];
+  const rawSectorMeta = SKYLINE_RAW_SECTORS[rawSector];
   const sectorId =
-    category === "commerce" ? commerceSector : factorySector;
+    category === "commerce"
+      ? commerceSector
+      : category === "factory"
+      ? factorySector
+      : rawSector;
   const sectorMeta =
-    category === "commerce" ? commerceSectorMeta : factorySectorMeta;
+    category === "commerce"
+      ? commerceSectorMeta
+      : category === "factory"
+      ? factorySectorMeta
+      : rawSectorMeta;
   const rent = skylineRentMonthly(district, size);
   const buyCost = skylinePurchaseCost(district, size);
   const totalCost = purchase ? buyCost : rent;
@@ -97,7 +115,7 @@ export function CreationForm({
         <div className="text-[11px] uppercase tracking-widest text-zinc-400">
           Type d&apos;entreprise
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             type="button"
             onClick={() => setCategory("commerce")}
@@ -132,6 +150,23 @@ export function CreationForm({
               2 matières → produit fini
             </div>
           </button>
+          <button
+            type="button"
+            onClick={() => setCategory("raw")}
+            className={`rounded-lg border p-3 text-left transition-colors ${
+              category === "raw"
+                ? "border-emerald-400/60 bg-emerald-500/10"
+                : "border-white/10 bg-white/[0.02] hover:border-white/20"
+            }`}
+          >
+            <div className="text-2xl">🌾</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">
+              Matière première
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Champ, élevage, mine, forêt...
+            </div>
+          </button>
         </div>
       </section>
 
@@ -163,7 +198,7 @@ export function CreationForm({
               </button>
             ))}
           </div>
-        ) : (
+        ) : category === "factory" ? (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {FACTORY_SECTORS.map((s) => (
               <button
@@ -173,6 +208,29 @@ export function CreationForm({
                 className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
                   factorySector === s.id
                     ? "border-orange-400/60 bg-orange-500/10"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                }`}
+              >
+                <span className="text-2xl">{s.glyph}</span>
+                <span className="text-xs font-semibold text-zinc-100">
+                  {s.name}
+                </span>
+                <span className="text-[10px] text-zinc-500">
+                  ~{s.minStartCash.toLocaleString("fr-FR")}$ démarrage
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {RAW_SECTORS.map((s) => (
+              <button
+                type="button"
+                key={s.id}
+                onClick={() => setRawSector(s.id)}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  rawSector === s.id
+                    ? "border-emerald-400/60 bg-emerald-500/10"
                     : "border-white/10 bg-white/[0.02] hover:border-white/20"
                 }`}
               >
@@ -199,6 +257,18 @@ export function CreationForm({
             <span>→</span>
             <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
               {factorySectorMeta.output.qty} × {factorySectorMeta.output.id}
+            </span>
+          </div>
+        ) : null}
+        {category === "raw" ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+            <span className="text-zinc-400">Production directe :</span>
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+              {SKYLINE_RAW_MATERIALS[rawSectorMeta.output]?.glyph}{" "}
+              {SKYLINE_RAW_MATERIALS[rawSectorMeta.output]?.name}
+            </span>
+            <span className="text-zinc-500">
+              · machines {rawSectorMeta.machineKind}
             </span>
           </div>
         ) : null}

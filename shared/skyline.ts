@@ -725,6 +725,81 @@ export const SKYLINE_INTERMEDIATE_PRODUCTS: Record<
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// 4.6.5. SECTEURS MATIÈRES PREMIÈRES (P8) — production primaire
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineRawSector =
+  | "champ_fleurs"
+  | "champ_ble"
+  | "champ_orge_houblon"
+  | "pepiniere"
+  | "maraichage"
+  | "verger"
+  | "plantation_sucre"
+  | "plantation_coton"
+  | "plantation_cafe"
+  | "plantation_cacao"
+  | "vignoble"
+  | "elevage_volaille"
+  | "elevage_ovin"
+  | "elevage_bovin"
+  | "apiculture"
+  | "foret"
+  | "salines"
+  | "mine_charbon"
+  | "mine_fer"
+  | "mine_cuivre"
+  | "mine_aluminium"
+  | "mine_or"
+  | "mine_pierres"
+  | "puit_petrole";
+
+export type SkylineRawMachineKind =
+  | "agri"
+  | "livestock"
+  | "forestry"
+  | "mining"
+  | "oil";
+
+export const SKYLINE_RAW_SECTORS: Record<
+  SkylineRawSector,
+  {
+    id: SkylineRawSector;
+    name: string;
+    glyph: string;
+    description: string;
+    output: SkylineRawMaterialId;
+    minStartCash: number;
+    machineKind: SkylineRawMachineKind;
+  }
+> = {
+  champ_fleurs: { id: "champ_fleurs", name: "Champ de fleurs", glyph: "🌹", description: "Production de fleurs.", output: "flowers", minStartCash: 50000, machineKind: "agri" },
+  pepiniere: { id: "pepiniere", name: "Pépinière", glyph: "🌱", description: "Plants et arbres médicinaux.", output: "plants_med", minStartCash: 80000, machineKind: "agri" },
+  maraichage: { id: "maraichage", name: "Maraîchage", glyph: "🥕", description: "Légumes en culture.", output: "vegetables", minStartCash: 100000, machineKind: "agri" },
+  apiculture: { id: "apiculture", name: "Apiculture", glyph: "🐝", description: "Production de miel/sucre.", output: "sugar", minStartCash: 30000, machineKind: "agri" },
+  elevage_volaille: { id: "elevage_volaille", name: "Élevage volaille", glyph: "🐔", description: "Volailles et œufs.", output: "cattle", minStartCash: 150000, machineKind: "livestock" },
+  champ_ble: { id: "champ_ble", name: "Champ de blé", glyph: "🌾", description: "Production de blé.", output: "wheat", minStartCash: 200000, machineKind: "agri" },
+  champ_orge_houblon: { id: "champ_orge_houblon", name: "Champ orge & houblon", glyph: "🌿", description: "Orge et houblon.", output: "barley", minStartCash: 200000, machineKind: "agri" },
+  verger: { id: "verger", name: "Verger", glyph: "🍎", description: "Fruits divers.", output: "fruits", minStartCash: 250000, machineKind: "agri" },
+  elevage_ovin: { id: "elevage_ovin", name: "Élevage ovin", glyph: "🐑", description: "Bétail et laine.", output: "wool", minStartCash: 300000, machineKind: "livestock" },
+  plantation_sucre: { id: "plantation_sucre", name: "Plantation sucre", glyph: "🌾", description: "Canne à sucre.", output: "sugar", minStartCash: 300000, machineKind: "agri" },
+  plantation_coton: { id: "plantation_coton", name: "Plantation coton", glyph: "🧶", description: "Coton brut.", output: "cotton", minStartCash: 400000, machineKind: "agri" },
+  vignoble: { id: "vignoble", name: "Vignoble", glyph: "🍇", description: "Raisins.", output: "grapes", minStartCash: 500000, machineKind: "agri" },
+  elevage_bovin: { id: "elevage_bovin", name: "Élevage bovin", glyph: "🐄", description: "Bétail vivant et lait.", output: "milk", minStartCash: 500000, machineKind: "livestock" },
+  foret: { id: "foret", name: "Exploitation forestière", glyph: "🌳", description: "Bois.", output: "wood", minStartCash: 800000, machineKind: "forestry" },
+  plantation_cafe: { id: "plantation_cafe", name: "Plantation café", glyph: "☕", description: "Grains de café.", output: "coffee", minStartCash: 1000000, machineKind: "agri" },
+  plantation_cacao: { id: "plantation_cacao", name: "Plantation cacao", glyph: "🍫", description: "Cacao.", output: "cocoa", minStartCash: 1500000, machineKind: "agri" },
+  salines: { id: "salines", name: "Salines", glyph: "🧂", description: "Sel.", output: "salt", minStartCash: 2000000, machineKind: "mining" },
+  mine_charbon: { id: "mine_charbon", name: "Mine de charbon", glyph: "⬛", description: "Charbon.", output: "coal", minStartCash: 20000000, machineKind: "mining" },
+  mine_fer: { id: "mine_fer", name: "Mine de fer", glyph: "⚙️", description: "Minerai de fer.", output: "iron", minStartCash: 50000000, machineKind: "mining" },
+  mine_cuivre: { id: "mine_cuivre", name: "Mine de cuivre", glyph: "🟠", description: "Cuivre.", output: "copper", minStartCash: 50000000, machineKind: "mining" },
+  mine_aluminium: { id: "mine_aluminium", name: "Mine d'aluminium", glyph: "🟪", description: "Aluminium.", output: "aluminum", minStartCash: 80000000, machineKind: "mining" },
+  mine_or: { id: "mine_or", name: "Mine d'or / argent", glyph: "🥇", description: "Métaux précieux.", output: "gold", minStartCash: 100000000, machineKind: "mining" },
+  mine_pierres: { id: "mine_pierres", name: "Mine pierres précieuses", glyph: "💎", description: "Pierres précieuses.", output: "gemstones", minStartCash: 200000000, machineKind: "mining" },
+  puit_petrole: { id: "puit_petrole", name: "Puit de pétrole", glyph: "🛢️", description: "Pétrole brut.", output: "oil", minStartCash: 1000000000, machineKind: "oil" },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // 4.7. NIVEAUX DE MACHINES (P5)
 // ──────────────────────────────────────────────────────────────────────────
 

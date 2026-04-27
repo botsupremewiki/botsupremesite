@@ -3246,7 +3246,533 @@ begin
     perform public.skyline_process_sales(p_company_id);
   elsif v_cat = 'factory' then
     perform public.skyline_factory_produce(p_company_id);
+  elsif v_cat = 'raw' then
+    perform public.skyline_raw_extract(p_company_id);
   end if;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 21. P7 — BOURSE : IPO, ORDRES, TICK COURS, DIVIDENDES
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Calcule la valorisation d'une entreprise (basée sur cash + revenus mensuels × 12).
+create or replace function public.skyline_company_valuation(p_company_id uuid)
+returns numeric
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_company public.skyline_companies%rowtype;
+  v_inv_value numeric;
+  v_machines_value numeric;
+  v_furniture_value numeric;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found then return 0; end if;
+
+  select coalesce(sum(quantity * avg_buy_price), 0) into v_inv_value
+    from public.skyline_inventory where company_id = p_company_id;
+  select coalesce(sum(cost), 0) into v_machines_value
+    from public.skyline_machines where company_id = p_company_id;
+  select coalesce(sum(public.skyline_furniture_cost(kind)), 0) into v_furniture_value
+    from public.skyline_furniture where company_id = p_company_id;
+
+  -- Cash + 12 mois de revenus + actifs.
+  return v_company.cash + v_company.monthly_revenue * 12 + v_inv_value
+         + v_machines_value + v_furniture_value;
+end;
+$$;
+
+-- Introduit l'entreprise en bourse (IPO).
+-- Min valorisation 5M$. Le joueur garde X% des actions, vend (100-X)% au prix d'introduction.
+create or replace function public.skyline_ipo_company(
+  p_company_id  uuid,
+  p_total_shares bigint,
+  p_keep_pct    numeric -- % d'actions que le joueur conserve (ex 60 = 60%)
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_company   public.skyline_companies%rowtype;
+  v_valuation numeric;
+  v_ipo_price numeric;
+  v_market_cap numeric;
+  v_share_id  uuid;
+  v_keep_shares bigint;
+  v_sold_shares bigint;
+  v_proceeds  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+
+  if exists (select 1 from public.skyline_company_shares where company_id = p_company_id) then
+    raise exception 'Déjà en bourse';
+  end if;
+
+  if p_total_shares <= 0 or p_keep_pct < 30 or p_keep_pct > 90 then
+    raise exception 'Paramètres invalides (actions > 0, garde 30-90%)';
+  end if;
+
+  v_valuation := public.skyline_company_valuation(p_company_id);
+  if v_valuation < 5000000 then
+    raise exception 'Valorisation insuffisante : il faut > 5M$ (actuellement % $)', round(v_valuation);
+  end if;
+
+  v_ipo_price := round(v_valuation / p_total_shares, 2);
+  v_market_cap := v_ipo_price * p_total_shares;
+
+  -- Le joueur garde keep_pct%, le reste est vendu sur le marché → cash pour la boîte.
+  v_keep_shares := floor(p_total_shares * p_keep_pct / 100);
+  v_sold_shares := p_total_shares - v_keep_shares;
+  v_proceeds := v_sold_shares * v_ipo_price;
+
+  insert into public.skyline_company_shares (
+    company_id, total_shares, ipo_price, current_price, market_cap, ipo_at, is_listed
+  )
+  values (
+    p_company_id, p_total_shares, v_ipo_price, v_ipo_price, v_market_cap, now(), true
+  )
+  returning id into v_share_id;
+
+  -- Holding du fondateur.
+  insert into public.skyline_share_holdings (user_id, company_id, shares, avg_buy_price)
+  values (v_user_id, p_company_id, v_keep_shares, v_ipo_price);
+
+  -- Cash de l'IPO crédité au profil utilisateur (le founder reçoit la trésorerie).
+  update public.skyline_profiles
+    set cash = cash + v_proceeds, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', v_proceeds,
+    'IPO ' || v_company.name || ' : ' || v_sold_shares || ' actions vendues à ' || v_ipo_price || '$ = ' || v_proceeds || '$');
+
+  -- News : annonce IPO.
+  insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+  values ('npc_announce',
+    '📈 IPO : ' || v_company.name || ' entre en bourse',
+    v_company.name || ' (' || v_company.sector || ') s''introduit à ' || v_ipo_price || '$ par action. Capitalisation : ' || round(v_market_cap) || '$.',
+    v_company.sector, 0);
+
+  return v_share_id;
+end;
+$$;
+
+-- Place un ordre d'achat ou vente d'actions au cours marché.
+create or replace function public.skyline_place_share_order(
+  p_company_id uuid,
+  p_side       text, -- 'buy' ou 'sell'
+  p_quantity   bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_share     public.skyline_company_shares%rowtype;
+  v_price     numeric;
+  v_total     numeric;
+  v_holding   public.skyline_share_holdings%rowtype;
+  v_existing_qty bigint;
+  v_existing_avg numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_quantity <= 0 then raise exception 'Quantité invalide'; end if;
+  if p_side not in ('buy', 'sell') then raise exception 'Side invalide'; end if;
+
+  select * into v_share from public.skyline_company_shares
+    where company_id = p_company_id and is_listed = true;
+  if not found then raise exception 'Entreprise non cotée'; end if;
+
+  v_price := v_share.current_price;
+  v_total := v_price * p_quantity;
+
+  if p_side = 'buy' then
+    declare v_user_cash numeric;
+    begin
+      select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+      if v_user_cash < v_total then raise exception 'Cash insuffisant'; end if;
+    end;
+
+    update public.skyline_profiles
+      set cash = cash - v_total, updated_at = now()
+      where user_id = v_user_id;
+
+    select * into v_holding from public.skyline_share_holdings
+      where user_id = v_user_id and company_id = p_company_id;
+    if not found then
+      insert into public.skyline_share_holdings (user_id, company_id, shares, avg_buy_price)
+      values (v_user_id, p_company_id, p_quantity, v_price);
+    else
+      update public.skyline_share_holdings
+        set shares = shares + p_quantity,
+            avg_buy_price = (shares * avg_buy_price + p_quantity * v_price) / (shares + p_quantity)
+        where user_id = v_user_id and company_id = p_company_id;
+    end if;
+
+    -- Achat → cours monte (volume).
+    update public.skyline_company_shares
+      set current_price = current_price * (1 + 0.0005 * p_quantity / nullif(total_shares, 0)),
+          market_cap = current_price * total_shares
+      where company_id = p_company_id;
+  else
+    -- Vente : check qu'on a les actions.
+    select * into v_holding from public.skyline_share_holdings
+      where user_id = v_user_id and company_id = p_company_id;
+    if not found or v_holding.shares < p_quantity then
+      raise exception 'Actions insuffisantes (tu en as %)', coalesce(v_holding.shares, 0);
+    end if;
+
+    update public.skyline_share_holdings
+      set shares = shares - p_quantity
+      where user_id = v_user_id and company_id = p_company_id;
+
+    -- Si plus d'actions, on supprime la ligne.
+    delete from public.skyline_share_holdings
+      where user_id = v_user_id and company_id = p_company_id and shares = 0;
+
+    update public.skyline_profiles
+      set cash = cash + v_total, updated_at = now()
+      where user_id = v_user_id;
+
+    update public.skyline_company_shares
+      set current_price = current_price * (1 - 0.0005 * p_quantity / nullif(total_shares, 0)),
+          market_cap = current_price * total_shares
+      where company_id = p_company_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other',
+    case when p_side = 'buy' then -v_total else v_total end,
+    'Bourse : ' || (case when p_side = 'buy' then 'achat' else 'vente' end) || ' ' || p_quantity || ' actions à ' || v_price || '$');
+
+  return jsonb_build_object('price', v_price, 'total', v_total, 'shares', p_quantity);
+end;
+$$;
+
+-- Tick global des cours d'actions : drift selon perf entreprise + drift aléatoire.
+create or replace function public.skyline_tick_shares()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_share record;
+  v_company public.skyline_companies%rowtype;
+  v_drift numeric;
+  v_perf  numeric;
+  v_new_price numeric;
+  v_count int := 0;
+begin
+  for v_share in select * from public.skyline_company_shares where is_listed = true loop
+    select * into v_company from public.skyline_companies where id = v_share.company_id;
+    if not found then continue; end if;
+
+    -- Perf : revenus mensuels rapportés à la valorisation IPO.
+    v_perf := v_company.monthly_revenue / nullif(v_share.ipo_price * v_share.total_shares / 12, 0);
+    if v_perf is null then v_perf := 0; end if;
+
+    v_drift := (random() - 0.5) * 0.04 + v_perf * 0.01;
+    v_new_price := v_share.current_price * (1 + v_drift);
+    v_new_price := greatest(v_share.ipo_price * 0.1, v_new_price);
+
+    update public.skyline_company_shares
+      set current_price = v_new_price,
+          market_cap = v_new_price * total_shares
+      where id = v_share.id;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+-- Verse un dividende aux actionnaires (initié par le propriétaire).
+create or replace function public.skyline_pay_dividend(
+  p_company_id   uuid,
+  p_total_amount numeric
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id  uuid := auth.uid();
+  v_company  public.skyline_companies%rowtype;
+  v_share    public.skyline_company_shares%rowtype;
+  v_per_share numeric;
+  v_holder   record;
+  v_payout   numeric;
+  v_total_paid numeric := 0;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Pas le propriétaire'; end if;
+
+  select * into v_share from public.skyline_company_shares where company_id = p_company_id;
+  if not found then raise exception 'Pas en bourse'; end if;
+
+  if p_total_amount <= 0 then raise exception 'Montant invalide'; end if;
+
+  -- Vérifier cash dispo du joueur (qui paie depuis sa trésorerie pour simplification).
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < p_total_amount then raise exception 'Cash insuffisant'; end if;
+  end;
+
+  v_per_share := p_total_amount / v_share.total_shares;
+
+  update public.skyline_profiles
+    set cash = cash - p_total_amount, updated_at = now()
+    where user_id = v_user_id;
+
+  -- Verser à chaque holder (sauf le payeur lui-même).
+  for v_holder in
+    select * from public.skyline_share_holdings where company_id = p_company_id
+  loop
+    v_payout := v_holder.shares * v_per_share;
+    update public.skyline_profiles
+      set cash = cash + v_payout, updated_at = now()
+      where user_id = v_holder.user_id;
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_holder.user_id, p_company_id, 'other', v_payout,
+      'Dividende ' || v_company.name || ' : ' || v_holder.shares || ' actions × ' || round(v_per_share, 4) || '$');
+    v_total_paid := v_total_paid + v_payout;
+  end loop;
+
+  insert into public.skyline_dividends (company_id, amount_per_share)
+  values (p_company_id, v_per_share);
+
+  return jsonb_build_object(
+    'per_share', v_per_share,
+    'total_paid', v_total_paid,
+    'holders', (select count(*) from public.skyline_share_holdings where company_id = p_company_id)
+  );
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 22. P8 — MATIÈRES PREMIÈRES (FERMES, MINES, ÉLEVAGES, FORÊTS)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Pour chaque secteur raw (ferme/mine/etc.) : output produit (la matière) + capacité jour de base.
+create or replace function public.skyline_raw_sector_spec(p_sector text)
+returns jsonb language sql immutable as $$
+  select case p_sector
+    when 'champ_fleurs'      then jsonb_build_object('output', 'flowers',     'min_cash', 50000)
+    when 'champ_ble'         then jsonb_build_object('output', 'wheat',       'min_cash', 200000)
+    when 'champ_orge_houblon' then jsonb_build_object('output', 'barley',     'min_cash', 200000)
+    when 'pepiniere'         then jsonb_build_object('output', 'plants_med',  'min_cash', 80000)
+    when 'maraichage'        then jsonb_build_object('output', 'vegetables', 'min_cash', 100000)
+    when 'verger'            then jsonb_build_object('output', 'fruits',     'min_cash', 250000)
+    when 'plantation_sucre'  then jsonb_build_object('output', 'sugar',      'min_cash', 300000)
+    when 'plantation_coton'  then jsonb_build_object('output', 'cotton',     'min_cash', 400000)
+    when 'plantation_cafe'   then jsonb_build_object('output', 'coffee',     'min_cash', 1000000)
+    when 'plantation_cacao'  then jsonb_build_object('output', 'cocoa',      'min_cash', 1500000)
+    when 'vignoble'          then jsonb_build_object('output', 'grapes',     'min_cash', 500000)
+    when 'elevage_volaille'  then jsonb_build_object('output', 'cattle',     'min_cash', 150000)
+    when 'elevage_ovin'      then jsonb_build_object('output', 'wool',       'min_cash', 300000)
+    when 'elevage_bovin'     then jsonb_build_object('output', 'milk',       'min_cash', 500000)
+    when 'apiculture'        then jsonb_build_object('output', 'sugar',      'min_cash', 30000)
+    when 'foret'             then jsonb_build_object('output', 'wood',       'min_cash', 800000)
+    when 'salines'           then jsonb_build_object('output', 'salt',       'min_cash', 2000000)
+    when 'mine_charbon'      then jsonb_build_object('output', 'coal',       'min_cash', 20000000)
+    when 'mine_fer'          then jsonb_build_object('output', 'iron',       'min_cash', 50000000)
+    when 'mine_cuivre'       then jsonb_build_object('output', 'copper',     'min_cash', 50000000)
+    when 'mine_aluminium'    then jsonb_build_object('output', 'aluminum',   'min_cash', 80000000)
+    when 'mine_or'           then jsonb_build_object('output', 'gold',       'min_cash', 100000000)
+    when 'mine_pierres'      then jsonb_build_object('output', 'gemstones', 'min_cash', 200000000)
+    when 'puit_petrole'      then jsonb_build_object('output', 'oil',       'min_cash', 1000000000)
+    else null
+  end;
+$$;
+
+-- Coût et capacité d'une machine extraction/agricole (kind = secteur, level basic/pro/elite/hightech).
+create or replace function public.skyline_raw_machine_spec(p_kind text, p_level text)
+returns jsonb language sql immutable as $$
+  select case p_kind || '/' || p_level
+    -- Champs (céréales, maraichage, etc.) : tracteurs
+    when 'agri/basic'    then jsonb_build_object('cost', 25000,   'capacity', 1000,   'name', 'Tracteur basique')
+    when 'agri/pro'      then jsonb_build_object('cost', 100000,  'capacity', 5000,   'name', 'Tracteur GPS')
+    when 'agri/elite'    then jsonb_build_object('cost', 400000,  'capacity', 25000,  'name', 'Moissonneuse géante')
+    when 'agri/hightech' then jsonb_build_object('cost', 1500000, 'capacity', 100000, 'name', 'Tracteur autonome IA')
+    -- Élevage : étables/abris
+    when 'livestock/basic'    then jsonb_build_object('cost', 30000,  'capacity', 200,   'name', 'Étable basique')
+    when 'livestock/pro'      then jsonb_build_object('cost', 120000, 'capacity', 1000,  'name', 'Élevage industriel')
+    when 'livestock/elite'    then jsonb_build_object('cost', 500000, 'capacity', 5000,  'name', 'Méga-élevage')
+    when 'livestock/hightech' then jsonb_build_object('cost', 2000000,'capacity', 20000, 'name', 'Élevage automatisé IA')
+    -- Forêt : tronçonneuses + scies
+    when 'forestry/basic'    then jsonb_build_object('cost', 40000,  'capacity', 500,   'name', 'Atelier coupe basique')
+    when 'forestry/pro'      then jsonb_build_object('cost', 150000, 'capacity', 2500,  'name', 'Exploitation pro')
+    when 'forestry/elite'    then jsonb_build_object('cost', 600000, 'capacity', 12000, 'name', 'Exploitation industrielle')
+    when 'forestry/hightech' then jsonb_build_object('cost', 2500000,'capacity', 50000, 'name', 'Exploitation auto IA')
+    -- Mines : excavateurs
+    when 'mining/basic'    then jsonb_build_object('cost', 200000,   'capacity', 200,    'name', 'Excavateur basique')
+    when 'mining/pro'      then jsonb_build_object('cost', 1000000,  'capacity', 2000,   'name', 'Pelle hydraulique')
+    when 'mining/elite'    then jsonb_build_object('cost', 5000000,  'capacity', 12000,  'name', 'Pelle minière géante')
+    when 'mining/hightech' then jsonb_build_object('cost', 25000000, 'capacity', 60000,  'name', 'Mine automatisée IA')
+    -- Pétrole : puits
+    when 'oil/basic'    then jsonb_build_object('cost', 5000000,    'capacity', 1000,   'name', 'Puit terrestre basique')
+    when 'oil/pro'      then jsonb_build_object('cost', 30000000,   'capacity', 8000,   'name', 'Plateforme onshore')
+    when 'oil/elite'    then jsonb_build_object('cost', 200000000,  'capacity', 50000,  'name', 'Plateforme offshore')
+    when 'oil/hightech' then jsonb_build_object('cost', 1000000000, 'capacity', 200000, 'name', 'Plateforme IA semi-sub')
+    else null
+  end;
+$$;
+
+-- Mapping secteur raw → kind de machine.
+create or replace function public.skyline_raw_machine_kind(p_sector text)
+returns text language sql immutable as $$
+  select case
+    when p_sector in ('champ_fleurs', 'champ_ble', 'champ_orge_houblon', 'pepiniere',
+                      'maraichage', 'verger', 'plantation_sucre', 'plantation_coton',
+                      'plantation_cafe', 'plantation_cacao', 'vignoble', 'apiculture')
+      then 'agri'
+    when p_sector in ('elevage_volaille', 'elevage_ovin', 'elevage_bovin')
+      then 'livestock'
+    when p_sector in ('foret')
+      then 'forestry'
+    when p_sector in ('salines', 'mine_charbon', 'mine_fer', 'mine_cuivre',
+                      'mine_aluminium', 'mine_or', 'mine_pierres')
+      then 'mining'
+    when p_sector in ('puit_petrole')
+      then 'oil'
+    else null
+  end;
+$$;
+
+-- Acheter une machine pour un raw site.
+create or replace function public.skyline_buy_raw_machine(
+  p_company_id uuid,
+  p_level      text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_company public.skyline_companies%rowtype;
+  v_kind    text;
+  v_spec    jsonb;
+  v_cost    numeric;
+  v_cap     int;
+  v_id      uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id and category = 'raw';
+  if not found then raise exception 'Pas une matière première ou pas trouvée'; end if;
+
+  v_kind := public.skyline_raw_machine_kind(v_company.sector);
+  if v_kind is null then raise exception 'Secteur non géré'; end if;
+
+  v_spec := public.skyline_raw_machine_spec(v_kind, p_level);
+  if v_spec is null then raise exception 'Niveau machine inconnu'; end if;
+
+  v_cost := (v_spec->>'cost')::numeric;
+  v_cap := (v_spec->>'capacity')::int;
+
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_cost then
+      raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+    end if;
+  end;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_machines (company_id, kind, level, cost, capacity_per_day)
+  values (p_company_id, v_kind, p_level, v_cost, v_cap)
+  returning id into v_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'equipment', -v_cost,
+    'Machine ' || v_kind || ' : ' || (v_spec->>'name'));
+
+  return v_id;
+end;
+$$;
+
+-- Extraction matière première (lazy via tick) : produit la matière selon capacité × heures.
+create or replace function public.skyline_raw_extract(p_company_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_user_id   uuid := auth.uid();
+  v_spec      jsonb;
+  v_output_id text;
+  v_total_cap int;
+  v_now       timestamptz := now();
+  v_elapsed_h numeric;
+  v_units     int;
+  v_existing_qty int;
+  v_existing_avg numeric;
+  v_cost_per_unit numeric;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return 0; end if;
+  if v_company.category <> 'raw' then return 0; end if;
+
+  v_spec := public.skyline_raw_sector_spec(v_company.sector);
+  if v_spec is null then return 0; end if;
+  v_output_id := v_spec->>'output';
+
+  select coalesce(sum(capacity_per_day), 0) into v_total_cap
+    from public.skyline_machines where company_id = p_company_id;
+  if v_total_cap = 0 then return 0; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return 0; end if;
+  v_units := floor(v_total_cap * v_elapsed_h / 24.0)::int;
+  if v_units <= 0 then return 0; end if;
+
+  -- Coût de revient = ~30% du prix de référence (production interne pas chère).
+  v_cost_per_unit := coalesce(public.skyline_raw_material_ref_buy(v_output_id), 1) * 0.3;
+
+  -- Ajouter à l'inventaire (avg pondéré).
+  select quantity, avg_buy_price into v_existing_qty, v_existing_avg
+    from public.skyline_inventory
+    where company_id = p_company_id and product_id = v_output_id;
+
+  if not found then
+    insert into public.skyline_inventory (company_id, product_id, quantity, avg_buy_price, sell_price, purchased_at)
+    values (p_company_id, v_output_id, v_units, v_cost_per_unit,
+      coalesce(public.skyline_raw_material_ref_buy(v_output_id), v_cost_per_unit * 2), now());
+  else
+    update public.skyline_inventory
+      set quantity = quantity + v_units,
+          avg_buy_price = (v_existing_qty * v_existing_avg + v_units * v_cost_per_unit) / (v_existing_qty + v_units)
+      where company_id = p_company_id and product_id = v_output_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', 0,
+    'Extraction : ' || v_units || '× ' || v_output_id);
+
+  return v_units;
 end;
 $$;
 

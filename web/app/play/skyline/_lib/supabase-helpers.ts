@@ -242,3 +242,124 @@ export async function fetchSkylineNews(limit = 20): Promise<SkylineNewsRow[]> {
     .limit(limit);
   return (data ?? []) as SkylineNewsRow[];
 }
+
+// ───── P7 : Bourse ─────
+
+export type SkylineCompanyShareWithName = {
+  id: string;
+  company_id: string;
+  total_shares: number;
+  ipo_price: number;
+  current_price: number;
+  market_cap: number;
+  ipo_at: string | null;
+  is_listed: boolean;
+  company_name: string;
+  company_sector: string;
+  company_user_id: string;
+};
+
+export async function fetchListedCompanies(): Promise<
+  SkylineCompanyShareWithName[]
+> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_company_shares")
+    .select(
+      "*, skyline_companies!inner(name, sector, user_id)",
+    )
+    .eq("is_listed", true)
+    .order("market_cap", { ascending: false });
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((row) => {
+    const company = row.skyline_companies as {
+      name: string;
+      sector: string;
+      user_id: string;
+    };
+    return {
+      id: row.id as string,
+      company_id: row.company_id as string,
+      total_shares: Number(row.total_shares),
+      ipo_price: Number(row.ipo_price),
+      current_price: Number(row.current_price),
+      market_cap: Number(row.market_cap),
+      ipo_at: (row.ipo_at as string) ?? null,
+      is_listed: row.is_listed as boolean,
+      company_name: company.name,
+      company_sector: company.sector,
+      company_user_id: company.user_id,
+    };
+  });
+}
+
+export async function fetchShareForCompany(
+  companyId: string,
+): Promise<{
+  id: string;
+  total_shares: number;
+  ipo_price: number;
+  current_price: number;
+  market_cap: number;
+  is_listed: boolean;
+  ipo_at: string | null;
+} | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("skyline_company_shares")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as Record<string, unknown>;
+  return {
+    id: r.id as string,
+    total_shares: Number(r.total_shares),
+    ipo_price: Number(r.ipo_price),
+    current_price: Number(r.current_price),
+    market_cap: Number(r.market_cap),
+    is_listed: r.is_listed as boolean,
+    ipo_at: (r.ipo_at as string) ?? null,
+  };
+}
+
+export async function fetchShareHoldingsForUser(
+  userId: string,
+): Promise<
+  Array<{
+    user_id: string;
+    company_id: string;
+    shares: number;
+    avg_buy_price: number;
+    company_name?: string;
+    current_price?: number;
+  }>
+> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_share_holdings")
+    .select(
+      "user_id, company_id, shares, avg_buy_price, skyline_companies!inner(name), skyline_company_shares!inner(current_price)",
+    )
+    .eq("user_id", userId);
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((r) => ({
+    user_id: r.user_id as string,
+    company_id: r.company_id as string,
+    shares: Number(r.shares),
+    avg_buy_price: Number(r.avg_buy_price),
+    company_name: (r.skyline_companies as { name: string }).name,
+    current_price: Number(
+      (r.skyline_company_shares as { current_price: number }).current_price,
+    ),
+  }));
+}
+
+export async function tickShareCourses(): Promise<void> {
+  const supabase = await createClient();
+  if (!supabase) return;
+  await supabase.rpc("skyline_tick_shares");
+}
