@@ -1,5 +1,30 @@
 export type Direction = "up" | "down" | "left" | "right";
 
+// ─── Apparence du personnage ──────────────────────────────────────────────
+// Tous les champs sont optionnels — le rendu fallback sur des défauts dérivés
+// de `color` (la couleur attribuée par le serveur PartyKit). Liste finie pour
+// que le client puisse dispatcher dans un switch sans surprise.
+
+export type SkinTone = "pale" | "beige" | "tan" | "brown" | "dark";
+export type HairStyle = "short" | "long" | "bun" | "mohawk" | "bald";
+export type HatStyle =
+  | "none"
+  | "cap"
+  | "crown"
+  | "wizard"
+  | "headband"
+  | "horns";
+export type GlassesStyle = "none" | "round" | "shades" | "monocle";
+
+export type Appearance = {
+  bodyColor?: string; // "#rrggbb"
+  skinTone?: SkinTone;
+  hairStyle?: HairStyle;
+  hairColor?: string; // "#rrggbb"
+  hat?: HatStyle;
+  glasses?: GlassesStyle;
+};
+
 export type Player = {
   id: string;
   authId?: string;
@@ -9,6 +34,7 @@ export type Player = {
   y: number;
   direction: Direction;
   color: string;
+  appearance?: Appearance;
 };
 
 export type ChatMessage = {

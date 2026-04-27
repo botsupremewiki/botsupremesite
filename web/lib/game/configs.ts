@@ -270,6 +270,7 @@ export const BLACKJACK_SCENE: SceneConfig = {
   floorColor: 0x0d1e15,
   floorAccentColor: 0x10b981,
   floorAccentAlpha: 0.04,
+  ambiance: "casino",
   landmarks: [
     {
       kind: "portal",

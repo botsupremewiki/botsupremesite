@@ -68,6 +68,30 @@ export function AreaClient({
   // stale page on back-navigation.
   const [liveGold, setLiveGold] = useState<number | null>(null);
 
+  // Active transition: when set, an overlay fades to this hex colour and
+  // we navigate after the fade completes. Cleared on the next mount.
+  const [transitionHex, setTransitionHex] = useState<string | null>(null);
+  // Arrival overlay: starts at full opacity (using the colour saved in
+  // sessionStorage by the previous page) and fades out shortly after mount.
+  const [arrivalHex, setArrivalHex] = useState<string | null>(null);
+  const [arrivalFading, setArrivalFading] = useState(false);
+
+  // Read & consume the cross-page handoff once on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hex = window.sessionStorage.getItem("portalFade");
+    if (!hex) return;
+    window.sessionStorage.removeItem("portalFade");
+    setArrivalHex(hex);
+    // Trigger fade-out on next frame so the initial paint shows the colour.
+    const id = window.setTimeout(() => setArrivalFading(true), 30);
+    const clear = window.setTimeout(() => setArrivalHex(null), 700);
+    return () => {
+      window.clearTimeout(id);
+      window.clearTimeout(clear);
+    };
+  }, []);
+
   const globalChat = useAuxChat({
     partyName: "global",
     room: "main",
@@ -138,11 +162,21 @@ export function AreaClient({
       };
 
       scene.onLandmarkArrival = (landmark) => {
-        if (landmark.kind === "portal" && landmark.href) {
-          router.push(landmark.href);
-        } else if (landmark.kind === "table" && landmark.href) {
-          router.push(landmark.href);
+        const href =
+          landmark.kind === "portal" || landmark.kind === "table"
+            ? landmark.href
+            : undefined;
+        if (!href) return;
+        const colorNum =
+          landmark.kind === "portal" ? landmark.color : 0x6366f1;
+        const hex = "#" + colorNum.toString(16).padStart(6, "0");
+        // Fade-in then navigate. The destination page reads the same colour
+        // from sessionStorage and fades out from it.
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem("portalFade", hex);
         }
+        setTransitionHex(hex);
+        window.setTimeout(() => router.push(href), 380);
       };
 
       if (cancelled) return;
@@ -191,7 +225,11 @@ export function AreaClient({
         case "welcome": {
           selfIdRef.current = msg.selfId;
           scene.setSelfId(msg.selfId);
-          for (const p of msg.players) scene.addPlayer(p);
+          // Other players already in the room shouldn't trigger arrival
+          // bursts — only fresh joins do. The local player gets a burst so
+          // the spawn lands with a flourish.
+          for (const p of msg.players)
+            scene.addPlayer(p, { skipBurst: p.id !== msg.selfId });
           setPlayers(msg.players);
           setChat(msg.chat);
           const self = msg.players.find((p) => p.id === msg.selfId);
@@ -339,6 +377,29 @@ export function AreaClient({
               style={{ width: sceneConfig.width, height: sceneConfig.height }}
             />
           </FitBox>
+
+          {/* Portal transition: fade-in flash before navigating away. */}
+          {transitionHex && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-[150] animate-[portal-flash_380ms_forwards]"
+              style={{
+                background: `radial-gradient(circle at center, ${transitionHex} 0%, ${transitionHex}aa 45%, ${transitionHex}00 90%)`,
+              }}
+            />
+          )}
+          {/* Arrival fade-out: the same colour the previous page faded into,
+              now fading away as the new scene becomes visible. */}
+          {arrivalHex && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-[140] transition-opacity duration-500 ease-out"
+              style={{
+                background: `radial-gradient(circle at center, ${arrivalHex} 0%, ${arrivalHex}cc 50%, ${arrivalHex}00 95%)`,
+                opacity: arrivalFading ? 0 : 1,
+              }}
+            />
+          )}
 
           {status === "connecting" && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">

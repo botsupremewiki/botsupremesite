@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
 import type {
+  Appearance,
   ChatMessage,
   ClientMessage,
   Player,
@@ -48,10 +49,14 @@ export default class PlazaServer implements Party.Server {
 
     let isAdmin = false;
     let gold: number | null = null;
+    let appearance: Appearance | undefined;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile?.is_admin) isAdmin = true;
       if (profile && Number.isFinite(profile.gold)) gold = profile.gold;
+      if (profile?.appearance) {
+        appearance = sanitizeAppearance(profile.appearance);
+      }
     }
     this.connIdToIsAdmin.set(conn.id, isAdmin);
 
@@ -67,7 +72,10 @@ export default class PlazaServer implements Party.Server {
       x: PLAZA_CONFIG.width / 2 + (Math.random() - 0.5) * 24,
       y: PLAZA_CONFIG.height / 2 + (Math.random() - 0.5) * 24,
       direction: "down",
-      color: AVATAR_COLORS[this.colorCursor++ % AVATAR_COLORS.length],
+      color: appearance?.bodyColor
+        ? appearance.bodyColor
+        : AVATAR_COLORS[this.colorCursor++ % AVATAR_COLORS.length],
+      appearance,
     };
     this.players.set(conn.id, player);
 
@@ -201,4 +209,31 @@ function sanitizeUrl(raw: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const SKIN_TONES = new Set(["pale", "beige", "tan", "brown", "dark"]);
+const HAIR_STYLES = new Set(["short", "long", "bun", "mohawk", "bald"]);
+const HATS = new Set(["none", "cap", "crown", "wizard", "headband", "horns"]);
+const GLASSES = new Set(["none", "round", "shades", "monocle"]);
+
+/** Strip anything that isn't an expected appearance value. The DB column is
+ *  jsonb so untrusted shape can land here; we never trust it directly. */
+function sanitizeAppearance(raw: unknown): Appearance | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: Appearance = {};
+  if (typeof r.bodyColor === "string" && HEX_RE.test(r.bodyColor))
+    out.bodyColor = r.bodyColor.toLowerCase();
+  if (typeof r.hairColor === "string" && HEX_RE.test(r.hairColor))
+    out.hairColor = r.hairColor.toLowerCase();
+  if (typeof r.skinTone === "string" && SKIN_TONES.has(r.skinTone))
+    out.skinTone = r.skinTone as Appearance["skinTone"];
+  if (typeof r.hairStyle === "string" && HAIR_STYLES.has(r.hairStyle))
+    out.hairStyle = r.hairStyle as Appearance["hairStyle"];
+  if (typeof r.hat === "string" && HATS.has(r.hat))
+    out.hat = r.hat as Appearance["hat"];
+  if (typeof r.glasses === "string" && GLASSES.has(r.glasses))
+    out.glasses = r.glasses as Appearance["glasses"];
+  return Object.keys(out).length > 0 ? out : undefined;
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import type { Appearance } from "@shared/types";
 import { createClient } from "./supabase/server";
 
 export type Profile = {
@@ -8,6 +9,7 @@ export type Profile = {
   avatar_url: string | null;
   gold: number;
   is_admin: boolean;
+  appearance?: Appearance | null;
 };
 
 export const getUser = cache(async () => {
@@ -27,7 +29,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 
   const { data } = await supabase
     .from("profiles")
-    .select("id, username, avatar_url, gold, is_admin")
+    .select("id, username, avatar_url, gold, is_admin, appearance")
     .eq("id", user.id)
     .single();
 

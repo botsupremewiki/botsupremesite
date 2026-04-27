@@ -32,3 +32,20 @@ body {
   display: block;
   image-rendering: pixelated;
 }
+
+/* Portal-traversal flash: short fade-in toward the portal colour just
+   before navigating to the destination. The destination page reads the
+   same colour from sessionStorage and fades it back out. */
+@keyframes portal-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  60% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

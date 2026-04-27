@@ -1,4 +1,5 @@
 import type * as Party from "partykit/server";
+import type { Appearance } from "../../../shared/types";
 
 export type ProfileRow = {
   gold: number;
@@ -6,6 +7,7 @@ export type ProfileRow = {
   username: string;
   avatar_url: string | null;
   tcg_free_packs?: Record<string, number> | null;
+  appearance?: Appearance | null;
 };
 
 export function getSupabaseEnv(room: Party.Room) {
@@ -26,7 +28,7 @@ export async function fetchProfile(
   if (!env) return null;
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=gold,is_admin,username,avatar_url,tcg_free_packs`,
+      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=gold,is_admin,username,avatar_url,tcg_free_packs,appearance`,
       {
         headers: {
           apikey: env.key,

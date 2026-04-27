@@ -61,6 +61,13 @@ export function UserPill({
               >
                 🏆 Profil & achievements
               </Link>
+              <Link
+                href="/play/personnaliser"
+                onClick={() => setOpen(false)}
+                className="block rounded-md px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/5"
+              >
+                🎨 Personnaliser l&apos;avatar
+              </Link>
               <form action={signOut}>
                 <button
                   type="submit"

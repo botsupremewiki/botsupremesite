@@ -1,8 +1,30 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
-import type { Direction, Player } from "@shared/types";
+import type {
+  Appearance,
+  Direction,
+  GlassesStyle,
+  HairStyle,
+  HatStyle,
+  Player,
+  SkinTone,
+} from "@shared/types";
 
 const SPEED_PX_PER_SEC = 180;
 const TILE = 32;
+
+// ─── Cosmetic palettes ─────────────────────────────────────────────────────
+// Centralised so every consumer (PlayerSprite, future preview screen, the
+// occupant chip on seats…) renders the same colours.
+
+export const SKIN_TONE_HEX: Record<SkinTone, number> = {
+  pale: 0xfde4cf,
+  beige: 0xf2c4a3,
+  tan: 0xd6996b,
+  brown: 0x9c6b46,
+  dark: 0x5c3a26,
+};
+
+export const DEFAULT_HAIR_HEX = 0x3f3f46;
 
 export type PortalStyle =
   | "default"
@@ -119,6 +141,8 @@ class PlayerSprite extends Container {
   private torso = new Graphics();
   private head = new Graphics();
   private face = new Graphics();
+  private hatGfx = new Graphics();
+  private glassesGfx = new Graphics();
   private nameLabel: Text;
   private nameBg: Graphics;
 
@@ -128,10 +152,13 @@ class PlayerSprite extends Container {
   private isMoving = false;
   private haloPhase = Math.random() * Math.PI * 2;
 
-  private readonly bodyColor: number;
-  private readonly accentColor: number;
-  private readonly skinColor = 0xfde4cf;
-  private readonly hairColor: number;
+  private bodyColor: number;
+  private accentColor: number;
+  private skinColor: number;
+  private hairColor: number;
+  private hairStyle: HairStyle;
+  private hatStyle: HatStyle;
+  private glassesStyle: GlassesStyle;
 
   public direction: Direction;
   public readonly playerId: string;
@@ -144,9 +171,19 @@ class PlayerSprite extends Container {
     this.targetY = player.y;
     this.direction = player.direction;
 
-    this.bodyColor = parseInt(player.color.slice(1), 16);
+    const baseBody = parseInt(player.color.slice(1), 16);
+    const a = player.appearance;
+    this.bodyColor = a?.bodyColor
+      ? parseInt(a.bodyColor.slice(1), 16)
+      : baseBody;
     this.accentColor = shiftColor(this.bodyColor, -25, -0.12);
-    this.hairColor = shiftColor(this.bodyColor, 35, -0.25);
+    this.skinColor = SKIN_TONE_HEX[a?.skinTone ?? "pale"];
+    this.hairColor = a?.hairColor
+      ? parseInt(a.hairColor.slice(1), 16)
+      : shiftColor(this.bodyColor, 35, -0.25);
+    this.hairStyle = a?.hairStyle ?? "short";
+    this.hatStyle = a?.hat ?? "none";
+    this.glassesStyle = a?.glasses ?? "none";
 
     // Subtle ground halo pulses with the avatar.
     this.addChild(this.halo);
@@ -162,6 +199,8 @@ class PlayerSprite extends Container {
     this.bodyRoot.addChild(this.torso);
     this.bodyRoot.addChild(this.head);
     this.bodyRoot.addChild(this.face);
+    this.bodyRoot.addChild(this.glassesGfx);
+    this.bodyRoot.addChild(this.hatGfx);
     this.addChild(this.bodyRoot);
 
     this.nameBg = new Graphics();
@@ -287,29 +326,8 @@ class PlayerSprite extends Container {
       .fill(this.skinColor)
       .stroke({ color: 0x000000, width: 1.2, alpha: 0.35 });
 
-    // Hair cap — varies per direction.
-    if (dir === "up") {
-      this.head.circle(0, -12, 7).fill(this.hairColor);
-    } else if (dir === "down") {
-      this.head
-        .arc(0, -12, 7, Math.PI, 2 * Math.PI)
-        .lineTo(7, -12)
-        .lineTo(-7, -12)
-        .closePath()
-        .fill(this.hairColor);
-      this.head
-        .roundRect(-7, -14, 14, 4, 2)
-        .fill(this.hairColor);
-    } else {
-      // Side: half cap on the back.
-      const back = -flipX;
-      this.head
-        .roundRect(back * 0 - 7, -19, 14, 7, 4)
-        .fill(this.hairColor);
-      this.head
-        .roundRect(back * 4 - 1, -16, 4, 6, 2)
-        .fill(this.hairColor);
-    }
+    // Hair — depends on style + direction. "bald" skips entirely.
+    this.drawHair(dir, flipX);
 
     // ── Face ─────────────────────────────────────────────────────────────
     this.face.clear();
@@ -326,6 +344,282 @@ class PlayerSprite extends Container {
       // Single visible eye on the facing side.
       this.face.circle(2.4 * flipX, -12, 1.2).fill(0x111111);
     }
+
+    // ── Glasses & hat (drawn on top of head/face) ────────────────────────
+    this.drawGlasses(dir, flipX);
+    this.drawHat(dir, flipX);
+  }
+
+  /** Hair shapes use the head centre at (0, -12) with radius 7 as anchor. */
+  private drawHair(dir: Direction, flipX: number) {
+    if (this.hairStyle === "bald") return;
+    const c = this.hairColor;
+
+    if (this.hairStyle === "mohawk") {
+      // Strip down the centre — visible from any angle except dead-on back.
+      if (dir === "up") {
+        this.head.roundRect(-2, -19, 4, 8, 1.5).fill(c);
+      } else if (dir === "down") {
+        this.head.roundRect(-2, -20, 4, 8, 1.5).fill(c);
+        // Slight tuft on top.
+        this.head.circle(0, -20, 2.5).fill(c);
+      } else {
+        // Side: visible spikes silhouette.
+        this.head.roundRect(-2, -21, 4, 9, 1.5).fill(c);
+        this.head
+          .moveTo(-2, -19)
+          .lineTo(0, -22)
+          .lineTo(2, -19)
+          .closePath()
+          .fill(c);
+      }
+      return;
+    }
+
+    if (this.hairStyle === "bun") {
+      // Cap + small bun on top-back.
+      if (dir === "up") {
+        this.head.circle(0, -12, 7).fill(c);
+        this.head.circle(0, -19, 3).fill(c);
+      } else if (dir === "down") {
+        this.head
+          .arc(0, -12, 7, Math.PI, 2 * Math.PI)
+          .lineTo(7, -12)
+          .lineTo(-7, -12)
+          .closePath()
+          .fill(c);
+        this.head.roundRect(-7, -14, 14, 4, 2).fill(c);
+        // Bun visible just above head.
+        this.head.circle(0, -19, 2.5).fill(c);
+      } else {
+        const back = -flipX;
+        this.head.roundRect(-7, -19, 14, 7, 4).fill(c);
+        this.head.circle(back * 5, -19, 3).fill(c);
+      }
+      return;
+    }
+
+    if (this.hairStyle === "long") {
+      // Cap + locks falling on shoulders.
+      if (dir === "up") {
+        this.head.circle(0, -12, 7).fill(c);
+        // Hair flowing down past head.
+        this.head.roundRect(-7, -12, 14, 9, 3).fill(c);
+      } else if (dir === "down") {
+        this.head
+          .arc(0, -12, 7, Math.PI, 2 * Math.PI)
+          .lineTo(7, -12)
+          .lineTo(-7, -12)
+          .closePath()
+          .fill(c);
+        this.head.roundRect(-7, -14, 14, 4, 2).fill(c);
+        // Side strands framing the face.
+        this.head.roundRect(-8, -13, 3, 9, 1.5).fill(c);
+        this.head.roundRect(5, -13, 3, 9, 1.5).fill(c);
+      } else {
+        const back = -flipX;
+        this.head.roundRect(-7, -19, 14, 7, 4).fill(c);
+        this.head.roundRect(back * 4 - 2, -16, 4, 12, 2).fill(c);
+      }
+      return;
+    }
+
+    // Default "short" — same as the legacy default.
+    if (dir === "up") {
+      this.head.circle(0, -12, 7).fill(c);
+    } else if (dir === "down") {
+      this.head
+        .arc(0, -12, 7, Math.PI, 2 * Math.PI)
+        .lineTo(7, -12)
+        .lineTo(-7, -12)
+        .closePath()
+        .fill(c);
+      this.head.roundRect(-7, -14, 14, 4, 2).fill(c);
+    } else {
+      const back = -flipX;
+      this.head.roundRect(-7, -19, 14, 7, 4).fill(c);
+      this.head.roundRect(back * 4 - 1, -16, 4, 6, 2).fill(c);
+    }
+  }
+
+  private drawHat(dir: Direction, flipX: number) {
+    this.hatGfx.clear();
+    if (this.hatStyle === "none") return;
+
+    if (this.hatStyle === "cap") {
+      // Backwards/forwards cap. Visor only visible from front + sides.
+      const peakColor = shiftColor(this.bodyColor, 0, -0.12);
+      this.hatGfx
+        .roundRect(-7, -22, 14, 6, 3)
+        .fill(this.bodyColor)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+      if (dir === "down") {
+        this.hatGfx.roundRect(-8, -17, 16, 2.5, 1).fill(peakColor);
+      } else if (dir === "left" || dir === "right") {
+        this.hatGfx.roundRect(flipX * 2, -17, flipX * 9, 2.5, 1).fill(peakColor);
+      }
+      // Stripe.
+      this.hatGfx
+        .roundRect(-7, -20, 14, 1.5, 0.7)
+        .fill({ color: 0xffffff, alpha: 0.25 });
+      return;
+    }
+
+    if (this.hatStyle === "crown") {
+      // Gold crown — 3 spikes.
+      const gold = 0xfacc15;
+      this.hatGfx
+        .roundRect(-7, -20, 14, 4, 1.5)
+        .fill(gold)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.45 });
+      this.hatGfx
+        .moveTo(-7, -20)
+        .lineTo(-5, -25)
+        .lineTo(-3, -20)
+        .closePath()
+        .fill(gold);
+      this.hatGfx
+        .moveTo(-1, -20)
+        .lineTo(0, -27)
+        .lineTo(1, -20)
+        .closePath()
+        .fill(gold);
+      this.hatGfx
+        .moveTo(3, -20)
+        .lineTo(5, -25)
+        .lineTo(7, -20)
+        .closePath()
+        .fill(gold);
+      // Gem in centre.
+      this.hatGfx.circle(0, -18, 1.5).fill(0xef4444);
+      return;
+    }
+
+    if (this.hatStyle === "wizard") {
+      // Pointy purple hat with a brim.
+      const hat = 0x6d28d9;
+      this.hatGfx
+        .moveTo(-9, -19)
+        .lineTo(-4, -19)
+        .lineTo(0, -32)
+        .lineTo(4, -19)
+        .lineTo(9, -19)
+        .closePath()
+        .fill(hat)
+        .stroke({ color: 0x000000, width: 1, alpha: 0.45 });
+      // Star.
+      this.hatGfx.circle(0, -25, 1.4).fill(0xfde68a);
+      return;
+    }
+
+    if (this.hatStyle === "headband") {
+      // Thin colored band across forehead.
+      const band = shiftColor(this.bodyColor, 60, 0.05);
+      this.hatGfx
+        .roundRect(-7, -16, 14, 2.5, 1)
+        .fill(band)
+        .stroke({ color: 0x000000, width: 0.8, alpha: 0.4 });
+      // Knot on the side (visible on profile back side).
+      if (dir === "left" || dir === "right") {
+        this.hatGfx.circle(-flipX * 7, -15, 1.4).fill(band);
+      }
+      return;
+    }
+
+    if (this.hatStyle === "horns") {
+      // Demon horns — 2 small dark cones.
+      const horn = 0x1f2937;
+      this.hatGfx
+        .moveTo(-5, -18)
+        .lineTo(-3, -25)
+        .lineTo(-1, -18)
+        .closePath()
+        .fill(horn)
+        .stroke({ color: 0x000000, width: 0.8, alpha: 0.5 });
+      this.hatGfx
+        .moveTo(1, -18)
+        .lineTo(3, -25)
+        .lineTo(5, -18)
+        .closePath()
+        .fill(horn)
+        .stroke({ color: 0x000000, width: 0.8, alpha: 0.5 });
+    }
+  }
+
+  private drawGlasses(dir: Direction, flipX: number) {
+    this.glassesGfx.clear();
+    if (this.glassesStyle === "none") return;
+    if (dir === "up") return; // back of head, glasses not visible
+
+    if (this.glassesStyle === "round") {
+      const stroke = { color: 0x111111, width: 1.2, alpha: 0.95 };
+      if (dir === "down") {
+        this.glassesGfx.circle(-3, -12, 2).stroke(stroke);
+        this.glassesGfx.circle(3, -12, 2).stroke(stroke);
+        this.glassesGfx
+          .moveTo(-1, -12)
+          .lineTo(1, -12)
+          .stroke(stroke);
+      } else {
+        this.glassesGfx.circle(2.4 * flipX, -12, 2).stroke(stroke);
+        // Temple piece.
+        this.glassesGfx
+          .moveTo(2.4 * flipX + flipX * 2, -12)
+          .lineTo(7 * flipX, -12)
+          .stroke(stroke);
+      }
+      return;
+    }
+
+    if (this.glassesStyle === "shades") {
+      const fill = 0x0f172a;
+      if (dir === "down") {
+        this.glassesGfx
+          .roundRect(-6, -13.5, 5.5, 3, 1)
+          .fill(fill)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+        this.glassesGfx
+          .roundRect(0.5, -13.5, 5.5, 3, 1)
+          .fill(fill)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+      } else {
+        this.glassesGfx
+          .roundRect(flipX * 0.5, -13.5, flipX * 5.5, 3, 1)
+          .fill(fill)
+          .stroke({ color: 0x000000, width: 1, alpha: 0.5 });
+      }
+      return;
+    }
+
+    if (this.glassesStyle === "monocle") {
+      const stroke = { color: 0xfacc15, width: 1.4, alpha: 1 };
+      if (dir === "down") {
+        this.glassesGfx.circle(3, -12, 2.4).stroke(stroke);
+        this.glassesGfx
+          .moveTo(3, -9.5)
+          .lineTo(4, -7)
+          .stroke({ color: 0xfacc15, width: 0.8, alpha: 0.8 });
+      } else {
+        this.glassesGfx.circle(2.4 * flipX, -12, 2.4).stroke(stroke);
+      }
+    }
+  }
+
+  /** Update cosmetic config and force a redraw — used by the live preview
+   *  on the customisation screen. */
+  setAppearance(appearance: Appearance | undefined) {
+    if (appearance?.bodyColor) {
+      this.bodyColor = parseInt(appearance.bodyColor.slice(1), 16);
+      this.accentColor = shiftColor(this.bodyColor, -25, -0.12);
+    }
+    this.skinColor = SKIN_TONE_HEX[appearance?.skinTone ?? "pale"];
+    this.hairColor = appearance?.hairColor
+      ? parseInt(appearance.hairColor.slice(1), 16)
+      : shiftColor(this.bodyColor, 35, -0.25);
+    this.hairStyle = appearance?.hairStyle ?? "short";
+    this.hatStyle = appearance?.hat ?? "none";
+    this.glassesStyle = appearance?.glasses ?? "none";
+    this.redrawBody(0, 0);
   }
 
   tick(dtMs: number) {
@@ -408,6 +702,17 @@ type AmbianceParticle = {
   drift: number;
 };
 
+type Burst = {
+  // World-space anchor where the burst was spawned.
+  cx: number;
+  cy: number;
+  // Per-particle radial velocities + lifetime ratio (0 → 1).
+  particles: { angle: number; speed: number; life: number; color: number }[];
+  // ms remaining; particles die at 0.
+  ttlMs: number;
+  totalMs: number;
+};
+
 export class GameScene {
   private app: Application | null = null;
   private world = new Container();
@@ -416,6 +721,7 @@ export class GameScene {
   private landmarksLayer = new Container();
   private playersLayer = new Container();
   private particlesLayer = new Graphics();
+  private burstsLayer = new Graphics();
   private sprites = new Map<string, PlayerSprite>();
   private seatContainers = new Map<number, Container>();
   private readonly config: SceneConfig;
@@ -427,6 +733,7 @@ export class GameScene {
   // Animated portal effects (pulse + particle motion).
   private animatedPortals: AnimatedPortal[] = [];
   private ambianceParticles: AmbianceParticle[] = [];
+  private bursts: Burst[] = [];
   private elapsedMs = 0;
 
   onClickMove?: (x: number, y: number) => void;
@@ -466,6 +773,7 @@ export class GameScene {
     this.app.stage.addChild(this.world);
     this.world.addChild(this.landmarksLayer);
     this.world.addChild(this.playersLayer);
+    this.world.addChild(this.burstsLayer);
     this.app.stage.addChild(this.particlesLayer);
 
     this.app.stage.eventMode = "static";
@@ -484,6 +792,7 @@ export class GameScene {
       for (const sprite of this.sprites.values()) sprite.tick(dt);
       this.tickPortals(dt);
       this.tickAmbiance(dt);
+      this.tickBursts(dt);
       this.checkLandmarkArrival();
     });
   }
@@ -604,6 +913,39 @@ export class GameScene {
           alpha: 0.015 + t * 0.022,
         });
       }
+
+      // Diagonal stripe pattern at low alpha — evokes a casino carpet.
+      const stripeStep = 48;
+      for (
+        let d = -height;
+        d < width + height;
+        d += stripeStep
+      ) {
+        g.moveTo(d, 0)
+          .lineTo(d - height, height)
+          .stroke({ color: 0xef4444, width: 12, alpha: 0.04 });
+      }
+
+      // Central spawn medallion (compact version of plaza centre).
+      g.circle(cx, cy, 56).fill({ color: 0x2a0a0a, alpha: 0.55 });
+      g.circle(cx, cy, 56).stroke({
+        color: 0xfca5a5,
+        width: 2,
+        alpha: 0.5,
+      });
+      g.circle(cx, cy, 48).stroke({
+        color: 0xfde68a,
+        width: 1,
+        alpha: 0.35,
+      });
+      // Centre chip.
+      g.circle(cx, cy, 5).fill({ color: 0xfde68a, alpha: 0.9 });
+      g.circle(cx, cy, 5).stroke({
+        color: 0x7c2d12,
+        width: 1.5,
+        alpha: 0.7,
+      });
+
       g.rect(0, 0, width, height).stroke({
         color: 0x000000,
         width: 80,
@@ -627,6 +969,62 @@ export class GameScene {
         drift: Math.random() * Math.PI * 2,
       });
     }
+  }
+
+  /**
+   * Spawn a short-lived burst of particles at (x, y). Used as the arrival
+   * "poof" when a new player joins the room. The burst is automatically
+   * cleaned up when its TTL hits 0.
+   */
+  spawnArrivalBurst(x: number, y: number, color: number) {
+    const count = 14;
+    const particles: Burst["particles"] = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+      const speed = 60 + Math.random() * 50; // px/s
+      particles.push({ angle, speed, life: 1, color });
+    }
+    this.bursts.push({
+      cx: x,
+      cy: y,
+      particles,
+      ttlMs: 700,
+      totalMs: 700,
+    });
+  }
+
+  private tickBursts(dtMs: number) {
+    if (this.bursts.length === 0) {
+      this.burstsLayer.clear();
+      return;
+    }
+    const g = this.burstsLayer;
+    g.clear();
+    const stillAlive: Burst[] = [];
+    for (const b of this.bursts) {
+      b.ttlMs -= dtMs;
+      if (b.ttlMs <= 0) continue;
+      const t = 1 - b.ttlMs / b.totalMs; // 0 → 1
+      const alpha = 1 - t;
+      const ring = 32 * t;
+      // Outer expanding ring.
+      g.circle(b.cx, b.cy, ring).stroke({
+        color: b.particles[0].color,
+        width: 2,
+        alpha: alpha * 0.6,
+      });
+      for (const p of b.particles) {
+        const r = (p.speed * (b.totalMs - b.ttlMs)) / 1000;
+        const px = b.cx + Math.cos(p.angle) * r;
+        const py = b.cy + Math.sin(p.angle) * r;
+        g.circle(px, py, 2 + (1 - t) * 1.5).fill({
+          color: p.color,
+          alpha,
+        });
+      }
+      stillAlive.push(b);
+    }
+    this.bursts = stillAlive;
   }
 
   private tickAmbiance(dtMs: number) {
@@ -1223,6 +1621,32 @@ export class GameScene {
       .stroke({ color: 0xffffff, width: 1, alpha: 0.15 });
     container.addChild(inner);
 
+    // Detail decoration on big tables: dealer slot at the top, chip stacks.
+    // Small tables (≤140px) stay minimal so the label remains readable.
+    if (table.width >= 200) {
+      const detail = new Graphics();
+      // Dealer arc behind the felt (back of the table where the dealer
+      // stands).
+      detail
+        .arc(0, -hh + 4, Math.min(hw * 0.35, 26), Math.PI, 2 * Math.PI)
+        .lineTo(Math.min(hw * 0.35, 26), -hh + 4)
+        .lineTo(-Math.min(hw * 0.35, 26), -hh + 4)
+        .closePath()
+        .fill({ color: 0x000000, alpha: 0.3 })
+        .stroke({ color: table.accentColor, width: 1, alpha: 0.6 });
+      // Two chip stacks at the bottom corners.
+      const stackY = hh - 14;
+      for (const sx of [-hw + 22, hw - 22]) {
+        for (let i = 0; i < 3; i++) {
+          detail
+            .ellipse(sx, stackY - i * 3, 7, 2.5)
+            .fill(i % 2 === 0 ? table.accentColor : 0xffffff)
+            .stroke({ color: 0x000000, width: 0.6, alpha: 0.5 });
+        }
+      }
+      container.addChild(detail);
+    }
+
     const label = new Text({
       text: table.label,
       style: {
@@ -1276,16 +1700,25 @@ export class GameScene {
     this.landmarksLayer.addChild(container);
   }
 
-  addPlayer(player: Player) {
+  addPlayer(player: Player, options?: { skipBurst?: boolean }) {
     if (this.sprites.has(player.id)) return;
     const sprite = new PlayerSprite(player);
     this.sprites.set(player.id, sprite);
     this.playersLayer.addChild(sprite);
+    if (!options?.skipBurst) {
+      const c = player.appearance?.bodyColor
+        ? parseInt(player.appearance.bodyColor.slice(1), 16)
+        : parseInt(player.color.slice(1), 16);
+      this.spawnArrivalBurst(player.x, player.y, c);
+    }
   }
 
   removePlayer(id: string) {
     const sprite = this.sprites.get(id);
     if (!sprite) return;
+    const pos = sprite.currentPosition();
+    // Mirror burst on departure so others see the player vanish.
+    this.spawnArrivalBurst(pos.x, pos.y, 0xa1a1aa);
     this.playersLayer.removeChild(sprite);
     sprite.destroy({ children: true });
     this.sprites.delete(id);
@@ -1297,6 +1730,13 @@ export class GameScene {
 
   renamePlayer(id: string, name: string) {
     this.sprites.get(id)?.setName(name);
+  }
+
+  /** Live-update the cosmetic look of a player. Used by the customisation
+   *  preview, and as soon as the server starts broadcasting appearance
+   *  changes (Phase 3+). */
+  updatePlayerAppearance(id: string, appearance: Appearance | undefined) {
+    this.sprites.get(id)?.setAppearance(appearance);
   }
 
   getPlayerPosition(id: string): { x: number; y: number } | null {
@@ -1311,5 +1751,6 @@ export class GameScene {
     this.sprites.clear();
     this.animatedPortals = [];
     this.ambianceParticles = [];
+    this.bursts = [];
   }
 }
