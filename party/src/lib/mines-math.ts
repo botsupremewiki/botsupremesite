@@ -45,14 +45,3 @@ export function pickMinePositions(
   }
   return positions;
 }
-
-export function pickMinePositions(
-  totalTiles: number,
-  minesCount: number,
-): Set<number> {
-  const positions = new Set<number>();
-  while (positions.size < minesCount) {
-    positions.add(Math.floor(Math.random() * totalTiles));
-  }
-  return positions;
-}
