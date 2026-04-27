@@ -6568,3 +6568,757 @@ begin
   return v_revenue;
 end;
 $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 39. SESSION 3 — MÉDIAS : PROGRAMMATION + AUDIENCES
+-- ══════════════════════════════════════════════════════════════════════
+
+create table if not exists public.skyline_media_audience (
+  company_id      uuid primary key references public.skyline_companies(id) on delete cascade,
+  audience_score  numeric(10, 2) not null default 0,
+  total_revenue   numeric(15, 2) not null default 0,
+  updated_at      timestamptz not null default now()
+);
+
+alter table public.skyline_media_audience enable row level security;
+
+drop policy if exists "skyline_media_audience_read_own" on public.skyline_media_audience;
+create policy "skyline_media_audience_read_own"
+  on public.skyline_media_audience
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_media_audience_write_own" on public.skyline_media_audience;
+create policy "skyline_media_audience_write_own"
+  on public.skyline_media_audience
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create table if not exists public.skyline_media_programs (
+  id              uuid primary key default gen_random_uuid(),
+  company_id      uuid not null references public.skyline_companies(id) on delete cascade,
+  kind            text not null,
+  cost            numeric(15, 2) not null,
+  audience_gained numeric(10, 2) not null,
+  produced_at     timestamptz not null default now()
+);
+
+alter table public.skyline_media_programs enable row level security;
+
+drop policy if exists "skyline_media_programs_read_own" on public.skyline_media_programs;
+create policy "skyline_media_programs_read_own"
+  on public.skyline_media_programs
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_media_programs_write_own" on public.skyline_media_programs;
+create policy "skyline_media_programs_write_own"
+  on public.skyline_media_programs
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create or replace function public.skyline_media_program_spec(p_kind text)
+returns jsonb language sql immutable as $$
+  select case p_kind
+    when 'journal'        then jsonb_build_object('cost', 10000,    'audience', 5,    'name', 'Journal')
+    when 'talk_show'      then jsonb_build_object('cost', 50000,    'audience', 15,   'name', 'Talk-show')
+    when 'documentaire'   then jsonb_build_object('cost', 100000,   'audience', 30,   'name', 'Documentaire')
+    when 'serie'          then jsonb_build_object('cost', 200000,   'audience', 50,   'name', 'Série')
+    when 'divertissement' then jsonb_build_object('cost', 300000,   'audience', 80,   'name', 'Divertissement')
+    when 'evenement_live' then jsonb_build_object('cost', 500000,   'audience', 120,  'name', 'Événement live')
+    when 'cinema'         then jsonb_build_object('cost', 1000000,  'audience', 200,  'name', 'Cinéma blockbuster')
+    else null
+  end;
+$$;
+
+create or replace function public.skyline_produce_show(
+  p_company_id uuid,
+  p_kind       text
+)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_company   public.skyline_companies%rowtype;
+  v_spec      jsonb;
+  v_cost      numeric;
+  v_audience  numeric;
+  v_user_cash numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+  if v_company.sector not in ('diffusion_tv', 'medias_studio') then
+    raise exception 'Réservé aux secteurs Médias / Diffusion';
+  end if;
+
+  v_spec := public.skyline_media_program_spec(p_kind);
+  if v_spec is null then raise exception 'Programme inconnu'; end if;
+  v_cost := (v_spec->>'cost')::numeric;
+  v_audience := (v_spec->>'audience')::numeric;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_media_programs (company_id, kind, cost, audience_gained)
+  values (p_company_id, p_kind, v_cost, v_audience);
+
+  insert into public.skyline_media_audience (company_id, audience_score)
+  values (p_company_id, v_audience)
+  on conflict (company_id) do update
+    set audience_score = least(1000, public.skyline_media_audience.audience_score + v_audience),
+        updated_at = now();
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'marketing', -v_cost,
+    'Programme : ' || (v_spec->>'name'));
+
+  return v_audience;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 40. SESSION 3 — LUXE : MARQUES ICONIQUES + DÉFILÉS
+-- ══════════════════════════════════════════════════════════════════════
+
+create table if not exists public.skyline_luxury_brand (
+  company_id     uuid primary key references public.skyline_companies(id) on delete cascade,
+  brand_name     text not null,
+  brand_value    numeric(5, 2) not null default 10 check (brand_value between 0 and 100),
+  shows_count    int not null default 0,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+alter table public.skyline_luxury_brand enable row level security;
+
+drop policy if exists "skyline_luxury_read_all" on public.skyline_luxury_brand;
+create policy "skyline_luxury_read_all"
+  on public.skyline_luxury_brand
+  for select
+  using (true);
+
+drop policy if exists "skyline_luxury_write_own" on public.skyline_luxury_brand;
+create policy "skyline_luxury_write_own"
+  on public.skyline_luxury_brand
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create or replace function public.skyline_create_luxury_brand(
+  p_company_id uuid,
+  p_brand_name text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_company public.skyline_companies%rowtype;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if length(p_brand_name) < 1 or length(p_brand_name) > 50 then
+    raise exception 'Nom invalide (1-50 caractères)';
+  end if;
+
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+  if v_company.sector not in ('joaillerie', 'parfumerie', 'boutique_vetements') then
+    raise exception 'Réservé aux secteurs luxe (joaillerie, parfumerie, vêtements)';
+  end if;
+
+  insert into public.skyline_luxury_brand (company_id, brand_name)
+  values (p_company_id, p_brand_name)
+  on conflict (company_id) do update
+    set brand_name = excluded.brand_name, updated_at = now();
+end;
+$$;
+
+create or replace function public.skyline_fashion_show(p_company_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_brand     public.skyline_luxury_brand%rowtype;
+  v_company   public.skyline_companies%rowtype;
+  v_cost      numeric;
+  v_user_cash numeric;
+  v_new_value numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_brand from public.skyline_luxury_brand where company_id = p_company_id;
+  if not found then raise exception 'Pas de marque créée pour cette entreprise'; end if;
+
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Pas autorisé'; end if;
+
+  v_cost := 50000 * (1 + v_brand.brand_value / 50.0);
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  v_new_value := least(100, v_brand.brand_value + 20);
+
+  update public.skyline_luxury_brand
+    set brand_value = v_new_value,
+        shows_count = shows_count + 1,
+        updated_at = now()
+    where company_id = p_company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'marketing', -v_cost,
+    'Défilé : ' || v_brand.brand_name || ' (brand value ' || v_brand.brand_value || ' → ' || v_new_value || ')');
+
+  insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+  values ('trend',
+    '👗 Défilé ' || v_brand.brand_name,
+    v_brand.brand_name || ' présente sa nouvelle collection. Brand value monte à ' || v_new_value || '.',
+    v_company.sector, 5);
+
+  return v_new_value;
+end;
+$$;
+
+-- Multiplicateurs utilisés par process_sales et service_produce.
+create or replace function public.skyline_luxury_price_multiplier(p_company_id uuid)
+returns numeric language sql stable security definer set search_path = public as $$
+  select case when brand_value is null then 1
+              else 1 + brand_value / 100.0
+         end
+  from public.skyline_luxury_brand where company_id = p_company_id
+$$;
+
+create or replace function public.skyline_media_audience_multiplier(p_company_id uuid)
+returns numeric language sql stable security definer set search_path = public as $$
+  select 1 + coalesce(audience_score, 0) / 200.0
+  from public.skyline_media_audience where company_id = p_company_id
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 41. SESSION 3 — ARMEMENT : SECTEUR FACTORY + CONTRATS MILITAIRES
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Étendre skyline_factory_recipe avec armement.
+create or replace function public.skyline_factory_recipe(p_sector text)
+returns jsonb language sql immutable as $$
+  select case p_sector
+    when 'moulin' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'wheat', 'qty', 1.0),
+      'in2', null,
+      'out', jsonb_build_object('id', 'farine', 'qty', 0.95)
+    )
+    when 'boulangerie_indus' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'farine', 'qty', 0.5),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.01),
+      'out', jsonb_build_object('id', 'pain_emballe', 'qty', 1.0)
+    )
+    when 'brasserie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'barley', 'qty', 0.4),
+      'in2', jsonb_build_object('id', 'hops', 'qty', 0.05),
+      'out', jsonb_build_object('id', 'biere_blonde', 'qty', 1.0)
+    )
+    when 'viticole' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'grapes', 'qty', 1.5),
+      'in2', null,
+      'out', jsonb_build_object('id', 'vin_rouge', 'qty', 1.0)
+    )
+    when 'distillerie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'wheat', 'qty', 0.8),
+      'in2', jsonb_build_object('id', 'fruits', 'qty', 0.3),
+      'out', jsonb_build_object('id', 'spiritueux', 'qty', 1.0)
+    )
+    when 'abattoir' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'cattle', 'qty', 0.05),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.02),
+      'out', jsonb_build_object('id', 'steak', 'qty', 1.0)
+    )
+    when 'laiterie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'milk', 'qty', 1.5),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.01),
+      'out', jsonb_build_object('id', 'fromage', 'qty', 1.0)
+    )
+    when 'chocolaterie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'cocoa', 'qty', 0.5),
+      'in2', jsonb_build_object('id', 'sugar', 'qty', 0.3),
+      'out', jsonb_build_object('id', 'chocolat_noir', 'qty', 1.0)
+    )
+    when 'conserverie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'vegetables', 'qty', 1.0),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.05),
+      'out', jsonb_build_object('id', 'conserve', 'qty', 1.0)
+    )
+    -- ARMEMENT (P10 bis)
+    when 'armement' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'iron', 'qty', 5.0),
+      'in2', jsonb_build_object('id', 'oil', 'qty', 2.0),
+      'out', jsonb_build_object('id', 'armes', 'qty', 1.0)
+    )
+    else null
+  end;
+$$;
+
+-- Étendre skyline_machine_spec avec armement.
+create or replace function public.skyline_machine_spec(p_kind text, p_level text)
+returns jsonb language sql immutable as $$
+  select case p_kind || '/' || p_level
+    when 'moulin/basic'    then jsonb_build_object('cost', 8000,    'capacity', 200,    'name', 'Moulin manuel')
+    when 'moulin/pro'      then jsonb_build_object('cost', 30000,   'capacity', 1000,   'name', 'Moulin électrique')
+    when 'moulin/elite'    then jsonb_build_object('cost', 120000,  'capacity', 5000,   'name', 'Moulin industriel')
+    when 'moulin/hightech' then jsonb_build_object('cost', 500000,  'capacity', 20000,  'name', 'Moulin auto IA')
+    when 'boulangerie_indus/basic'    then jsonb_build_object('cost', 20000,  'capacity', 500,   'name', 'Four industriel basique')
+    when 'boulangerie_indus/pro'      then jsonb_build_object('cost', 80000,  'capacity', 2500,  'name', 'Four industriel pro')
+    when 'boulangerie_indus/elite'    then jsonb_build_object('cost', 250000, 'capacity', 10000, 'name', 'Four tunnel automatisé')
+    when 'boulangerie_indus/hightech' then jsonb_build_object('cost', 800000, 'capacity', 40000, 'name', 'Ligne robotisée IA')
+    when 'brasserie/basic'    then jsonb_build_object('cost', 30000,  'capacity', 800,   'name', 'Cuve brassage 1000L')
+    when 'brasserie/pro'      then jsonb_build_object('cost', 100000, 'capacity', 4000,  'name', 'Brasserie semi-industrielle')
+    when 'brasserie/elite'    then jsonb_build_object('cost', 400000, 'capacity', 15000, 'name', 'Brasserie industrielle')
+    when 'brasserie/hightech' then jsonb_build_object('cost', 1500000,'capacity', 60000, 'name', 'Méga-brasserie auto')
+    when 'viticole/basic'    then jsonb_build_object('cost', 15000,  'capacity', 300,   'name', 'Pressoir manuel')
+    when 'viticole/pro'      then jsonb_build_object('cost', 60000,  'capacity', 1500,  'name', 'Pressoir pneumatique')
+    when 'viticole/elite'    then jsonb_build_object('cost', 200000, 'capacity', 6000,  'name', 'Chai industriel')
+    when 'viticole/hightech' then jsonb_build_object('cost', 800000, 'capacity', 25000, 'name', 'Chai automatisé IA')
+    when 'distillerie/basic'    then jsonb_build_object('cost', 25000,  'capacity', 400,   'name', 'Alambic artisanal')
+    when 'distillerie/pro'      then jsonb_build_object('cost', 100000, 'capacity', 2000,  'name', 'Colonne distillation')
+    when 'distillerie/elite'    then jsonb_build_object('cost', 350000, 'capacity', 8000,  'name', 'Distillerie industrielle')
+    when 'distillerie/hightech' then jsonb_build_object('cost', 1200000,'capacity', 30000, 'name', 'Distillerie auto')
+    when 'abattoir/basic'    then jsonb_build_object('cost', 50000,  'capacity', 100,   'name', 'Atelier de découpe')
+    when 'abattoir/pro'      then jsonb_build_object('cost', 200000, 'capacity', 500,   'name', 'Abattoir semi-indus')
+    when 'abattoir/elite'    then jsonb_build_object('cost', 800000, 'capacity', 2000,  'name', 'Abattoir industriel')
+    when 'abattoir/hightech' then jsonb_build_object('cost', 3000000,'capacity', 8000,  'name', 'Abattoir auto IA')
+    when 'laiterie/basic'    then jsonb_build_object('cost', 20000,  'capacity', 400,   'name', 'Atelier laitier')
+    when 'laiterie/pro'      then jsonb_build_object('cost', 80000,  'capacity', 2000,  'name', 'Laiterie semi-indus')
+    when 'laiterie/elite'    then jsonb_build_object('cost', 300000, 'capacity', 8000,  'name', 'Laiterie industrielle')
+    when 'laiterie/hightech' then jsonb_build_object('cost', 1000000,'capacity', 30000, 'name', 'Laiterie auto IA')
+    when 'chocolaterie/basic'    then jsonb_build_object('cost', 15000,  'capacity', 300,   'name', 'Atelier chocolatier')
+    when 'chocolaterie/pro'      then jsonb_build_object('cost', 60000,  'capacity', 1500,  'name', 'Chocolaterie semi-indus')
+    when 'chocolaterie/elite'    then jsonb_build_object('cost', 200000, 'capacity', 6000,  'name', 'Chocolaterie industrielle')
+    when 'chocolaterie/hightech' then jsonb_build_object('cost', 700000, 'capacity', 25000, 'name', 'Chocolaterie auto IA')
+    when 'conserverie/basic'    then jsonb_build_object('cost', 30000,  'capacity', 500,   'name', 'Ligne conserve basique')
+    when 'conserverie/pro'      then jsonb_build_object('cost', 120000, 'capacity', 2500,  'name', 'Ligne conserve pro')
+    when 'conserverie/elite'    then jsonb_build_object('cost', 400000, 'capacity', 10000, 'name', 'Conserverie industrielle')
+    when 'conserverie/hightech' then jsonb_build_object('cost', 1500000,'capacity', 40000, 'name', 'Conserverie auto IA')
+    when 'armement/basic'    then jsonb_build_object('cost', 1000000,   'capacity', 50,    'name', 'Atelier armement')
+    when 'armement/pro'      then jsonb_build_object('cost', 5000000,   'capacity', 250,   'name', 'Usine armement pro')
+    when 'armement/elite'    then jsonb_build_object('cost', 25000000,  'capacity', 1500,  'name', 'Complexe militaire')
+    when 'armement/hightech' then jsonb_build_object('cost', 100000000, 'capacity', 8000,  'name', 'Méga-complexe IA')
+    else null
+  end;
+$$;
+
+create table if not exists public.skyline_military_contracts (
+  id              uuid primary key default gen_random_uuid(),
+  product_id      text not null default 'armes',
+  qty_required    int not null,
+  price_per_unit  numeric(12, 2) not null,
+  total_value     numeric(15, 2) not null,
+  expires_at      timestamptz not null,
+  fulfilled_by    uuid references public.skyline_companies(id) on delete set null,
+  fulfilled_at    timestamptz,
+  created_at      timestamptz not null default now()
+);
+
+alter table public.skyline_military_contracts enable row level security;
+
+drop policy if exists "skyline_military_read_all" on public.skyline_military_contracts;
+create policy "skyline_military_read_all"
+  on public.skyline_military_contracts
+  for select
+  using (true);
+
+create or replace function public.skyline_seed_military_contract()
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_qty   int;
+  v_price numeric;
+  v_id    uuid;
+begin
+  v_qty := 100 + floor(random() * 4900)::int;
+  v_price := 1500 + random() * 2000;
+  insert into public.skyline_military_contracts (
+    qty_required, price_per_unit, total_value, expires_at
+  )
+  values (
+    v_qty, v_price, v_qty * v_price, now() + interval '72 hours'
+  )
+  returning id into v_id;
+
+  insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+  values ('npc_announce',
+    '🪖 Appel d''offres militaire',
+    'L''État lance un appel d''offres pour ' || v_qty || ' unités d''armes à ' || round(v_price) || '$/u (total ' || round(v_qty * v_price) || '$).',
+    'armement', 0);
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.skyline_fulfill_military_contract(
+  p_contract_id uuid,
+  p_company_id  uuid
+)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_contract  public.skyline_military_contracts%rowtype;
+  v_company   public.skyline_companies%rowtype;
+  v_inv_qty   int;
+  v_revenue   numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+
+  select * into v_contract from public.skyline_military_contracts where id = p_contract_id;
+  if not found then raise exception 'Contrat introuvable'; end if;
+  if v_contract.fulfilled_at is not null then raise exception 'Contrat déjà honoré'; end if;
+  if v_contract.expires_at < now() then raise exception 'Contrat expiré'; end if;
+
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+  if v_company.sector <> 'armement' then
+    raise exception 'Réservé aux compagnies d''armement';
+  end if;
+
+  select coalesce(quantity, 0) into v_inv_qty
+    from public.skyline_inventory
+    where company_id = p_company_id and product_id = v_contract.product_id;
+  if v_inv_qty < v_contract.qty_required then
+    raise exception 'Stock insuffisant : tu as % unités, besoin %', v_inv_qty, v_contract.qty_required;
+  end if;
+
+  update public.skyline_inventory
+    set quantity = quantity - v_contract.qty_required
+    where company_id = p_company_id and product_id = v_contract.product_id;
+
+  v_revenue := v_contract.total_value;
+
+  update public.skyline_profiles
+    set cash = cash + v_revenue, updated_at = now()
+    where user_id = v_user_id;
+
+  update public.skyline_military_contracts
+    set fulfilled_by = p_company_id, fulfilled_at = now()
+    where id = p_contract_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'sale', v_revenue,
+    'Contrat militaire honoré : ' || v_contract.qty_required || ' armes à ' || round(v_contract.price_per_unit) || '$/u');
+
+  return v_revenue;
+end;
+$$;
+
+create or replace function public.skyline_military_heartbeat()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_active int;
+begin
+  select count(*) into v_active
+    from public.skyline_military_contracts
+    where fulfilled_at is null and expires_at > now();
+  if v_active < 3 then
+    perform public.skyline_seed_military_contract();
+  end if;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 42. SESSION 3 — INTÉGRATION : process_sales + service_produce
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Override final process_sales : ajout multiplicateur luxury.
+create or replace function public.skyline_process_sales(p_company_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company       public.skyline_companies%rowtype;
+  v_user_id       uuid := auth.uid();
+  v_now           timestamptz := now();
+  v_elapsed_h     numeric;
+  v_district_factor numeric;
+  v_size_factor   numeric;
+  v_clients       int;
+  v_inv_rec       record;
+  v_sold_qty      int;
+  v_revenue       numeric;
+  v_total_sold    int := 0;
+  v_total_revenue numeric := 0;
+  v_star_mult     numeric := 1;
+  v_luxury_mult   numeric := 1;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then
+    raise exception 'Entreprise non trouvée';
+  end if;
+
+  if v_company.closed_until is not null and v_company.closed_until > v_now then
+    update public.skyline_companies set last_tick_at = v_now where id = p_company_id;
+    return 0;
+  end if;
+
+  perform public.skyline_random_sanitary_inspection(p_company_id);
+
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if v_company.closed_until is not null and v_company.closed_until > v_now then
+    return 0;
+  end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h < 0.01 then return 0; end if;
+
+  v_district_factor := case v_company.district
+    when 'centre'      then 25
+    when 'affaires'    then 20
+    when 'residentiel' then 12
+    when 'peripherie'  then 6
+    when 'populaire'   then 8
+    else 5
+  end;
+  v_size_factor := case v_company.local_size
+    when 'xs' then 0.6
+    when 's'  then 1.0
+    when 'm'  then 1.5
+    when 'l'  then 2.0
+    when 'xl' then 2.8
+    else 1
+  end;
+  v_clients := floor(v_district_factor * v_size_factor * v_elapsed_h)::int;
+
+  v_star_mult := coalesce(public.skyline_restau_price_multiplier(p_company_id), 1);
+  v_luxury_mult := coalesce(public.skyline_luxury_price_multiplier(p_company_id), 1);
+
+  if v_clients <= 0 then
+    update public.skyline_companies set last_tick_at = v_now where id = p_company_id;
+    return 0;
+  end if;
+
+  for v_inv_rec in
+    select * from public.skyline_inventory
+    where company_id = p_company_id and quantity > 0
+  loop
+    declare
+      v_ref_sell  numeric := public.skyline_product_ref_sell(v_inv_rec.product_id);
+      v_combined_mult numeric := v_star_mult * v_luxury_mult;
+      v_price_factor numeric;
+      v_demand_qty int;
+      v_effective_price numeric;
+    begin
+      if v_ref_sell is null or v_ref_sell <= 0 then continue; end if;
+      v_effective_price := v_inv_rec.sell_price * v_combined_mult;
+      v_price_factor := least(2.0, greatest(0.1, v_ref_sell * v_combined_mult / nullif(v_effective_price, 0)));
+      v_demand_qty := least(
+        v_inv_rec.quantity,
+        floor(v_clients * v_price_factor * 0.15 / greatest(1, (
+          select count(*) from public.skyline_inventory where company_id = p_company_id and quantity > 0
+        )))::int
+      );
+      if v_demand_qty <= 0 then continue; end if;
+
+      v_sold_qty := v_demand_qty;
+      v_revenue := v_sold_qty * v_effective_price;
+
+      update public.skyline_inventory
+        set quantity = quantity - v_sold_qty
+        where id = v_inv_rec.id;
+
+      v_total_sold := v_total_sold + v_sold_qty;
+      v_total_revenue := v_total_revenue + v_revenue;
+    end;
+  end loop;
+
+  if v_total_revenue > 0 then
+    update public.skyline_profiles
+      set cash = cash + v_total_revenue, updated_at = v_now
+      where user_id = v_user_id;
+    update public.skyline_companies
+      set monthly_revenue = v_total_revenue,
+          last_tick_at = v_now,
+          updated_at = v_now
+      where id = p_company_id;
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_user_id, p_company_id, 'sale', v_total_revenue,
+      v_total_sold || ' ventes (' || round(v_elapsed_h, 1) || 'h flux ' || v_clients || ' clients' ||
+      case when v_star_mult > 1 then ' · ×' || v_star_mult || ' étoiles' else '' end ||
+      case when v_luxury_mult > 1 then ' · ×' || round(v_luxury_mult, 2) || ' luxe' else '' end || ')');
+  else
+    update public.skyline_companies set last_tick_at = v_now where id = p_company_id;
+  end if;
+
+  return v_total_sold;
+end;
+$$;
+
+-- Override final service_produce : ajout multiplicateur audience pour médias.
+create or replace function public.skyline_service_produce(p_company_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_user_id   uuid := auth.uid();
+  v_spec      jsonb;
+  v_skill     text;
+  v_rate      numeric;
+  v_total_cap int;
+  v_emp_count int;
+  v_skill_sum int;
+  v_now       timestamptz := now();
+  v_elapsed_h numeric;
+  v_capacity_h numeric;
+  v_quality   numeric;
+  v_revenue   numeric;
+  v_casino    public.skyline_casino_config%rowtype;
+  v_route_revenue numeric := 0;
+  v_route_rec record;
+  v_route_spec jsonb;
+  v_audience_mult numeric := 1;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return 0; end if;
+  if v_company.category <> 'service' then return 0; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return 0; end if;
+
+  if v_company.sector = 'casino' then
+    select * into v_casino from public.skyline_casino_config where company_id = p_company_id;
+    if not found then v_casino.rtp_pct := 95; v_casino.vip_premier := 0; v_casino.vip_diamond := 0; v_casino.vip_royal := 0; end if;
+
+    select coalesce(sum(capacity_per_day), 0) into v_total_cap
+      from public.skyline_machines where company_id = p_company_id;
+    select count(*), coalesce(sum(coalesce((skills->>'service_client')::int, 30)), 0)
+      into v_emp_count, v_skill_sum
+      from public.skyline_employees where company_id = p_company_id;
+
+    if v_total_cap = 0 or v_emp_count = 0 then return 0; end if;
+
+    declare
+      v_house_edge numeric := (100 - v_casino.rtp_pct) / 100.0;
+      v_vip_mult numeric := 1 + v_casino.vip_premier * 2 + v_casino.vip_diamond * 5 + v_casino.vip_royal * 15;
+      v_avg_bet numeric := 200;
+    begin
+      v_capacity_h := least(v_total_cap, v_emp_count * 8) * v_elapsed_h / 24.0;
+      v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+      v_revenue := v_capacity_h * v_avg_bet * v_house_edge * v_vip_mult * v_quality;
+    end;
+  elsif v_company.sector = 'aerien' then
+    for v_route_rec in
+      select * from public.skyline_airline_routes
+      where company_id = p_company_id and is_active = true
+    loop
+      v_route_spec := public.skyline_route_spec(v_route_rec.route_kind);
+      if v_route_spec is null then continue; end if;
+      v_route_revenue := v_route_revenue + (v_route_spec->>'monthly_revenue')::numeric * v_elapsed_h / 720.0;
+    end loop;
+    select count(*), coalesce(sum(coalesce((skills->>'machine_use')::int, 30)), 0)
+      into v_emp_count, v_skill_sum
+      from public.skyline_employees where company_id = p_company_id;
+    if v_emp_count = 0 then return 0; end if;
+    v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+    v_revenue := v_route_revenue * v_quality;
+  else
+    v_spec := public.skyline_service_sector_spec(v_company.sector);
+    if v_spec is null then return 0; end if;
+    v_skill := v_spec->>'skill';
+    v_rate := (v_spec->>'rate')::numeric;
+
+    select coalesce(sum(capacity_per_day), 0) into v_total_cap
+      from public.skyline_machines where company_id = p_company_id;
+    select count(*), coalesce(sum(coalesce((skills->>v_skill)::int, 30)), 0)
+      into v_emp_count, v_skill_sum
+      from public.skyline_employees where company_id = p_company_id;
+
+    if v_total_cap = 0 or v_emp_count = 0 then return 0; end if;
+
+    v_capacity_h := least(v_total_cap, v_emp_count * 8) * v_elapsed_h / 24.0;
+    v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+
+    if v_company.sector in ('diffusion_tv', 'medias_studio') then
+      v_audience_mult := coalesce(public.skyline_media_audience_multiplier(p_company_id), 1);
+    end if;
+
+    v_revenue := v_capacity_h * v_rate * v_quality * v_audience_mult;
+  end if;
+
+  if v_revenue <= 0 then return 0; end if;
+
+  update public.skyline_profiles
+    set cash = cash + v_revenue, updated_at = v_now
+    where user_id = v_user_id;
+  update public.skyline_companies
+    set monthly_revenue = v_revenue,
+        last_tick_at = v_now,
+        updated_at = v_now
+    where id = p_company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'sale', v_revenue,
+    'Prestations service ' || v_company.sector || ' (' || round(v_elapsed_h, 1) || 'h)' ||
+    case when v_audience_mult > 1 then ' · ×' || round(v_audience_mult, 2) || ' audience' else '' end);
+
+  return v_revenue;
+end;
+$$;

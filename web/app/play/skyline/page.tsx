@@ -7,6 +7,7 @@ import {
   skylineFormatCashFR,
   type SkylineCommerceSector,
 } from "@shared/skyline";
+import { createClient } from "@/lib/supabase/server";
 import {
   ensureSkylineProfile,
   fetchSkylineCompanies,
@@ -14,6 +15,7 @@ import {
   runRandomAudit,
 } from "./_lib/supabase-helpers";
 import { SkylineHeader } from "./_components/skyline-header";
+import { TutorialPanel } from "./_components/tutorial-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,50 @@ export default async function SkylineHub() {
   const cash = Number(skyProfile?.cash ?? 0);
   const netWorth = Number(skyProfile?.net_worth ?? cash);
 
+  // Données pour le tutoriel.
+  const supabase = await createClient();
+  let hasEmployee = false;
+  let hasIpo = false;
+  let hasHolding = false;
+  if (supabase) {
+    const { data: emp } = await supabase
+      .from("skyline_employees")
+      .select("id", { count: "exact", head: true })
+      .in("company_id", companies.map((c) => c.id));
+    hasEmployee = (emp ?? []).length > 0 || companies.length > 0
+      ? Boolean(
+          (
+            await supabase
+              .from("skyline_employees")
+              .select("id")
+              .in("company_id", companies.map((c) => c.id))
+              .limit(1)
+          ).data?.length,
+        )
+      : false;
+    hasIpo = Boolean(
+      (
+        await supabase
+          .from("skyline_company_shares")
+          .select("id")
+          .in("company_id", companies.map((c) => c.id).concat([""]))
+          .limit(1)
+      ).data?.length,
+    );
+    hasHolding = Boolean(
+      (
+        await supabase
+          .from("skyline_holdings")
+          .select("id")
+          .eq("user_id", profile.id)
+          .limit(1)
+      ).data?.length,
+    );
+  }
+  const playerSkills =
+    (skyProfile?.player_skills as Record<string, number> | null) ?? {};
+  const hasTrainedSkill = Object.values(playerSkills).some((v) => Number(v) > 0);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SkylineHeader profile={profile} cash={cash} />
@@ -50,6 +96,16 @@ export default async function SkylineHub() {
         className={`flex flex-1 flex-col overflow-y-auto p-6 ${SKYLINE_BRAND.gradient}`}
       >
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+          {/* Tutoriel */}
+          <TutorialPanel
+            companiesCount={companies.length}
+            cash={netWorth}
+            hasEmployee={hasEmployee}
+            hasIpo={hasIpo}
+            hasHolding={hasHolding}
+            hasTrainedSkill={hasTrainedSkill}
+          />
+
           {/* Stats banner */}
           <div className="rounded-xl border border-pink-400/40 bg-black/40 p-4">
             <div className="text-[11px] uppercase tracking-widest text-zinc-400">

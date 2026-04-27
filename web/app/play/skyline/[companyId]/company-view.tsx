@@ -48,7 +48,10 @@ import {
   casinoSetRtpAction,
   cleanCompanyAction,
   closeRouteAction,
+  createLuxuryBrandAction,
+  fashionShowAction,
   fireEmployeeAction,
+  fulfillMilitaryContractAction,
   ipoCompanyAction,
   listCompanyForSaleAction,
   openRouteAction,
@@ -58,6 +61,7 @@ import {
   pharmaStartResearchAction,
   placeFurnitureAction,
   placeMarketOrderAction,
+  produceShowAction,
   purchaseRawMaterialAction,
   purchaseStockAction,
   removeFurnitureAction,
@@ -69,6 +73,7 @@ import {
   SKYLINE_AIRLINE_ROUTES,
   SKYLINE_BTP_PROJECTS,
   SKYLINE_CASINO_VIP_ROOMS,
+  SKYLINE_MEDIA_PROGRAMS,
   SKYLINE_PHARMA_MOLECULES,
   SKYLINE_SERVICE_SECTORS,
   type SkylineAirlineRouteRow,
@@ -77,6 +82,11 @@ import {
   type SkylineCasinoConfigRow,
   type SkylineCasinoVipKind,
   type SkylineCompanyForSaleRow,
+  type SkylineLuxuryBrandRow,
+  type SkylineMediaAudienceRow,
+  type SkylineMediaProgramKind,
+  type SkylineMediaProgramRow,
+  type SkylineMilitaryContractRow,
   type SkylinePharmaMolecule,
   type SkylinePharmaPatentRow,
   type SkylinePharmaResearchRow,
@@ -108,7 +118,10 @@ type Tab =
   | "sell"
   | "btp"
   | "casino_cfg"
-  | "airline";
+  | "airline"
+  | "media"
+  | "luxury"
+  | "military";
 
 type ShareInfo = {
   id: string;
@@ -137,6 +150,10 @@ export function CompanyView({
   btpProjects,
   casinoConfig,
   airlineRoutes,
+  mediaPrograms,
+  mediaAudience,
+  luxuryBrand,
+  militaryContracts,
   cash,
 }: {
   company: SkylineCompanyRow;
@@ -155,6 +172,10 @@ export function CompanyView({
   btpProjects: SkylineBtpProjectRow[];
   casinoConfig: SkylineCasinoConfigRow | null;
   airlineRoutes: SkylineAirlineRouteRow[];
+  mediaPrograms: SkylineMediaProgramRow[];
+  mediaAudience: SkylineMediaAudienceRow | null;
+  luxuryBrand: SkylineLuxuryBrandRow | null;
+  militaryContracts: SkylineMilitaryContractRow[];
   cash: number;
 }) {
   const isFactory = company.category === "factory";
@@ -173,6 +194,14 @@ export function CompanyView({
   const isBtpSector = company.sector === "btp_construction";
   const isCasinoSector = company.sector === "casino";
   const isAerienSector = company.sector === "aerien";
+  const isMediaSector =
+    company.sector === "diffusion_tv" || company.sector === "medias_studio";
+  const isLuxurySector = [
+    "joaillerie",
+    "parfumerie",
+    "boutique_vetements",
+  ].includes(company.sector);
+  const isArmementSector = company.sector === "armement";
   const [tab, setTab] = useState<Tab>(
     isFactory
       ? "production"
@@ -351,6 +380,21 @@ export function CompanyView({
               ✈️ Lignes
             </TabButton>
           ) : null}
+          {isMediaSector ? (
+            <TabButton current={tab} value="media" onClick={setTab}>
+              📺 Programmation
+            </TabButton>
+          ) : null}
+          {isLuxurySector ? (
+            <TabButton current={tab} value="luxury" onClick={setTab}>
+              👗 Marque iconique
+            </TabButton>
+          ) : null}
+          {isArmementSector ? (
+            <TabButton current={tab} value="military" onClick={setTab}>
+              🪖 Contrats militaires
+            </TabButton>
+          ) : null}
           <TabButton current={tab} value="bourse" onClick={setTab}>
             📈 Bourse
           </TabButton>
@@ -485,6 +529,28 @@ export function CompanyView({
             companyId={company.id}
             routes={airlineRoutes}
             cash={cash}
+          />
+        ) : null}
+        {tab === "media" ? (
+          <MediaTab
+            companyId={company.id}
+            programs={mediaPrograms}
+            audience={mediaAudience}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "luxury" ? (
+          <LuxuryTab
+            companyId={company.id}
+            brand={luxuryBrand}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "military" ? (
+          <MilitaryTab
+            companyId={company.id}
+            contracts={militaryContracts}
+            inventory={inventory}
           />
         ) : null}
         {tab === "sell" ? (
@@ -1881,6 +1947,7 @@ const MACHINE_COSTS: Record<string, Record<SkylineMachineLevel, number>> = {
   laiterie: { basic: 20000, pro: 80000, elite: 300000, hightech: 1000000 },
   chocolaterie: { basic: 15000, pro: 60000, elite: 200000, hightech: 700000 },
   conserverie: { basic: 30000, pro: 120000, elite: 400000, hightech: 1500000 },
+  armement: { basic: 1000000, pro: 5000000, elite: 25000000, hightech: 100000000 },
 };
 
 function MachineCard({
@@ -3851,6 +3918,415 @@ function RouteCard({
             : `Ouvrir · ${skylineFormatCashFR(spec.openCost)}`}
         </button>
       )}
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglets Session 3 : MÉDIAS / LUXE / ARMEMENT
+// ──────────────────────────────────────────────────────────────────
+
+// ── Médias programmation ──
+function MediaTab({
+  companyId,
+  programs,
+  audience,
+  cash,
+}: {
+  companyId: string;
+  programs: SkylineMediaProgramRow[];
+  audience: SkylineMediaAudienceRow | null;
+  cash: number;
+}) {
+  const score = audience?.audience_score ?? 0;
+  const audienceMultiplier = 1 + Number(score) / 200;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-purple-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-purple-200">
+          📺 Score d&apos;audience
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Chaque programme produit augmente ton audience cumulée. L&apos;audience
+          multiplie tes revenus services médias (×1 = audience zéro, ×6 = audience max).
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Audience score"
+            value={`${Number(score).toFixed(0)} / 1000`}
+            accent="text-purple-200"
+          />
+          <Stat
+            label="Multiplicateur revenus"
+            value={`×${audienceMultiplier.toFixed(2)}`}
+            accent="text-emerald-200"
+          />
+          <Stat
+            label="Programmes produits"
+            value={String(programs.length)}
+            accent="text-zinc-200"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          🎬 Produire un programme
+        </h3>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {Object.values(SKYLINE_MEDIA_PROGRAMS).map((spec) => (
+            <ProgramCard
+              key={spec.id}
+              companyId={companyId}
+              spec={spec}
+              cash={cash}
+            />
+          ))}
+        </div>
+      </div>
+
+      {programs.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Historique récent
+          </h3>
+          <ul className="mt-3 space-y-1 text-xs">
+            {programs.slice(0, 8).map((p) => {
+              const meta = SKYLINE_MEDIA_PROGRAMS[p.kind];
+              return (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between rounded border border-white/5 bg-white/[0.02] px-3 py-1.5"
+                >
+                  <span className="text-zinc-300">
+                    {meta?.glyph} {meta?.name ?? p.kind}
+                  </span>
+                  <span className="text-purple-300 tabular-nums">
+                    +{Number(p.audience_gained).toFixed(0)} audience
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ProgramCard({
+  companyId,
+  spec,
+  cash,
+}: {
+  companyId: string;
+  spec: (typeof SKYLINE_MEDIA_PROGRAMS)[SkylineMediaProgramKind];
+  cash: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canAfford = cash >= spec.cost;
+
+  const handleProduce = () => {
+    if (pending || !canAfford) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", spec.id);
+    startTransition(async () => {
+      const res = await produceShowAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            {spec.glyph} {spec.name}
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            +{spec.audience} audience
+          </div>
+        </div>
+        <div className="text-right text-[10px] tabular-nums text-zinc-400">
+          {skylineFormatCashFR(spec.cost)}
+        </div>
+      </div>
+      <button
+        onClick={handleProduce}
+        disabled={pending || !canAfford}
+        className="mt-2 w-full rounded-md border border-purple-400/50 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-200 transition-colors hover:bg-purple-500/20 disabled:opacity-40"
+      >
+        {pending
+          ? "..."
+          : !canAfford
+          ? "Cash insuffisant"
+          : "🎬 Produire"}
+      </button>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Luxe iconique ──
+function LuxuryTab({
+  companyId,
+  brand,
+  cash,
+}: {
+  companyId: string;
+  brand: SkylineLuxuryBrandRow | null;
+  cash: number;
+}) {
+  const [brandName, setBrandName] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCreate = () => {
+    if (pending || !brandName.trim()) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("brand_name", brandName);
+    startTransition(async () => {
+      const res = await createLuxuryBrandAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  const handleShow = () => {
+    if (pending || !brand) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      const res = await fashionShowAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  if (!brand) {
+    return (
+      <div className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-amber-200">
+          👗 Créer une marque iconique
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Crée ta marque de luxe pour bénéficier d&apos;un multiplicateur de
+          prix de vente. Plus la brand value monte (via défilés), plus tu vends
+          cher.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            value={brandName}
+            onChange={(e) => setBrandName(e.target.value)}
+            maxLength={50}
+            placeholder="Nom de marque (ex : Maison Lumière)"
+            className="flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/50"
+          />
+          <button
+            onClick={handleCreate}
+            disabled={pending || !brandName.trim()}
+            className="rounded-md border border-amber-400/50 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 disabled:opacity-40"
+          >
+            {pending ? "..." : "Créer"}
+          </button>
+        </div>
+        {error ? (
+          <div className="mt-2 text-xs text-rose-300">{error}</div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const brandValue = Number(brand.brand_value);
+  const showCost = 50000 * (1 + brandValue / 50);
+  const priceMultiplier = 1 + brandValue / 100;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-amber-200">
+          👗 {brand.brand_name}
+        </h3>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Brand value"
+            value={`${brandValue.toFixed(0)} / 100`}
+            accent="text-amber-200"
+          />
+          <Stat
+            label="Multiplicateur prix"
+            value={`×${priceMultiplier.toFixed(2)}`}
+            accent="text-emerald-200"
+          />
+          <Stat
+            label="Défilés organisés"
+            value={String(brand.shows_count)}
+            accent="text-zinc-200"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          🎭 Organiser un défilé
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Coût scaled : plus ta marque est connue, plus c&apos;est cher.
+          Bonus : +20 brand value (cap à 100).
+        </p>
+        <div className="mt-3 flex items-center justify-between rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-xs tabular-nums">
+          <span className="text-zinc-300">Coût</span>
+          <span className="text-amber-200">{skylineFormatCashFR(showCost)}</span>
+        </div>
+        <button
+          onClick={handleShow}
+          disabled={pending || cash < showCost || brandValue >= 100}
+          className="mt-3 w-full rounded-md border border-amber-400/50 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {pending
+            ? "..."
+            : brandValue >= 100
+            ? "Brand value max atteinte"
+            : cash < showCost
+            ? "Cash insuffisant"
+            : `🎭 Organiser un défilé (+20 brand)`}
+        </button>
+        {error ? (
+          <div className="mt-2 text-xs text-rose-300">{error}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ── Armement contrats militaires ──
+function MilitaryTab({
+  companyId,
+  contracts,
+  inventory,
+}: {
+  companyId: string;
+  contracts: SkylineMilitaryContractRow[];
+  inventory: SkylineInventoryRow[];
+}) {
+  const armesStock =
+    inventory.find((i) => i.product_id === "armes")?.quantity ?? 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-rose-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-rose-200">
+          🪖 Contrats militaires
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          L&apos;État émet régulièrement des appels d&apos;offres. Honore-les
+          en livrant le stock requis pour toucher le total. Premium vs marché
+          normal.
+        </p>
+        <div className="mt-2 text-[11px] tabular-nums text-zinc-300">
+          Stock armes :{" "}
+          <strong className="text-zinc-100">{armesStock}</strong>
+        </div>
+      </div>
+
+      {contracts.length === 0 ? (
+        <div className="rounded-md border border-zinc-400/30 bg-zinc-500/5 p-3 text-xs text-zinc-400">
+          Aucun appel d&apos;offres actif. Reviens plus tard (l&apos;État en
+          émet régulièrement).
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {contracts.map((c) => (
+            <ContractCard
+              key={c.id}
+              contract={c}
+              companyId={companyId}
+              armesStock={armesStock}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContractCard({
+  contract,
+  companyId,
+  armesStock,
+}: {
+  contract: SkylineMilitaryContractRow;
+  companyId: string;
+  armesStock: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const canFulfill = armesStock >= Number(contract.qty_required);
+  const expiresAt = new Date(contract.expires_at);
+
+  const handleFulfill = () => {
+    if (pending || !canFulfill) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("contract_id", contract.id);
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      const res = await fulfillMilitaryContractAction(fd);
+      if (res.ok) setDone(true);
+      else setError(res.error);
+    });
+  };
+
+  if (done) {
+    return (
+      <div className="rounded-lg border border-emerald-400/40 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+        ✓ Contrat honoré — paiement reçu.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            🪖 {Number(contract.qty_required).toLocaleString("fr-FR")} armes
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            {skylineFormatCashFR(Number(contract.price_per_unit))}/u · expire{" "}
+            {expiresAt.toLocaleDateString("fr-FR")}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-base font-bold text-emerald-300 tabular-nums">
+            +{skylineFormatCashFR(Number(contract.total_value))}
+          </div>
+          <div className="text-[10px] text-zinc-500">total</div>
+        </div>
+      </div>
+      <button
+        onClick={handleFulfill}
+        disabled={pending || !canFulfill}
+        className="mt-2 w-full rounded-md border border-rose-400/50 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending
+          ? "..."
+          : !canFulfill
+          ? `Stock insuffisant (${armesStock} / ${contract.qty_required})`
+          : "Honorer le contrat"}
+      </button>
       {error ? (
         <div className="mt-1 text-[10px] text-rose-300">{error}</div>
       ) : null}

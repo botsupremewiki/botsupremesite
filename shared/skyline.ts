@@ -569,7 +569,8 @@ export type SkylineFactorySector =
   | "abattoir"
   | "laiterie"
   | "chocolaterie"
-  | "conserverie";
+  | "conserverie"
+  | "armement";
 
 export const SKYLINE_FACTORY_SECTORS: Record<
   SkylineFactorySector,
@@ -695,6 +696,19 @@ export const SKYLINE_FACTORY_SECTORS: Record<
     ],
     output: { id: "conserve", qty: 1.0 },
   },
+  armement: {
+    id: "armement",
+    name: "Usine d'armement",
+    glyph: "🪖",
+    description: "Produit des armes pour contrats militaires (acier + pétrole).",
+    machineKind: "armement",
+    minStartCash: 1000000,
+    inputs: [
+      { id: "iron", qty: 5.0 },
+      { id: "oil", qty: 2.0 },
+    ],
+    output: { id: "armes", qty: 1.0 },
+  },
 };
 
 // Produits intermédiaires (outputs d'usines).
@@ -722,6 +736,81 @@ export const SKYLINE_INTERMEDIATE_PRODUCTS: Record<
     glyph: "🥫",
     refSellPrice: 4,
   },
+  armes: {
+    id: "armes",
+    name: "Armes",
+    glyph: "🪖",
+    refSellPrice: 2500,
+  },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4.6.13. SECTEURS CREUSÉS SESSION 3 (Médias / Luxe / Armement)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineMediaProgramKind =
+  | "journal"
+  | "talk_show"
+  | "documentaire"
+  | "serie"
+  | "divertissement"
+  | "evenement_live"
+  | "cinema";
+
+export const SKYLINE_MEDIA_PROGRAMS: Record<
+  SkylineMediaProgramKind,
+  {
+    id: SkylineMediaProgramKind;
+    name: string;
+    glyph: string;
+    cost: number;
+    audience: number;
+  }
+> = {
+  journal: { id: "journal", name: "Journal", glyph: "📰", cost: 10000, audience: 5 },
+  talk_show: { id: "talk_show", name: "Talk-show", glyph: "🎤", cost: 50000, audience: 15 },
+  documentaire: { id: "documentaire", name: "Documentaire", glyph: "🎞️", cost: 100000, audience: 30 },
+  serie: { id: "serie", name: "Série", glyph: "📺", cost: 200000, audience: 50 },
+  divertissement: { id: "divertissement", name: "Divertissement", glyph: "🎉", cost: 300000, audience: 80 },
+  evenement_live: { id: "evenement_live", name: "Événement live", glyph: "🏟️", cost: 500000, audience: 120 },
+  cinema: { id: "cinema", name: "Cinéma blockbuster", glyph: "🎬", cost: 1000000, audience: 200 },
+};
+
+export type SkylineMediaProgramRow = {
+  id: string;
+  company_id: string;
+  kind: SkylineMediaProgramKind;
+  cost: number;
+  audience_gained: number;
+  produced_at: string;
+};
+
+export type SkylineMediaAudienceRow = {
+  company_id: string;
+  audience_score: number;
+  total_revenue: number;
+  updated_at: string;
+};
+
+export type SkylineLuxuryBrandRow = {
+  company_id: string;
+  brand_name: string;
+  brand_value: number;
+  shows_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SkylineMilitaryContractRow = {
+  id: string;
+  product_id: string;
+  qty_required: number;
+  price_per_unit: number;
+  total_value: number;
+  expires_at: string;
+  fulfilled_by: string | null;
+  fulfilled_at: string | null;
+  created_at: string;
 };
 
 // ──────────────────────────────────────────────────────────────────────────

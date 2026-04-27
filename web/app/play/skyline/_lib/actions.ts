@@ -1007,3 +1007,76 @@ export async function declineLoanOfferAction(
   revalidatePath("/play/skyline/banque");
   return { ok: true, data: null };
 }
+
+// ───── Session 3 : Médias / Luxe / Armement ─────
+
+export async function produceShowAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  if (!companyId || !kind) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_produce_show", {
+    p_company_id: companyId,
+    p_kind: kind,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+export async function createLuxuryBrandAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const brandName = String(formData.get("brand_name") ?? "").trim();
+  if (!companyId || !brandName)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_create_luxury_brand", {
+    p_company_id: companyId,
+    p_brand_name: brandName,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+export async function fashionShowAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!companyId) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_fashion_show", {
+    p_company_id: companyId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+export async function fulfillMilitaryContractAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const contractId = String(formData.get("contract_id") ?? "");
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!contractId || !companyId)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc(
+    "skyline_fulfill_military_contract",
+    {
+      p_contract_id: contractId,
+      p_company_id: companyId,
+    },
+  );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}

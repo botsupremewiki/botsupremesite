@@ -26,6 +26,10 @@ import type {
   SkylineCasinoConfigRow,
   SkylineAirlineRouteRow,
   SkylineLoanOfferRow,
+  SkylineMediaProgramRow,
+  SkylineMediaAudienceRow,
+  SkylineLuxuryBrandRow,
+  SkylineMilitaryContractRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -789,6 +793,64 @@ export async function fetchPotentialBorrowers(
     net_worth: Number(r.net_worth),
     credit_score: Number(r.credit_score),
   }));
+}
+
+// ───── Session 3 : Médias / Luxe / Armement ─────
+
+export async function fetchMediaPrograms(
+  companyId: string,
+): Promise<SkylineMediaProgramRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_media_programs")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("produced_at", { ascending: false })
+    .limit(20);
+  return (data ?? []) as SkylineMediaProgramRow[];
+}
+
+export async function fetchMediaAudience(
+  companyId: string,
+): Promise<SkylineMediaAudienceRow | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("skyline_media_audience")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return (data as SkylineMediaAudienceRow | null) ?? null;
+}
+
+export async function fetchLuxuryBrand(
+  companyId: string,
+): Promise<SkylineLuxuryBrandRow | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("skyline_luxury_brand")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return (data as SkylineLuxuryBrandRow | null) ?? null;
+}
+
+export async function fetchMilitaryContracts(): Promise<
+  SkylineMilitaryContractRow[]
+> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  // Heartbeat : génère un contrat si moins de 3 actifs.
+  await supabase.rpc("skyline_military_heartbeat");
+  const { data } = await supabase
+    .from("skyline_military_contracts")
+    .select("*")
+    .is("fulfilled_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("expires_at", { ascending: true });
+  return (data ?? []) as SkylineMilitaryContractRow[];
 }
 
 export async function fetchPlayerCandidates(

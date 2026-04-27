@@ -7,7 +7,11 @@ import {
   fetchCasinoConfig,
   fetchEmployeesForCompany,
   fetchListingForCompany,
+  fetchLuxuryBrand,
   fetchMachinesForCompany,
+  fetchMediaAudience,
+  fetchMediaPrograms,
+  fetchMilitaryContracts,
   fetchPermitsForCompany,
   fetchPharmaPatents,
   fetchPharmaResearch,
@@ -68,6 +72,12 @@ export default async function CompanyPage({
   const isBtp = company.sector === "btp_construction";
   const isCasino = company.sector === "casino";
   const isAerien = company.sector === "aerien";
+  const isMedia =
+    company.sector === "diffusion_tv" || company.sector === "medias_studio";
+  const isLuxury = ["joaillerie", "parfumerie", "boutique_vetements"].includes(
+    company.sector,
+  );
+  const isArmement = company.sector === "armement";
 
   const [
     pharmaResearch,
@@ -78,6 +88,10 @@ export default async function CompanyPage({
     btpProjects,
     casinoConfig,
     airlineRoutes,
+    mediaPrograms,
+    mediaAudience,
+    luxuryBrand,
+    militaryContracts,
   ] = await Promise.all([
     isPharma ? fetchPharmaResearch(companyId) : Promise.resolve([]),
     isPharma ? fetchPharmaPatents(companyId) : Promise.resolve([]),
@@ -87,6 +101,10 @@ export default async function CompanyPage({
     isBtp ? fetchBtpProjects(companyId) : Promise.resolve([]),
     isCasino ? fetchCasinoConfig(companyId) : Promise.resolve(null),
     isAerien ? fetchAirlineRoutes(companyId) : Promise.resolve([]),
+    isMedia ? fetchMediaPrograms(companyId) : Promise.resolve([]),
+    isMedia ? fetchMediaAudience(companyId) : Promise.resolve(null),
+    isLuxury ? fetchLuxuryBrand(companyId) : Promise.resolve(null),
+    isArmement ? fetchMilitaryContracts() : Promise.resolve([]),
   ]);
 
   return (
@@ -116,6 +134,10 @@ export default async function CompanyPage({
         btpProjects={btpProjects}
         casinoConfig={casinoConfig}
         airlineRoutes={airlineRoutes}
+        mediaPrograms={mediaPrograms}
+        mediaAudience={mediaAudience}
+        luxuryBrand={luxuryBrand}
+        militaryContracts={militaryContracts}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>
