@@ -629,8 +629,14 @@ function PlayingCard({
   return (
     <motion.div
       key={`${card.rank}${card.suit}`}
-      initial={{ opacity: 0, y: 12, rotate: -3 }}
-      animate={{ opacity: dim ? 0.45 : 1, y: 0, rotate: 0 }}
+      initial={{ opacity: 0, scale: 0.7, rotateY: 90 }}
+      animate={{
+        opacity: dim ? 0.45 : 1,
+        scale: 1,
+        rotateY: 0,
+      }}
+      transition={{ duration: 0.42, ease: [0.22, 0.85, 0.3, 1.05] }}
+      style={{ transformStyle: "preserve-3d", perspective: 600 }}
       className={`flex h-32 w-24 select-none flex-col items-center justify-between rounded-lg border bg-zinc-50 px-2 py-1 shadow-md ${
         highlight
           ? "border-amber-400 shadow-[0_0_24px_rgba(251,191,36,0.35)]"

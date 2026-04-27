@@ -752,6 +752,23 @@ function BetCell({
       className={`group relative ${className} ${disabled ? "cursor-not-allowed opacity-80" : "cursor-pointer"} ${highlight ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-black" : ""}`}
     >
       {children}
+      {/* Pulse glow on the winning cell after a spin lands. */}
+      {highlight && (
+        <motion.span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-sm"
+          initial={{ boxShadow: "0 0 0 0 rgba(251,191,36,0)", scale: 1 }}
+          animate={{
+            boxShadow: [
+              "0 0 0 0 rgba(251,191,36,0)",
+              "0 0 18px 6px rgba(251,191,36,0.75)",
+              "0 0 0 0 rgba(251,191,36,0)",
+            ],
+            scale: [1, 1.08, 1],
+          }}
+          transition={{ duration: 0.9, repeat: 2, ease: "easeOut" }}
+        />
+      )}
       {mineAmount > 0 && (
         <motion.span
           key={mineAmount}

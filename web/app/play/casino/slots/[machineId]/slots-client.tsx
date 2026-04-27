@@ -526,16 +526,72 @@ function BigWinFlash({
   multiplier: number;
   accentClass: string;
 }) {
+  // Confetti dots: 24 particles bursting outward from the centre. Each has
+  // a randomised direction + delay, driven by CSS variables so we don't
+  // need to mount 24 motion components.
+  const confetti = useMemo(() => {
+    const palette = [
+      "#fde68a",
+      "#fb923c",
+      "#f472b6",
+      "#a78bfa",
+      "#34d399",
+      "#60a5fa",
+    ];
+    return Array.from({ length: 24 }, (_, i) => {
+      const angle = (i / 24) * Math.PI * 2 + Math.random() * 0.4;
+      const distance = 90 + Math.random() * 70;
+      return {
+        tx: `${Math.cos(angle) * distance}px`,
+        ty: `${Math.sin(angle) * distance}px`,
+        color: palette[i % palette.length],
+        delay: Math.random() * 200,
+        size: 6 + Math.random() * 4,
+      };
+    });
+  }, []);
+
   return (
-    <motion.div
-      initial={{ scale: 0.6, opacity: 0 }}
-      animate={{ scale: [0.6, 1.1, 1], opacity: [0, 1, 1] }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
-      className={`pointer-events-none absolute inset-0 flex items-center justify-center text-5xl font-black tracking-widest drop-shadow-[0_0_15px_rgba(0,0,0,0.6)] ${accentClass}`}
-    >
-      ×{multiplier}
-    </motion.div>
+    <div className="pointer-events-none absolute inset-0 overflow-visible">
+      {/* Multiplier text — bigger, screen-shake-style entry. */}
+      <motion.div
+        initial={{ scale: 0.3, opacity: 0, rotate: -8 }}
+        animate={{
+          scale: [0.3, 1.25, 1],
+          opacity: [0, 1, 1],
+          rotate: [-8, 4, 0],
+        }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }}
+        className={`absolute inset-0 flex items-center justify-center text-6xl font-black tracking-widest drop-shadow-[0_0_18px_rgba(0,0,0,0.8)] ${accentClass}`}
+      >
+        ×{multiplier}
+      </motion.div>
+      {/* Background flash so the win feels like the screen lit up. */}
+      <motion.div
+        aria-hidden
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0.55, 0] }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="absolute inset-0 rounded-2xl bg-amber-300/40"
+      />
+      {/* Confetti burst from the centre. */}
+      {confetti.map((c, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="absolute left-1/2 top-1/2 rounded-sm"
+          style={{
+            width: c.size,
+            height: c.size,
+            backgroundColor: c.color,
+            ["--tx" as string]: c.tx,
+            ["--ty" as string]: c.ty,
+            animation: `confetti-burst 1.2s ${c.delay}ms ease-out forwards`,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -754,7 +810,7 @@ function BetControls({
         <button
           type="submit"
           disabled={!betValid || !profile || isSpinning}
-          className={`mt-1 rounded-md bg-amber-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 shadow hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40`}
+          className="casino-btn mt-1 rounded-md bg-amber-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 shadow hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {!profile
             ? "Connecte-toi pour jouer"

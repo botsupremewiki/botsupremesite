@@ -453,11 +453,25 @@ function GameHud({
         value={`${game.bet.toLocaleString("fr-FR")} OS`}
         accent="amber"
       />
-      <Pill
-        label="Multi"
-        value={`×${game.multiplier.toFixed(2)}`}
-        accent="emerald"
-      />
+      {/* Pulse the multiplier pill each time it ticks up (i.e. on each
+          safe reveal). `key` on the value re-mounts the wrapper so the
+          animation replays. */}
+      <motion.div
+        key={`mul-${game.multiplier.toFixed(2)}`}
+        initial={false}
+        animate={
+          game.multiplier > 0
+            ? { scale: [1, 1.18, 1] }
+            : { scale: 1 }
+        }
+        transition={{ duration: 0.4, ease: [0.2, 0.8, 0.3, 1] }}
+      >
+        <Pill
+          label="Multi"
+          value={`×${game.multiplier.toFixed(2)}`}
+          accent="emerald"
+        />
+      </motion.div>
       {inGame && (
         <Pill
           label="Prochain"
@@ -550,8 +564,23 @@ function MinesGrid({
                   : "Mine"
             }
           >
-            {tile === "safe" && "◆"}
-            {tile === "mine" && "✸"}
+            {/* Pop animation when the tile resolves. `key` includes the
+                state so framer-motion replays the animation on transition
+                from "hidden" → "safe"/"mine". */}
+            {tile !== "hidden" && (
+              <motion.span
+                key={tile}
+                initial={{ scale: 0.2, opacity: 0, rotate: -30 }}
+                animate={{
+                  scale: [0.2, 1.3, 1],
+                  opacity: [0, 1, 1],
+                  rotate: [-30, 8, 0],
+                }}
+                transition={{ duration: 0.32, ease: [0.2, 0.8, 0.3, 1.05] }}
+              >
+                {tile === "safe" ? "◆" : "✸"}
+              </motion.span>
+            )}
           </button>
         );
       })}

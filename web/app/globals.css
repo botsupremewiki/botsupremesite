@@ -49,3 +49,64 @@ body {
     transform: scale(1);
   }
 }
+
+/* Casino button feel: subtle scale on hover + press feedback. Used across
+   slots/blackjack/poker/etc. for the primary "spin", "hit", "bet"
+   buttons that should feel tactile. Combine with whatever bg/text class
+   the variant needs. Disabled state is handled by Tailwind's
+   `disabled:` modifiers. */
+.casino-btn {
+  transition: transform 80ms ease-out, background-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+  will-change: transform;
+}
+.casino-btn:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+.casino-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.casino-btn:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.6);
+  outline-offset: 2px;
+}
+
+/* Big-win celebration: a screen-bound flash + bounce used by slots and
+   roulette when the multiplier crosses a threshold. */
+@keyframes big-win-flash {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+    filter: blur(8px);
+  }
+  35% {
+    transform: scale(1.15);
+    opacity: 1;
+    filter: blur(0);
+  }
+  70% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+/* Confetti dot used by the big-win celebration. Each dot gets a CSS
+   variable for direction and delay (set inline). */
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    transform: translate(var(--tx, 0), var(--ty, 0)) scale(0.6) rotate(540deg);
+    opacity: 0;
+  }
+}

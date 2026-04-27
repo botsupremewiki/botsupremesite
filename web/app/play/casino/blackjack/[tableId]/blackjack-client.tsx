@@ -813,6 +813,18 @@ function SeatCards({
                     : hand.status === "pushed"
                       ? "ring-2 ring-zinc-400"
                       : "";
+          // Pulse the score badge briefly when the hand resolves into a
+          // dramatic outcome (blackjack / bust). `key` includes the
+          // status so framer-motion replays the animation when the
+          // status flips.
+          const isDramatic =
+            hand.status === "blackjack" || hand.status === "busted";
+          const badgeBg =
+            hand.status === "blackjack"
+              ? "bg-amber-400 text-amber-950"
+              : hand.status === "busted"
+                ? "bg-rose-500 text-rose-50"
+                : "bg-black/70 text-white";
           return (
             <div
               key={hi}
@@ -829,10 +841,25 @@ function SeatCards({
                 ))}
               </div>
               <div className="flex items-center gap-1">
-                <div className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {hand.score}
-                  {hand.doubled ? " ×2" : ""}
-                </div>
+                <motion.div
+                  key={`${hand.status}-${hand.score}`}
+                  initial={
+                    isDramatic ? { scale: 0.4, opacity: 0 } : false
+                  }
+                  animate={
+                    isDramatic
+                      ? { scale: [0.4, 1.25, 1], opacity: [0, 1, 1] }
+                      : undefined
+                  }
+                  transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeBg}`}
+                >
+                  {hand.status === "blackjack"
+                    ? "BJ"
+                    : hand.status === "busted"
+                      ? `${hand.score} BUST`
+                      : `${hand.score}${hand.doubled ? " ×2" : ""}`}
+                </motion.div>
                 {seat.hands.length > 1 && (
                   <div className="rounded-full bg-black/50 px-1.5 py-0.5 text-[9px] text-zinc-300">
                     M{hi + 1}
@@ -872,16 +899,29 @@ function DealerCards({ state }: { state: BlackjackState }) {
 }
 
 function CardFace({ card, hidden }: { card?: Card; hidden?: boolean }) {
+  // Animation uses framer-motion. Each new card slides in from the top
+  // with a slight rotate to mimic a dealer's flick. Existing cards keep
+  // their final state because the parent uses `key={i}`.
   if (hidden || !card) {
     return (
-      <div className="flex h-12 w-9 items-center justify-center rounded-md border border-indigo-300/40 bg-gradient-to-br from-indigo-700 to-indigo-900 shadow-lg">
+      <motion.div
+        initial={{ y: -22, opacity: 0, scale: 0.7, rotateZ: -10 }}
+        animate={{ y: 0, opacity: 1, scale: 1, rotateZ: 0 }}
+        transition={{ duration: 0.28, ease: [0.22, 0.9, 0.3, 1.05] }}
+        className="flex h-12 w-9 items-center justify-center rounded-md border border-indigo-300/40 bg-gradient-to-br from-indigo-700 to-indigo-900 shadow-lg"
+      >
         <span className="text-xs font-bold text-indigo-300/70">?</span>
-      </div>
+      </motion.div>
     );
   }
   const isRed = card.suit === "H" || card.suit === "D";
   return (
-    <div className="flex h-12 w-9 flex-col items-center justify-between rounded-md border border-zinc-300 bg-white py-1 shadow-lg">
+    <motion.div
+      initial={{ y: -22, opacity: 0, scale: 0.7, rotateZ: -10 }}
+      animate={{ y: 0, opacity: 1, scale: 1, rotateZ: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 0.9, 0.3, 1.05] }}
+      className="flex h-12 w-9 flex-col items-center justify-between rounded-md border border-zinc-300 bg-white py-1 shadow-lg"
+    >
       <span
         className={`text-xs font-bold leading-none ${
           isRed ? "text-red-600" : "text-zinc-900"
@@ -889,10 +929,14 @@ function CardFace({ card, hidden }: { card?: Card; hidden?: boolean }) {
       >
         {card.rank}
       </span>
-      <span className={`text-lg leading-none ${isRed ? "text-red-600" : "text-zinc-900"}`}>
+      <span
+        className={`text-lg leading-none ${
+          isRed ? "text-red-600" : "text-zinc-900"
+        }`}
+      >
         {suitSymbol(card.suit)}
       </span>
-    </div>
+    </motion.div>
   );
 }
 

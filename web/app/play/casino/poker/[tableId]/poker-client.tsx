@@ -425,9 +425,15 @@ function Felt({
 
 function CommunityCards({ community }: { community: Card[] }) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5" style={{ perspective: 800 }}>
       {[0, 1, 2, 3, 4].map((i) => (
-        <CardFace key={i} card={community[i]} />
+        <CardFace
+          key={i}
+          card={community[i]}
+          // Stagger only on the flop (3 cards arrive at once). Turn and
+          // river are single cards — no stagger, just a normal flip.
+          delay={community.length === 3 && i < 3 ? i * 0.12 : 0}
+        />
       ))}
     </div>
   );
@@ -766,15 +772,15 @@ function ActionBar({
             >
               Check
             </button>
-          ) : (
+          ) : canCall ? (
             <button
               onClick={onCall}
-              disabled={!canCall && selfSeat.chips > 0}
-              className="rounded-md bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-400"
             >
               Suivre {toCall.toLocaleString("fr-FR")}
             </button>
-          )}
+          ) : null /* Pas assez de jetons pour suivre — le joueur doit
+                     fold ou all-in. Le bouton All-in reste visible. */}
           {canBet && (
             <div className="flex items-center gap-1">
               <input
@@ -835,10 +841,12 @@ function CardFace({
   card,
   hidden,
   small,
+  delay = 0,
 }: {
   card?: Card;
   hidden?: boolean;
   small?: boolean;
+  delay?: number;
 }) {
   const w = small ? 28 : 44;
   const h = small ? 40 : 64;
@@ -861,12 +869,21 @@ function CardFace({
   const isRed = RED_SUITS.has(card.suit);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, scale: 0.65, rotateY: 90, y: -8 }}
+      animate={{ opacity: 1, scale: 1, rotateY: 0, y: 0 }}
+      transition={{
+        duration: 0.36,
+        delay,
+        ease: [0.22, 0.85, 0.3, 1.05],
+      }}
       className={`flex flex-col items-center justify-between rounded-md border bg-white py-0.5 shadow ${
         isRed ? "text-rose-600" : "text-zinc-900"
       } border-zinc-300`}
-      style={{ width: w, height: h }}
+      style={{
+        width: w,
+        height: h,
+        transformStyle: "preserve-3d",
+      }}
     >
       <span
         className="self-start pl-1 leading-none"
