@@ -812,7 +812,7 @@ create policy "skyline_events_read_all"
   for select
   using (true);
 
-create index if not exists skyline_events_active_idx on public.skyline_events(ends_at) where ends_at > now();
+create index if not exists skyline_events_ends_idx on public.skyline_events(ends_at);
 
 -- Fil d'actu type Bloomberg.
 create table if not exists public.skyline_news (
