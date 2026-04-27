@@ -22,6 +22,10 @@ import type {
   SkylineAchievementId,
   SkylineLeaderboardRow,
   SkylineShortPositionRow,
+  SkylineBtpProjectRow,
+  SkylineCasinoConfigRow,
+  SkylineAirlineRouteRow,
+  SkylineLoanOfferRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -668,6 +672,124 @@ export async function fetchOpenShortsForUser(
 }
 
 // ───── Session 1 : Salariat joueur ─────
+
+// ───── Session 2 : BTP / Casino / Airline / Loan offers ─────
+
+export async function fetchBtpProjects(
+  companyId: string,
+): Promise<SkylineBtpProjectRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_btp_projects")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("started_at", { ascending: false });
+  return (data ?? []) as SkylineBtpProjectRow[];
+}
+
+export async function fetchCasinoConfig(
+  companyId: string,
+): Promise<SkylineCasinoConfigRow | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("skyline_casino_config")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return (data as SkylineCasinoConfigRow | null) ?? null;
+}
+
+export async function fetchAirlineRoutes(
+  companyId: string,
+): Promise<SkylineAirlineRouteRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_airline_routes")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .order("opened_at", { ascending: true });
+  return (data ?? []) as SkylineAirlineRouteRow[];
+}
+
+export async function fetchLoanOffersForUser(
+  userId: string,
+): Promise<SkylineLoanOfferRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_loans")
+    .select(
+      "id, user_id, lender_user_id, lender_company_id, amount_initial, rate, duration_months, monthly_payment, status, created_at, skyline_companies!skyline_loans_lender_company_id_fkey(name), profiles!skyline_loans_lender_user_id_fkey(username)",
+    )
+    .eq("user_id", userId)
+    .eq("status", "offered")
+    .order("created_at", { ascending: false });
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((r) => {
+    const c = r.skyline_companies as { name: string } | null;
+    const p = r.profiles as { username: string } | null;
+    return {
+      id: r.id as string,
+      user_id: r.user_id as string,
+      lender_user_id: r.lender_user_id as string,
+      lender_company_id: r.lender_company_id as string,
+      amount_initial: Number(r.amount_initial),
+      rate: Number(r.rate),
+      duration_months: Number(r.duration_months),
+      monthly_payment: Number(r.monthly_payment),
+      status: r.status as SkylineLoanOfferRow["status"],
+      created_at: r.created_at as string,
+      lender_company_name: c?.name,
+      lender_username: p?.username,
+    };
+  });
+}
+
+export async function fetchOfferedLoansByLender(
+  lenderUserId: string,
+): Promise<SkylineLoanOfferRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_loans")
+    .select("*")
+    .eq("lender_user_id", lenderUserId)
+    .in("status", ["offered", "active"])
+    .order("created_at", { ascending: false });
+  return (data ?? []) as SkylineLoanOfferRow[];
+}
+
+export type PotentialBorrower = {
+  user_id: string;
+  username: string;
+  net_worth: number;
+  credit_score: number;
+};
+
+export async function fetchPotentialBorrowers(
+  excludeUserId: string,
+  limit = 30,
+): Promise<PotentialBorrower[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_profiles")
+    .select("user_id, credit_score, net_worth, profiles!inner(username)")
+    .neq("user_id", excludeUserId)
+    .order("net_worth", { ascending: false })
+    .limit(limit);
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((r) => ({
+    user_id: r.user_id as string,
+    username: (r.profiles as { username: string }).username,
+    net_worth: Number(r.net_worth),
+    credit_score: Number(r.credit_score),
+  }));
+}
 
 export async function fetchPlayerCandidates(
   limit = 30,

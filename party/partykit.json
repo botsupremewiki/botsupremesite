@@ -15,7 +15,8 @@
     "eternumraid": "src/eternum-raid.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",
-    "dm": "src/dm.ts"
+    "dm": "src/dm.ts",
+    "imperiumalliance": "src/imperium-alliance.ts"
   },
   "compatibilityDate": "2024-09-01"
 }

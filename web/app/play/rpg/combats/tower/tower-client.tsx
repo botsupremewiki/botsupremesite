@@ -67,6 +67,24 @@ export function TowerClient({
   async function fight() {
     setError(null);
     setResult(null);
+    if (!supabase) return;
+
+    const { data, error: rpcErr } = await supabase.rpc("eternum_attempt_tower", {
+      p_floor: floor,
+    });
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const r = data as
+      | { ok: true; won: boolean; floor?: number }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+
+    // Log cosmétique
     const playerTeam = [
       buildHeroUnit(
         "hero",
@@ -79,9 +97,9 @@ export function TowerClient({
     ];
     const enemy = buildEnemy(floor);
     const battle = simulateBattle(playerTeam, enemy, 30);
-    setResult({ winner: battle.winner, log: battle.log });
-    if (battle.winner === "A" && supabase) {
-      await supabase.rpc("eternum_record_tower", { p_floor: floor });
+    setResult({ winner: r.won ? "A" : "B", log: battle.log });
+
+    if (r.won) {
       setFloor(floor + 1);
       router.refresh();
     }

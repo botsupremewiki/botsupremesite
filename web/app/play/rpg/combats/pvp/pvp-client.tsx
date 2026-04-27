@@ -47,7 +47,25 @@ export function PvpClient({
   async function challenge(opp: Opponent) {
     setError(null);
     setResult(null);
+    if (!supabase) return;
 
+    // ⚠️ Server décide le winner basé sur power comparison.
+    const { data, error: rpcErr } = await supabase.rpc("eternum_attempt_pvp", {
+      p_defender_id: opp.user_id,
+    });
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const r = data as
+      | { ok: true; won: boolean; attacker_elo_after: number; defender_elo_after: number }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+
+    // Log cosmétique côté client.
     const playerTeam = [
       buildHeroUnit(
         "hero",
@@ -70,19 +88,8 @@ export function PvpClient({
     ];
     const battle = simulateBattle(playerTeam, oppTeam, 50);
 
-    const winnerId = battle.winner === "A" ? selfId : opp.user_id;
-    if (!supabase) return;
-    const { data, error: rpcErr } = await supabase.rpc("eternum_record_pvp", {
-      p_defender_id: opp.user_id,
-      p_winner_id: winnerId,
-    });
-    if (rpcErr) {
-      setError(rpcErr.message);
-      return;
-    }
-    const r = data as { attacker_elo_after: number; defender_elo_after: number };
     setResult({
-      winner: battle.winner,
+      winner: r.won ? "A" : "B",
       log: battle.log,
       eloAfter: r.attacker_elo_after,
       opp: ETERNUM_CLASSES[opp.class_id as EternumClassId].name,

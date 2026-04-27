@@ -82,39 +82,32 @@ export function WorldBossClient({
   async function attack() {
     setError(null);
     setResult(null);
-    if (attempts >= 3) {
-      setError("Cap journalier atteint (3/3).");
-      return;
-    }
-    if (team.length === 0) {
-      setError("Configure ton équipe de familiers d'abord.");
-      return;
-    }
+    if (!supabase) return;
 
-    const playerTeam = buildPlayerTeam();
-    const boss = buildBoss();
-    const battle = simulateBattle(playerTeam, boss, 30);
-    // Dégâts infligés = HP max boss - HP restant.
-    // Le boss est immortel sur 30 tours, on calcule les dmg via le log.
-    const damage = battle.log
-      .filter((l) => l.target === ETERNUM_WORLD_BOSS.name && l.damage)
-      .reduce((s, l) => s + (l.damage ?? 0), 0);
-
-    if (!supabase) {
-      setResult({ damage, log: battle.log, osGained: 0 });
-      return;
-    }
+    // ⚠️ Server-authoritative : le serveur calcule les dégâts à partir du
+    // power du joueur, on n'envoie rien.
     const { data, error: rpcErr } = await supabase.rpc(
-      "eternum_record_world_boss",
-      { p_damage: damage },
+      "eternum_attempt_world_boss",
     );
     if (rpcErr) {
       setError(rpcErr.message);
       return;
     }
-    const r = data as { ok: boolean; os_gained: number; attempts_used: number };
+    const r = data as
+      | { ok: true; damage: number; os_gained: number; attempts_used: number }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+
+    // Log cosmétique côté client (optionnel — on reuse le simulate pour le show).
+    const playerTeam = buildPlayerTeam();
+    const boss = buildBoss();
+    const battle = simulateBattle(playerTeam, boss, 30);
+
     setAttempts(r.attempts_used);
-    setResult({ damage, log: battle.log, osGained: r.os_gained });
+    setResult({ damage: r.damage, log: battle.log, osGained: r.os_gained });
     router.refresh();
   }
 

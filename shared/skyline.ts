@@ -1526,6 +1526,119 @@ export type SkylineProfileRow = {
   updated_at: string;
 };
 
+// ──────────────────────────────────────────────────────────────────────────
+// 4.6.12. SECTEURS CREUSÉS SESSION 2 (P10 bis)
+// ──────────────────────────────────────────────────────────────────────────
+
+// BTP — projets
+export type SkylineBtpProjectKind =
+  | "maison"
+  | "immeuble"
+  | "pont_route"
+  | "gratte_ciel"
+  | "aeroport";
+
+export const SKYLINE_BTP_PROJECTS: Record<
+  SkylineBtpProjectKind,
+  {
+    id: SkylineBtpProjectKind;
+    name: string;
+    glyph: string;
+    cost: number;
+    reward: number;
+    durationH: number;
+  }
+> = {
+  maison: { id: "maison", name: "Maison individuelle", glyph: "🏠", cost: 50000, reward: 100000, durationH: 12 },
+  immeuble: { id: "immeuble", name: "Immeuble résidentiel", glyph: "🏢", cost: 500000, reward: 900000, durationH: 36 },
+  pont_route: { id: "pont_route", name: "Pont / Route", glyph: "🌉", cost: 5000000, reward: 12000000, durationH: 96 },
+  gratte_ciel: { id: "gratte_ciel", name: "Gratte-ciel", glyph: "🏙️", cost: 50000000, reward: 120000000, durationH: 240 },
+  aeroport: { id: "aeroport", name: "Aéroport", glyph: "🛫", cost: 300000000, reward: 800000000, durationH: 480 },
+};
+
+export type SkylineBtpProjectRow = {
+  id: string;
+  company_id: string;
+  project_kind: SkylineBtpProjectKind;
+  cost_advance: number;
+  reward: number;
+  duration_h: number;
+  started_at: string;
+  ends_at: string;
+  completed_at: string | null;
+  status: "in_progress" | "completed" | "cancelled";
+};
+
+// Casino — config
+export type SkylineCasinoVipKind = "premier" | "diamond" | "royal";
+
+export const SKYLINE_CASINO_VIP_ROOMS: Record<
+  SkylineCasinoVipKind,
+  { id: SkylineCasinoVipKind; name: string; cost: number; multiplier: number }
+> = {
+  premier: { id: "premier", name: "Salon Premier", cost: 100000, multiplier: 2 },
+  diamond: { id: "diamond", name: "Salon Diamond", cost: 500000, multiplier: 5 },
+  royal: { id: "royal", name: "Salon Royal", cost: 2000000, multiplier: 15 },
+};
+
+export type SkylineCasinoConfigRow = {
+  company_id: string;
+  rtp_pct: number;
+  vip_premier: number;
+  vip_diamond: number;
+  vip_royal: number;
+  updated_at: string;
+};
+
+// Aérien — lignes
+export type SkylineRouteKind =
+  | "domestic"
+  | "european"
+  | "transatlantic"
+  | "asia"
+  | "intercontinental";
+
+export const SKYLINE_AIRLINE_ROUTES: Record<
+  SkylineRouteKind,
+  {
+    id: SkylineRouteKind;
+    name: string;
+    glyph: string;
+    openCost: number;
+    monthlyRevenue: number;
+  }
+> = {
+  domestic: { id: "domestic", name: "Ligne domestique", glyph: "🛫", openCost: 100000, monthlyRevenue: 50000 },
+  european: { id: "european", name: "Ligne européenne", glyph: "✈️", openCost: 500000, monthlyRevenue: 250000 },
+  transatlantic: { id: "transatlantic", name: "Transatlantique", glyph: "🌍", openCost: 2000000, monthlyRevenue: 1200000 },
+  asia: { id: "asia", name: "Asie longue-distance", glyph: "🌏", openCost: 3000000, monthlyRevenue: 1800000 },
+  intercontinental: { id: "intercontinental", name: "Tour du monde", glyph: "🌐", openCost: 5000000, monthlyRevenue: 3500000 },
+};
+
+export type SkylineAirlineRouteRow = {
+  id: string;
+  company_id: string;
+  route_kind: SkylineRouteKind;
+  opened_at: string;
+  is_active: boolean;
+};
+
+// Banque — offres de prêts (loan rows avec status='offered')
+export type SkylineLoanOfferRow = {
+  id: string;
+  user_id: string; // borrower
+  lender_user_id: string;
+  lender_company_id: string;
+  amount_initial: number;
+  rate: number;
+  duration_months: number;
+  monthly_payment: number;
+  status: "offered" | "active" | "paid" | "defaulted";
+  created_at: string;
+  lender_company_name?: string;
+  lender_username?: string;
+};
+
 export type SkylineShortPositionRow = {
   id: string;
   user_id: string;

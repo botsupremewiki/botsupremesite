@@ -78,50 +78,43 @@ export function DreamClient({
   async function fight(d: DreamConfig) {
     setError(null);
     setResult(null);
-    if (hero.energy < d.energyCost) {
-      setError(`Énergie insuffisante (${hero.energy}/${d.energyCost}).`);
+    if (!supabase) return;
+
+    // ⚠️ Server-authoritative.
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_attempt_dream",
+      { p_dream_id: d.id },
+    );
+    if (rpcErr) {
+      setError(rpcErr.message);
       return;
     }
-    if (team.length === 0) {
-      setError("Configure ton équipe de familiers d'abord.");
+    const r = data as
+      | {
+          ok: true;
+          won: boolean;
+          shards?: { resource_id: string; count: number }[];
+        }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
       return;
     }
 
+    // Log cosmétique
     const playerTeam = buildPlayerTeam();
     const enemy = buildEnemy(d);
     const battle = simulateBattle(playerTeam, enemy, 50);
 
-    if (!supabase) return;
-    await supabase.rpc("eternum_consume_my_energy", { p_amount: d.energyCost });
-
-    if (battle.winner !== "A") {
-      setResult({ winner: battle.winner, log: battle.log });
-      return;
-    }
-
-    // Drops shards selon shardsByRarity (chance par rareté).
-    const drops: { rarity: string; count: number }[] = [];
-    for (const [rarity, chance] of Object.entries(d.shardsByRarity)) {
-      if (Math.random() < chance) {
-        const count = 1 + Math.floor(Math.random() * 3);
-        drops.push({ rarity, count });
-      }
-    }
-
-    if (drops.length > 0) {
-      await supabase.rpc("eternum_record_dream", {
-        p_dream_id: d.id,
-        p_shards: drops.map((dr) => ({
-          shard_rarity: dr.rarity,
-          count: dr.count,
-        })),
-      });
-    }
-
     setResult({
-      winner: battle.winner,
+      winner: r.won ? "A" : "B",
       log: battle.log,
-      shards: drops,
+      shards: r.won
+        ? (r.shards ?? []).map((s) => ({
+            rarity: s.resource_id.replace("shard-", ""),
+            count: s.count,
+          }))
+        : undefined,
     });
     router.refresh();
   }

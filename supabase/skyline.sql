@@ -5927,3 +5927,644 @@ begin
   return v_total_sold;
 end;
 $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 35. SESSION 2 — BTP : GRANDS CHANTIERS
+-- ══════════════════════════════════════════════════════════════════════
+
+create table if not exists public.skyline_btp_projects (
+  id              uuid primary key default gen_random_uuid(),
+  company_id      uuid not null references public.skyline_companies(id) on delete cascade,
+  project_kind    text not null,
+  cost_advance    numeric(15, 2) not null,
+  reward          numeric(15, 2) not null,
+  duration_h      int not null,
+  started_at      timestamptz not null default now(),
+  ends_at         timestamptz not null,
+  completed_at    timestamptz,
+  status          text not null default 'in_progress' check (status in ('in_progress', 'completed', 'cancelled'))
+);
+
+alter table public.skyline_btp_projects enable row level security;
+
+drop policy if exists "skyline_btp_read_own" on public.skyline_btp_projects;
+create policy "skyline_btp_read_own"
+  on public.skyline_btp_projects
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_btp_write_own" on public.skyline_btp_projects;
+create policy "skyline_btp_write_own"
+  on public.skyline_btp_projects
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create or replace function public.skyline_btp_project_spec(p_kind text)
+returns jsonb language sql immutable as $$
+  select case p_kind
+    when 'maison'        then jsonb_build_object('cost', 50000,    'reward', 100000,   'duration_h', 12,  'name', 'Maison individuelle')
+    when 'immeuble'      then jsonb_build_object('cost', 500000,   'reward', 900000,   'duration_h', 36,  'name', 'Immeuble résidentiel')
+    when 'pont_route'    then jsonb_build_object('cost', 5000000,  'reward', 12000000, 'duration_h', 96,  'name', 'Pont / Route')
+    when 'gratte_ciel'   then jsonb_build_object('cost', 50000000, 'reward', 120000000,'duration_h', 240, 'name', 'Gratte-ciel')
+    when 'aeroport'      then jsonb_build_object('cost', 300000000,'reward', 800000000,'duration_h', 480, 'name', 'Aéroport')
+    else null
+  end;
+$$;
+
+create or replace function public.skyline_btp_start_project(
+  p_company_id uuid,
+  p_kind       text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_company   public.skyline_companies%rowtype;
+  v_spec      jsonb;
+  v_cost      numeric;
+  v_reward    numeric;
+  v_duration  int;
+  v_id        uuid;
+  v_user_cash numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+  if v_company.sector <> 'btp_construction' then
+    raise exception 'Réservé au secteur BTP / Construction';
+  end if;
+
+  v_spec := public.skyline_btp_project_spec(p_kind);
+  if v_spec is null then raise exception 'Chantier inconnu'; end if;
+
+  v_cost := (v_spec->>'cost')::numeric;
+  v_reward := (v_spec->>'reward')::numeric;
+  v_duration := (v_spec->>'duration_h')::int;
+
+  if exists (
+    select 1 from public.skyline_btp_projects
+    where company_id = p_company_id and status = 'in_progress'
+  ) then raise exception 'Un chantier est déjà en cours'; end if;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_btp_projects (
+    company_id, project_kind, cost_advance, reward, duration_h, ends_at
+  )
+  values (
+    p_company_id, p_kind, v_cost, v_reward, v_duration,
+    now() + make_interval(hours => v_duration)
+  )
+  returning id into v_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', -v_cost,
+    'Chantier démarré : ' || (v_spec->>'name'));
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.skyline_btp_complete_project(p_project_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id  uuid := auth.uid();
+  v_project  public.skyline_btp_projects%rowtype;
+  v_company  public.skyline_companies%rowtype;
+  v_spec     jsonb;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_project from public.skyline_btp_projects where id = p_project_id;
+  if not found then raise exception 'Chantier non trouvé'; end if;
+  if v_project.status <> 'in_progress' then return 0; end if;
+  if v_project.ends_at > now() then raise exception 'Pas encore terminé'; end if;
+
+  select * into v_company from public.skyline_companies where id = v_project.company_id;
+  if v_company.user_id <> v_user_id then raise exception 'Pas autorisé'; end if;
+
+  v_spec := public.skyline_btp_project_spec(v_project.project_kind);
+
+  update public.skyline_btp_projects
+    set status = 'completed', completed_at = now()
+    where id = p_project_id;
+
+  update public.skyline_profiles
+    set cash = cash + v_project.reward, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, v_company.id, 'sale', v_project.reward,
+    'Chantier livré : ' || (v_spec->>'name'));
+
+  return v_project.reward;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 36. SESSION 2 — CASINO : RTP CONFIGURABLE + SALONS VIP
+-- ══════════════════════════════════════════════════════════════════════
+
+create table if not exists public.skyline_casino_config (
+  company_id      uuid primary key references public.skyline_companies(id) on delete cascade,
+  rtp_pct         numeric(5, 2) not null default 95 check (rtp_pct between 90 and 99),
+  vip_premier     int not null default 0,
+  vip_diamond     int not null default 0,
+  vip_royal       int not null default 0,
+  updated_at      timestamptz not null default now()
+);
+
+alter table public.skyline_casino_config enable row level security;
+
+drop policy if exists "skyline_casino_config_read_own" on public.skyline_casino_config;
+create policy "skyline_casino_config_read_own"
+  on public.skyline_casino_config
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_casino_config_write_own" on public.skyline_casino_config;
+create policy "skyline_casino_config_write_own"
+  on public.skyline_casino_config
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create or replace function public.skyline_casino_set_rtp(
+  p_company_id uuid,
+  p_rtp        numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_rtp < 90 or p_rtp > 99 then raise exception 'RTP doit être entre 90 et 99%%'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id and sector = 'casino'
+  ) then raise exception 'Pas un casino ou pas trouvé'; end if;
+
+  insert into public.skyline_casino_config (company_id, rtp_pct)
+  values (p_company_id, p_rtp)
+  on conflict (company_id) do update
+    set rtp_pct = excluded.rtp_pct, updated_at = now();
+end;
+$$;
+
+create or replace function public.skyline_casino_vip_cost(p_kind text)
+returns numeric language sql immutable as $$
+  select case p_kind
+    when 'premier'  then 100000
+    when 'diamond'  then 500000
+    when 'royal'    then 2000000
+    else null
+  end;
+$$;
+
+create or replace function public.skyline_casino_add_vip(
+  p_company_id uuid,
+  p_kind       text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_cost    numeric;
+  v_user_cash numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id and sector = 'casino'
+  ) then raise exception 'Pas un casino'; end if;
+
+  v_cost := public.skyline_casino_vip_cost(p_kind);
+  if v_cost is null then raise exception 'Type de salon invalide'; end if;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_casino_config (company_id)
+  values (p_company_id)
+  on conflict (company_id) do nothing;
+
+  if p_kind = 'premier' then
+    update public.skyline_casino_config
+      set vip_premier = vip_premier + 1, updated_at = now()
+      where company_id = p_company_id;
+  elsif p_kind = 'diamond' then
+    update public.skyline_casino_config
+      set vip_diamond = vip_diamond + 1, updated_at = now()
+      where company_id = p_company_id;
+  else
+    update public.skyline_casino_config
+      set vip_royal = vip_royal + 1, updated_at = now()
+      where company_id = p_company_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'equipment', -v_cost,
+    'Salon VIP ' || p_kind);
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 37. SESSION 2 — BANQUE : PRÊTS À RISQUE INTER-JOUEURS
+-- ══════════════════════════════════════════════════════════════════════
+
+alter table public.skyline_loans
+  add column if not exists lender_user_id uuid references auth.users(id) on delete set null;
+alter table public.skyline_loans
+  add column if not exists lender_company_id uuid references public.skyline_companies(id) on delete set null;
+alter table public.skyline_loans
+  add column if not exists status text not null default 'active' check (status in ('offered', 'active', 'paid', 'defaulted'));
+
+create or replace function public.skyline_offer_loan(
+  p_lender_company_id uuid,
+  p_borrower_user_id  uuid,
+  p_amount            numeric,
+  p_rate              numeric,
+  p_duration_months   int
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id     uuid := auth.uid();
+  v_lender      public.skyline_companies%rowtype;
+  v_monthly_pmt numeric;
+  v_loan_id     uuid;
+  v_lender_cash numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_amount <= 0 or p_rate <= 0 or p_rate > 0.30 then
+    raise exception 'Paramètres invalides (taux 0-30%%)';
+  end if;
+  if p_duration_months not in (60, 120, 180, 240) then
+    raise exception 'Durée invalide (5/10/15/20 ans en mois)';
+  end if;
+
+  select * into v_lender from public.skyline_companies
+    where id = p_lender_company_id and user_id = v_user_id and sector = 'banque_commerciale';
+  if not found then raise exception 'Pas une banque commerciale ou pas autorisé'; end if;
+  if v_user_id = p_borrower_user_id then
+    raise exception 'Tu ne peux pas te prêter à toi-même';
+  end if;
+
+  select cash into v_lender_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_lender_cash < p_amount then
+    raise exception 'Cash banque insuffisant';
+  end if;
+
+  v_monthly_pmt := public.skyline_loan_monthly_payment(p_amount, p_rate, p_duration_months);
+
+  insert into public.skyline_loans (
+    user_id, company_id, lender_user_id, lender_company_id,
+    amount_initial, amount_remaining, rate, duration_months,
+    monthly_payment, next_payment_at, status
+  )
+  values (
+    p_borrower_user_id, null, v_user_id, p_lender_company_id,
+    p_amount, p_amount, p_rate, p_duration_months,
+    v_monthly_pmt, now() + interval '30 hours', 'offered'
+  )
+  returning id into v_loan_id;
+
+  return v_loan_id;
+end;
+$$;
+
+create or replace function public.skyline_accept_loan_offer(p_loan_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_loan    public.skyline_loans%rowtype;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_loan from public.skyline_loans
+    where id = p_loan_id and user_id = v_user_id and status = 'offered';
+  if not found then raise exception 'Offre introuvable ou expirée'; end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_loan.amount_initial, updated_at = now()
+    where user_id = v_loan.lender_user_id;
+  update public.skyline_profiles
+    set cash = cash + v_loan.amount_initial, updated_at = now()
+    where user_id = v_user_id;
+
+  update public.skyline_loans
+    set status = 'active'
+    where id = p_loan_id;
+
+  insert into public.skyline_transactions (user_id, kind, amount, description)
+  values
+    (v_user_id, 'other', v_loan.amount_initial,
+     'Prêt accepté : ' || v_loan.amount_initial || '$ à ' ||
+     (v_loan.rate * 100) || '%'),
+    (v_loan.lender_user_id, 'other', -v_loan.amount_initial,
+     'Prêt octroyé : ' || v_loan.amount_initial || '$ à ' ||
+     (v_loan.rate * 100) || '%');
+end;
+$$;
+
+create or replace function public.skyline_decline_loan_offer(p_loan_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  delete from public.skyline_loans
+    where id = p_loan_id and user_id = v_user_id and status = 'offered';
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 38. SESSION 2 — AÉRIEN : LIGNES OUVERTES
+-- ══════════════════════════════════════════════════════════════════════
+
+create table if not exists public.skyline_airline_routes (
+  id              uuid primary key default gen_random_uuid(),
+  company_id      uuid not null references public.skyline_companies(id) on delete cascade,
+  route_kind      text not null,
+  opened_at       timestamptz not null default now(),
+  is_active       boolean not null default true,
+  unique (company_id, route_kind)
+);
+
+alter table public.skyline_airline_routes enable row level security;
+
+drop policy if exists "skyline_routes_read_own" on public.skyline_airline_routes;
+create policy "skyline_routes_read_own"
+  on public.skyline_airline_routes
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_routes_write_own" on public.skyline_airline_routes;
+create policy "skyline_routes_write_own"
+  on public.skyline_airline_routes
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create or replace function public.skyline_route_spec(p_kind text)
+returns jsonb language sql immutable as $$
+  select case p_kind
+    when 'domestic'        then jsonb_build_object('open_cost', 100000,   'monthly_revenue', 50000,    'name', 'Ligne domestique', 'glyph', '🛫')
+    when 'european'        then jsonb_build_object('open_cost', 500000,   'monthly_revenue', 250000,   'name', 'Ligne européenne', 'glyph', '✈️')
+    when 'transatlantic'   then jsonb_build_object('open_cost', 2000000,  'monthly_revenue', 1200000,  'name', 'Transatlantique',   'glyph', '🌍')
+    when 'asia'            then jsonb_build_object('open_cost', 3000000,  'monthly_revenue', 1800000,  'name', 'Asie longue-distance', 'glyph', '🌏')
+    when 'intercontinental' then jsonb_build_object('open_cost', 5000000, 'monthly_revenue', 3500000,  'name', 'Tour du monde',      'glyph', '🌐')
+    else null
+  end;
+$$;
+
+create or replace function public.skyline_open_route(
+  p_company_id uuid,
+  p_kind       text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_company   public.skyline_companies%rowtype;
+  v_spec      jsonb;
+  v_cost      numeric;
+  v_id        uuid;
+  v_user_cash numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+  if v_company.sector <> 'aerien' then raise exception 'Réservé au secteur Aérien'; end if;
+
+  v_spec := public.skyline_route_spec(p_kind);
+  if v_spec is null then raise exception 'Ligne inconnue'; end if;
+  v_cost := (v_spec->>'open_cost')::numeric;
+
+  if exists (
+    select 1 from public.skyline_airline_routes
+    where company_id = p_company_id and route_kind = p_kind and is_active = true
+  ) then raise exception 'Ligne déjà ouverte'; end if;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_airline_routes (company_id, route_kind)
+  values (p_company_id, p_kind)
+  on conflict (company_id, route_kind) do update
+    set is_active = true, opened_at = now()
+  returning id into v_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'equipment', -v_cost,
+    'Ligne ouverte : ' || (v_spec->>'name'));
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.skyline_close_route(
+  p_company_id uuid,
+  p_kind       text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Pas autorisé'; end if;
+
+  update public.skyline_airline_routes
+    set is_active = false
+    where company_id = p_company_id and route_kind = p_kind;
+end;
+$$;
+
+-- Override skyline_service_produce pour les secteurs creusés (casino, aerien).
+create or replace function public.skyline_service_produce(p_company_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_user_id   uuid := auth.uid();
+  v_spec      jsonb;
+  v_skill     text;
+  v_rate      numeric;
+  v_total_cap int;
+  v_emp_count int;
+  v_skill_sum int;
+  v_now       timestamptz := now();
+  v_elapsed_h numeric;
+  v_capacity_h numeric;
+  v_quality   numeric;
+  v_revenue   numeric;
+  v_casino    public.skyline_casino_config%rowtype;
+  v_route_revenue numeric := 0;
+  v_route_rec record;
+  v_route_spec jsonb;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return 0; end if;
+  if v_company.category <> 'service' then return 0; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return 0; end if;
+
+  if v_company.sector = 'casino' then
+    select * into v_casino from public.skyline_casino_config where company_id = p_company_id;
+    if not found then v_casino.rtp_pct := 95; v_casino.vip_premier := 0; v_casino.vip_diamond := 0; v_casino.vip_royal := 0; end if;
+
+    select coalesce(sum(capacity_per_day), 0) into v_total_cap
+      from public.skyline_machines where company_id = p_company_id;
+    select count(*), coalesce(sum(coalesce((skills->>'service_client')::int, 30)), 0)
+      into v_emp_count, v_skill_sum
+      from public.skyline_employees where company_id = p_company_id;
+
+    if v_total_cap = 0 or v_emp_count = 0 then return 0; end if;
+
+    declare
+      v_house_edge numeric := (100 - v_casino.rtp_pct) / 100.0;
+      v_vip_mult numeric := 1 + v_casino.vip_premier * 2 + v_casino.vip_diamond * 5 + v_casino.vip_royal * 15;
+      v_avg_bet numeric := 200;
+    begin
+      v_capacity_h := least(v_total_cap, v_emp_count * 8) * v_elapsed_h / 24.0;
+      v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+      v_revenue := v_capacity_h * v_avg_bet * v_house_edge * v_vip_mult * v_quality;
+    end;
+  elsif v_company.sector = 'aerien' then
+    for v_route_rec in
+      select * from public.skyline_airline_routes
+      where company_id = p_company_id and is_active = true
+    loop
+      v_route_spec := public.skyline_route_spec(v_route_rec.route_kind);
+      if v_route_spec is null then continue; end if;
+      v_route_revenue := v_route_revenue + (v_route_spec->>'monthly_revenue')::numeric * v_elapsed_h / 720.0;
+    end loop;
+    select count(*), coalesce(sum(coalesce((skills->>'machine_use')::int, 30)), 0)
+      into v_emp_count, v_skill_sum
+      from public.skyline_employees where company_id = p_company_id;
+    if v_emp_count = 0 then return 0; end if;
+    v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+    v_revenue := v_route_revenue * v_quality;
+  else
+    v_spec := public.skyline_service_sector_spec(v_company.sector);
+    if v_spec is null then return 0; end if;
+    v_skill := v_spec->>'skill';
+    v_rate := (v_spec->>'rate')::numeric;
+
+    select coalesce(sum(capacity_per_day), 0) into v_total_cap
+      from public.skyline_machines where company_id = p_company_id;
+    select count(*), coalesce(sum(coalesce((skills->>v_skill)::int, 30)), 0)
+      into v_emp_count, v_skill_sum
+      from public.skyline_employees where company_id = p_company_id;
+
+    if v_total_cap = 0 or v_emp_count = 0 then return 0; end if;
+
+    v_capacity_h := least(v_total_cap, v_emp_count * 8) * v_elapsed_h / 24.0;
+    v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+    v_revenue := v_capacity_h * v_rate * v_quality;
+  end if;
+
+  if v_revenue <= 0 then return 0; end if;
+
+  update public.skyline_profiles
+    set cash = cash + v_revenue, updated_at = v_now
+    where user_id = v_user_id;
+  update public.skyline_companies
+    set monthly_revenue = v_revenue,
+        last_tick_at = v_now,
+        updated_at = v_now
+    where id = p_company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'sale', v_revenue,
+    'Prestations service ' || v_company.sector || ' (' || round(v_elapsed_h, 1) || 'h)');
+
+  return v_revenue;
+end;
+$$;

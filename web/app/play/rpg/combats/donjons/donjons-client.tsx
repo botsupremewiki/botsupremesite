@@ -98,75 +98,57 @@ export function DonjonsClient({
   async function fight(d: DungeonConfig) {
     setError(null);
     setResult(null);
-    if (hero.energy < d.energyCost) {
-      setError(`Énergie insuffisante (${hero.energy}/${d.energyCost}).`);
+    if (!supabase) return;
+
+    // ⚠️ Server-authoritative : on demande juste "j'attaque ce donjon",
+    // le serveur calcule l'outcome + les rewards.
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_attempt_dungeon",
+      { p_dungeon_id: d.id },
+    );
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const r = data as
+      | {
+          ok: true;
+          won: boolean;
+          os_gained?: number;
+          xp_gained?: number;
+          resources_gained?: { resource_id: string; count: number }[];
+          player_power?: number;
+          required_power?: number;
+        }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
       return;
     }
 
-    // Simulate combat client-side (engine pure-fonction).
+    // Simule un log côté client juste pour l'affichage (cosmétique).
     const playerTeam = buildPlayerTeam();
     const enemyTeam = buildEnemyTeam(d);
     const battle = simulateBattle(playerTeam, enemyTeam);
 
-    if (battle.winner !== "A") {
-      setResult({ winner: battle.winner, log: battle.log });
-      // Pas de reward, mais on consomme énergie
-      if (supabase) {
-        await supabase.rpc("eternum_consume_my_energy", {
-          p_amount: d.energyCost,
-        });
-      }
+    if (!r.won) {
+      setResult({
+        winner: "B",
+        log: battle.log,
+      });
+      router.refresh();
       return;
-    }
-
-    // Victoire — applique rewards.
-    const osReward =
-      d.rewards.osMin +
-      Math.floor(Math.random() * (d.rewards.osMax - d.rewards.osMin + 1));
-    const xpReward =
-      d.rewards.xpMin +
-      Math.floor(Math.random() * (d.rewards.xpMax - d.rewards.xpMin + 1));
-    const dropped: { resource_id: string; count: number }[] = [];
-    for (const r of d.rewards.resources) {
-      if (Math.random() < r.chance) {
-        const n = r.min + Math.floor(Math.random() * (r.max - r.min + 1));
-        dropped.push({ resource_id: r.id, count: n });
-      }
-    }
-
-    if (!supabase) {
-      setResult({ winner: battle.winner, log: battle.log });
-      return;
-    }
-
-    // Consomme énergie via RPC dédié + applique récompenses
-    const { data: energyOk } = await supabase.rpc(
-      "eternum_consume_my_energy",
-      { p_amount: d.energyCost },
-    );
-    void energyOk;
-
-    const { error: rpcErr } = await supabase.rpc(
-      "eternum_record_dungeon_win",
-      {
-        p_dungeon_id: d.id,
-        p_floor: 1,
-        p_os_reward: osReward,
-        p_xp_reward: xpReward,
-        p_resources: dropped,
-      },
-    );
-    if (rpcErr) {
-      setError(rpcErr.message);
     }
 
     setResult({
-      winner: battle.winner,
+      winner: "A",
       log: battle.log,
       rewards: {
-        os: osReward,
-        xp: xpReward,
-        resources: dropped.map((r) => `${r.count} × ${r.resource_id}`),
+        os: r.os_gained ?? 0,
+        xp: r.xp_gained ?? 0,
+        resources: (r.resources_gained ?? []).map(
+          (rs) => `${rs.count} × ${rs.resource_id}`,
+        ),
       },
     });
     router.refresh();

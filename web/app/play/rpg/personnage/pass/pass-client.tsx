@@ -41,6 +41,23 @@ export function PassClient({
     router.refresh();
   }
 
+  async function claimTier(tier: number) {
+    if (!supabase) return;
+    setError(null);
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_pass_claim_tier",
+      { p_tier: tier },
+    );
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const r = data as { ok: boolean; os_gained: number };
+    setPass({ ...pass, last_claimed_tier: tier });
+    setGold(gold + r.os_gained);
+    router.refresh();
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 overflow-hidden">
       <div className="shrink-0 rounded-xl border border-amber-400/40 bg-black/40 p-5">
@@ -92,13 +109,17 @@ export function PassClient({
         <div className="grid grid-cols-1 gap-1 p-3">
           {ETERNUM_PASS_REWARDS.map((rew) => {
             const reached = currentTier >= rew.tier;
+            const claimed = pass.last_claimed_tier >= rew.tier;
+            const canClaim = reached && !claimed;
             return (
               <div
                 key={rew.tier}
-                className={`flex items-center justify-between rounded border px-3 py-2 text-xs ${
-                  reached
-                    ? "border-amber-400/40 bg-amber-400/[0.04]"
-                    : "border-white/5 bg-white/[0.02] opacity-70"
+                className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-xs ${
+                  claimed
+                    ? "border-emerald-400/30 bg-emerald-400/[0.04]"
+                    : reached
+                      ? "border-amber-400/40 bg-amber-400/[0.04]"
+                      : "border-white/5 bg-white/[0.02] opacity-70"
                 }`}
               >
                 <span className="font-semibold">Tier {rew.tier}</span>
@@ -109,6 +130,19 @@ export function PassClient({
                   Premium : +{rew.premium?.os ?? 0} OS
                   {rew.premium?.resource ? ` + ${rew.premium.resource.count}× ${rew.premium.resource.id}` : ""}
                 </span>
+                <button
+                  onClick={() => claimTier(rew.tier)}
+                  disabled={!canClaim}
+                  className={`rounded-md px-2 py-1 text-[11px] font-bold ${
+                    claimed
+                      ? "bg-emerald-400/20 text-emerald-300"
+                      : canClaim
+                        ? "bg-amber-500 text-amber-950 hover:bg-amber-400"
+                        : "bg-white/10 text-zinc-500 cursor-not-allowed"
+                  }`}
+                >
+                  {claimed ? "✓" : canClaim ? "Claim" : "🔒"}
+                </button>
               </div>
             );
           })}

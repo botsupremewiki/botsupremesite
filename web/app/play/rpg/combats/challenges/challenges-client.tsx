@@ -118,43 +118,37 @@ export function ChallengesClient({
   async function fight(c: ChallengeConfig) {
     setError(null);
     setResult(null);
-    if (done.includes(c.id)) {
-      setError("Déjà complété cette semaine.");
-      return;
-    }
-
-    const built = buildPlayerTeam(c);
-    if (built.error) {
-      setError(built.error);
-      return;
-    }
-    const enemy = buildEnemy();
-    // Pour speed-run : cap 8 tours.
-    const maxT = c.id === "speed-run" ? 8 : 50;
-    const battle = simulateBattle(built.units, enemy, maxT);
-
-    // Pour no-ult : on simule différemment (engine ne supporte pas désactiver
-    // les ultimates dynamiquement, on suppose victoire si winner=A).
-    if (battle.winner !== "A") {
-      setResult({ challenge: c, winner: battle.winner, log: battle.log });
-      return;
-    }
-
     if (!supabase) return;
-    const { error: rpcErr } = await supabase.rpc("eternum_complete_challenge", {
-      p_challenge_id: c.id,
-      p_os_reward: c.rewardOs,
-      p_resources: c.rewardResources.map((r) => ({
-        resource_id: r.id,
-        count: r.count,
-      })),
-    });
+
+    // ⚠️ Server-authoritative — restrictions vérifiées server-side.
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_attempt_challenge",
+      { p_challenge_id: c.id },
+    );
     if (rpcErr) {
       setError(rpcErr.message);
       return;
     }
-    setDone([...done, c.id]);
-    setResult({ challenge: c, winner: battle.winner, log: battle.log });
+    const r = data as
+      | { ok: true; won: boolean }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+
+    // Log cosmétique : on simule juste pour le show.
+    const built = buildPlayerTeam(c);
+    const enemy = buildEnemy();
+    const maxT = c.id === "speed-run" ? 8 : 50;
+    const battle = simulateBattle(built.units, enemy, maxT);
+
+    if (r.won) setDone([...done, c.id]);
+    setResult({
+      challenge: c,
+      winner: r.won ? "A" : "B",
+      log: battle.log,
+    });
     router.refresh();
   }
 

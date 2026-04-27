@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ETERNUM_CLASSES,
   ETERNUM_ELEMENTS,
   ETERNUM_JOBS,
+  type EternumElementId,
   type EternumHero,
   eternumHeroStats,
   eternumXpForNextLevel,
 } from "@shared/types";
+import { createClient } from "@/lib/supabase/client";
 
 export function HeroSummary({ hero }: { hero: EternumHero }) {
   const cls = ETERNUM_CLASSES[hero.classId];
@@ -133,8 +137,8 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
         )}
       </Link>
 
-      {/* Quêtes / Pass / Bestiaire */}
-      <section className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      {/* Quêtes / Pass / Bestiaire / Prestige */}
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Link
           href="/play/rpg/personnage/quetes"
           className="flex items-center justify-between rounded-md border border-amber-400/30 bg-black/40 p-3 hover:bg-white/[0.04]"
@@ -143,7 +147,6 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
             <span className="text-xl">📜</span>
             <span className="text-sm text-amber-200">Quêtes</span>
           </span>
-          <span className="text-amber-300">→</span>
         </Link>
         <Link
           href="/play/rpg/personnage/pass"
@@ -151,9 +154,8 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
         >
           <span className="flex items-center gap-2">
             <span className="text-xl">🎟️</span>
-            <span className="text-sm text-amber-200">Pass Suprême</span>
+            <span className="text-sm text-amber-200">Pass</span>
           </span>
-          <span className="text-amber-300">→</span>
         </Link>
         <Link
           href="/play/rpg/personnage/bestiaire"
@@ -163,9 +165,29 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
             <span className="text-xl">📖</span>
             <span className="text-sm text-amber-200">Bestiaire</span>
           </span>
-          <span className="text-amber-300">→</span>
+        </Link>
+        <Link
+          href="/play/rpg/personnage/prestige"
+          className={`flex items-center justify-between rounded-md border p-3 ${
+            hero.level >= 100 && hero.evolutionStage >= 4
+              ? "border-fuchsia-400/40 bg-fuchsia-400/10 ring-1 ring-fuchsia-400/30 hover:bg-fuchsia-400/20"
+              : "border-white/10 bg-black/40 hover:bg-white/[0.04]"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-xl">✨</span>
+            <span className="text-sm text-fuchsia-200">Prestige</span>
+          </span>
+          {hero.prestigeCount > 0 && (
+            <span className="text-xs text-fuchsia-300">×{hero.prestigeCount}</span>
+          )}
         </Link>
       </section>
+
+      {/* Lumière/Ombre unlock — visible uniquement si éligible */}
+      {hero.evolutionStage >= 4 && hero.level >= 100 && (
+        <ElementSwitcher hero={hero} />
+      )}
     </div>
   );
 }
@@ -212,6 +234,60 @@ function SkillCard({
       <div className="text-sm font-semibold text-zinc-100">{name}</div>
       {text && <div className="mt-1 text-[11px] text-zinc-400">{text}</div>}
     </div>
+  );
+}
+
+function ElementSwitcher({ hero }: { hero: EternumHero }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+
+  async function changeTo(el: EternumElementId) {
+    const supabase = createClient();
+    if (!supabase) return;
+    setError(null);
+    const { error: rpcErr } = await supabase.rpc("eternum_change_element", {
+      p_new_element: el,
+    });
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <section className="rounded-xl border border-yellow-400/40 bg-yellow-400/[0.04] p-4">
+      <div className="text-[11px] uppercase tracking-widest text-yellow-300">
+        🌟 Élément débloqué
+      </div>
+      <div className="mt-1 text-xs text-zinc-400">
+        Niveau 100 + évolution 4 atteints. Tu peux switch vers Lumière /
+        Ombre librement (ou retour aux 4 éléments de base).
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {(["fire", "water", "wind", "earth", "light", "dark"] as EternumElementId[]).map((el) => {
+          const e = ETERNUM_ELEMENTS[el];
+          const active = hero.elementId === el;
+          return (
+            <button
+              key={el}
+              onClick={() => !active && changeTo(el)}
+              disabled={active}
+              className={`rounded-md border px-2 py-1 text-xs ${
+                active
+                  ? "border-yellow-400/60 bg-yellow-400/10 text-yellow-200 cursor-default"
+                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.07]"
+              }`}
+            >
+              {e.glyph} {e.name}
+            </button>
+          );
+        })}
+      </div>
+      {error && (
+        <div className="mt-2 text-xs text-rose-300">{error}</div>
+      )}
+    </section>
   );
 }
 

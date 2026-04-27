@@ -34,13 +34,25 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
     setError(null);
     setResult(null);
     setSelected(r);
+    if (!supabase) return;
 
-    if (hero.energy < r.energyCost) {
-      setError(`Énergie insuffisante (${hero.energy}/${r.energyCost}).`);
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_attempt_raid",
+      { p_raid_id: r.id },
+    );
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const res = data as
+      | { ok: true; won: boolean; os_gained?: number; xp_gained?: number }
+      | { ok: false; error: string };
+    if (!res.ok) {
+      setError(res.error);
       return;
     }
 
-    // Héros only en raid (la spec : pas de familiers).
+    // Log cosmétique
     const playerTeam = [
       buildHeroUnit(
         "hero",
@@ -64,26 +76,13 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
     ];
     const battle = simulateBattle(playerTeam, boss, 50);
 
-    if (!supabase) return;
-    await supabase.rpc("eternum_consume_my_energy", { p_amount: r.energyCost });
-
-    if (battle.winner === "A") {
-      // Apply rewards as a dungeon win (réutilise le RPC).
-      await supabase.rpc("eternum_record_dungeon_win", {
-        p_dungeon_id: `raid-${r.id}`,
-        p_floor: 1,
-        p_os_reward: r.rewardOs,
-        p_xp_reward: r.rewardXp,
-        p_resources: [],
-      });
-      setResult({
-        winner: battle.winner,
-        log: battle.log,
-        rewards: { os: r.rewardOs, xp: r.rewardXp },
-      });
-    } else {
-      setResult({ winner: battle.winner, log: battle.log });
-    }
+    setResult({
+      winner: res.won ? "A" : "B",
+      log: battle.log,
+      rewards: res.won
+        ? { os: res.os_gained ?? 0, xp: res.xp_gained ?? 0 }
+        : undefined,
+    });
     router.refresh();
   }
 

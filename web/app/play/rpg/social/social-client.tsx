@@ -187,8 +187,25 @@ function GuildView({
     if (!supabase) return;
     setError(null);
     setBossResult(null);
-    // Combat héros vs boss de guilde (scale par tier).
-    const tier = guildBoss?.boss_tier ?? 1;
+
+    // ⚠️ Server-authoritative — dmg calculé server-side.
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_attempt_guild_boss",
+    );
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const r = data as
+      | { ok: true; damage: number; hp_left: number; tier: number }
+      | { ok: false; error: string };
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+
+    // Log cosmétique
+    const tier = r.tier;
     const playerTeam = [
       buildHeroUnit(
         "hero",
@@ -208,8 +225,8 @@ function GuildView({
         classId: "warrior" as EternumClassId,
         element: "dark" as EternumElementId,
         level: 50 + tier * 10,
-        hp: guildBoss?.boss_hp_remaining ?? 50000,
-        hpMax: guildBoss?.boss_hp_remaining ?? 50000,
+        hp: 50000 * tier,
+        hpMax: 50000 * tier,
         atk: 80 * tier,
         def: 30 * tier,
         spd: 18,
@@ -220,20 +237,9 @@ function GuildView({
       },
     ];
     const battle = simulateBattle(playerTeam, boss, 30);
-    const damage = battle.log
-      .filter((l) => l.target === boss[0].name && l.damage)
-      .reduce((s, l) => s + (l.damage ?? 0), 0);
 
-    const { data, error: rpcErr } = await supabase.rpc("eternum_guild_boss_attack", {
-      p_damage: damage,
-    });
-    if (rpcErr) {
-      setError(rpcErr.message);
-      return;
-    }
-    const r = data as { ok: boolean; hp_left: number; tier: number };
-    setBossResult({ log: battle.log, damage, hpLeft: r.hp_left });
-    setOkMsg(`+${damage} dmg infligés au boss de guilde T${r.tier}`);
+    setBossResult({ log: battle.log, damage: r.damage, hpLeft: r.hp_left });
+    setOkMsg(`+${r.damage} dmg infligés au boss de guilde T${r.tier}`);
     router.refresh();
   }
 
