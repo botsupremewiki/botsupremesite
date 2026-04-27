@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signOut } from "@/app/actions/auth";
 import type { Profile } from "@/lib/auth";
 import { NotifBell } from "./notif-bell";
+import { useMetaBadges } from "./use-meta-badges";
 
 export function UserPill({
   profile,
@@ -15,6 +16,7 @@ export function UserPill({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const badges = useMetaBadges(true);
 
   useEffect(() => {
     if (!open) return;
@@ -25,6 +27,9 @@ export function UserPill({
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  // Combined badge on the trigger : true if any sub-section has a "1".
+  const hasAnyBadge = badges.dailyClaimable || badges.friendPending > 0;
+
   return (
     <div className="flex items-center gap-2">
       <NotifBell />
@@ -32,19 +37,22 @@ export function UserPill({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1 pl-1 pr-3 text-sm text-zinc-100 transition-colors hover:bg-white/10"
+          className="relative flex items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1 pl-1 pr-3 text-sm text-zinc-100 transition-colors hover:bg-white/10"
         >
           <Avatar url={profile.avatar_url} name={profile.username} />
           <span className="font-medium">{profile.username}</span>
           <GoldBadge gold={profile.gold} />
+          {hasAnyBadge && (
+            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-zinc-900" />
+          )}
         </button>
 
         {open && (
           <div
             className={
               variant === "play"
-                ? "absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl shadow-black/40 backdrop-blur-md"
-                : "absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl shadow-black/40 backdrop-blur-md"
+                ? "absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl shadow-black/40 backdrop-blur-md"
+                : "absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl shadow-black/40 backdrop-blur-md"
             }
           >
             <div className="border-b border-white/5 p-3">
@@ -53,27 +61,41 @@ export function UserPill({
                 {profile.username}
               </div>
             </div>
+
             <div className="p-1">
-              <Link
+              <MenuItem
                 href="/play/profil"
                 onClick={() => setOpen(false)}
-                className="block rounded-md px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/5"
-              >
-                🏆 Profil & achievements
-              </Link>
-              <Link
-                href="/play/personnaliser"
+                icon="👤"
+                label="Profil"
+                hint="Stats, avatar, cosmétiques"
+              />
+              <MenuItem
+                href="/play/objectifs"
                 onClick={() => setOpen(false)}
-                className="block rounded-md px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/5"
-              >
-                🎨 Personnaliser l&apos;avatar
-              </Link>
+                icon="🎯"
+                label="Objectifs"
+                hint="Récompenses, quêtes, achievements"
+                badge={badges.dailyClaimable ? 1 : 0}
+              />
+              <MenuItem
+                href="/play/amis"
+                onClick={() => setOpen(false)}
+                icon="👥"
+                label="Amis"
+                hint="Liste, demandes, ajouter"
+                badge={badges.friendPending}
+              />
+
+              <div className="my-1 h-px bg-white/5" />
+
               <form action={signOut}>
                 <button
                   type="submit"
-                  className="block w-full rounded-md px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/5"
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-zinc-400 transition-colors hover:bg-rose-500/10 hover:text-rose-200"
                 >
-                  Se déconnecter
+                  <span className="text-base">🚪</span>
+                  <span>Se déconnecter</span>
                 </button>
               </form>
             </div>
@@ -81,6 +103,47 @@ export function UserPill({
         )}
       </div>
     </div>
+  );
+}
+
+function MenuItem({
+  href,
+  onClick,
+  icon,
+  label,
+  hint,
+  badge = 0,
+}: {
+  href: string;
+  onClick: () => void;
+  icon: string;
+  label: string;
+  hint?: string;
+  badge?: number;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="flex items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-white/5"
+    >
+      <span className="flex items-center gap-3">
+        <span className="text-base">{icon}</span>
+        <span className="flex flex-col">
+          <span className="font-medium leading-tight">{label}</span>
+          {hint && (
+            <span className="text-[10px] leading-tight text-zinc-500">
+              {hint}
+            </span>
+          )}
+        </span>
+      </span>
+      {badge > 0 && (
+        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white shadow">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
+    </Link>
   );
 }
 

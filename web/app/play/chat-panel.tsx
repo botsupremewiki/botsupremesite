@@ -9,6 +9,7 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ChatMessage } from "@shared/types";
+import { UserMention } from "@/components/user-mention";
 
 export type ChatTabId = "proximity" | "zone" | "global" | "dms";
 
@@ -171,6 +172,7 @@ export function ChatPanel({
                   return (
                     <button
                       key={id}
+                      data-chat-tab={id}
                       onClick={() => !disabled && setActive(id)}
                       disabled={disabled}
                       title={ch.disabledReason ?? ""}
@@ -256,9 +258,13 @@ export function ChatPanel({
                                 [ADMIN]
                               </span>
                             )}
-                            <span className="font-semibold text-indigo-300">
-                              {m.playerName}
-                            </span>
+                            <UserMention
+                              name={m.playerName}
+                              isSelf={
+                                currentUser?.username === m.playerName
+                              }
+                              isAdmin={!!showAdmin}
+                            />
                             <span className="text-zinc-500"> : </span>
                             <span className="text-zinc-100">{m.text}</span>
                           </motion.div>
