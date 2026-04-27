@@ -137,8 +137,17 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
         )}
       </Link>
 
-      {/* Quêtes / Pass / Bestiaire / Prestige */}
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* Quêtes / Pass / Bestiaire / Prestige / Équipement */}
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <Link
+          href="/play/rpg/personnage/equipement"
+          className="flex items-center justify-between rounded-md border border-amber-400/30 bg-black/40 p-3 hover:bg-white/[0.04]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-xl">⚒️</span>
+            <span className="text-sm text-amber-200">Équipement</span>
+          </span>
+        </Link>
         <Link
           href="/play/rpg/personnage/quetes"
           className="flex items-center justify-between rounded-md border border-amber-400/30 bg-black/40 p-3 hover:bg-white/[0.04]"

@@ -45,7 +45,25 @@ export default async function SocialPage() {
   let friends: Friend[] = [];
   let requests: FriendRequest[] = [];
 
+  // Mes familiers (pour le picker de prêt aux amis).
+  type FamilierForLend = {
+    id: string;
+    familier_id: string;
+    element_id: string;
+    level: number;
+    star: number;
+    team_slot: number | null;
+  };
+  let myFamiliers: FamilierForLend[] = [];
+
   if (supabase) {
+    const famRes = await supabase
+      .from("eternum_familiers_owned")
+      .select("id,familier_id,element_id,level,star,team_slot")
+      .eq("user_id", profile.id)
+      .order("level", { ascending: false });
+    myFamiliers = (famRes.data ?? []) as FamilierForLend[];
+
     const memRes = await supabase
       .from("eternum_guild_members")
       .select("guild_id,role")
@@ -105,6 +123,7 @@ export default async function SocialPage() {
           friends={friends}
           requests={requests}
           hero={hero!}
+          myFamiliers={myFamiliers}
         />
       </main>
     </div>

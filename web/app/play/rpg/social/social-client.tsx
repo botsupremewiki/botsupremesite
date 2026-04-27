@@ -14,10 +14,23 @@ import {
   simulateBattle,
   type CombatLog,
 } from "@shared/eternum-combat";
+import {
+  ETERNUM_FAMILIERS_BY_ID,
+  RARITY_ACCENT,
+} from "@shared/eternum-familiers";
 import { createClient } from "@/lib/supabase/client";
 import type { Friend, FriendRequest, Guild, GuildBoss } from "./page";
 
 type Tab = "guild" | "friends";
+
+type FamilierForLend = {
+  id: string;
+  familier_id: string;
+  element_id: string;
+  level: number;
+  star: number;
+  team_slot: number | null;
+};
 
 export function SocialClient({
   myGuild,
@@ -27,6 +40,7 @@ export function SocialClient({
   friends,
   requests,
   hero,
+  myFamiliers,
 }: {
   myGuild: Guild | null;
   allGuilds: Guild[];
@@ -35,6 +49,7 @@ export function SocialClient({
   friends: Friend[];
   requests: FriendRequest[];
   hero: EternumHero;
+  myFamiliers: FamilierForLend[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("guild");
@@ -88,6 +103,7 @@ export function SocialClient({
           <FriendsView
             friends={friends}
             requests={requests}
+            myFamiliers={myFamiliers}
             supabase={supabase}
             setError={setError}
             setOkMsg={setOkMsg}
@@ -392,6 +408,7 @@ function GuildView({
 function FriendsView({
   friends,
   requests,
+  myFamiliers,
   supabase,
   setError,
   setOkMsg,
@@ -399,6 +416,7 @@ function FriendsView({
 }: {
   friends: Friend[];
   requests: FriendRequest[];
+  myFamiliers: FamilierForLend[];
   supabase: ReturnType<typeof createClient>;
   setError: (s: string | null) => void;
   setOkMsg: (s: string | null) => void;
@@ -406,6 +424,23 @@ function FriendsView({
 }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<{ id: string; username: string }[]>([]);
+  const [lendingTo, setLendingTo] = useState<Friend | null>(null);
+
+  async function lend(friend: Friend, familierOwnedId: string) {
+    if (!supabase) return;
+    setError(null);
+    const { error: rpcErr } = await supabase.rpc("eternum_lend_familier", {
+      p_borrower_id: friend.friend_id,
+      p_familier_owned_id: familierOwnedId,
+    });
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    setOkMsg(`Familier prêté à ${friend.username}`);
+    setLendingTo(null);
+    router.refresh();
+  }
 
   async function searchUsers() {
     if (!supabase || search.trim().length < 2) return;
@@ -537,15 +572,103 @@ function FriendsView({
                     {cls?.glyph ?? "❓"} {elt?.glyph ?? ""} <strong>{f.username}</strong>{" "}
                     {f.level && <span className="text-zinc-500">— niv {f.level}</span>}
                   </span>
-                  <span className="text-[10px] text-zinc-500">
-                    Prêt familier 1×/jour · à venir
-                  </span>
+                  <button
+                    onClick={() => setLendingTo(f)}
+                    className="rounded-md bg-amber-500/20 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/30"
+                  >
+                    🤝 Prêter
+                  </button>
                 </div>
               );
             })}
           </div>
         )}
       </section>
+
+      {/* Picker modal de prêt de familier */}
+      {lendingTo && (
+        <LendPicker
+          friend={lendingTo}
+          myFamiliers={myFamiliers}
+          onClose={() => setLendingTo(null)}
+          onPick={(famOwnedId) => lend(lendingTo, famOwnedId)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LendPicker({
+  friend,
+  myFamiliers,
+  onClose,
+  onPick,
+}: {
+  friend: Friend;
+  myFamiliers: FamilierForLend[];
+  onClose: () => void;
+  onPick: (famOwnedId: string) => void;
+}) {
+  // On ne peut pas prêter un familier déjà dans l'équipe active
+  const lendable = myFamiliers.filter((f) => f.team_slot === null);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl rounded-xl border border-amber-400/40 bg-zinc-950 p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-base font-bold text-amber-200">
+              🤝 Prêter un familier à {friend.username}
+            </div>
+            <div className="text-[11px] text-zinc-400">
+              Le familier sera inutilisable pour toi pendant 24 h. 1 prêt par
+              jour par familier.
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md bg-white/5 px-2 py-1 text-xs text-zinc-300 hover:bg-white/10"
+          >
+            ✕
+          </button>
+        </div>
+
+        {lendable.length === 0 ? (
+          <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-xs text-zinc-500">
+            Aucun familier prêtable. Retire-le de ton équipe d&apos;abord.
+          </div>
+        ) : (
+          <div className="grid max-h-[60vh] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+            {lendable.map((fam) => {
+              const def = ETERNUM_FAMILIERS_BY_ID.get(fam.familier_id);
+              const accent = def
+                ? RARITY_ACCENT[def.rarity]
+                : "border-white/10 text-zinc-300";
+              return (
+                <button
+                  key={fam.id}
+                  onClick={() => onPick(fam.id)}
+                  className={`flex flex-col items-start rounded-md border bg-white/[0.03] p-2 text-left text-xs transition-colors hover:bg-white/[0.07] ${accent}`}
+                >
+                  <span className="text-2xl">{def?.glyph ?? "🐾"}</span>
+                  <span className="font-semibold">
+                    {def?.name ?? fam.familier_id}
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    Niv {fam.level} · {"⭐".repeat(fam.star)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
