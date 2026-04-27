@@ -1,6 +1,6 @@
--- Decks de TCG (Pokémon Gen 1 pour l'instant). Les RPCs valident les
--- contraintes côté DB pour qu'aucun client malicieux ne puisse stocker
--- un deck illégal (≠ 60 cartes, > 4 doublons d'un non-énergie).
+-- Decks de TCG (Pokémon Pocket — règles allégées : deck 20 cartes, max 2
+-- copies de la même carte). Les RPCs valident côté DB pour qu'aucun client
+-- malicieux ne puisse stocker un deck illégal.
 
 create table if not exists public.tcg_decks (
   id uuid primary key default gen_random_uuid(),
@@ -29,9 +29,9 @@ create policy "tcg_decks_read_own"
 
 -- ───────────────────── Save deck ─────────────────────
 -- p_id = NULL → création; sinon update du deck si l'utilisateur en est
--- propriétaire.  Vérifie aussi les contraintes officielles :
---   • exactement 60 cartes au total
---   • max 4 copies d'une même carte non-énergie de base
+-- propriétaire.  Vérifie aussi les contraintes Pocket :
+--   • exactement 20 cartes au total
+--   • max 2 copies d'une même carte
 --   • toutes les card_id existent côté client (pas vérifié ici)
 create or replace function public.save_tcg_deck(
   p_user_id uuid,
@@ -62,19 +62,19 @@ begin
   select coalesce(sum((c->>'count')::int), 0)
   into total_count
   from jsonb_array_elements(p_cards) as c;
-  if total_count <> 60 then
-    raise exception 'Le deck doit contenir exactement 60 cartes (actuellement %)', total_count;
+  if total_count <> 20 then
+    raise exception 'Le deck doit contenir exactement 20 cartes (actuellement %)', total_count;
   end if;
 
-  -- Max copies of any single non-basic-energy card. The client passes a
-  -- card_id like "g1-energy-fire" for energies — we recognise them by the
-  -- "energy" substring in the id and let them through unbounded.
+  -- Pocket : pas plus de 2 copies de la même carte, énergies incluses
+  -- (les énergies sont générées automatiquement chaque tour, pas dans le
+  -- deck — mais on reste strict au cas où le client pousserait n'importe
+  -- quoi).
   select coalesce(max((c->>'count')::int), 0)
   into max_dupes
-  from jsonb_array_elements(p_cards) as c
-  where (c->>'card_id') not like '%energy%';
-  if max_dupes > 4 then
-    raise exception 'Pas plus de 4 copies par carte non-énergie (actuellement %)', max_dupes;
+  from jsonb_array_elements(p_cards) as c;
+  if max_dupes > 2 then
+    raise exception 'Pas plus de 2 copies par carte (actuellement %)', max_dupes;
   end if;
 
   if p_id is null then

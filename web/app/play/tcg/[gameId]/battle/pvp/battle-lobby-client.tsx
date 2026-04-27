@@ -10,7 +10,7 @@ import type {
   TcgGameId,
   TcgServerMessage,
 } from "@shared/types";
-import { TCG_GAMES } from "@shared/types";
+import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
@@ -230,7 +230,7 @@ export function BattleLobbyClient({
                   <div className="flex flex-col gap-1.5">
                     {decks.map((deck) => {
                       const total = deck.cards.reduce((s, c) => s + c.count, 0);
-                      const valid = total === 60;
+                      const valid = total === BATTLE_CONFIG.deckSize;
                       const isSelected = selectedDeckId === deck.id;
                       return (
                         <button
@@ -251,7 +251,7 @@ export function BattleLobbyClient({
                               valid ? "text-emerald-300" : "text-rose-400"
                             }`}
                           >
-                            {total}/60
+                            {total}/{BATTLE_CONFIG.deckSize}
                           </span>
                         </button>
                       );

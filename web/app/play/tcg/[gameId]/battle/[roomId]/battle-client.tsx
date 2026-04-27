@@ -1020,7 +1020,6 @@ function HandCard({
   onSetActive,
   onAddBench,
   onPlayBench,
-  onAttachEnergy,
   onEvolve,
   onHover,
 }: {
@@ -1028,7 +1027,6 @@ function HandCard({
   onSetActive?: () => void;
   onAddBench?: () => void;
   onPlayBench?: () => void;
-  onAttachEnergy?: () => void;
   onEvolve?: () => void;
   onHover?: (cardId: string | null) => void;
 }) {
@@ -1036,8 +1034,7 @@ function HandCard({
   const bg = isEnergyCard
     ? TYPE_BG[data.energyType]
     : TYPE_BG[data.type] ?? TYPE_BG.colorless;
-  const hasAction =
-    onSetActive || onAddBench || onPlayBench || onAttachEnergy || onEvolve;
+  const hasAction = onSetActive || onAddBench || onPlayBench || onEvolve;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -1083,15 +1080,6 @@ function HandCard({
               title="Poser au Banc"
             >
               ↓
-            </button>
-          )}
-          {onAttachEnergy && (
-            <button
-              onClick={onAttachEnergy}
-              className="rounded bg-sky-500 px-1 py-0.5 text-[8px] font-bold text-sky-950 hover:bg-sky-400"
-              title="Attacher cette Énergie"
-            >
-              ⚡
             </button>
           )}
           {onEvolve && (

@@ -512,7 +512,7 @@ export default class BattleServer implements Party.Server {
     const seat = this.seats[seatId];
     if (!seat || seat.hasSetup) return;
     if (seat.bench.length >= MAX_BENCH) {
-      this.sendErrorToSeat(seatId, "Banc complet (5 max).");
+      this.sendErrorToSeat(seatId, `Banc complet (${MAX_BENCH} max).`);
       return;
     }
     const card = seat.hand[handIndex];
@@ -572,7 +572,7 @@ export default class BattleServer implements Party.Server {
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     if (seat.bench.length >= MAX_BENCH) {
-      this.sendErrorToSeat(seatId, "Banc complet (5 max).");
+      this.sendErrorToSeat(seatId, `Banc complet (${MAX_BENCH} max).`);
       return;
     }
     const card = seat.hand[handIndex];
@@ -1174,7 +1174,7 @@ export default class BattleServer implements Party.Server {
         );
         const data = getCard(s.active.cardId);
         if (data?.kind === "pokemon" && s.active.damage >= data.hp) {
-          // KO inter-tours — l'autre joueur prend une prize.
+          // KO inter-tours — l'adversaire incrémente son koCount (Pocket).
           const otherId: BattleSeatId = sId === "p1" ? "p2" : "p1";
           this.knockOut(otherId, sId);
           if (this.phase === "ended") {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TcgDeck, TcgGameId, TcgServerMessage } from "@shared/types";
-import { TCG_GAMES } from "@shared/types";
+import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
@@ -80,7 +80,9 @@ export function BotLobbyClient({
   const validDecks = useMemo(
     () =>
       decks.filter(
-        (d) => d.cards.reduce((s, c) => s + c.count, 0) === 20,
+        (d) =>
+          d.cards.reduce((s, c) => s + c.count, 0) ===
+          BATTLE_CONFIG.deckSize,
       ),
     [decks],
   );
@@ -162,7 +164,7 @@ export function BotLobbyClient({
                         (s, c) => s + c.count,
                         0,
                       );
-                      const valid = total === 20;
+                      const valid = total === BATTLE_CONFIG.deckSize;
                       const isSelected = selectedDeckId === deck.id;
                       return (
                         <button
@@ -183,7 +185,7 @@ export function BotLobbyClient({
                               valid ? "text-emerald-300" : "text-rose-400"
                             }`}
                           >
-                            {total}/60
+                            {total}/{BATTLE_CONFIG.deckSize}
                           </span>
                         </button>
                       );
