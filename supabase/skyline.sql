@@ -3319,7 +3319,7 @@ begin
   end if;
 
   if p_total_shares <= 0 or p_keep_pct < 30 or p_keep_pct > 90 then
-    raise exception 'Paramètres invalides (actions > 0, garde 30-90%)';
+    raise exception 'Paramètres invalides (actions > 0, garde 30-90%%)';
   end if;
 
   v_valuation := public.skyline_company_valuation(p_company_id);
