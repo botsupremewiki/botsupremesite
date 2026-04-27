@@ -8,6 +8,28 @@ import { SocialClient } from "./social-client";
 
 export const dynamic = "force-dynamic";
 
+export type Guild = {
+  id: string;
+  name: string;
+  tag: string;
+  level: number;
+  bank_gold: number;
+};
+export type GuildBoss = {
+  guild_id: string;
+  boss_tier: number;
+  boss_hp_remaining: number;
+  reset_at: string;
+};
+export type Friend = {
+  friend_id: string;
+  username: string;
+  class_id: string | null;
+  element_id: string | null;
+  level: number | null;
+};
+export type FriendRequest = { requester_id: string; username: string };
+
 export default async function SocialPage() {
   const profile = await getProfile();
   if (!profile) return <p className="p-6 text-zinc-400">Connecte-toi.</p>;
@@ -15,11 +37,14 @@ export default async function SocialPage() {
   if (!hero) redirect("/play/rpg/personnage");
 
   const supabase = await createClient();
-  type Guild = { id: string; name: string; tag: string; level: number; bank_gold: number };
-  type Membership = { guild_id: string; role: string };
   let myGuild: Guild | null = null;
   let allGuilds: Guild[] = [];
+  type Membership = { guild_id: string; role: string };
   let myMembership: Membership | null = null;
+  let guildBoss: GuildBoss | null = null;
+  let friends: Friend[] = [];
+  let requests: FriendRequest[] = [];
+
   if (supabase) {
     const memRes = await supabase
       .from("eternum_guild_members")
@@ -27,20 +52,36 @@ export default async function SocialPage() {
       .eq("user_id", profile.id)
       .maybeSingle();
     myMembership = (memRes.data as Membership | null) ?? null;
+
     if (myMembership) {
-      const gRes = await supabase
+      const [gRes, bossRes] = await Promise.all([
+        supabase
+          .from("eternum_guilds")
+          .select("id,name,tag,level,bank_gold")
+          .eq("id", myMembership.guild_id)
+          .maybeSingle(),
+        supabase
+          .from("eternum_guild_boss_state")
+          .select("guild_id,boss_tier,boss_hp_remaining,reset_at")
+          .eq("guild_id", myMembership.guild_id)
+          .maybeSingle(),
+      ]);
+      myGuild = (gRes.data as Guild | null) ?? null;
+      guildBoss = (bossRes.data as GuildBoss | null) ?? null;
+    }
+
+    const [allRes, frRes, reqRes] = await Promise.all([
+      supabase
         .from("eternum_guilds")
         .select("id,name,tag,level,bank_gold")
-        .eq("id", myMembership.guild_id)
-        .maybeSingle();
-      myGuild = (gRes.data as Guild | null) ?? null;
-    }
-    const allRes = await supabase
-      .from("eternum_guilds")
-      .select("id,name,tag,level,bank_gold")
-      .order("level", { ascending: false })
-      .limit(20);
-    allGuilds = (allRes.data ?? []) as typeof allGuilds;
+        .order("level", { ascending: false })
+        .limit(20),
+      supabase.rpc("eternum_get_friends"),
+      supabase.rpc("eternum_get_friend_requests"),
+    ]);
+    allGuilds = (allRes.data ?? []) as Guild[];
+    friends = (frRes.data ?? []) as Friend[];
+    requests = (reqRes.data ?? []) as FriendRequest[];
   }
 
   return (
@@ -56,7 +97,15 @@ export default async function SocialPage() {
         <UserPill profile={profile} variant="play" />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden p-6">
-        <SocialClient myGuild={myGuild} allGuilds={allGuilds} hasGuild={!!myMembership} />
+        <SocialClient
+          myGuild={myGuild}
+          allGuilds={allGuilds}
+          hasGuild={!!myMembership}
+          guildBoss={guildBoss}
+          friends={friends}
+          requests={requests}
+          hero={hero!}
+        />
       </main>
     </div>
   );

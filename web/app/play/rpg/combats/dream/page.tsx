@@ -1,12 +1,32 @@
 import Link from "next/link";
-import { ETERNUM_DREAMS } from "@shared/eternum-content";
+import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
+import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import { DreamClient } from "./dream-client";
+import type { OwnedFamilier } from "../../familiers/page";
 
 export const dynamic = "force-dynamic";
 
 export default async function DreamPage() {
   const profile = await getProfile();
+  if (!profile) return <p className="p-6 text-zinc-400">Connecte-toi.</p>;
+  const hero = await fetchEternumHero(profile.id);
+  if (!hero) redirect("/play/rpg/personnage");
+
+  const supabase = await createClient();
+  let team: OwnedFamilier[] = [];
+  if (supabase) {
+    const { data } = await supabase
+      .from("eternum_familiers_owned")
+      .select("id,familier_id,element_id,level,xp,star,team_slot,in_auberge,acquired_at")
+      .eq("user_id", profile.id)
+      .not("team_slot", "is", null)
+      .order("team_slot");
+    team = (data ?? []) as OwnedFamilier[];
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
@@ -17,43 +37,10 @@ export default async function DreamPage() {
           <div className="h-4 w-px bg-white/10" />
           <span className="font-semibold text-indigo-200">🌑 Mode Rêve</span>
         </div>
-        {profile && <UserPill profile={profile} variant="play" />}
+        <UserPill profile={profile} variant="play" />
       </header>
-      <main className="flex flex-1 flex-col overflow-y-auto p-6">
-        <div className="mx-auto w-full max-w-4xl">
-          <div className="mb-4 text-sm text-zinc-400">
-            Mode hardcore qui drop des shards d&apos;évolution familiers.
-            Combat fonctionnel via P10 (système de shards).
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {ETERNUM_DREAMS.map((d) => (
-              <div
-                key={d.id}
-                className="rounded-xl border border-indigo-400/30 bg-black/40 p-4"
-              >
-                <div className="text-3xl">{d.glyph}</div>
-                <div className="mt-1 text-base font-bold text-indigo-200">{d.name}</div>
-                <div className="mt-1 text-[11px] text-zinc-400">
-                  Niv recommandé : {d.recommendedLevel} · ⚡ {d.energyCost}
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-400">{d.description}</div>
-                <div className="mt-2 rounded bg-white/5 p-2 text-[10px] text-amber-200">
-                  Drops shards :{" "}
-                  {Object.entries(d.shardsByRarity)
-                    .map(([r, c]) => `${r} ${Math.round(c * 100)}%`)
-                    .join(" · ")}
-                </div>
-                <button
-                  disabled
-                  className="mt-2 w-full rounded-md bg-white/10 px-3 py-2 text-xs text-zinc-400 disabled:cursor-not-allowed"
-                  title="Activé après lancement de la migration P10"
-                >
-                  Combattre (P10 — système shards)
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+      <main className="flex flex-1 flex-col overflow-hidden p-6">
+        <DreamClient hero={hero!} team={team} />
       </main>
     </div>
   );

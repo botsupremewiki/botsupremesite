@@ -15,6 +15,10 @@ import {
 } from "@shared/eternum-combat";
 import { createClient } from "@/lib/supabase/client";
 
+function generateRoomId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 export function RaidsClient({ hero }: { hero: EternumHero }) {
   const router = useRouter();
   const [result, setResult] = useState<{
@@ -112,13 +116,22 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
               Reward : {r.rewardOs.toLocaleString("fr-FR")} OS + {r.rewardXp} XP
             </div>
             <div className="text-[10px] text-zinc-500">⚡ {r.energyCost}</div>
-            <button
-              onClick={() => fight(r)}
-              disabled={hero.energy < r.energyCost}
-              className="mt-1 rounded-md bg-emerald-500 px-3 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-40"
-            >
-              ⚔️ Affronter
-            </button>
+            <div className="flex gap-1">
+              <button
+                onClick={() => fight(r)}
+                disabled={hero.energy < r.energyCost}
+                className="flex-1 rounded-md bg-emerald-500 px-3 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-40"
+              >
+                ⚔️ Solo
+              </button>
+              <button
+                onClick={() => router.push(`/play/rpg/combats/raids/coop/raid-${r.id}-${generateRoomId()}?raid=${r.id}`)}
+                className="flex-1 rounded-md border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-500/20"
+                title="Crée une room coop. Partage l'URL avec tes amis."
+              >
+                🤝 Coop
+              </button>
+            </div>
           </div>
         ))}
       </div>

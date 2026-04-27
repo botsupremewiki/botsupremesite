@@ -12,6 +12,7 @@
     "tcg": "src/tcg.ts",
     "battlelobby": "src/battle-lobby.ts",
     "battle": "src/battle.ts",
+    "eternumraid": "src/eternum-raid.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",
     "dm": "src/dm.ts"

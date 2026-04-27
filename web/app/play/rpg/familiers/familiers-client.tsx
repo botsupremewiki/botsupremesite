@@ -165,6 +165,32 @@ export function FamiliersClient({
     );
   }
 
+  async function evolveFamilier(ownedId: string) {
+    if (!supabase) return;
+    setError(null);
+    setOkMsg(null);
+    const { data, error: rpcErr } = await supabase.rpc(
+      "eternum_evolve_familier",
+      { p_owned_id: ownedId },
+    );
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    const r = data as { ok: boolean; error?: string; new_star?: number };
+    if (!r.ok) {
+      setError(r.error ?? "Évolution échouée.");
+      return;
+    }
+    setOwned((prev) =>
+      prev.map((f) =>
+        f.id === ownedId ? { ...f, star: r.new_star! } : f,
+      ),
+    );
+    setOkMsg(`✨ Évolué à ⭐${r.new_star}`);
+    router.refresh();
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-hidden">
       {/* Header gold + tabs */}
@@ -229,6 +255,7 @@ export function FamiliersClient({
             setFilterElement={setFilterElement}
             onSetSlot={setSlot}
             onToggleAuberge={toggleAuberge}
+            onEvolve={evolveFamilier}
           />
         )}
         {tab === "team" && (
@@ -293,6 +320,7 @@ function CollectionView({
   setFilterElement,
   onSetSlot,
   onToggleAuberge,
+  onEvolve,
 }: {
   owned: OwnedFamilier[];
   allOwned: OwnedFamilier[];
@@ -304,6 +332,7 @@ function CollectionView({
   setFilterElement: (e: EternumElementId | null) => void;
   onSetSlot: (id: string, slot: number) => void;
   onToggleAuberge: (id: string, current: boolean) => void;
+  onEvolve: (id: string) => void;
 }) {
   void allOwned;
   return (
@@ -367,6 +396,7 @@ function CollectionView({
               owned={o}
               onSetSlot={onSetSlot}
               onToggleAuberge={onToggleAuberge}
+              onEvolve={onEvolve}
             />
           ))}
         </div>
@@ -379,10 +409,12 @@ function FamilierCard({
   owned,
   onSetSlot,
   onToggleAuberge,
+  onEvolve,
 }: {
   owned: OwnedFamilier;
   onSetSlot: (id: string, slot: number) => void;
   onToggleAuberge: (id: string, current: boolean) => void;
+  onEvolve: (id: string) => void;
 }) {
   const base = ETERNUM_FAMILIERS_BY_ID.get(owned.familier_id);
   if (!base) return null;
@@ -436,6 +468,17 @@ function FamilierCard({
             }`}
           >
             {owned.in_auberge ? "🍺 Sortir" : "🍺 Auberge"}
+          </button>
+        )}
+        {owned.star < 6 && (
+          <button
+            onClick={() => onEvolve(owned.id)}
+            className="rounded bg-fuchsia-500/20 px-1.5 py-0.5 text-[9px] text-fuchsia-200 hover:bg-fuchsia-500/40"
+            title={`Évolution requiert des shards (${
+              base.rarity === "common" ? 5 : base.rarity === "rare" ? 10 : base.rarity === "epic" ? 20 : base.rarity === "legendary" ? 50 : 100
+            } shard-${base.rarity})`}
+          >
+            ✨ +1⭐
           </button>
         )}
       </div>
