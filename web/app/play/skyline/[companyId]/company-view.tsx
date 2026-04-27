@@ -38,14 +38,20 @@ import {
 } from "@shared/skyline";
 import {
   acquirePermitAction,
+  btpCompleteProjectAction,
+  btpStartProjectAction,
   buyFurnitureAction,
   buyMachineAction,
   buyRawMachineAction,
   buyServiceEquipmentAction,
+  casinoAddVipAction,
+  casinoSetRtpAction,
   cleanCompanyAction,
+  closeRouteAction,
   fireEmployeeAction,
   ipoCompanyAction,
   listCompanyForSaleAction,
+  openRouteAction,
   payDividendAction,
   pharmaCompleteResearchAction,
   pharmaSellAction,
@@ -60,13 +66,22 @@ import {
   unlistCompanyAction,
 } from "../_lib/actions";
 import {
+  SKYLINE_AIRLINE_ROUTES,
+  SKYLINE_BTP_PROJECTS,
+  SKYLINE_CASINO_VIP_ROOMS,
   SKYLINE_PHARMA_MOLECULES,
   SKYLINE_SERVICE_SECTORS,
+  type SkylineAirlineRouteRow,
+  type SkylineBtpProjectKind,
+  type SkylineBtpProjectRow,
+  type SkylineCasinoConfigRow,
+  type SkylineCasinoVipKind,
   type SkylineCompanyForSaleRow,
   type SkylinePharmaMolecule,
   type SkylinePharmaPatentRow,
   type SkylinePharmaResearchRow,
   type SkylineRestaurantStarsRow,
+  type SkylineRouteKind,
   type SkylineSaasProductRow,
   type SkylineServiceSector,
 } from "@shared/skyline";
@@ -90,7 +105,10 @@ type Tab =
   | "pharma"
   | "saas"
   | "stars"
-  | "sell";
+  | "sell"
+  | "btp"
+  | "casino_cfg"
+  | "airline";
 
 type ShareInfo = {
   id: string;
@@ -116,6 +134,9 @@ export function CompanyView({
   saasProducts,
   restauStars,
   listing,
+  btpProjects,
+  casinoConfig,
+  airlineRoutes,
   cash,
 }: {
   company: SkylineCompanyRow;
@@ -131,6 +152,9 @@ export function CompanyView({
   saasProducts: SkylineSaasProductRow[];
   restauStars: SkylineRestaurantStarsRow | null;
   listing: SkylineCompanyForSaleRow | null;
+  btpProjects: SkylineBtpProjectRow[];
+  casinoConfig: SkylineCasinoConfigRow | null;
+  airlineRoutes: SkylineAirlineRouteRow[];
   cash: number;
 }) {
   const isFactory = company.category === "factory";
@@ -146,6 +170,9 @@ export function CompanyView({
     "fast_food",
     "cafe_bar",
   ].includes(company.sector);
+  const isBtpSector = company.sector === "btp_construction";
+  const isCasinoSector = company.sector === "casino";
+  const isAerienSector = company.sector === "aerien";
   const [tab, setTab] = useState<Tab>(
     isFactory
       ? "production"
@@ -309,6 +336,21 @@ export function CompanyView({
               ⭐ Guide Skyline
             </TabButton>
           ) : null}
+          {isBtpSector ? (
+            <TabButton current={tab} value="btp" onClick={setTab}>
+              🏗️ Chantiers
+            </TabButton>
+          ) : null}
+          {isCasinoSector ? (
+            <TabButton current={tab} value="casino_cfg" onClick={setTab}>
+              🎰 RTP & VIP
+            </TabButton>
+          ) : null}
+          {isAerienSector ? (
+            <TabButton current={tab} value="airline" onClick={setTab}>
+              ✈️ Lignes
+            </TabButton>
+          ) : null}
           <TabButton current={tab} value="bourse" onClick={setTab}>
             📈 Bourse
           </TabButton>
@@ -424,6 +466,27 @@ export function CompanyView({
           />
         ) : null}
         {tab === "stars" ? <StarsTab stars={restauStars} /> : null}
+        {tab === "btp" ? (
+          <BtpTab
+            companyId={company.id}
+            projects={btpProjects}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "casino_cfg" ? (
+          <CasinoConfigTab
+            companyId={company.id}
+            config={casinoConfig}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "airline" ? (
+          <AirlineTab
+            companyId={company.id}
+            routes={airlineRoutes}
+            cash={cash}
+          />
+        ) : null}
         {tab === "sell" ? (
           <SellTab
             companyId={company.id}
@@ -3323,6 +3386,474 @@ function SellTab({
       <div className="mt-3 text-[10px] text-zinc-500">
         💡 Conseil : prix indicatif = revenus mensuels × 6-12 selon attractivité du secteur.
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglets Session 2 : SECTEURS CREUSÉS BIS
+// ──────────────────────────────────────────────────────────────────
+
+// ── BTP Chantiers ──
+function BtpTab({
+  companyId,
+  projects,
+  cash,
+}: {
+  companyId: string;
+  projects: SkylineBtpProjectRow[];
+  cash: number;
+}) {
+  const inProgress = projects.find((p) => p.status === "in_progress");
+  const recent = projects.filter((p) => p.status !== "in_progress").slice(0, 5);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-amber-200">
+          🏗️ Chantiers disponibles
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Tu avances les coûts au démarrage et reçois la récompense à la
+          livraison. 1 seul chantier en cours à la fois. Plus c&apos;est gros,
+          plus c&apos;est long et plus le retour est élevé.
+        </p>
+        {inProgress ? (
+          <BtpInProgressCard
+            project={inProgress}
+            companyId={companyId}
+          />
+        ) : (
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {Object.values(SKYLINE_BTP_PROJECTS).map((spec) => (
+              <BtpProjectCard
+                key={spec.id}
+                companyId={companyId}
+                spec={spec}
+                cash={cash}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {recent.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Historique récent
+          </h3>
+          <ul className="mt-3 space-y-1 text-xs">
+            {recent.map((p) => {
+              const meta = SKYLINE_BTP_PROJECTS[p.project_kind];
+              return (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between rounded border border-white/5 bg-white/[0.02] px-3 py-1.5"
+                >
+                  <span className="text-zinc-300">
+                    {meta?.glyph} {meta?.name ?? p.project_kind}
+                  </span>
+                  <span className="text-zinc-500 tabular-nums">
+                    {p.status === "completed"
+                      ? `+${skylineFormatCashFR(Number(p.reward))}`
+                      : "annulé"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BtpProjectCard({
+  companyId,
+  spec,
+  cash,
+}: {
+  companyId: string;
+  spec: (typeof SKYLINE_BTP_PROJECTS)[SkylineBtpProjectKind];
+  cash: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const margin = spec.reward - spec.cost;
+  const canAfford = cash >= spec.cost;
+
+  const handleStart = () => {
+    if (pending || !canAfford) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", spec.id);
+    startTransition(async () => {
+      const res = await btpStartProjectAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            {spec.glyph} {spec.name}
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            Coût {skylineFormatCashFR(spec.cost)} → +
+            {skylineFormatCashFR(spec.reward)} ({spec.durationH}h)
+          </div>
+        </div>
+        <div className="text-right text-[10px] tabular-nums text-emerald-300">
+          +{skylineFormatCashFR(margin)}
+        </div>
+      </div>
+      <button
+        onClick={handleStart}
+        disabled={pending || !canAfford}
+        className="mt-2 w-full rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending
+          ? "..."
+          : !canAfford
+          ? "Cash insuffisant"
+          : "Démarrer le chantier"}
+      </button>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function BtpInProgressCard({
+  project,
+  companyId,
+}: {
+  project: SkylineBtpProjectRow;
+  companyId: string;
+}) {
+  const meta = SKYLINE_BTP_PROJECTS[project.project_kind];
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const endsAt = new Date(project.ends_at);
+  const ready = endsAt < new Date();
+
+  const handleComplete = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("project_id", project.id);
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      const res = await btpCompleteProjectAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/5 p-3">
+      <div className="text-base font-semibold text-amber-200">
+        {meta?.glyph} Chantier en cours : {meta?.name}
+      </div>
+      <div className="mt-1 text-[11px] text-zinc-400">
+        Coût avancé{" "}
+        <span className="text-zinc-300 tabular-nums">
+          {skylineFormatCashFR(Number(project.cost_advance))}
+        </span>{" "}
+        · Récompense{" "}
+        <span className="text-emerald-300 tabular-nums">
+          +{skylineFormatCashFR(Number(project.reward))}
+        </span>
+      </div>
+      <div className="mt-1 text-[11px] text-zinc-500">
+        {ready
+          ? "✓ Chantier terminé — réclame ta récompense !"
+          : `⏳ Fin : ${endsAt.toLocaleString("fr-FR")}`}
+      </div>
+      {ready ? (
+        <button
+          onClick={handleComplete}
+          disabled={pending}
+          className="mt-3 w-full rounded-md border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-40"
+        >
+          {pending ? "..." : `✓ Livrer (+${skylineFormatCashFR(Number(project.reward))})`}
+        </button>
+      ) : null}
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Casino RTP/VIP ──
+function CasinoConfigTab({
+  companyId,
+  config,
+  cash,
+}: {
+  companyId: string;
+  config: SkylineCasinoConfigRow | null;
+  cash: number;
+}) {
+  const currentRtp = config?.rtp_pct ?? 95;
+  const [rtp, setRtp] = useState(Number(currentRtp));
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSetRtp = () => {
+    if (pending || rtp < 90 || rtp > 99) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("rtp", String(rtp));
+    startTransition(async () => {
+      const res = await casinoSetRtpAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  const handleAddVip = (kind: SkylineCasinoVipKind) => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", kind);
+    startTransition(async () => {
+      const res = await casinoAddVipAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-rose-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-rose-200">
+          🎰 RTP — Return To Player
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          La maison gagne <strong>(100 - RTP)%</strong> sur chaque mise. RTP
+          haut = clients heureux mais marges faibles. RTP bas = profits mais
+          réputation dégradée.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <input
+            type="range"
+            min={90}
+            max={99}
+            step={0.5}
+            value={rtp}
+            onChange={(e) => setRtp(Number(e.target.value))}
+            className="flex-1"
+          />
+          <span className="w-20 text-center text-base font-bold text-rose-200 tabular-nums">
+            {rtp}%
+          </span>
+          <button
+            onClick={handleSetRtp}
+            disabled={pending}
+            className="rounded-md border border-rose-400/50 bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-100 transition-colors hover:bg-rose-500/25 disabled:opacity-40"
+          >
+            {pending ? "..." : "Appliquer"}
+          </button>
+        </div>
+        <div className="mt-2 text-[10px] text-zinc-500">
+          Edge maison actuel : {(100 - Number(currentRtp)).toFixed(1)}%
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          💎 Salons VIP
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Chaque salon multiplie tes revenus casino. Premier ×2, Diamond ×5,
+          Royal ×15 (multiplicatif).
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {(Object.keys(SKYLINE_CASINO_VIP_ROOMS) as SkylineCasinoVipKind[]).map(
+            (k) => {
+              const meta = SKYLINE_CASINO_VIP_ROOMS[k];
+              const owned =
+                k === "premier"
+                  ? config?.vip_premier ?? 0
+                  : k === "diamond"
+                  ? config?.vip_diamond ?? 0
+                  : config?.vip_royal ?? 0;
+              const canAfford = cash >= meta.cost;
+              return (
+                <div
+                  key={k}
+                  className="rounded-lg border border-white/10 bg-white/[0.02] p-3"
+                >
+                  <div className="text-sm font-semibold text-zinc-100">
+                    {meta.name} ×{meta.multiplier}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 tabular-nums">
+                    {owned} possédé(s) · coût {skylineFormatCashFR(meta.cost)}
+                  </div>
+                  <button
+                    onClick={() => handleAddVip(k)}
+                    disabled={pending || !canAfford}
+                    className="mt-2 w-full rounded-md border border-purple-400/50 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-200 transition-colors hover:bg-purple-500/20 disabled:opacity-40"
+                  >
+                    {pending
+                      ? "..."
+                      : !canAfford
+                      ? "Cash insuffisant"
+                      : `Ajouter (+${meta.multiplier}×)`}
+                  </button>
+                </div>
+              );
+            },
+          )}
+        </div>
+        {error ? (
+          <div className="mt-2 text-[10px] text-rose-300">{error}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ── Aérien Lignes ──
+function AirlineTab({
+  companyId,
+  routes,
+  cash,
+}: {
+  companyId: string;
+  routes: SkylineAirlineRouteRow[];
+  cash: number;
+}) {
+  const openedKinds = new Set(routes.map((r) => r.route_kind));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-cyan-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-cyan-200">
+          ✈️ Lignes aériennes
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Ouvre des lignes pour générer des revenus mensuels passifs. Plus
+          c&apos;est intercontinental, plus c&apos;est rentable mais cher à
+          ouvrir.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(Object.keys(SKYLINE_AIRLINE_ROUTES) as SkylineRouteKind[]).map((k) => {
+            const meta = SKYLINE_AIRLINE_ROUTES[k];
+            const opened = openedKinds.has(k);
+            return (
+              <RouteCard
+                key={k}
+                companyId={companyId}
+                routeKind={k}
+                spec={meta}
+                opened={opened}
+                cash={cash}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RouteCard({
+  companyId,
+  routeKind,
+  spec,
+  opened,
+  cash,
+}: {
+  companyId: string;
+  routeKind: SkylineRouteKind;
+  spec: (typeof SKYLINE_AIRLINE_ROUTES)[SkylineRouteKind];
+  opened: boolean;
+  cash: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canAfford = cash >= spec.openCost;
+
+  const handleOpen = () => {
+    if (pending || !canAfford) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", routeKind);
+    startTransition(async () => {
+      const res = await openRouteAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  const handleClose = () => {
+    if (pending) return;
+    if (!confirm(`Fermer la ligne ${spec.name} ? (pas de remboursement)`))
+      return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", routeKind);
+    startTransition(async () => {
+      const res = await closeRouteAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        opened
+          ? "border-emerald-400/40 bg-emerald-500/5"
+          : "border-white/10 bg-white/[0.02]"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            {spec.glyph} {spec.name}
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            Ouverture {skylineFormatCashFR(spec.openCost)} ·{" "}
+            +{skylineFormatCashFR(spec.monthlyRevenue)}/mois
+          </div>
+        </div>
+        {opened ? (
+          <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200">
+            ✓ Active
+          </span>
+        ) : null}
+      </div>
+      {opened ? (
+        <button
+          onClick={handleClose}
+          disabled={pending}
+          className="mt-2 w-full rounded-md border border-rose-400/40 bg-rose-500/5 px-3 py-1 text-xs text-rose-300 transition-colors hover:bg-rose-500/15 disabled:opacity-40"
+        >
+          {pending ? "..." : "Fermer la ligne"}
+        </button>
+      ) : (
+        <button
+          onClick={handleOpen}
+          disabled={pending || !canAfford}
+          className="mt-2 w-full rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/20 disabled:opacity-40"
+        >
+          {pending
+            ? "..."
+            : !canAfford
+            ? "Cash insuffisant"
+            : `Ouvrir · ${skylineFormatCashFR(spec.openCost)}`}
+        </button>
+      )}
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
     </div>
   );
 }

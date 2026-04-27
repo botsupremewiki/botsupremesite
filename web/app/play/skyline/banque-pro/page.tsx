@@ -2,46 +2,42 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import {
   ensureSkylineProfile,
-  fetchLoanOffersForUser,
-  fetchLoansForUser,
+  fetchOfferedLoansByLender,
+  fetchPotentialBorrowers,
   fetchSkylineCompanies,
 } from "../_lib/supabase-helpers";
 import { SkylineHeader } from "../_components/skyline-header";
-import { BanqueView } from "./banque-view";
+import { BanqueProView } from "./banque-pro-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function BanquePage() {
+export default async function BanqueProPage() {
   const profile = await getProfile();
   if (!profile) redirect("/play");
 
   const skyProfile = await ensureSkylineProfile();
-  const [loans, companies, loanOffers] = await Promise.all([
-    fetchLoansForUser(profile.id),
+  const [companies, borrowers, offered] = await Promise.all([
     fetchSkylineCompanies(profile.id),
-    fetchLoanOffersForUser(profile.id),
+    fetchPotentialBorrowers(profile.id, 30),
+    fetchOfferedLoansByLender(profile.id),
   ]);
 
-  const hasUsedStarterLoan = loans.some((l) => l.is_starter_loan);
+  const banks = companies.filter((c) => c.sector === "banque_commerciale");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SkylineHeader
         profile={profile}
         cash={Number(skyProfile?.cash ?? 0)}
-        subtitle="Banque"
+        subtitle="Banque pro"
         backHref="/play/skyline"
         backLabel="Skyline"
       />
-      <BanqueView
+      <BanqueProView
+        banks={banks}
+        borrowers={borrowers}
+        offered={offered}
         cash={Number(skyProfile?.cash ?? 0)}
-        creditScore={skyProfile?.credit_score ?? 0}
-        netWorth={Number(skyProfile?.net_worth ?? 0)}
-        bankruptcyPending={skyProfile?.bankruptcy_pending ?? false}
-        loans={loans}
-        companies={companies}
-        loanOffers={loanOffers}
-        hasUsedStarterLoan={hasUsedStarterLoan}
       />
     </div>
   );

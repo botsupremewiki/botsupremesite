@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import {
   ensureSkylineProfile,
+  fetchAirlineRoutes,
+  fetchBtpProjects,
+  fetchCasinoConfig,
   fetchEmployeesForCompany,
   fetchListingForCompany,
   fetchMachinesForCompany,
@@ -62,14 +65,29 @@ export default async function CompanyPage({
     company.sector,
   );
 
-  const [pharmaResearch, pharmaPatents, saasProducts, restauStars, listing] =
-    await Promise.all([
-      isPharma ? fetchPharmaResearch(companyId) : Promise.resolve([]),
-      isPharma ? fetchPharmaPatents(companyId) : Promise.resolve([]),
-      isTech ? fetchSaasProducts(companyId) : Promise.resolve([]),
-      isRestau ? fetchRestaurantStars(companyId) : Promise.resolve(null),
-      fetchListingForCompany(companyId),
-    ]);
+  const isBtp = company.sector === "btp_construction";
+  const isCasino = company.sector === "casino";
+  const isAerien = company.sector === "aerien";
+
+  const [
+    pharmaResearch,
+    pharmaPatents,
+    saasProducts,
+    restauStars,
+    listing,
+    btpProjects,
+    casinoConfig,
+    airlineRoutes,
+  ] = await Promise.all([
+    isPharma ? fetchPharmaResearch(companyId) : Promise.resolve([]),
+    isPharma ? fetchPharmaPatents(companyId) : Promise.resolve([]),
+    isTech ? fetchSaasProducts(companyId) : Promise.resolve([]),
+    isRestau ? fetchRestaurantStars(companyId) : Promise.resolve(null),
+    fetchListingForCompany(companyId),
+    isBtp ? fetchBtpProjects(companyId) : Promise.resolve([]),
+    isCasino ? fetchCasinoConfig(companyId) : Promise.resolve(null),
+    isAerien ? fetchAirlineRoutes(companyId) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -95,6 +113,9 @@ export default async function CompanyPage({
         saasProducts={saasProducts}
         restauStars={restauStars}
         listing={listing}
+        btpProjects={btpProjects}
+        casinoConfig={casinoConfig}
+        airlineRoutes={airlineRoutes}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>

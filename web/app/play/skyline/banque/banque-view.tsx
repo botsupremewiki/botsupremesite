@@ -3,10 +3,16 @@
 import { useState, useTransition } from "react";
 import {
   type SkylineCompanyRow,
+  type SkylineLoanOfferRow,
   type SkylineLoanRow,
   skylineFormatCashFR,
 } from "@shared/skyline";
-import { repayLoanAction, requestLoanAction } from "../_lib/actions";
+import {
+  acceptLoanOfferAction,
+  declineLoanOfferAction,
+  repayLoanAction,
+  requestLoanAction,
+} from "../_lib/actions";
 
 function rateForCreditScore(score: number): number {
   if (score >= 800) return 0.04;
@@ -28,6 +34,7 @@ export function BanqueView({
   bankruptcyPending,
   loans,
   companies,
+  loanOffers,
   hasUsedStarterLoan,
 }: {
   cash: number;
@@ -36,6 +43,7 @@ export function BanqueView({
   bankruptcyPending: boolean;
   loans: SkylineLoanRow[];
   companies: SkylineCompanyRow[];
+  loanOffers: SkylineLoanOfferRow[];
   hasUsedStarterLoan: boolean;
 }) {
   return (
@@ -71,6 +79,20 @@ export function BanqueView({
           />
           <CreditScoreStat score={creditScore} />
         </div>
+
+        {/* Offres de prêts reçues d'autres joueurs */}
+        {loanOffers.length > 0 ? (
+          <section className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+            <h2 className="text-sm font-semibold text-amber-200">
+              📥 Offres de prêts reçues ({loanOffers.length})
+            </h2>
+            <div className="mt-3 space-y-2">
+              {loanOffers.map((o) => (
+                <LoanOfferCard key={o.id} offer={o} />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* Demande de prêt */}
         <LoanRequestForm
@@ -374,6 +396,102 @@ function LoanCard({ loan, cash }: { loan: SkylineLoanRow; cash: number }) {
           className="rounded-md border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {pending ? "..." : "Rembourser"}
+        </button>
+      </div>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function LoanOfferCard({ offer }: { offer: SkylineLoanOfferRow }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<"accepted" | "declined" | null>(null);
+
+  const totalCost =
+    Number(offer.monthly_payment) * Number(offer.duration_months);
+
+  const handleAccept = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("loan_id", offer.id);
+    startTransition(async () => {
+      const res = await acceptLoanOfferAction(fd);
+      if (res.ok) setDone("accepted");
+      else setError(res.error);
+    });
+  };
+
+  const handleDecline = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("loan_id", offer.id);
+    startTransition(async () => {
+      const res = await declineLoanOfferAction(fd);
+      if (res.ok) setDone("declined");
+      else setError(res.error);
+    });
+  };
+
+  if (done === "accepted") {
+    return (
+      <div className="rounded-lg border border-emerald-400/40 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+        ✓ Offre acceptée — cash crédité.
+      </div>
+    );
+  }
+  if (done === "declined") {
+    return (
+      <div className="rounded-lg border border-zinc-400/30 bg-zinc-500/5 p-3 text-xs text-zinc-400">
+        Offre refusée.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-400/40 bg-amber-500/5 p-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-sm font-semibold text-amber-200">
+            🏦 {offer.lender_company_name ?? "Banque inconnue"}
+            <span className="ml-2 text-[10px] text-zinc-500">
+              · {offer.lender_username ?? "?"}
+            </span>
+          </div>
+          <div className="mt-1 text-[11px] text-zinc-400 tabular-nums">
+            <strong className="text-emerald-300">
+              {skylineFormatCashFR(Number(offer.amount_initial))}
+            </strong>{" "}
+            à{" "}
+            <strong className="text-amber-200">
+              {(Number(offer.rate) * 100).toFixed(1)}%
+            </strong>{" "}
+            sur {Number(offer.duration_months) / 12} ans
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            Mensualité {skylineFormatCashFR(Number(offer.monthly_payment))} ·
+            Total {skylineFormatCashFR(totalCost)}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={handleAccept}
+          disabled={pending}
+          className="flex-1 rounded-md border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+        >
+          {pending ? "..." : "✓ Accepter"}
+        </button>
+        <button
+          onClick={handleDecline}
+          disabled={pending}
+          className="rounded-md border border-rose-400/40 bg-rose-500/5 px-3 py-1 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/15 disabled:opacity-40"
+        >
+          Refuser
         </button>
       </div>
       {error ? (

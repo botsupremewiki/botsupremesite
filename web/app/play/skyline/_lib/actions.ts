@@ -843,3 +843,167 @@ export async function closeShortPositionAction(
   revalidatePath("/play/skyline/bourse");
   return { ok: true, data };
 }
+
+// ───── Session 2 : BTP ─────
+
+export async function btpStartProjectAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  if (!companyId || !kind) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_btp_start_project", {
+    p_company_id: companyId,
+    p_kind: kind,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+export async function btpCompleteProjectAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const projectId = String(formData.get("project_id") ?? "");
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!projectId) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_btp_complete_project", {
+    p_project_id: projectId,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (companyId) revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+// ───── Session 2 : Casino ─────
+
+export async function casinoSetRtpAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const rtp = Number(formData.get("rtp") ?? 95);
+  if (!companyId || rtp < 90 || rtp > 99)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_casino_set_rtp", {
+    p_company_id: companyId,
+    p_rtp: rtp,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+export async function casinoAddVipAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  if (!companyId || !kind) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_casino_add_vip", {
+    p_company_id: companyId,
+    p_kind: kind,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+// ───── Session 2 : Aérien ─────
+
+export async function openRouteAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  if (!companyId || !kind) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_open_route", {
+    p_company_id: companyId,
+    p_kind: kind,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+export async function closeRouteAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  if (!companyId || !kind) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_close_route", {
+    p_company_id: companyId,
+    p_kind: kind,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+// ───── Session 2 : Banque prêts inter-joueurs ─────
+
+export async function offerLoanAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const lenderCompanyId = String(formData.get("lender_company_id") ?? "");
+  const borrowerUserId = String(formData.get("borrower_user_id") ?? "");
+  const amount = Number(formData.get("amount") ?? 0);
+  const rate = Number(formData.get("rate") ?? 0);
+  const durationMonths = Number(formData.get("duration_months") ?? 0);
+  if (!lenderCompanyId || !borrowerUserId || amount <= 0 || rate <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_offer_loan", {
+    p_lender_company_id: lenderCompanyId,
+    p_borrower_user_id: borrowerUserId,
+    p_amount: amount,
+    p_rate: rate,
+    p_duration_months: durationMonths,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/banque-pro");
+  revalidatePath("/play/skyline/banque");
+  return { ok: true, data };
+}
+
+export async function acceptLoanOfferAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const loanId = String(formData.get("loan_id") ?? "");
+  if (!loanId) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_accept_loan_offer", {
+    p_loan_id: loanId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/banque");
+  return { ok: true, data: null };
+}
+
+export async function declineLoanOfferAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const loanId = String(formData.get("loan_id") ?? "");
+  if (!loanId) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_decline_loan_offer", {
+    p_loan_id: loanId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/banque");
+  return { ok: true, data: null };
+}

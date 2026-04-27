@@ -174,6 +174,14 @@ export default async function SkylineHub() {
                 border="border-cyan-400/40"
               />
               <MenuButton
+                href="/play/skyline/banque-pro"
+                icon="💰"
+                title="Banque pro"
+                description="Si tu possèdes une banque commerciale : prêter aux autres joueurs"
+                accent="text-cyan-200"
+                border="border-cyan-400/40"
+              />
+              <MenuButton
                 href="/play/skyline/offshore"
                 icon="🪙"
                 title="Pont $ ↔ OS"
