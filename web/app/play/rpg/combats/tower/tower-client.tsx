@@ -183,6 +183,7 @@ export function TowerClient({
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
+        ambiance="tower"
         title={session ? `🗼 Tour étage ${session.floor}` : ""}
         rewards={session?.rewards}
         onComplete={({ winner }) => {

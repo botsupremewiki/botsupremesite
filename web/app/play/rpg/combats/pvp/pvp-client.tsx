@@ -167,6 +167,7 @@ export function PvpClient({
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
+        ambiance="pvp"
         title={
           session
             ? `⚔️ PvP vs ${ETERNUM_CLASSES[session.opp.class_id as EternumClassId].name}`

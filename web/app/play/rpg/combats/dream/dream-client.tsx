@@ -156,6 +156,7 @@ export function DreamClient({
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
+        ambiance="dream"
         title={session ? `${session.dream.glyph} ${session.dream.name}` : ""}
         rewards={
           session?.shards

@@ -222,6 +222,7 @@ export function ChallengesClient({
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
+        ambiance="boss"
         title={session ? `${session.challenge.glyph} ${session.challenge.name}` : ""}
         rewards={session?.rewards}
         onComplete={() => {

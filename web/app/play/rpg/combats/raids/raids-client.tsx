@@ -141,6 +141,7 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
+        ambiance="boss"
         title={session ? `${session.raid.glyph} ${session.raid.name}` : ""}
         rewards={session?.rewards}
         onComplete={() => {

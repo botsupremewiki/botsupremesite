@@ -26,6 +26,7 @@ type FightSession = {
   teamA: CombatUnit[];
   teamB: CombatUnit[];
   forcedWinner: "A" | "B";
+  unitRarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic">;
   rewards?: { os: number; xp: number; resources: string[] };
 };
 
@@ -124,12 +125,22 @@ export function DonjonsClient({
       return;
     }
 
+    // Map id → rareté pour cadres précis
+    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
+      hero: "legendary",
+    };
+    for (const f of team) {
+      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
+      if (base) rarities[`fam-${f.id}`] = base.rarity;
+    }
+
     // Lance le combat ATB tactique avec le résultat serveur en input.
     setSession({
       dungeon: d,
       teamA: buildPlayerTeam(),
       teamB: buildEnemyTeam(d),
       forcedWinner: r.won ? "A" : "B",
+      unitRarities: rarities,
       rewards: r.won
         ? {
             os: r.os_gained ?? 0,
@@ -201,6 +212,8 @@ export function DonjonsClient({
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner={session?.forcedWinner}
+        ambiance="dungeon"
+        unitRarities={session?.unitRarities}
         title={session ? `${session.dungeon.glyph} ${session.dungeon.name}` : ""}
         rewards={
           session?.rewards

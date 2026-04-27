@@ -193,6 +193,7 @@ export function WorldBossClient({
         teamA={session?.teamA ?? []}
         teamB={session?.teamB ?? []}
         forcedWinner="B"
+        ambiance="boss"
         title={session ? `🤖 ${ETERNUM_WORLD_BOSS.name}` : ""}
         rewards={
           session

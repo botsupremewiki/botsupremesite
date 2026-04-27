@@ -352,6 +352,7 @@ function GuildView({
         teamA={bossSession?.teamA ?? []}
         teamB={bossSession?.teamB ?? []}
         forcedWinner="B"
+        ambiance="boss"
         title={
           bossSession ? `🐉 Boss de guilde Tier ${bossSession.tier}` : ""
         }
