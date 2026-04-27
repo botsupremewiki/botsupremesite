@@ -10,7 +10,7 @@ import type {
   TcgRarity,
   TcgServerMessage,
 } from "../../shared/types";
-import { POKEMON_PACK_TYPES, TCG_GAMES } from "../../shared/types";
+import { BATTLE_CONFIG, POKEMON_PACK_TYPES, TCG_GAMES } from "../../shared/types";
 import { POKEMON_BASE_SET } from "../../shared/tcg-pokemon-base";
 import {
   addTcgCards,
@@ -268,9 +268,24 @@ export default class TcgServer implements Party.Server {
       this.sendError(conn, "Deck vide.");
       return;
     }
-    // Verify the player owns enough copies of every non-energy card.
+    // Pocket : deck = 20 cartes exactement, max 2 copies par carte, pas de
+    // cartes énergie (énergies générées auto en combat).
+    const total = cards.reduce((s, c) => s + c.count, 0);
+    if (total !== BATTLE_CONFIG.deckSize) {
+      this.sendError(
+        conn,
+        `Le deck doit contenir exactement ${BATTLE_CONFIG.deckSize} cartes (actuellement ${total}).`,
+      );
+      return;
+    }
     for (const entry of cards) {
-      if (entry.cardId.includes("energy")) continue; // énergies illimitées
+      if (entry.count > BATTLE_CONFIG.maxCopies) {
+        this.sendError(
+          conn,
+          `Max ${BATTLE_CONFIG.maxCopies} copies par carte (${entry.cardId} = ${entry.count}).`,
+        );
+        return;
+      }
       const owned = info.collection.get(entry.cardId) ?? 0;
       if (entry.count > owned) {
         this.sendError(

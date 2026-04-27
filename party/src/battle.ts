@@ -9,7 +9,9 @@ import type {
   BattleSelfState,
   BattleState,
   ChatMessage,
+  PokemonEnergyType,
 } from "../../shared/types";
+import { BATTLE_CONFIG } from "../../shared/types";
 import {
   fetchProfile,
   fetchTcgDeckById,
@@ -22,19 +24,20 @@ import type {
 import {
   type DeckCard,
   dealOpeningHand,
+  deriveEnergyTypes,
   expandDeck,
   getCard,
   isBasicPokemon,
-  isEnergy,
+  pickRandomEnergy,
   shuffle,
-  takePrizes,
 } from "./lib/battle-engine";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const PRIZE_COUNT = 6;
-const MAX_BENCH = 5;
+const KO_WIN_TARGET = BATTLE_CONFIG.koWinTarget;
+const MAX_BENCH = BATTLE_CONFIG.maxBench;
+const OPENING_HAND_SIZE = BATTLE_CONFIG.openingHandSize;
 const LOG_KEEP = 30;
 
 const BOT_AUTH_ID = "bot-supreme";
@@ -48,11 +51,20 @@ type SeatState = {
   conn: Party.Connection | null;
   deck: DeckCard[];
   hand: DeckCard[];
-  prizes: DeckCard[];
   discard: DeckCard[];
   active: BattleCard | null;
   bench: BattleCard[];
   hasSetup: boolean;
+  // Pocket : compteur de KO infligés à l'adversaire. Premier à atteindre
+  // KO_WIN_TARGET (= 3) gagne la partie. Remplace l'ancien système de prizes.
+  koCount: number;
+  // Pocket : énergie générée automatiquement au début du tour, prête à être
+  // attachée à un Pokémon. Consommée par battle-attach-energy. Reset à null
+  // quand le tour se termine sans avoir été attachée (énergie perdue).
+  pendingEnergy: PokemonEnergyType | null;
+  // Liste des types d'énergies que ce deck peut générer. Calculée au setup
+  // depuis les types des Pokémon du deck (Pocket : random parmi ces types).
+  energyTypes: PokemonEnergyType[];
   // Limites par tour de jeu (reset à end-turn).
   energyAttachedThisTurn: boolean;
   hasRetreatedThisTurn: boolean;
@@ -133,10 +145,10 @@ export default class BattleServer implements Party.Server {
         return;
       }
       const total = (deckRow.cards ?? []).reduce((s, c) => s + c.count, 0);
-      if (total !== 60) {
+      if (total !== BATTLE_CONFIG.deckSize) {
         this.sendError(
           conn,
-          `Deck invalide (${total}/60 cartes).`,
+          `Deck invalide (${total}/${BATTLE_CONFIG.deckSize} cartes).`,
         );
         conn.close();
         return;
@@ -147,8 +159,7 @@ export default class BattleServer implements Party.Server {
       }));
       const deck = expandDeck(deckCards);
       shuffle(deck);
-      const { hand, mulligans } = dealOpeningHand(deck);
-      const prizes = takePrizes(deck, PRIZE_COUNT);
+      const { hand, mulligans } = dealOpeningHand(deck, OPENING_HAND_SIZE);
       this.seats[seatId] = {
         authId,
         username,
@@ -156,11 +167,13 @@ export default class BattleServer implements Party.Server {
         conn,
         deck,
         hand,
-        prizes,
         discard: [],
         active: null,
         bench: [],
         hasSetup: false,
+        koCount: 0,
+        pendingEnergy: null,
+        energyTypes: deriveEnergyTypes(deckCards),
         energyAttachedThisTurn: false,
         hasRetreatedThisTurn: false,
         evolvedThisTurn: new Set(),
@@ -209,8 +222,7 @@ export default class BattleServer implements Party.Server {
   private fillBotSeat(deckCards: { cardId: string; count: number }[]) {
     const deck = expandDeck(deckCards);
     shuffle(deck);
-    const { hand, mulligans } = dealOpeningHand(deck);
-    const prizes = takePrizes(deck, PRIZE_COUNT);
+    const { hand, mulligans } = dealOpeningHand(deck, OPENING_HAND_SIZE);
     this.seats.p2 = {
       authId: BOT_AUTH_ID,
       username: BOT_USERNAME,
@@ -218,11 +230,13 @@ export default class BattleServer implements Party.Server {
       conn: null,
       deck,
       hand,
-      prizes,
       discard: [],
       active: null,
       bench: [],
       hasSetup: false,
+      koCount: 0,
+      pendingEnergy: null,
+      energyTypes: deriveEnergyTypes(deckCards),
       energyAttachedThisTurn: false,
       hasRetreatedThisTurn: false,
       evolvedThisTurn: new Set(),
@@ -350,14 +364,11 @@ export default class BattleServer implements Party.Server {
       }
     }
 
-    // 3. Attache une Énergie (priorité Actif, fallback premier sur banc)
-    if (!seat.energyAttachedThisTurn && seat.active) {
-      const energyIdx = seat.hand.findIndex((c) => isEnergy(c.cardId));
-      if (energyIdx >= 0) {
-        this.handleAttachEnergy("p2", energyIdx, seat.active.uid);
-        this.scheduleNextBotStep();
-        return;
-      }
+    // 3. Attache l'énergie pending sur l'Actif (Pocket : 1 énergie auto/tour).
+    if (!seat.energyAttachedThisTurn && seat.pendingEnergy && seat.active) {
+      this.handleAttachEnergy("p2", seat.active.uid);
+      this.scheduleNextBotStep();
+      return;
     }
 
     // 4. Attaque (la plus forte payée)
@@ -446,7 +457,7 @@ export default class BattleServer implements Party.Server {
         this.handlePlayBasic(seatId, data.handIndex);
         break;
       case "battle-attach-energy":
-        this.handleAttachEnergy(seatId, data.handIndex, data.targetUid);
+        this.handleAttachEnergy(seatId, data.targetUid);
         break;
       case "battle-evolve":
         this.handleEvolve(seatId, data.handIndex, data.targetUid);
@@ -574,19 +585,19 @@ export default class BattleServer implements Party.Server {
     this.broadcastState();
   }
 
-  /** Attache une carte Énergie de la main à un Pokémon (Actif ou Banc). */
-  private handleAttachEnergy(
-    seatId: BattleSeatId,
-    handIndex: number,
-    targetUid: string,
-  ) {
+  /** Attache l'énergie pending (générée auto au début du tour) sur un Pokémon
+   *  en jeu (Actif ou Banc). Pocket : 1 énergie attachable par tour, max. */
+  private handleAttachEnergy(seatId: BattleSeatId, targetUid: string) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
-    const card = seat.hand[handIndex];
-    if (!card || !isEnergy(card.cardId)) {
-      this.sendErrorToSeat(seatId, "Cette carte n'est pas une Énergie.");
+    if (!seat.pendingEnergy) {
+      this.sendErrorToSeat(seatId, "Aucune énergie disponible ce tour.");
+      return;
+    }
+    if (seat.energyAttachedThisTurn) {
+      this.sendErrorToSeat(seatId, "Une seule Énergie peut être attachée par tour.");
       return;
     }
     const target = this.findOwnPokemon(seat, targetUid);
@@ -594,26 +605,15 @@ export default class BattleServer implements Party.Server {
       this.sendErrorToSeat(seatId, "Cible invalide.");
       return;
     }
-    // Rain Dance (Tortank) : Eau → Pokémon Eau bypasse la limite 1/tour.
-    const energyData = getCard(card.cardId);
+    const energyType = seat.pendingEnergy;
     const targetData = getCard(target.cardId);
-    const isWaterToWater =
-      energyData?.kind === "energy" &&
-      energyData.energyType === "water" &&
-      targetData?.kind === "pokemon" &&
-      targetData.type === "water" &&
-      this.findAbility(seat, "rain-dance") !== null;
-    if (seat.energyAttachedThisTurn && !isWaterToWater) {
-      this.sendErrorToSeat(seatId, "Une seule Énergie peut être attachée par tour.");
-      return;
-    }
-    seat.hand.splice(handIndex, 1);
-    target.attachedEnergies.push(card.cardId);
-    if (!isWaterToWater) seat.energyAttachedThisTurn = true;
+    target.attachedEnergies.push(energyType);
+    seat.pendingEnergy = null;
+    seat.energyAttachedThisTurn = true;
     this.pushLog(
-      `${seat.username} attache ${energyData?.name ?? "Énergie"} à ${
+      `${seat.username} attache ⚡${energyType} à ${
         targetData?.kind === "pokemon" ? targetData.name : "Pokémon"
-      }${isWaterToWater ? " (Danse Pluie)" : ""}.`,
+      }.`,
     );
     this.broadcastState();
   }
@@ -718,11 +718,9 @@ export default class BattleServer implements Party.Server {
       );
       return;
     }
-    // Discard `cost` énergies (les plus anciennes en tête).
-    const discarded = seat.active.attachedEnergies.splice(0, cost);
-    for (const energyId of discarded) {
-      seat.discard.push({ uid: `disc-${this.uidCounter++}`, cardId: energyId });
-    }
+    // Pocket : retire `cost` énergies (les plus anciennes en tête). Pas de
+    // discard à matérialiser — les énergies ne sont pas des cartes.
+    seat.active.attachedEnergies.splice(0, cost);
     // Swap.
     const old = seat.active;
     seat.active = newActive;
@@ -998,14 +996,9 @@ export default class BattleServer implements Party.Server {
         }
         case "discard-energy": {
           if (!att.active) break;
+          // Pocket : énergies non-cartes, retirées sans discard physique.
           const n = Math.min(effect.count, att.active.attachedEnergies.length);
-          const removed = att.active.attachedEnergies.splice(0, n);
-          for (const eId of removed) {
-            att.discard.push({
-              uid: `disc-${this.uidCounter++}`,
-              cardId: eId,
-            });
-          }
+          att.active.attachedEnergies.splice(0, n);
           this.pushLog(`${att.username} défausse ${n} Énergie(s).`);
           break;
         }
@@ -1067,19 +1060,18 @@ export default class BattleServer implements Party.Server {
 
   /** Vérifie qu'on peut payer le coût d'une attaque avec les énergies
    *  attachées. "colorless" peut être payé par n'importe quelle énergie.
-   *  Avec Energy Burn (Dracaufeu), toute Énergie attachée compte comme Feu. */
+   *  Avec Energy Burn (Dracaufeu), toute Énergie attachée compte comme Feu.
+   *  Pocket : attachedEnergies contient directement les types ("fire", "water"…)
+   *  au lieu de card_ids — pas de cartes énergie en deck. */
   private canPayAttackCost(
     attached: string[],
-    cost: import("../../shared/types").PokemonEnergyType[],
+    cost: PokemonEnergyType[],
     attacker: BattleCard | null = null,
   ): boolean {
     const energyBurn = this.getAbilityEffect(attacker)?.kind === "energy-burn";
-    // Pool d'énergies par type effectif.
     const pool = new Map<string, number>();
-    for (const energyId of attached) {
-      const data = getCard(energyId);
-      if (data?.kind !== "energy") continue;
-      const effectiveType = energyBurn ? "fire" : data.energyType;
+    for (const energyType of attached) {
+      const effectiveType = energyBurn ? "fire" : energyType;
       pool.set(effectiveType, (pool.get(effectiveType) ?? 0) + 1);
     }
     let colorlessNeeded = 0;
@@ -1106,29 +1098,22 @@ export default class BattleServer implements Party.Server {
     this.pushLog(
       `💥 ${koData?.kind === "pokemon" ? koData.name : "?"} est mis K.O. !`,
     );
-    // Discard l'Actif + ses énergies attachées.
+    // Discard l'Actif (ses énergies attachées partent avec en Pocket — pas
+    // remises au deck/main, juste supprimées).
     def.discard.push({
       uid: `disc-${this.uidCounter++}`,
       cardId: def.active.cardId,
     });
-    for (const energyId of def.active.attachedEnergies) {
-      def.discard.push({
-        uid: `disc-${this.uidCounter++}`,
-        cardId: energyId,
-      });
-    }
     def.active = null;
 
-    // Attaquant prend une carte de Prize (silencieusement passe en main).
-    const prize = att.prizes.pop();
-    if (prize) {
-      att.hand.push(prize);
-      this.pushLog(`${att.username} prend une carte de Prize.`);
-    }
+    // Pocket : l'attaquant gagne 1 KO. Premier à KO_WIN_TARGET gagne.
+    att.koCount += 1;
+    this.pushLog(
+      `${att.username} marque 1 KO (${att.koCount}/${KO_WIN_TARGET}).`,
+    );
 
-    // Conditions de victoire.
-    if (att.prizes.length === 0) {
-      this.declareWinner(attackerSeatId, "Toutes les Prizes prises.");
+    if (att.koCount >= KO_WIN_TARGET) {
+      this.declareWinner(attackerSeatId, `${KO_WIN_TARGET} KO infligés.`);
       return;
     }
     if (def.bench.length === 0) {
@@ -1225,13 +1210,15 @@ export default class BattleServer implements Party.Server {
       );
     }
 
-    // Reset des flags de tour pour le joueur actif.
+    // Reset des flags de tour pour le joueur sortant.
     for (const c of [seat.active, ...seat.bench]) {
       if (c) c.playedThisTurn = false;
     }
     seat.energyAttachedThisTurn = false;
     seat.hasRetreatedThisTurn = false;
     seat.evolvedThisTurn = new Set();
+    // Pocket : énergie pending non attachée est perdue à end-of-turn.
+    seat.pendingEnergy = null;
 
     const next: BattleSeatId = seatId === "p1" ? "p2" : "p1";
     this.activeSeat = next;
@@ -1246,6 +1233,11 @@ export default class BattleServer implements Party.Server {
         this.declareWinner(seatId, "Adversaire deck-out.");
         return;
       }
+      // Pocket : à chaque début de tour, le joueur reçoit une énergie auto
+      // (type aléatoire parmi ceux de son deck). Le first-player n'en a pas
+      // au tour 1 absolu — mais comme advanceTurn n'est pas appelé pour ce
+      // tour-là, c'est géré naturellement.
+      nextSeat.pendingEnergy = pickRandomEnergy(nextSeat.energyTypes);
     }
     this.pushLog(`Tour ${this.turnNumber} — ${nextSeat?.username} joue.`);
     this.broadcastState();
@@ -1374,11 +1366,12 @@ export default class BattleServer implements Party.Server {
       active: seat.active,
       bench: seat.bench,
       discardCount: seat.discard.length,
-      prizesRemaining: seat.prizes.length,
+      koCount: seat.koCount,
       hasSetup: seat.hasSetup,
       mustPromoteActive: seat.mustPromoteActive,
       energyAttachedThisTurn: seat.energyAttachedThisTurn,
       hasRetreatedThisTurn: seat.hasRetreatedThisTurn,
+      pendingEnergy: seat.pendingEnergy,
     };
   }
 

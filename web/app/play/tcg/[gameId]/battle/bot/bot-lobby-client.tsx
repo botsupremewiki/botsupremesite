@@ -80,7 +80,7 @@ export function BotLobbyClient({
   const validDecks = useMemo(
     () =>
       decks.filter(
-        (d) => d.cards.reduce((s, c) => s + c.count, 0) === 60,
+        (d) => d.cards.reduce((s, c) => s + c.count, 0) === 20,
       ),
     [decks],
   );
@@ -162,7 +162,7 @@ export function BotLobbyClient({
                         (s, c) => s + c.count,
                         0,
                       );
-                      const valid = total === 60;
+                      const valid = total === 20;
                       const isSelected = selectedDeckId === deck.id;
                       return (
                         <button

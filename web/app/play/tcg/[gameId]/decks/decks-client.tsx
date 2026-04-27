@@ -19,7 +19,7 @@ import type {
   TcgRarity,
   TcgServerMessage,
 } from "@shared/types";
-import { TCG_GAMES } from "@shared/types";
+import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import {
   POKEMON_BASE_SET,
   POKEMON_BASE_SET_BY_ID,
@@ -30,7 +30,8 @@ import { CardFace } from "../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
-const DECK_TARGET = 60;
+const DECK_TARGET = BATTLE_CONFIG.deckSize;
+const MAX_COPIES = BATTLE_CONFIG.maxCopies;
 const DECK_NAME_MAX = 40;
 
 // Empty deck draft used when creating a new deck.
@@ -218,10 +219,9 @@ export function DecksClient({
       setDraftEntries((prev) => {
         const next = new Map(prev);
         const current = next.get(card.id) ?? 0;
-        const isEnergy = card.id.includes("energy");
         const owned = collection.get(card.id) ?? 0;
-        // Energies are unlimited; non-energies capped at owned + 4.
-        const cap = isEnergy ? Infinity : Math.min(owned, 4);
+        // Pocket : max MAX_COPIES (2) par carte, capé par les copies possédées.
+        const cap = Math.min(owned, MAX_COPIES);
         if (current >= cap) return prev;
         const total = Array.from(next.values()).reduce((s, n) => s + n, 0);
         if (total >= DECK_TARGET) return prev;
@@ -244,7 +244,9 @@ export function DecksClient({
 
   const saveDeck = useCallback(() => {
     if (totalCount !== DECK_TARGET) {
-      setErrorMsg(`Le deck doit contenir exactement 60 cartes (${totalCount}/60).`);
+      setErrorMsg(
+        `Le deck doit contenir exactement ${DECK_TARGET} cartes (${totalCount}/${DECK_TARGET}).`,
+      );
       return;
     }
     if (!draftName.trim()) {
@@ -329,7 +331,7 @@ export function DecksClient({
                   >
                     <span className="truncate font-semibold">{deck.name}</span>
                     <span className="text-[10px] text-zinc-500">
-                      {cardSum}/60 cartes
+                      {cardSum}/{DECK_TARGET} cartes
                     </span>
                   </button>
                   <button
@@ -470,11 +472,9 @@ function CollectionPicker({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return pool.filter((c) => {
-      const isEnergy = c.id.includes("energy");
       const owned = collection.get(c.id) ?? 0;
-      const ownedAtAll = owned > 0 || isEnergy;
-      if (ownedFilter === "owned" && !ownedAtAll) return false;
-      if (ownedFilter === "missing" && ownedAtAll) return false;
+      if (ownedFilter === "owned" && owned <= 0) return false;
+      if (ownedFilter === "missing" && owned > 0) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
       if (typeFilter) {
         const cType = c.kind === "energy" ? c.energyType : c.type;
@@ -606,12 +606,11 @@ function CollectionPicker({
         ) : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {sorted.map((card) => {
-              const isEnergy = card.id.includes("energy");
               const owned = collection.get(card.id) ?? 0;
               const inDeck = draftEntries.get(card.id) ?? 0;
-              const cap = isEnergy ? Infinity : Math.min(owned, 4);
+              const cap = Math.min(owned, MAX_COPIES);
               const canAdd = inDeck < cap;
-              const ownedAtAll = owned > 0 || isEnergy;
+              const ownedAtAll = owned > 0;
               return (
                 <button
                   key={card.id}
@@ -627,8 +626,7 @@ function CollectionPicker({
                   <CardFace card={card} />
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-zinc-400">
-                      {isEnergy ? "∞" : owned} {!isEnergy && "possédée"}
-                      {!isEnergy && owned > 1 ? "s" : ""}
+                      {owned} possédée{owned > 1 ? "s" : ""}
                     </span>
                     {inDeck > 0 && (
                       <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950">

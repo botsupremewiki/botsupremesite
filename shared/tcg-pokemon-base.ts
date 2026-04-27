@@ -765,6 +765,6 @@ const POKEMON: PokemonCardData[] = [
 
 export const POKEMON_BASE_SET: PokemonCardData[] = POKEMON;
 
-export const POKEMON_BASE_SET_BY_ID: Record<string, PokemonCardData> = Object.fromEntries(
+export const POKEMON_BASE_SET_BY_ID: Map<string, PokemonCardData> = new Map(
   POKEMON.map((c) => [c.id, c]),
 );

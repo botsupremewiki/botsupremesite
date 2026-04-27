@@ -160,7 +160,7 @@ export function BattleLobbyClient({
   const validDecks = useMemo(
     () =>
       decks.filter(
-        (d) => d.cards.reduce((s, c) => s + c.count, 0) === 60,
+        (d) => d.cards.reduce((s, c) => s + c.count, 0) === 20,
       ),
     [decks],
   );
@@ -199,8 +199,8 @@ export function BattleLobbyClient({
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
             {ranked
-              ? "Match classé : ton ELO monte ou descend selon le résultat. Choisis un deck légal (60 cartes) et entre en file."
-              : "Combat amical sans classement. Choisis un deck légal (60 cartes) et entre en file d'attente — tu seras associé au prochain joueur disponible."}
+              ? "Match classé : ton ELO monte ou descend selon le résultat. Choisis un deck légal (20 cartes) et entre en file."
+              : "Combat amical sans classement. Choisis un deck légal (20 cartes) et entre en file d'attente — tu seras associé au prochain joueur disponible."}
           </p>
 
           {!profile && (

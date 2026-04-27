@@ -1221,9 +1221,10 @@ export type BattlePlayerPublicState = {
   deckSize: number; // nombre de cartes restantes dans le deck
   handCount: number; // nombre de cartes en main (cachées pour l'adverse)
   active: BattleCard | null;
-  bench: BattleCard[]; // 0..5
+  bench: BattleCard[]; // 0..3 (Pocket : banc max 3)
   discardCount: number;
-  prizesRemaining: number;
+  // Compteur de KO infligés à l'adversaire ce match. Premier à BATTLE_KO_TARGET = 3 gagne.
+  koCount: number;
   hasSetup: boolean;
   // Quand l'Actif vient d'être KO, le joueur doit promouvoir un Pokémon
   // du Banc avant que l'autre puisse jouer.
@@ -1231,12 +1232,15 @@ export type BattlePlayerPublicState = {
   // Limites par tour — exposées pour que l'UI grise les actions épuisées.
   energyAttachedThisTurn: boolean;
   hasRetreatedThisTurn: boolean;
+  // Pocket : énergie générée automatiquement chaque tour, prête à être
+  // attachée à un Pokémon (1 attache max/tour). null si pas d'énergie en
+  // attente (consommée, ou tour 1 du first player qui n'en génère pas).
+  pendingEnergy: PokemonEnergyType | null;
 };
 
 export type BattleSelfState = BattlePlayerPublicState & {
   // Cartes de la main visibles pour soi.
   hand: string[]; // card_ids
-  // Cartes de prize encore face cachée — on connaît juste le nombre.
 };
 
 export type BattleState = {
@@ -1261,7 +1265,9 @@ export type BattleClientMessage =
   | { type: "battle-confirm-setup" }
   // Playing phase actions
   | { type: "battle-play-basic"; handIndex: number }
-  | { type: "battle-attach-energy"; handIndex: number; targetUid: string }
+  // Pocket : pas de handIndex (énergies auto-générées chaque tour, attachées
+  // au choix sur n'importe quel Pokémon en jeu).
+  | { type: "battle-attach-energy"; targetUid: string }
   | { type: "battle-evolve"; handIndex: number; targetUid: string }
   | { type: "battle-retreat"; benchIndex: number }
   | { type: "battle-attack"; attackIndex: number }
@@ -1270,6 +1276,21 @@ export type BattleClientMessage =
   | { type: "battle-end-turn" }
   | { type: "battle-concede" }
   | { type: "chat"; text: string };
+
+// ─── Battle constants (Pocket-style) ───────────────────────────────────────
+
+export const BATTLE_CONFIG = {
+  /** Premier à atteindre ce nombre de KO infligés gagne. */
+  koWinTarget: 3,
+  /** Banc max (en plus de l'Actif). Pocket : 3 (vs 5 dans le TCG complet). */
+  maxBench: 3,
+  /** Cartes piochées au setup. Pocket : 5 (vs 7 dans le TCG complet). */
+  openingHandSize: 5,
+  /** Taille de deck exacte requise. Pocket : 20 (vs 60 dans le TCG complet). */
+  deckSize: 20,
+  /** Max copies d'une même carte dans un deck. Pocket : 2 (vs 4 dans le TCG complet). */
+  maxCopies: 2,
+} as const;
 
 export type BattleServerMessage =
   | { type: "battle-welcome"; selfId: string; selfSeat: BattleSeatId | null }

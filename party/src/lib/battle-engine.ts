@@ -1,7 +1,7 @@
 // Helpers communs à toutes les phases du battle Pokémon. Volontairement
 // pure-fonctionnels (pas de state) pour qu'on puisse les tester en isolation.
 
-import type { PokemonCardData } from "../../../shared/types";
+import type { PokemonCardData, PokemonEnergyType } from "../../../shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "../../../shared/tcg-pokemon-base";
 
 /** Une carte de deck encapsulée (ce qu'on shuffle / pioche). On garde
@@ -75,25 +75,46 @@ export function drawN(deck: DeckCard[], n: number): DeckCard[] {
 
 /** Pioche initiale + boucle de mulligan jusqu'à avoir 1 Basic en main.
  *  Retourne la main finale + le nombre de mulligans effectués (pour
- *  compenser l'adversaire). */
-export function dealOpeningHand(deck: DeckCard[]): {
+ *  compenser l'adversaire). Pocket : openingSize = 5. */
+export function dealOpeningHand(
+  deck: DeckCard[],
+  openingSize: number,
+): {
   hand: DeckCard[];
   mulligans: number;
 } {
   let mulligans = 0;
-  let hand = drawN(deck, 7);
+  let hand = drawN(deck, openingSize);
   while (!handHasBasic(hand)) {
-    // Remettre la main dans le deck, reshuffle, redraw 7.
+    // Remettre la main dans le deck, reshuffle, redraw openingSize.
     deck.push(...hand);
     shuffle(deck);
     mulligans++;
-    hand = drawN(deck, 7);
+    hand = drawN(deck, openingSize);
     if (mulligans > 20) break; // sécurité anti-deck-pourri
   }
   return { hand, mulligans };
 }
 
-/** Place `n` cartes face cachée comme prizes (ex 6 pour Pokémon TCG). */
-export function takePrizes(deck: DeckCard[], n: number): DeckCard[] {
-  return drawN(deck, n);
+/** Pocket : déduit les types d'énergies disponibles dans le deck à partir
+ *  des types des Pokémon présents. Ces types serviront à générer aléatoirement
+ *  une énergie à chaque tour. Si aucun Pokémon (impossible normalement),
+ *  fallback sur ["colorless"]. */
+export function deriveEnergyTypes(
+  cards: { cardId: string; count: number }[],
+): PokemonEnergyType[] {
+  const types = new Set<PokemonEnergyType>();
+  for (const entry of cards) {
+    const c = getCard(entry.cardId);
+    if (c?.kind === "pokemon") types.add(c.type);
+  }
+  return types.size > 0 ? [...types] : ["colorless"];
+}
+
+/** Pocket : tire une énergie aléatoire parmi les types du deck. */
+export function pickRandomEnergy(
+  types: PokemonEnergyType[],
+): PokemonEnergyType {
+  if (types.length === 0) return "colorless";
+  return types[Math.floor(Math.random() * types.length)];
 }

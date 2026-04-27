@@ -140,7 +140,7 @@ export default async function TcgGameHub({
               href={`/play/tcg/${gameId}/decks`}
               icon="🛠️"
               title="Mes Decks"
-              description={`${deckCount} deck${deckCount > 1 ? "s" : ""} sauvegardé${deckCount > 1 ? "s" : ""} — éditeur 60 cartes`}
+              description={`${deckCount} deck${deckCount > 1 ? "s" : ""} sauvegardé${deckCount > 1 ? "s" : ""} — éditeur 20 cartes (Pocket)`}
               accent="text-violet-200"
               border="border-violet-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.10),transparent_70%)]"

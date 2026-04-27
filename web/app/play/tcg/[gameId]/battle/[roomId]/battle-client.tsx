@@ -16,7 +16,7 @@ import type {
   PokemonEnergyType,
   TcgGameId,
 } from "@shared/types";
-import { TCG_GAMES } from "@shared/types";
+import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
@@ -134,8 +134,8 @@ export function BattleClient({
   const confirmSetup = () => send({ type: "battle-confirm-setup" });
   const playBasic = (handIndex: number) =>
     send({ type: "battle-play-basic", handIndex });
-  const attachEnergy = (handIndex: number, targetUid: string) =>
-    send({ type: "battle-attach-energy", handIndex, targetUid });
+  const attachEnergy = (targetUid: string) =>
+    send({ type: "battle-attach-energy", targetUid });
   const evolve = (handIndex: number, targetUid: string) =>
     send({ type: "battle-evolve", handIndex, targetUid });
   const retreat = (benchIndex: number) =>
@@ -329,17 +329,20 @@ function BattleBoard({
   onConfirmSetup: () => void;
   onEndTurn: () => void;
   onPlayBasic: (handIndex: number) => void;
-  onAttachEnergy: (handIndex: number, targetUid: string) => void;
+  onAttachEnergy: (targetUid: string) => void;
   onEvolve: (handIndex: number, targetUid: string) => void;
   onRetreat: (benchIndex: number) => void;
   onAttack: (attackIndex: number) => void;
   onPromoteActive: (benchIndex: number) => void;
 }) {
-  // Mode "attach energy" : index de l'énergie sélectionnée en main
-  const [pendingEnergyIdx, setPendingEnergyIdx] = useState<number | null>(null);
+  // Mode "attach energy" : Pocket génère 1 énergie automatique par tour. Si
+  // pendingEnergy est définie côté serveur et qu'aucune attache n'a encore eu
+  // lieu ce tour, le joueur peut activer ce mode pour cliquer sur un Pokémon
+  // (Actif ou Banc) afin d'y attacher l'énergie.
+  const [attachEnergyMode, setAttachEnergyMode] = useState(false);
   const [pendingEvolveIdx, setPendingEvolveIdx] = useState<number | null>(null);
   const cancelPending = () => {
-    setPendingEnergyIdx(null);
+    setAttachEnergyMode(false);
     setPendingEvolveIdx(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
@@ -360,7 +363,7 @@ function BattleBoard({
           <div className="flex-shrink-0 border-b border-white/10 bg-black/30 p-3">
             <PlayerInfo player={state.opponent} isOpponent />
             <div className="mt-2 flex items-center justify-center gap-3">
-              <BackRow side="opp" prizes={state.opponent.prizesRemaining} deckSize={state.opponent.deckSize} discardCount={state.opponent.discardCount} />
+              <BackRow side="opp" koCount={state.opponent.koCount} deckSize={state.opponent.deckSize} discardCount={state.opponent.discardCount} />
               <BoardArea
                 active={state.opponent.active}
                 bench={state.opponent.bench}
@@ -386,7 +389,7 @@ function BattleBoard({
         {state.self && (
           <div className="flex-shrink-0 border-t border-white/10 bg-black/30 p-3">
             <div className="flex items-center justify-center gap-3">
-              <BackRow side="self" prizes={state.self.prizesRemaining} deckSize={state.self.deckSize} discardCount={state.self.discardCount} />
+              <BackRow side="self" koCount={state.self.koCount} deckSize={state.self.deckSize} discardCount={state.self.discardCount} />
               <BoardArea
                 active={state.self.active}
                 bench={state.self.bench}
@@ -394,10 +397,10 @@ function BattleBoard({
                 isOpponent={false}
                 onHoverCard={setHoveredCardId}
                 attachMode={
-                  pendingEnergyIdx !== null
+                  attachEnergyMode
                     ? (uid) => {
-                        onAttachEnergy(pendingEnergyIdx, uid);
-                        setPendingEnergyIdx(null);
+                        onAttachEnergy(uid);
+                        setAttachEnergyMode(false);
                       }
                     : pendingEvolveIdx !== null
                       ? (uid) => {
@@ -428,10 +431,27 @@ function BattleBoard({
             </div>
             <PlayerInfo player={state.self} isOpponent={false} />
 
-            {(pendingEnergyIdx !== null || pendingEvolveIdx !== null) && (
+            {/* Énergie auto Pocket : bouton "Attacher ⚡{type}" si pendingEnergy. */}
+            {state.self.pendingEnergy &&
+              !state.self.energyAttachedThisTurn &&
+              isMyTurn &&
+              !attachEnergyMode &&
+              pendingEvolveIdx === null && (
+                <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
+                  ⚡ Énergie disponible : <strong>{state.self.pendingEnergy}</strong>
+                  <button
+                    onClick={() => setAttachEnergyMode(true)}
+                    className="ml-auto rounded border border-amber-400/40 bg-amber-400/20 px-2 py-0.5 text-amber-100 hover:bg-amber-400/30"
+                  >
+                    Attacher
+                  </button>
+                </div>
+              )}
+
+            {(attachEnergyMode || pendingEvolveIdx !== null) && (
               <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-                {pendingEnergyIdx !== null
-                  ? "Choisis un Pokémon à qui attacher cette Énergie."
+                {attachEnergyMode
+                  ? "Choisis un Pokémon à qui attacher l'Énergie."
                   : "Choisis le Pokémon à faire évoluer."}
                 <button
                   onClick={cancelPending}
@@ -452,12 +472,8 @@ function BattleBoard({
               onRemoveBench={onRemoveBench}
               onPlayBasic={onPlayBasic}
               onHoverCard={setHoveredCardId}
-              onSelectEnergy={(i) => {
-                setPendingEvolveIdx(null);
-                setPendingEnergyIdx(i);
-              }}
               onSelectEvolve={(i) => {
-                setPendingEnergyIdx(null);
+                setAttachEnergyMode(false);
                 setPendingEvolveIdx(i);
               }}
             />
@@ -541,9 +557,9 @@ function PlayerInfo({
         {player.username}
       </span>
       <span className="text-zinc-400">
-        Main {player.handCount} · Deck {player.deckSize} · Prizes{" "}
+        Main {player.handCount} · Deck {player.deckSize} · KO{" "}
         <span className="font-bold text-amber-300">
-          {player.prizesRemaining}
+          {player.koCount}/{BATTLE_CONFIG.koWinTarget}
         </span>
       </span>
     </div>
@@ -552,12 +568,12 @@ function PlayerInfo({
 
 function BackRow({
   side,
-  prizes,
+  koCount,
   deckSize,
   discardCount,
 }: {
   side: "self" | "opp";
-  prizes: number;
+  koCount: number;
   deckSize: number;
   discardCount: number;
 }) {
@@ -565,13 +581,17 @@ function BackRow({
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex flex-col items-center">
-        <div className="text-[9px] uppercase tracking-widest text-zinc-500">Prizes</div>
-        <div className="grid grid-cols-3 gap-0.5">
-          {Array.from({ length: 6 }, (_, i) => (
+        <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+          KO {koCount}/{BATTLE_CONFIG.koWinTarget}
+        </div>
+        <div className="flex gap-0.5">
+          {Array.from({ length: BATTLE_CONFIG.koWinTarget }, (_, i) => (
             <div
               key={i}
-              className={`h-5 w-4 rounded-sm border ${
-                i < prizes ? "border-amber-300/60 bg-amber-700/40" : "border-white/5 bg-white/[0.02]"
+              className={`h-5 w-5 rounded-sm border ${
+                i < koCount
+                  ? "border-amber-300/60 bg-amber-700/40"
+                  : "border-white/5 bg-white/[0.02]"
               }`}
             />
           ))}
@@ -654,9 +674,9 @@ function BoardArea({
           Actif
         </div>
       )}
-      {/* Bench */}
+      {/* Bench (Pocket : max 3 slots) */}
       <div className="flex gap-1">
-        {Array.from({ length: 5 }, (_, i) => {
+        {Array.from({ length: BATTLE_CONFIG.maxBench }, (_, i) => {
           const card = bench[i];
           if (!card) {
             return (
@@ -914,7 +934,6 @@ function SelfHand({
   onAddBench,
   onRemoveBench,
   onPlayBasic,
-  onSelectEnergy,
   onSelectEvolve,
   onHoverCard,
 }: {
@@ -925,7 +944,6 @@ function SelfHand({
   onAddBench: (handIndex: number) => void;
   onRemoveBench: (benchIndex: number) => void;
   onPlayBasic: (handIndex: number) => void;
-  onSelectEnergy: (handIndex: number) => void;
   onSelectEvolve: (handIndex: number) => void;
   onHoverCard?: (cardId: string | null) => void;
 }) {
@@ -934,6 +952,7 @@ function SelfHand({
   const inSetup = state.phase === "setup" && !self.hasSetup;
   const inMain =
     state.phase === "playing" && isMyTurn && !self.mustPromoteActive;
+  const benchCap = BATTLE_CONFIG.maxBench;
 
   return (
     <div className="mt-2 border-t border-white/10 pt-2">
@@ -947,22 +966,17 @@ function SelfHand({
           const isBasicPoke = data.kind === "pokemon" && data.stage === "basic";
           const isEvolution =
             data.kind === "pokemon" && data.stage !== "basic" && !!data.evolvesFrom;
-          const isEnergyCard = data.kind === "energy";
           // Setup-phase actions
           const setupSetActive =
             inSetup && isBasicPoke && !self.active ? () => onSetActive(i) : undefined;
           const setupAddBench =
-            inSetup && isBasicPoke && !!self.active && self.bench.length < 5
+            inSetup && isBasicPoke && !!self.active && self.bench.length < benchCap
               ? () => onAddBench(i)
               : undefined;
           // Main-phase actions
           const playBench =
-            inMain && isBasicPoke && self.bench.length < 5
+            inMain && isBasicPoke && self.bench.length < benchCap
               ? () => onPlayBasic(i)
-              : undefined;
-          const attachEnergy =
-            inMain && isEnergyCard && !self.energyAttachedThisTurn
-              ? () => onSelectEnergy(i)
               : undefined;
           const evolveCard = inMain && isEvolution ? () => onSelectEvolve(i) : undefined;
 
@@ -973,7 +987,6 @@ function SelfHand({
               onSetActive={setupSetActive}
               onAddBench={setupAddBench}
               onPlayBench={playBench}
-              onAttachEnergy={attachEnergy}
               onEvolve={evolveCard}
               onHover={onHoverCard}
             />

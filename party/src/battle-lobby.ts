@@ -3,6 +3,7 @@ import type {
   BattleLobbyClientMessage,
   BattleLobbyServerMessage,
 } from "../../shared/types";
+import { BATTLE_CONFIG } from "../../shared/types";
 import { fetchTcgDeckById } from "./lib/supabase";
 
 const UUID_RE =
@@ -98,10 +99,10 @@ export default class BattleLobbyServer implements Party.Server {
       return;
     }
     const total = (deck.cards ?? []).reduce((s, c) => s + c.count, 0);
-    if (total !== 60) {
+    if (total !== BATTLE_CONFIG.deckSize) {
       this.sendTo(conn, {
         type: "lobby-error",
-        message: `Ce deck est invalide (${total}/60 cartes).`,
+        message: `Ce deck est invalide (${total}/${BATTLE_CONFIG.deckSize} cartes).`,
       });
       return;
     }

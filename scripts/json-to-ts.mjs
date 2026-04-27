@@ -101,7 +101,7 @@ async function main() {
   lines.push("");
   lines.push("export const POKEMON_BASE_SET: PokemonCardData[] = POKEMON;");
   lines.push("");
-  lines.push("export const POKEMON_BASE_SET_BY_ID: Record<string, PokemonCardData> = Object.fromEntries(");
+  lines.push("export const POKEMON_BASE_SET_BY_ID: Map<string, PokemonCardData> = new Map(");
   lines.push("  POKEMON.map((c) => [c.id, c]),");
   lines.push(");");
   lines.push("");
