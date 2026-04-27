@@ -6,10 +6,14 @@ import {
   SKYLINE_COMMERCE_PRODUCTS,
   SKYLINE_COMMERCE_SECTORS,
   SKYLINE_DISTRICTS,
+  SKYLINE_FACTORY_SECTORS,
   SKYLINE_FURNITURE,
+  SKYLINE_INTERMEDIATE_PRODUCTS,
   SKYLINE_LOCAL_SIZES,
+  SKYLINE_MACHINE_LEVELS,
   SKYLINE_PERMITS,
   SKYLINE_PRODUCTS,
+  SKYLINE_RAW_MATERIALS,
   SKYLINE_SECTOR_REQUIRED_PERMITS,
   SKYLINE_SKILLS,
   skylineFormatCashFR,
@@ -17,21 +21,28 @@ import {
   type SkylineCommerceSector,
   type SkylineCompanyRow,
   type SkylineEmployeeRow,
+  type SkylineFactorySector,
   type SkylineFurnitureKind,
   type SkylineFurnitureRow,
   type SkylineInventoryRow,
+  type SkylineMachineLevel,
+  type SkylineMachineRow,
   type SkylinePermitKind,
   type SkylinePermitRow,
   type SkylineProductId,
+  type SkylineRawMaterialId,
   type SkylineSkill,
   type SkylineTransactionRow,
 } from "@shared/skyline";
 import {
   acquirePermitAction,
   buyFurnitureAction,
+  buyMachineAction,
   cleanCompanyAction,
   fireEmployeeAction,
   placeFurnitureAction,
+  placeMarketOrderAction,
+  purchaseRawMaterialAction,
   purchaseStockAction,
   removeFurnitureAction,
   setSellPriceAction,
@@ -45,7 +56,10 @@ type Tab =
   | "hr"
   | "hygiene"
   | "permits"
-  | "compta";
+  | "compta"
+  | "machines"
+  | "production"
+  | "market";
 
 export function CompanyView({
   company,
@@ -54,6 +68,7 @@ export function CompanyView({
   transactions,
   employees,
   permits,
+  machines,
   cash,
 }: {
   company: SkylineCompanyRow;
@@ -62,16 +77,24 @@ export function CompanyView({
   transactions: SkylineTransactionRow[];
   employees: SkylineEmployeeRow[];
   permits: SkylinePermitRow[];
+  machines: SkylineMachineRow[];
   cash: number;
 }) {
-  const [tab, setTab] = useState<Tab>("stocks");
-  const sectorMeta =
-    SKYLINE_COMMERCE_SECTORS[company.sector as SkylineCommerceSector];
+  const isFactory = company.category === "factory";
+  const [tab, setTab] = useState<Tab>(isFactory ? "production" : "stocks");
+  const commerceSectorMeta = isFactory
+    ? null
+    : SKYLINE_COMMERCE_SECTORS[company.sector as SkylineCommerceSector];
+  const factorySectorMeta = isFactory
+    ? SKYLINE_FACTORY_SECTORS[company.sector as SkylineFactorySector]
+    : null;
+  const sectorMeta = commerceSectorMeta ?? factorySectorMeta;
   const districtMeta = SKYLINE_DISTRICTS[company.district];
   const sizeMeta = SKYLINE_LOCAL_SIZES[company.local_size];
   const rent = skylineRentMonthly(company.district, company.local_size);
   const availableProducts =
     SKYLINE_COMMERCE_PRODUCTS[company.sector as SkylineCommerceSector] ?? [];
+  const factoryRecipe = factorySectorMeta;
 
   return (
     <main
@@ -112,18 +135,37 @@ export function CompanyView({
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2">
-          <TabButton current={tab} value="stocks" onClick={setTab}>
-            📦 Stocks
-          </TabButton>
-          <TabButton current={tab} value="furniture" onClick={setTab}>
-            🪑 Présentoirs ({furniture.length})
-          </TabButton>
-          <TabButton current={tab} value="layout" onClick={setTab}>
-            🏠 Local 2D
-          </TabButton>
-          <TabButton current={tab} value="pricing" onClick={setTab}>
-            💰 Prix de vente
-          </TabButton>
+          {isFactory ? (
+            <>
+              <TabButton current={tab} value="production" onClick={setTab}>
+                🏭 Production
+              </TabButton>
+              <TabButton current={tab} value="machines" onClick={setTab}>
+                ⚙️ Machines ({machines.length})
+              </TabButton>
+              <TabButton current={tab} value="stocks" onClick={setTab}>
+                📦 Stocks
+              </TabButton>
+              <TabButton current={tab} value="market" onClick={setTab}>
+                📈 Marché B2B
+              </TabButton>
+            </>
+          ) : (
+            <>
+              <TabButton current={tab} value="stocks" onClick={setTab}>
+                📦 Stocks
+              </TabButton>
+              <TabButton current={tab} value="furniture" onClick={setTab}>
+                🪑 Présentoirs ({furniture.length})
+              </TabButton>
+              <TabButton current={tab} value="layout" onClick={setTab}>
+                🏠 Local 2D
+              </TabButton>
+              <TabButton current={tab} value="pricing" onClick={setTab}>
+                💰 Prix de vente
+              </TabButton>
+            </>
+          )}
           <TabButton current={tab} value="hr" onClick={setTab}>
             👥 RH ({employees.length})
           </TabButton>
@@ -140,10 +182,43 @@ export function CompanyView({
 
         {/* Tab content */}
         {tab === "stocks" ? (
-          <StocksTab
+          isFactory && factoryRecipe ? (
+            <FactoryStocksTab
+              companyId={company.id}
+              inventory={inventory}
+              recipe={factoryRecipe}
+              cash={cash}
+            />
+          ) : (
+            <StocksTab
+              companyId={company.id}
+              inventory={inventory}
+              availableProducts={availableProducts}
+              cash={cash}
+            />
+          )
+        ) : null}
+        {tab === "production" && factoryRecipe ? (
+          <ProductionTab
+            company={company}
+            inventory={inventory}
+            recipe={factoryRecipe}
+            machines={machines}
+            employees={employees}
+          />
+        ) : null}
+        {tab === "machines" && factoryRecipe ? (
+          <MachinesTab
+            companyId={company.id}
+            machineKind={factoryRecipe.machineKind}
+            machines={machines}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "market" ? (
+          <MarketTab
             companyId={company.id}
             inventory={inventory}
-            availableProducts={availableProducts}
             cash={cash}
           />
         ) : null}
@@ -1186,6 +1261,534 @@ function LayoutTab({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglets P5 : USINE
+// ──────────────────────────────────────────────────────────────────
+
+type FactoryRecipeMeta = (typeof SKYLINE_FACTORY_SECTORS)[SkylineFactorySector];
+
+function FactoryStocksTab({
+  companyId,
+  inventory,
+  recipe,
+  cash,
+}: {
+  companyId: string;
+  inventory: SkylineInventoryRow[];
+  recipe: FactoryRecipeMeta;
+  cash: number;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-orange-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-orange-200">
+          🌾 Achat matières premières
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Cette usine consomme {recipe.inputs.map((i) => i.id).join(" + ")} pour
+          produire {recipe.output.id}. Achète aux fournisseurs PNJ ou via le
+          marché commun (P6).
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {recipe.inputs.map((inp) => {
+            const matMeta =
+              SKYLINE_RAW_MATERIALS[inp.id as SkylineRawMaterialId];
+            if (!matMeta) return null;
+            return (
+              <RawMaterialPurchaseCard
+                key={inp.id}
+                companyId={companyId}
+                materialId={matMeta.id}
+                name={matMeta.name}
+                glyph={matMeta.glyph}
+                refBuyPrice={matMeta.refBuyPrice}
+                cash={cash}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {inventory.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Stock actuel ({inventory.length} lignes)
+          </h3>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs tabular-nums">
+              <thead className="text-zinc-500">
+                <tr className="border-b border-white/5">
+                  <th className="py-2 text-left">Ligne</th>
+                  <th className="text-right">Quantité</th>
+                  <th className="text-right">Prix achat moy.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventory.map((inv) => {
+                  const mat =
+                    SKYLINE_RAW_MATERIALS[inv.product_id as SkylineRawMaterialId];
+                  const intermed = SKYLINE_INTERMEDIATE_PRODUCTS[inv.product_id];
+                  const product = SKYLINE_PRODUCTS[inv.product_id];
+                  const meta = mat ?? intermed ?? product;
+                  return (
+                    <tr key={inv.id} className="border-b border-white/5">
+                      <td className="py-2 text-zinc-200">
+                        {meta?.glyph} {meta?.name ?? inv.product_id}
+                      </td>
+                      <td className="text-right text-zinc-300">
+                        {inv.quantity}
+                      </td>
+                      <td className="text-right text-zinc-400">
+                        {skylineFormatCashFR(Number(inv.avg_buy_price))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RawMaterialPurchaseCard({
+  companyId,
+  materialId,
+  name,
+  glyph,
+  refBuyPrice,
+  cash,
+}: {
+  companyId: string;
+  materialId: string;
+  name: string;
+  glyph: string;
+  refBuyPrice: number;
+  cash: number;
+}) {
+  const [quantity, setQuantity] = useState(100);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const cost = quantity * refBuyPrice;
+  const canAfford = cash >= cost;
+
+  const handleBuy = () => {
+    if (!canAfford || pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("material_id", materialId);
+    fd.set("quantity", String(quantity));
+    startTransition(async () => {
+      const res = await purchaseRawMaterialAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-zinc-200">
+          {glyph} {name}
+        </div>
+        <div className="text-xs tabular-nums text-zinc-400">
+          {skylineFormatCashFR(refBuyPrice)} /u
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={100000}
+          value={quantity}
+          onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+          className="w-24 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-orange-400/50"
+        />
+        <button
+          onClick={handleBuy}
+          disabled={!canAfford || pending}
+          className="flex-1 rounded-md border border-orange-400/50 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-200 transition-colors hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Acheter · {skylineFormatCashFR(cost)}
+        </button>
+      </div>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function ProductionTab({
+  inventory,
+  recipe,
+  machines,
+}: {
+  company: SkylineCompanyRow;
+  inventory: SkylineInventoryRow[];
+  recipe: FactoryRecipeMeta;
+  machines: SkylineMachineRow[];
+  employees: SkylineEmployeeRow[];
+}) {
+  const totalCapacity = machines.reduce(
+    (s, m) => s + Number(m.capacity_per_day),
+    0,
+  );
+  const outputId = recipe.output.id;
+  const outputStock = inventory.find((i) => i.product_id === outputId);
+  const intermedMeta = SKYLINE_INTERMEDIATE_PRODUCTS[outputId];
+  const productMeta = SKYLINE_PRODUCTS[outputId];
+  const meta = intermedMeta ?? productMeta;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-orange-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-orange-200">
+          🏭 Production automatique
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Tant que tu as des matières premières en stock et au moins une machine,
+          la production tourne automatiquement. Recettes par jour selon ta
+          capacité totale machines.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Capacité totale"
+            value={`${totalCapacity.toLocaleString("fr-FR")}/jour`}
+            accent="text-orange-200"
+          />
+          <Stat
+            label="Machines"
+            value={String(machines.length)}
+            accent="text-zinc-200"
+          />
+          <Stat
+            label={`Stock ${meta?.name ?? outputId}`}
+            value={String(outputStock?.quantity ?? 0)}
+            accent="text-emerald-200"
+          />
+        </div>
+
+        <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs">
+          <div className="text-zinc-400">Recette</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {recipe.inputs.map((inp, i) => {
+              const m =
+                SKYLINE_RAW_MATERIALS[inp.id as SkylineRawMaterialId] ??
+                SKYLINE_INTERMEDIATE_PRODUCTS[inp.id];
+              return (
+                <span
+                  key={i}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300"
+                >
+                  {m?.glyph} {inp.qty} × {m?.name ?? inp.id}
+                </span>
+              );
+            })}
+            <span className="text-zinc-500">→</span>
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-emerald-200">
+              {meta?.glyph} {recipe.output.qty} × {meta?.name ?? outputId}
+            </span>
+          </div>
+        </div>
+
+        {totalCapacity === 0 ? (
+          <div className="mt-3 rounded-md border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-200">
+            ⚠️ Aucune machine installée. Va dans l&apos;onglet{" "}
+            <strong>Machines</strong> pour démarrer la production.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+        {label}
+      </div>
+      <div className={`mt-1 text-base font-semibold tabular-nums ${accent}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function MachinesTab({
+  companyId,
+  machineKind,
+  machines,
+  cash,
+}: {
+  companyId: string;
+  machineKind: string;
+  machines: SkylineMachineRow[];
+  cash: number;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          ⚙️ Acheter une machine
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Plus la machine est haut de gamme, plus elle produit en volume — mais
+          elle exige des employés avec compétence Utilisation machines plus élevée.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {SKYLINE_MACHINE_LEVELS.map((lvl) => (
+            <MachineCard
+              key={lvl.id}
+              companyId={companyId}
+              kind={machineKind}
+              level={lvl.id}
+              levelName={lvl.name}
+              skillRequired={lvl.skillRequired}
+              multiplier={lvl.multiplier}
+              cash={cash}
+            />
+          ))}
+        </div>
+      </div>
+
+      {machines.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Mes machines ({machines.length})
+          </h3>
+          <ul className="mt-3 space-y-1 text-xs">
+            {machines.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded border border-white/5 bg-white/[0.02] px-3 py-2"
+              >
+                <span className="text-zinc-200">
+                  ⚙️ {m.kind} · niveau {m.level}
+                </span>
+                <span className="text-zinc-400 tabular-nums">
+                  {m.capacity_per_day}/jour · état {m.condition}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const MACHINE_COSTS: Record<string, Record<SkylineMachineLevel, number>> = {
+  moulin: { basic: 8000, pro: 30000, elite: 120000, hightech: 500000 },
+  boulangerie_indus: {
+    basic: 20000,
+    pro: 80000,
+    elite: 250000,
+    hightech: 800000,
+  },
+  brasserie: { basic: 30000, pro: 100000, elite: 400000, hightech: 1500000 },
+  viticole: { basic: 15000, pro: 60000, elite: 200000, hightech: 800000 },
+  distillerie: { basic: 25000, pro: 100000, elite: 350000, hightech: 1200000 },
+  abattoir: { basic: 50000, pro: 200000, elite: 800000, hightech: 3000000 },
+  laiterie: { basic: 20000, pro: 80000, elite: 300000, hightech: 1000000 },
+  chocolaterie: { basic: 15000, pro: 60000, elite: 200000, hightech: 700000 },
+  conserverie: { basic: 30000, pro: 120000, elite: 400000, hightech: 1500000 },
+};
+
+function MachineCard({
+  companyId,
+  kind,
+  level,
+  levelName,
+  skillRequired,
+  multiplier,
+  cash,
+}: {
+  companyId: string;
+  kind: string;
+  level: SkylineMachineLevel;
+  levelName: string;
+  skillRequired: number;
+  multiplier: string;
+  cash: number;
+}) {
+  const cost = MACHINE_COSTS[kind]?.[level] ?? 0;
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canAfford = cash >= cost;
+
+  const handleBuy = () => {
+    if (!canAfford || pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", kind);
+    fd.set("level", level);
+    startTransition(async () => {
+      const res = await buyMachineAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-zinc-100">
+          ⚙️ {levelName} ({multiplier})
+        </div>
+        <div className="text-xs text-zinc-400">
+          Comp. ≥ {skillRequired}
+        </div>
+      </div>
+      <button
+        onClick={handleBuy}
+        disabled={!canAfford || pending}
+        className="rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending ? "..." : `Acheter · ${skylineFormatCashFR(cost)}`}
+      </button>
+      {error ? (
+        <div className="text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function MarketTab({
+  companyId,
+  inventory,
+  cash,
+}: {
+  companyId: string;
+  inventory: SkylineInventoryRow[];
+  cash: number;
+}) {
+  const sellable = inventory.filter((i) => i.quantity > 0);
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+      <h3 className="text-sm font-semibold text-zinc-200">
+        📈 Marché B2B (commun multijoueur)
+      </h3>
+      <p className="mt-1 text-xs text-zinc-400">
+        Pose des ordres d&apos;achat ou de vente sur le marché commun.
+        Le prix est dynamique selon offre/demande globale (P6).
+      </p>
+      {sellable.length === 0 ? (
+        <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          Aucun stock à vendre. Produis ou achète d&apos;abord.
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {sellable.map((inv) => (
+            <MarketSellRow key={inv.id} companyId={companyId} inv={inv} />
+          ))}
+        </div>
+      )}
+      <div className="mt-4">
+        <Link
+          href="/play/skyline/marche"
+          className="text-xs text-cyan-300 hover:text-cyan-200"
+        >
+          → Voir les cours produits sur le Marché commun
+        </Link>
+      </div>
+      <p className="mt-2 text-[10px] text-zinc-500">
+        Cash dispo : {skylineFormatCashFR(cash)}
+      </p>
+    </div>
+  );
+}
+
+function MarketSellRow({
+  companyId,
+  inv,
+}: {
+  companyId: string;
+  inv: SkylineInventoryRow;
+}) {
+  const intermed = SKYLINE_INTERMEDIATE_PRODUCTS[inv.product_id];
+  const product = SKYLINE_PRODUCTS[inv.product_id];
+  const mat = SKYLINE_RAW_MATERIALS[inv.product_id as SkylineRawMaterialId];
+  const meta = intermed ?? product ?? mat;
+  const [qty, setQty] = useState(Math.min(inv.quantity, 100));
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSell = () => {
+    if (pending || qty <= 0 || qty > inv.quantity) return;
+    setError(null);
+    setResult(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("side", "sell");
+    fd.set("product_id", inv.product_id);
+    fd.set("quantity", String(qty));
+    startTransition(async () => {
+      const res = await placeMarketOrderAction(fd);
+      if (res.ok) {
+        const d = res.data as { price?: number; total?: number };
+        setResult(
+          `Vendu ${qty}× à ${d?.price?.toFixed(2) ?? "?"}$ → +${skylineFormatCashFR(
+            d?.total ?? 0,
+          )}`,
+        );
+      } else {
+        setError(res.error);
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
+      <div className="min-w-[200px] flex-1">
+        <div className="text-zinc-200">
+          {meta?.glyph} {meta?.name ?? inv.product_id}
+        </div>
+        <div className="text-[10px] text-zinc-500">
+          Stock {inv.quantity} · Coût moy.{" "}
+          {skylineFormatCashFR(Number(inv.avg_buy_price))}
+        </div>
+      </div>
+      <input
+        type="number"
+        min={1}
+        max={inv.quantity}
+        value={qty}
+        onChange={(e) =>
+          setQty(Math.max(1, Math.min(inv.quantity, Number(e.target.value))))
+        }
+        className="w-24 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-right text-zinc-100 outline-none tabular-nums focus:border-cyan-400/50"
+      />
+      <button
+        onClick={handleSell}
+        disabled={pending || qty <= 0 || qty > inv.quantity}
+        className="rounded-md border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+      >
+        {pending ? "..." : "Vendre marché"}
+      </button>
+      {result ? (
+        <div className="w-full text-[10px] text-emerald-300">{result}</div>
+      ) : null}
+      {error ? (
+        <div className="w-full text-[10px] text-rose-300">{error}</div>
+      ) : null}
     </div>
   );
 }

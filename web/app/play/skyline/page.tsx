@@ -179,13 +179,12 @@ export default async function SkylineHub() {
                 border="border-amber-400/40"
               />
               <MenuButton
-                href="/play/skyline"
+                href="/play/skyline/marche"
                 icon="📊"
                 title="Marché commun"
-                description="Cours produits & matières (P6 — bientôt)"
-                accent="text-zinc-300"
-                border="border-zinc-400/30"
-                disabled
+                description="Cours produits & matières temps réel + fil d'actu"
+                accent="text-cyan-200"
+                border="border-cyan-400/40"
               />
               <MenuButton
                 href="/play/skyline"

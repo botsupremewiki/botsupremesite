@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import {
+  SKYLINE_FACTORY_SECTORS,
   type SkylineCommerceSector,
   type SkylineDistrict,
+  type SkylineFactorySector,
   type SkylineLocalSize,
   skylineRentMonthly,
   skylinePurchaseCost,
@@ -35,6 +37,12 @@ type Size = {
   sqm: number;
 };
 
+type Category = "commerce" | "factory";
+
+const FACTORY_SECTORS = Object.values(SKYLINE_FACTORY_SECTORS).sort(
+  (a, b) => a.minStartCash - b.minStartCash,
+);
+
 export function CreationForm({
   sectors,
   districts,
@@ -46,14 +54,25 @@ export function CreationForm({
   sizes: Size[];
   cash: number;
 }) {
-  const [sector, setSector] = useState<SkylineCommerceSector>(sectors[0].id);
+  const [category, setCategory] = useState<Category>("commerce");
+  const [commerceSector, setCommerceSector] = useState<SkylineCommerceSector>(
+    sectors[0].id,
+  );
+  const [factorySector, setFactorySector] = useState<SkylineFactorySector>(
+    FACTORY_SECTORS[0].id,
+  );
   const [name, setName] = useState("");
   const [district, setDistrict] = useState<SkylineDistrict>("populaire");
   const [size, setSize] = useState<SkylineLocalSize>("xs");
   const [purchase, setPurchase] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const sectorMeta = sectors.find((s) => s.id === sector)!;
+  const commerceSectorMeta = sectors.find((s) => s.id === commerceSector)!;
+  const factorySectorMeta = SKYLINE_FACTORY_SECTORS[factorySector];
+  const sectorId =
+    category === "commerce" ? commerceSector : factorySector;
+  const sectorMeta =
+    category === "commerce" ? commerceSectorMeta : factorySectorMeta;
   const rent = skylineRentMonthly(district, size);
   const buyCost = skylinePurchaseCost(district, size);
   const totalCost = purchase ? buyCost : rent;
@@ -70,37 +89,119 @@ export function CreationForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      <input type="hidden" name="category" value="commerce" />
+      <input type="hidden" name="category" value={category} />
+      <input type="hidden" name="sector" value={sectorId} />
+
+      {/* Step 0 — Catégorie */}
+      <section className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <div className="text-[11px] uppercase tracking-widest text-zinc-400">
+          Type d&apos;entreprise
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setCategory("commerce")}
+            className={`rounded-lg border p-3 text-left transition-colors ${
+              category === "commerce"
+                ? "border-pink-400/60 bg-pink-500/10"
+                : "border-white/10 bg-white/[0.02] hover:border-white/20"
+            }`}
+          >
+            <div className="text-2xl">🏪</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">
+              Commerce
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Vendre au consommateur
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategory("factory")}
+            className={`rounded-lg border p-3 text-left transition-colors ${
+              category === "factory"
+                ? "border-orange-400/60 bg-orange-500/10"
+                : "border-white/10 bg-white/[0.02] hover:border-white/20"
+            }`}
+          >
+            <div className="text-2xl">🏭</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">
+              Usine de transformation
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              2 matières → produit fini
+            </div>
+          </button>
+        </div>
+      </section>
 
       {/* Step 1 — Secteur */}
       <section className="rounded-xl border border-white/10 bg-black/40 p-4">
         <div className="text-[11px] uppercase tracking-widest text-zinc-400">
           1. Choisis ton secteur
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {sectors.map((s) => (
-            <button
-              type="button"
-              key={s.id}
-              onClick={() => setSector(s.id)}
-              className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
-                sector === s.id
-                  ? "border-pink-400/60 bg-pink-500/10"
-                  : "border-white/10 bg-white/[0.02] hover:border-white/20"
-              }`}
-            >
-              <span className="text-2xl">{s.glyph}</span>
-              <span className="text-xs font-semibold text-zinc-100">
-                {s.name}
-              </span>
-              <span className="text-[10px] text-zinc-500">
-                ~{s.minStartCash.toLocaleString("fr-FR")}$ démarrage
-              </span>
-            </button>
-          ))}
-        </div>
-        <input type="hidden" name="sector" value={sector} />
+        {category === "commerce" ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {sectors.map((s) => (
+              <button
+                type="button"
+                key={s.id}
+                onClick={() => setCommerceSector(s.id)}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  commerceSector === s.id
+                    ? "border-pink-400/60 bg-pink-500/10"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                }`}
+              >
+                <span className="text-2xl">{s.glyph}</span>
+                <span className="text-xs font-semibold text-zinc-100">
+                  {s.name}
+                </span>
+                <span className="text-[10px] text-zinc-500">
+                  ~{s.minStartCash.toLocaleString("fr-FR")}$ démarrage
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {FACTORY_SECTORS.map((s) => (
+              <button
+                type="button"
+                key={s.id}
+                onClick={() => setFactorySector(s.id)}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  factorySector === s.id
+                    ? "border-orange-400/60 bg-orange-500/10"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                }`}
+              >
+                <span className="text-2xl">{s.glyph}</span>
+                <span className="text-xs font-semibold text-zinc-100">
+                  {s.name}
+                </span>
+                <span className="text-[10px] text-zinc-500">
+                  ~{s.minStartCash.toLocaleString("fr-FR")}$ démarrage
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <p className="mt-3 text-xs text-zinc-400">{sectorMeta.description}</p>
+        {category === "factory" ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+            <span className="text-zinc-400">Recette :</span>
+            {factorySectorMeta.inputs.map((inp, i) => (
+              <span key={i} className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5">
+                {inp.qty} × {inp.id}
+              </span>
+            ))}
+            <span>→</span>
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+              {factorySectorMeta.output.qty} × {factorySectorMeta.output.id}
+            </span>
+          </div>
+        ) : null}
       </section>
 
       {/* Step 2 — Nom */}

@@ -320,3 +320,71 @@ export async function repayLoanAction(formData: FormData): Promise<Result> {
   revalidatePath("/play/skyline");
   return { ok: true, data: null };
 }
+
+// ───── P5 : Usines / Machines ─────
+
+export async function buyMachineAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  const level = String(formData.get("level") ?? "");
+  if (!companyId || !kind || !level)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_buy_machine", {
+    p_company_id: companyId,
+    p_kind: kind,
+    p_level: level,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+export async function purchaseRawMaterialAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const materialId = String(formData.get("material_id") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!companyId || !materialId || quantity <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_purchase_raw_material", {
+    p_company_id: companyId,
+    p_material_id: materialId,
+    p_quantity: quantity,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+// ───── P6 : Marché commun ─────
+
+export async function placeMarketOrderAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const side = String(formData.get("side") ?? "");
+  const productId = String(formData.get("product_id") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!companyId || !side || !productId || quantity <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_place_market_order", {
+    p_company_id: companyId,
+    p_side: side,
+    p_product_id: productId,
+    p_quantity: quantity,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/marche");
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}

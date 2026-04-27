@@ -3,6 +3,7 @@ import { getProfile } from "@/lib/auth";
 import {
   ensureSkylineProfile,
   fetchEmployeesForCompany,
+  fetchMachinesForCompany,
   fetchPermitsForCompany,
   fetchSkylineCompany,
   fetchSkylineFurniture,
@@ -30,13 +31,14 @@ export default async function CompanyPage({
     redirect("/play/skyline");
   }
 
-  const [furniture, inventory, transactions, employees, permits] =
+  const [furniture, inventory, transactions, employees, permits, machines] =
     await Promise.all([
       fetchSkylineFurniture(companyId),
       fetchSkylineInventory(companyId),
       fetchSkylineTransactions(profile.id, companyId, 30),
       fetchEmployeesForCompany(companyId),
       fetchPermitsForCompany(companyId),
+      fetchMachinesForCompany(companyId),
     ]);
 
   return (
@@ -56,6 +58,7 @@ export default async function CompanyPage({
         transactions={transactions}
         employees={employees}
         permits={permits}
+        machines={machines}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>

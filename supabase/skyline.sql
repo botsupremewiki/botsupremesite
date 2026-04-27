@@ -2495,3 +2495,758 @@ begin
 end;
 $$;
 
+-- ══════════════════════════════════════════════════════════════════════
+-- 18. P5 — USINES, MACHINES, MATIÈRES PREMIÈRES, PRODUCTION
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Prix de référence d'une matière première (achetable au marché de gros PNJ
+-- tant que les fermes/mines joueurs n'existent pas, P8).
+create or replace function public.skyline_raw_material_ref_buy(p_material_id text)
+returns numeric language sql immutable as $$
+  select case p_material_id
+    when 'wheat'         then 0.20
+    when 'barley'        then 0.25
+    when 'hops'          then 0.50
+    when 'grapes'        then 0.80
+    when 'cattle'        then 50.0
+    when 'milk'          then 0.40
+    when 'fruits'        then 0.60
+    when 'vegetables'    then 0.40
+    when 'salt'          then 0.10
+    when 'sugar'         then 0.30
+    when 'cocoa'         then 1.20
+    when 'coffee'        then 1.50
+    when 'cotton'        then 0.80
+    when 'wool'          then 1.50
+    when 'wood'          then 0.30
+    when 'iron'          then 0.80
+    when 'copper'        then 1.20
+    when 'aluminum'      then 1.50
+    when 'gold'          then 50
+    when 'silver'        then 5
+    when 'gemstones'     then 200
+    when 'coal'          then 0.20
+    when 'oil'           then 0.50
+    when 'flowers'       then 0.30
+    when 'plants_med'    then 1.00
+    else null
+  end;
+$$;
+
+-- Pour chaque secteur usine, retourne (input1, input2 ou null, output, ratio_in1, ratio_in2, ratio_out).
+-- Ex : moulin = 1 unité de blé → 1 unité de farine. Boulangerie indus = 0.5 farine + 0.005 sel → 1 baguette.
+-- On stocke en jsonb : { in1: { id, qty }, in2: { id, qty } | null, out: { id, qty } }
+create or replace function public.skyline_factory_recipe(p_sector text)
+returns jsonb language sql immutable as $$
+  select case p_sector
+    -- Moulin : blé → farine
+    when 'moulin' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'wheat', 'qty', 1.0),
+      'in2', null,
+      'out', jsonb_build_object('id', 'farine', 'qty', 0.95)
+    )
+    -- Boulangerie industrielle : farine + sel → pain emballé
+    when 'boulangerie_indus' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'farine', 'qty', 0.5),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.01),
+      'out', jsonb_build_object('id', 'pain_emballe', 'qty', 1.0)
+    )
+    -- Brasserie : orge + houblon → bière
+    when 'brasserie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'barley', 'qty', 0.4),
+      'in2', jsonb_build_object('id', 'hops', 'qty', 0.05),
+      'out', jsonb_build_object('id', 'biere_blonde', 'qty', 1.0)
+    )
+    -- Domaine viticole : raisins → vin (1 input simplifié)
+    when 'viticole' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'grapes', 'qty', 1.5),
+      'in2', null,
+      'out', jsonb_build_object('id', 'vin_rouge', 'qty', 1.0)
+    )
+    -- Distillerie : céréales + fruits → spiritueux
+    when 'distillerie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'wheat', 'qty', 0.8),
+      'in2', jsonb_build_object('id', 'fruits', 'qty', 0.3),
+      'out', jsonb_build_object('id', 'spiritueux', 'qty', 1.0)
+    )
+    -- Abattoir : bétail + sel → viandes
+    when 'abattoir' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'cattle', 'qty', 0.05),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.02),
+      'out', jsonb_build_object('id', 'steak', 'qty', 1.0)
+    )
+    -- Laiterie : lait + sel → fromages
+    when 'laiterie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'milk', 'qty', 1.5),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.01),
+      'out', jsonb_build_object('id', 'fromage', 'qty', 1.0)
+    )
+    -- Chocolaterie : cacao + sucre → chocolat
+    when 'chocolaterie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'cocoa', 'qty', 0.5),
+      'in2', jsonb_build_object('id', 'sugar', 'qty', 0.3),
+      'out', jsonb_build_object('id', 'chocolat_noir', 'qty', 1.0)
+    )
+    -- Conserverie : légumes + sel → conserves
+    when 'conserverie' then jsonb_build_object(
+      'in1', jsonb_build_object('id', 'vegetables', 'qty', 1.0),
+      'in2', jsonb_build_object('id', 'salt', 'qty', 0.05),
+      'out', jsonb_build_object('id', 'conserve', 'qty', 1.0)
+    )
+    else null
+  end;
+$$;
+
+-- Coût et capacité d'une machine (kind = secteur, level = basic/pro/elite/hightech).
+create or replace function public.skyline_machine_spec(p_kind text, p_level text)
+returns jsonb language sql immutable as $$
+  select case p_kind || '/' || p_level
+    -- Moulin
+    when 'moulin/basic'    then jsonb_build_object('cost', 8000,    'capacity', 200,    'name', 'Moulin manuel')
+    when 'moulin/pro'      then jsonb_build_object('cost', 30000,   'capacity', 1000,   'name', 'Moulin électrique')
+    when 'moulin/elite'    then jsonb_build_object('cost', 120000,  'capacity', 5000,   'name', 'Moulin industriel')
+    when 'moulin/hightech' then jsonb_build_object('cost', 500000,  'capacity', 20000,  'name', 'Moulin auto IA')
+    -- Boulangerie indus
+    when 'boulangerie_indus/basic'    then jsonb_build_object('cost', 20000,  'capacity', 500,   'name', 'Four industriel basique')
+    when 'boulangerie_indus/pro'      then jsonb_build_object('cost', 80000,  'capacity', 2500,  'name', 'Four industriel pro')
+    when 'boulangerie_indus/elite'    then jsonb_build_object('cost', 250000, 'capacity', 10000, 'name', 'Four tunnel automatisé')
+    when 'boulangerie_indus/hightech' then jsonb_build_object('cost', 800000, 'capacity', 40000, 'name', 'Ligne robotisée IA')
+    -- Brasserie
+    when 'brasserie/basic'    then jsonb_build_object('cost', 30000,  'capacity', 800,   'name', 'Cuve brassage 1000L')
+    when 'brasserie/pro'      then jsonb_build_object('cost', 100000, 'capacity', 4000,  'name', 'Brasserie semi-industrielle')
+    when 'brasserie/elite'    then jsonb_build_object('cost', 400000, 'capacity', 15000, 'name', 'Brasserie industrielle')
+    when 'brasserie/hightech' then jsonb_build_object('cost', 1500000,'capacity', 60000, 'name', 'Méga-brasserie auto')
+    -- Viticole
+    when 'viticole/basic'    then jsonb_build_object('cost', 15000,  'capacity', 300,   'name', 'Pressoir manuel')
+    when 'viticole/pro'      then jsonb_build_object('cost', 60000,  'capacity', 1500,  'name', 'Pressoir pneumatique')
+    when 'viticole/elite'    then jsonb_build_object('cost', 200000, 'capacity', 6000,  'name', 'Chai industriel')
+    when 'viticole/hightech' then jsonb_build_object('cost', 800000, 'capacity', 25000, 'name', 'Chai automatisé IA')
+    -- Distillerie
+    when 'distillerie/basic'    then jsonb_build_object('cost', 25000,  'capacity', 400,   'name', 'Alambic artisanal')
+    when 'distillerie/pro'      then jsonb_build_object('cost', 100000, 'capacity', 2000,  'name', 'Colonne distillation')
+    when 'distillerie/elite'    then jsonb_build_object('cost', 350000, 'capacity', 8000,  'name', 'Distillerie industrielle')
+    when 'distillerie/hightech' then jsonb_build_object('cost', 1200000,'capacity', 30000, 'name', 'Distillerie auto')
+    -- Abattoir
+    when 'abattoir/basic'    then jsonb_build_object('cost', 50000,  'capacity', 100,   'name', 'Atelier de découpe')
+    when 'abattoir/pro'      then jsonb_build_object('cost', 200000, 'capacity', 500,   'name', 'Abattoir semi-indus')
+    when 'abattoir/elite'    then jsonb_build_object('cost', 800000, 'capacity', 2000,  'name', 'Abattoir industriel')
+    when 'abattoir/hightech' then jsonb_build_object('cost', 3000000,'capacity', 8000,  'name', 'Abattoir auto IA')
+    -- Laiterie
+    when 'laiterie/basic'    then jsonb_build_object('cost', 20000,  'capacity', 400,   'name', 'Atelier laitier')
+    when 'laiterie/pro'      then jsonb_build_object('cost', 80000,  'capacity', 2000,  'name', 'Laiterie semi-indus')
+    when 'laiterie/elite'    then jsonb_build_object('cost', 300000, 'capacity', 8000,  'name', 'Laiterie industrielle')
+    when 'laiterie/hightech' then jsonb_build_object('cost', 1000000,'capacity', 30000, 'name', 'Laiterie auto IA')
+    -- Chocolaterie
+    when 'chocolaterie/basic'    then jsonb_build_object('cost', 15000,  'capacity', 300,   'name', 'Atelier chocolatier')
+    when 'chocolaterie/pro'      then jsonb_build_object('cost', 60000,  'capacity', 1500,  'name', 'Chocolaterie semi-indus')
+    when 'chocolaterie/elite'    then jsonb_build_object('cost', 200000, 'capacity', 6000,  'name', 'Chocolaterie industrielle')
+    when 'chocolaterie/hightech' then jsonb_build_object('cost', 700000, 'capacity', 25000, 'name', 'Chocolaterie auto IA')
+    -- Conserverie
+    when 'conserverie/basic'    then jsonb_build_object('cost', 30000,  'capacity', 500,   'name', 'Ligne conserve basique')
+    when 'conserverie/pro'      then jsonb_build_object('cost', 120000, 'capacity', 2500,  'name', 'Ligne conserve pro')
+    when 'conserverie/elite'    then jsonb_build_object('cost', 400000, 'capacity', 10000, 'name', 'Conserverie industrielle')
+    when 'conserverie/hightech' then jsonb_build_object('cost', 1500000,'capacity', 40000, 'name', 'Conserverie auto IA')
+    else null
+  end;
+$$;
+
+-- Acheter une machine pour une usine.
+create or replace function public.skyline_buy_machine(
+  p_company_id uuid,
+  p_kind       text,
+  p_level      text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_spec    jsonb;
+  v_cost    numeric;
+  v_cap     int;
+  v_id      uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id and category = 'factory'
+  ) then raise exception 'Pas une usine ou pas trouvée'; end if;
+
+  v_spec := public.skyline_machine_spec(p_kind, p_level);
+  if v_spec is null then raise exception 'Machine inconnue'; end if;
+
+  v_cost := (v_spec->>'cost')::numeric;
+  v_cap := (v_spec->>'capacity')::int;
+
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_cost then
+      raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+    end if;
+  end;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_machines (company_id, kind, level, cost, capacity_per_day)
+  values (p_company_id, p_kind, p_level, v_cost, v_cap)
+  returning id into v_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'equipment', -v_cost,
+    'Machine : ' || (v_spec->>'name'));
+
+  return v_id;
+end;
+$$;
+
+-- Achat de matière première au marché de gros (équivalent skyline_purchase_stock pour matières).
+-- Utilise le même inventaire (skyline_inventory) car c'est la même structure.
+create or replace function public.skyline_purchase_raw_material(
+  p_company_id  uuid,
+  p_material_id text,
+  p_quantity    int
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id      uuid := auth.uid();
+  v_unit_price   numeric;
+  v_total_cost   numeric;
+  v_existing_qty int;
+  v_existing_avg numeric;
+  v_new_avg      numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_quantity <= 0 then raise exception 'Quantité invalide'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  v_unit_price := public.skyline_raw_material_ref_buy(p_material_id);
+  if v_unit_price is null then raise exception 'Matière inconnue'; end if;
+
+  v_total_cost := v_unit_price * p_quantity;
+
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_total_cost then
+      raise exception 'Cash insuffisant : il te manque % $', round(v_total_cost - v_user_cash, 2);
+    end if;
+  end;
+
+  update public.skyline_profiles
+    set cash = cash - v_total_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  select quantity, avg_buy_price
+    into v_existing_qty, v_existing_avg
+    from public.skyline_inventory
+    where company_id = p_company_id and product_id = p_material_id;
+
+  if not found then
+    insert into public.skyline_inventory (company_id, product_id, quantity, avg_buy_price, sell_price, purchased_at)
+    values (p_company_id, p_material_id, p_quantity, v_unit_price, 0, now());
+  else
+    v_new_avg := (v_existing_qty * v_existing_avg + p_quantity * v_unit_price) / (v_existing_qty + p_quantity);
+    update public.skyline_inventory
+      set quantity = quantity + p_quantity,
+          avg_buy_price = v_new_avg,
+          purchased_at = now()
+      where company_id = p_company_id and product_id = p_material_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'purchase', -v_total_cost,
+    'Matière 1ère ' || p_quantity || '× ' || p_material_id || ' à ' || v_unit_price || '$');
+end;
+$$;
+
+-- Production usine (déclenchée par le tick) : consomme matières → produit finis.
+-- Capacité = somme(machines.capacity_per_day) × heures_écoulées / 24.
+-- Limitée par stock de matières dispo.
+create or replace function public.skyline_factory_produce(p_company_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_user_id   uuid := auth.uid();
+  v_recipe    jsonb;
+  v_in1_id    text;
+  v_in1_qty   numeric;
+  v_in2_id    text;
+  v_in2_qty   numeric;
+  v_out_id    text;
+  v_out_qty   numeric;
+  v_total_cap int;
+  v_now       timestamptz := now();
+  v_elapsed_h numeric;
+  v_cap_window int;
+  v_inv1_qty  int;
+  v_inv2_qty  int;
+  v_max_units int;
+  v_units_to_produce int;
+  v_cost_avg  numeric;
+  v_existing_qty int;
+  v_existing_avg numeric;
+  v_new_avg   numeric;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return 0; end if;
+  if v_company.category <> 'factory' then return 0; end if;
+
+  v_recipe := public.skyline_factory_recipe(v_company.sector);
+  if v_recipe is null then return 0; end if;
+
+  v_in1_id := v_recipe->'in1'->>'id';
+  v_in1_qty := (v_recipe->'in1'->>'qty')::numeric;
+  if v_recipe->'in2' is not null then
+    v_in2_id := v_recipe->'in2'->>'id';
+    v_in2_qty := (v_recipe->'in2'->>'qty')::numeric;
+  end if;
+  v_out_id := v_recipe->'out'->>'id';
+  v_out_qty := (v_recipe->'out'->>'qty')::numeric;
+
+  -- Capacité totale machines.
+  select coalesce(sum(capacity_per_day), 0) into v_total_cap
+  from public.skyline_machines where company_id = p_company_id;
+  if v_total_cap = 0 then return 0; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return 0; end if;
+  v_cap_window := floor(v_total_cap * v_elapsed_h / 24.0)::int;
+  if v_cap_window <= 0 then return 0; end if;
+
+  -- Inventaire matières dispo.
+  select coalesce(quantity, 0) into v_inv1_qty
+    from public.skyline_inventory where company_id = p_company_id and product_id = v_in1_id;
+  v_inv1_qty := coalesce(v_inv1_qty, 0);
+  v_inv2_qty := 9999999;
+  if v_in2_id is not null then
+    select coalesce(quantity, 0) into v_inv2_qty
+      from public.skyline_inventory where company_id = p_company_id and product_id = v_in2_id;
+    v_inv2_qty := coalesce(v_inv2_qty, 0);
+  end if;
+
+  -- Limite par matière.
+  v_max_units := least(
+    v_cap_window,
+    floor(v_inv1_qty / v_in1_qty)::int,
+    case when v_in2_id is not null then floor(v_inv2_qty / v_in2_qty)::int else v_cap_window end
+  );
+  if v_max_units <= 0 then return 0; end if;
+
+  v_units_to_produce := v_max_units;
+
+  -- Calcul prix de revient moyen pour avg_buy_price du produit fini.
+  v_cost_avg :=
+    coalesce((select avg_buy_price from public.skyline_inventory
+              where company_id = p_company_id and product_id = v_in1_id), 0) * v_in1_qty
+    + case when v_in2_id is not null then
+        coalesce((select avg_buy_price from public.skyline_inventory
+                  where company_id = p_company_id and product_id = v_in2_id), 0) * v_in2_qty
+      else 0 end;
+  -- Diviser par output qty pour avoir le coût par unité produite.
+  if v_out_qty > 0 then v_cost_avg := v_cost_avg / v_out_qty; end if;
+
+  -- Consommer matières.
+  update public.skyline_inventory
+    set quantity = quantity - floor(v_units_to_produce * v_in1_qty)::int
+    where company_id = p_company_id and product_id = v_in1_id;
+  if v_in2_id is not null then
+    update public.skyline_inventory
+      set quantity = quantity - floor(v_units_to_produce * v_in2_qty)::int
+      where company_id = p_company_id and product_id = v_in2_id;
+  end if;
+
+  -- Ajouter à l'inventaire produit fini (avg pondéré).
+  select quantity, avg_buy_price into v_existing_qty, v_existing_avg
+    from public.skyline_inventory
+    where company_id = p_company_id and product_id = v_out_id;
+  if not found then
+    v_existing_qty := 0;
+    v_existing_avg := 0;
+  end if;
+  v_new_avg := case
+    when v_existing_qty + v_units_to_produce <= 0 then v_cost_avg
+    else (v_existing_qty * v_existing_avg + v_units_to_produce * v_cost_avg)
+         / (v_existing_qty + v_units_to_produce)
+  end;
+
+  if v_existing_qty = 0 and v_existing_avg = 0 then
+    insert into public.skyline_inventory (company_id, product_id, quantity, avg_buy_price, sell_price, purchased_at)
+    values (p_company_id, v_out_id, v_units_to_produce, v_new_avg,
+      coalesce(public.skyline_product_ref_sell(v_out_id), v_cost_avg * 1.5),
+      now())
+    on conflict (company_id, product_id) do update
+      set quantity = public.skyline_inventory.quantity + v_units_to_produce,
+          avg_buy_price = (public.skyline_inventory.quantity * public.skyline_inventory.avg_buy_price + excluded.quantity * excluded.avg_buy_price)
+                          / (public.skyline_inventory.quantity + excluded.quantity);
+  else
+    update public.skyline_inventory
+      set quantity = quantity + v_units_to_produce,
+          avg_buy_price = v_new_avg
+      where company_id = p_company_id and product_id = v_out_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', 0,
+    'Production : ' || v_units_to_produce || '× ' || v_out_id);
+
+  return v_units_to_produce;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 19. P6 — MARCHÉ COMMUN : COURS, ORDRES, ÉVÉNEMENTS, FIL D'ACTU
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Liste des produits qui ont un cours public (mis à jour dynamiquement).
+-- On seed avec tous les produits ref + matières.
+create or replace function public.skyline_seed_market_courses()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count int := 0;
+  v_products text[] := array[
+    -- Produits commerce
+    'baguette', 'croissant', 'pain_au_chocolat', 'tarte_pommes',
+    'vin_rouge', 'vin_blanc', 'biere_blonde', 'champagne',
+    'steak', 'saucisson', 'jambon', 'rotisserie_poulet',
+    'pizza_margherita', 'pizza_4_fromages', 'tiramisu',
+    'burger_classique', 'frites', 'nuggets',
+    'cafe_expresso', 'cappuccino', 'biere_pression', 'soda',
+    'bouquet_roses', 'bouquet_mixte', 'plante_verte', 'orchidee',
+    'chocolat_noir', 'huile_olive', 'miel', 'confiture',
+    'pates', 'yaourt', 'lait', 'biscuits',
+    'tshirt_basic', 'jean', 'pull', 'robe',
+    'bague_argent', 'collier_or', 'montre_classique', 'bracelet',
+    'paracetamol', 'creme_hydratante', 'vitamines', 'shampoing',
+    'parfum_femme', 'parfum_homme', 'creme_visage', 'rouge_levres',
+    -- Produits usine
+    'farine', 'pain_emballe', 'fromage', 'spiritueux', 'conserve',
+    -- Matières premières
+    'wheat', 'barley', 'hops', 'grapes', 'cattle', 'milk',
+    'fruits', 'vegetables', 'salt', 'sugar', 'cocoa', 'coffee',
+    'cotton', 'wool', 'wood', 'iron', 'copper', 'aluminum',
+    'gold', 'silver', 'gemstones', 'coal', 'oil', 'flowers', 'plants_med'
+  ];
+  v_p text;
+  v_ref numeric;
+begin
+  foreach v_p in array v_products loop
+    v_ref := coalesce(
+      public.skyline_product_ref_buy(v_p),
+      public.skyline_raw_material_ref_buy(v_p),
+      0
+    );
+    if v_ref <= 0 then continue; end if;
+
+    insert into public.skyline_market_courses (
+      product_id, current_price, ref_price, trend_24h, volume_24h, high_30d, low_30d
+    )
+    values (v_p, v_ref, v_ref, 0, 0, v_ref, v_ref)
+    on conflict (product_id) do nothing;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+-- Tick global du marché : applique drift aléatoire + effets événements actifs.
+create or replace function public.skyline_tick_market()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_course record;
+  v_drift  numeric;
+  v_event_impact numeric;
+  v_new_price numeric;
+  v_count int := 0;
+begin
+  for v_course in select * from public.skyline_market_courses loop
+    -- Drift aléatoire ±2%.
+    v_drift := (random() - 0.5) * 0.04;
+
+    -- Impact des événements actifs sur ce produit.
+    select coalesce(sum(impact_pct), 0) / 100.0 into v_event_impact
+      from public.skyline_events
+      where ends_at > now()
+        and (
+          (scope = 'product' and target = v_course.product_id) or
+          (scope = 'global')
+        );
+
+    v_new_price := v_course.current_price * (1 + v_drift + v_event_impact * 0.02);
+    -- Réversion vers le prix de référence (10% pull).
+    v_new_price := v_new_price * 0.95 + v_course.ref_price * 0.05;
+    v_new_price := greatest(v_course.ref_price * 0.3, least(v_course.ref_price * 3.0, v_new_price));
+
+    update public.skyline_market_courses
+      set current_price = v_new_price,
+          trend_24h = ((v_new_price - v_course.current_price) / v_course.current_price) * 100,
+          high_30d = greatest(high_30d, v_new_price),
+          low_30d = least(low_30d, v_new_price),
+          updated_at = now()
+      where product_id = v_course.product_id;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+-- Génère un événement aléatoire (pénurie, tendance, scandale, saisonnier, réglementation, npc_announce).
+create or replace function public.skyline_generate_event()
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id        uuid;
+  v_kinds     text[] := array['shortage', 'trend', 'scandal', 'season', 'regulation', 'npc_announce'];
+  v_kind      text;
+  v_targets   text[];
+  v_target    text;
+  v_impact    numeric;
+  v_headline  text;
+  v_body      text;
+  v_duration  interval;
+begin
+  v_kind := v_kinds[1 + floor(random() * array_length(v_kinds, 1))::int];
+
+  -- Choix du produit cible aléatoire.
+  v_targets := array(select product_id from public.skyline_market_courses order by random() limit 1);
+  if array_length(v_targets, 1) is null then return null; end if;
+  v_target := v_targets[1];
+
+  case v_kind
+    when 'shortage' then
+      v_impact := 20 + random() * 30; -- +20 à +50%
+      v_headline := '🌾 Pénurie sur le marché du ' || v_target;
+      v_body := 'Une rupture d''approvisionnement fait grimper les cours. Les analystes anticipent une hausse de prix soutenue dans les semaines à venir.';
+      v_duration := '60 hours'; -- 2 mois jeu
+    when 'trend' then
+      v_impact := 15 + random() * 25;
+      v_headline := '📈 Tendance haussière : ' || v_target;
+      v_body := 'Effet de mode constaté chez les consommateurs. La demande explose, les acteurs du secteur s''emballent.';
+      v_duration := '45 hours';
+    when 'scandal' then
+      v_impact := -(20 + random() * 30); -- -20 à -50%
+      v_headline := '⚠️ Scandale autour du ' || v_target;
+      v_body := 'Une enquête révèle des problèmes sanitaires. Les consommateurs boycottent, les cours s''effondrent.';
+      v_duration := '40 hours';
+    when 'season' then
+      v_impact := (case when random() > 0.5 then 1 else -1 end) * (10 + random() * 15);
+      v_headline := '🍂 Effet saisonnier sur ' || v_target;
+      v_body := 'La saison influence la demande. Variations attendues dans les prochains jours.';
+      v_duration := '30 hours';
+    when 'regulation' then
+      v_impact := (case when random() > 0.5 then 1 else -1 end) * (10 + random() * 20);
+      v_headline := '📜 Nouvelle réglementation : ' || v_target;
+      v_body := 'Une décision réglementaire bouleverse le marché. Les acteurs doivent s''adapter.';
+      v_duration := '50 hours';
+    else -- npc_announce
+      v_impact := 10 + random() * 20;
+      v_headline := (select name from public.skyline_npc_corp order by random() limit 1) ||
+                    ' annonce une expansion sur ' || v_target;
+      v_body := 'Le géant industriel investit massivement. Le secteur attend de voir l''impact à moyen terme.';
+      v_duration := '70 hours';
+  end case;
+
+  insert into public.skyline_events (
+    kind, scope, target, headline, body, impact_pct, ends_at, announced
+  )
+  values (
+    v_kind, 'product', v_target, v_headline, v_body, v_impact,
+    now() + v_duration, true
+  )
+  returning id into v_id;
+
+  insert into public.skyline_news (kind, headline, body, product_id, impact_pct)
+  values (v_kind, v_headline, v_body, v_target, v_impact);
+
+  return v_id;
+end;
+$$;
+
+-- Wrapper public : si moins de 3 événements actifs, en génère un + tick le marché.
+create or replace function public.skyline_market_heartbeat()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_active_events int;
+begin
+  -- Seed courses si nécessaire.
+  if (select count(*) from public.skyline_market_courses) < 50 then
+    perform public.skyline_seed_market_courses();
+  end if;
+
+  -- Génère événement si peu actifs.
+  select count(*) into v_active_events
+    from public.skyline_events where ends_at > now();
+  if v_active_events < 3 then
+    perform public.skyline_generate_event();
+  end if;
+
+  -- Drift les cours.
+  perform public.skyline_tick_market();
+end;
+$$;
+
+-- Place un ordre B2B au prix marché courant (achat ou vente).
+create or replace function public.skyline_place_market_order(
+  p_company_id uuid,
+  p_side       text, -- 'buy' ou 'sell'
+  p_product_id text,
+  p_quantity   int
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id    uuid := auth.uid();
+  v_company    public.skyline_companies%rowtype;
+  v_price      numeric;
+  v_total      numeric;
+  v_inv_qty    int;
+  v_existing_qty int;
+  v_existing_avg numeric;
+  v_user_cash  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_quantity <= 0 then raise exception 'Quantité invalide'; end if;
+  if p_side not in ('buy', 'sell') then raise exception 'Side invalide'; end if;
+
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+
+  -- Prix marché courant.
+  select current_price into v_price
+    from public.skyline_market_courses
+    where product_id = p_product_id;
+  if v_price is null then raise exception 'Produit non coté'; end if;
+
+  v_total := v_price * p_quantity;
+
+  if p_side = 'buy' then
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_total then raise exception 'Cash insuffisant'; end if;
+
+    update public.skyline_profiles
+      set cash = cash - v_total, updated_at = now()
+      where user_id = v_user_id;
+
+    select quantity, avg_buy_price into v_existing_qty, v_existing_avg
+      from public.skyline_inventory
+      where company_id = p_company_id and product_id = p_product_id;
+    if not found then
+      insert into public.skyline_inventory (company_id, product_id, quantity, avg_buy_price, sell_price, purchased_at)
+      values (p_company_id, p_product_id, p_quantity, v_price, v_price * 1.4, now());
+    else
+      update public.skyline_inventory
+        set quantity = quantity + p_quantity,
+            avg_buy_price = (v_existing_qty * v_existing_avg + p_quantity * v_price) / (v_existing_qty + p_quantity),
+            purchased_at = now()
+        where company_id = p_company_id and product_id = p_product_id;
+    end if;
+
+    -- Achat → cours monte légèrement (volume).
+    update public.skyline_market_courses
+      set current_price = current_price * (1 + 0.001 * p_quantity / 1000.0),
+          volume_24h = volume_24h + p_quantity,
+          updated_at = now()
+      where product_id = p_product_id;
+
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_user_id, p_company_id, 'purchase', -v_total,
+      'Marché : achat ' || p_quantity || '× ' || p_product_id || ' à ' || v_price || '$');
+  else
+    -- Vente : check qu'on a le stock.
+    select quantity into v_inv_qty
+      from public.skyline_inventory
+      where company_id = p_company_id and product_id = p_product_id;
+    if coalesce(v_inv_qty, 0) < p_quantity then
+      raise exception 'Stock insuffisant : tu as % unités', coalesce(v_inv_qty, 0);
+    end if;
+
+    update public.skyline_inventory
+      set quantity = quantity - p_quantity
+      where company_id = p_company_id and product_id = p_product_id;
+
+    update public.skyline_profiles
+      set cash = cash + v_total, updated_at = now()
+      where user_id = v_user_id;
+
+    -- Vente → cours baisse légèrement.
+    update public.skyline_market_courses
+      set current_price = current_price * (1 - 0.001 * p_quantity / 1000.0),
+          volume_24h = volume_24h + p_quantity,
+          updated_at = now()
+      where product_id = p_product_id;
+
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_user_id, p_company_id, 'sale', v_total,
+      'Marché : vente ' || p_quantity || '× ' || p_product_id || ' à ' || v_price || '$');
+  end if;
+
+  return jsonb_build_object(
+    'price', v_price,
+    'total', v_total,
+    'quantity', p_quantity
+  );
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 20. TICK ENRICHI P5 (production usines)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Wrapper qui appelle factory_produce ou process_sales selon la catégorie.
+-- À appeler à chaque lecture d'une entreprise.
+create or replace function public.skyline_tick_company_full(p_company_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cat text;
+begin
+  select category into v_cat from public.skyline_companies where id = p_company_id;
+  if v_cat is null then return; end if;
+
+  perform public.skyline_tick_company(p_company_id);
+
+  if v_cat = 'commerce' then
+    perform public.skyline_process_sales(p_company_id);
+  elsif v_cat = 'factory' then
+    perform public.skyline_factory_produce(p_company_id);
+  end if;
+end;
+$$;
+

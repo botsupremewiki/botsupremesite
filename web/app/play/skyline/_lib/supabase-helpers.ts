@@ -10,6 +10,9 @@ import type {
   SkylineEmployeeRow,
   SkylineLoanRow,
   SkylinePermitRow,
+  SkylineMachineRow,
+  SkylineMarketCourseRow,
+  SkylineNewsRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -47,10 +50,8 @@ export async function fetchSkylineCompany(
 ): Promise<SkylineCompanyRow | null> {
   const supabase = await createClient();
   if (!supabase) return null;
-  // Tick lazy avant lecture (loyer prorata, etc.).
-  await supabase.rpc("skyline_tick_company", { p_company_id: companyId });
-  // Process sales (P1 — vente automatique aux PNJ).
-  await supabase.rpc("skyline_process_sales", { p_company_id: companyId });
+  // Tick lazy enrichi (loyer + salaires + saleté + mensualités + production/ventes).
+  await supabase.rpc("skyline_tick_company_full", { p_company_id: companyId });
   const { data } = await supabase
     .from("skyline_companies")
     .select("*")
@@ -196,4 +197,48 @@ export async function checkBankruptcy(): Promise<boolean> {
   if (!supabase) return false;
   const { data } = await supabase.rpc("skyline_check_bankruptcy");
   return Boolean(data);
+}
+
+// ───── P5 : Usines / Machines ─────
+
+export async function fetchMachinesForCompany(
+  companyId: string,
+): Promise<SkylineMachineRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_machines")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("installed_at", { ascending: true });
+  return (data ?? []) as SkylineMachineRow[];
+}
+
+// ───── P6 : Marché commun + fil d'actu ─────
+
+export async function ensureMarketSeeded(): Promise<void> {
+  const supabase = await createClient();
+  if (!supabase) return;
+  await supabase.rpc("skyline_market_heartbeat");
+}
+
+export async function fetchMarketCourses(): Promise<SkylineMarketCourseRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_market_courses")
+    .select("*")
+    .order("product_id", { ascending: true });
+  return (data ?? []) as SkylineMarketCourseRow[];
+}
+
+export async function fetchSkylineNews(limit = 20): Promise<SkylineNewsRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_news")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as SkylineNewsRow[];
 }

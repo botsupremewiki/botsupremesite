@@ -516,6 +516,242 @@ export const SKYLINE_PRODUCTS: Record<
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// 4.5. MATIÈRES PREMIÈRES (P5/P8) — basics achetables au marché de gros
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineRawMaterialId =
+  | "wheat" | "barley" | "hops" | "grapes" | "cattle" | "milk"
+  | "fruits" | "vegetables" | "salt" | "sugar" | "cocoa" | "coffee"
+  | "cotton" | "wool" | "wood" | "iron" | "copper" | "aluminum"
+  | "gold" | "silver" | "gemstones" | "coal" | "oil" | "flowers" | "plants_med";
+
+export const SKYLINE_RAW_MATERIALS: Record<
+  SkylineRawMaterialId,
+  { id: SkylineRawMaterialId; name: string; glyph: string; refBuyPrice: number }
+> = {
+  wheat: { id: "wheat", name: "Blé", glyph: "🌾", refBuyPrice: 0.20 },
+  barley: { id: "barley", name: "Orge", glyph: "🌾", refBuyPrice: 0.25 },
+  hops: { id: "hops", name: "Houblon", glyph: "🌿", refBuyPrice: 0.50 },
+  grapes: { id: "grapes", name: "Raisins", glyph: "🍇", refBuyPrice: 0.80 },
+  cattle: { id: "cattle", name: "Bétail", glyph: "🐄", refBuyPrice: 50 },
+  milk: { id: "milk", name: "Lait", glyph: "🥛", refBuyPrice: 0.40 },
+  fruits: { id: "fruits", name: "Fruits", glyph: "🍎", refBuyPrice: 0.60 },
+  vegetables: { id: "vegetables", name: "Légumes", glyph: "🥕", refBuyPrice: 0.40 },
+  salt: { id: "salt", name: "Sel", glyph: "🧂", refBuyPrice: 0.10 },
+  sugar: { id: "sugar", name: "Sucre", glyph: "🍬", refBuyPrice: 0.30 },
+  cocoa: { id: "cocoa", name: "Cacao", glyph: "🍫", refBuyPrice: 1.20 },
+  coffee: { id: "coffee", name: "Café (grains)", glyph: "☕", refBuyPrice: 1.50 },
+  cotton: { id: "cotton", name: "Coton", glyph: "🧶", refBuyPrice: 0.80 },
+  wool: { id: "wool", name: "Laine", glyph: "🐑", refBuyPrice: 1.50 },
+  wood: { id: "wood", name: "Bois", glyph: "🪵", refBuyPrice: 0.30 },
+  iron: { id: "iron", name: "Fer (acier)", glyph: "⚙️", refBuyPrice: 0.80 },
+  copper: { id: "copper", name: "Cuivre", glyph: "🟠", refBuyPrice: 1.20 },
+  aluminum: { id: "aluminum", name: "Aluminium", glyph: "🟪", refBuyPrice: 1.50 },
+  gold: { id: "gold", name: "Or", glyph: "🥇", refBuyPrice: 50 },
+  silver: { id: "silver", name: "Argent", glyph: "🥈", refBuyPrice: 5 },
+  gemstones: { id: "gemstones", name: "Pierres précieuses", glyph: "💎", refBuyPrice: 200 },
+  coal: { id: "coal", name: "Charbon", glyph: "⬛", refBuyPrice: 0.20 },
+  oil: { id: "oil", name: "Pétrole brut", glyph: "🛢️", refBuyPrice: 0.50 },
+  flowers: { id: "flowers", name: "Fleurs (huiles)", glyph: "🌸", refBuyPrice: 0.30 },
+  plants_med: { id: "plants_med", name: "Plantes médicinales", glyph: "🌱", refBuyPrice: 1.00 },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4.6. USINES (P5) — recettes : 2 inputs → 1 output
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineFactorySector =
+  | "moulin"
+  | "boulangerie_indus"
+  | "brasserie"
+  | "viticole"
+  | "distillerie"
+  | "abattoir"
+  | "laiterie"
+  | "chocolaterie"
+  | "conserverie";
+
+export const SKYLINE_FACTORY_SECTORS: Record<
+  SkylineFactorySector,
+  {
+    id: SkylineFactorySector;
+    name: string;
+    glyph: string;
+    description: string;
+    machineKind: string; // pour skyline_machine_spec
+    minStartCash: number; // capital total approximatif pour démarrer
+    inputs: { id: SkylineRawMaterialId | string; qty: number }[]; // 1 ou 2 inputs
+    output: { id: string; qty: number };
+  }
+> = {
+  moulin: {
+    id: "moulin",
+    name: "Moulin",
+    glyph: "🌾",
+    description: "Transforme le blé en farine.",
+    machineKind: "moulin",
+    minStartCash: 30000,
+    inputs: [{ id: "wheat", qty: 1.0 }],
+    output: { id: "farine", qty: 0.95 },
+  },
+  boulangerie_indus: {
+    id: "boulangerie_indus",
+    name: "Boulangerie industrielle",
+    glyph: "🍞",
+    description: "Produit pain emballé en gros volume.",
+    machineKind: "boulangerie_indus",
+    minStartCash: 50000,
+    inputs: [
+      { id: "farine", qty: 0.5 },
+      { id: "salt", qty: 0.01 },
+    ],
+    output: { id: "pain_emballe", qty: 1.0 },
+  },
+  brasserie: {
+    id: "brasserie",
+    name: "Brasserie",
+    glyph: "🍺",
+    description: "Brasse de la bière à partir d'orge et houblon.",
+    machineKind: "brasserie",
+    minStartCash: 80000,
+    inputs: [
+      { id: "barley", qty: 0.4 },
+      { id: "hops", qty: 0.05 },
+    ],
+    output: { id: "biere_blonde", qty: 1.0 },
+  },
+  viticole: {
+    id: "viticole",
+    name: "Domaine viticole",
+    glyph: "🍷",
+    description: "Presse les raisins, élève le vin.",
+    machineKind: "viticole",
+    minStartCash: 30000,
+    inputs: [{ id: "grapes", qty: 1.5 }],
+    output: { id: "vin_rouge", qty: 1.0 },
+  },
+  distillerie: {
+    id: "distillerie",
+    name: "Distillerie",
+    glyph: "🥃",
+    description: "Distille spiritueux à partir de céréales et fruits.",
+    machineKind: "distillerie",
+    minStartCash: 50000,
+    inputs: [
+      { id: "wheat", qty: 0.8 },
+      { id: "fruits", qty: 0.3 },
+    ],
+    output: { id: "spiritueux", qty: 1.0 },
+  },
+  abattoir: {
+    id: "abattoir",
+    name: "Abattoir + transformation",
+    glyph: "🥩",
+    description: "Découpe et transforme le bétail en viandes et charcuteries.",
+    machineKind: "abattoir",
+    minStartCash: 100000,
+    inputs: [
+      { id: "cattle", qty: 0.05 },
+      { id: "salt", qty: 0.02 },
+    ],
+    output: { id: "steak", qty: 1.0 },
+  },
+  laiterie: {
+    id: "laiterie",
+    name: "Laiterie / Fromagerie",
+    glyph: "🧀",
+    description: "Transforme le lait en fromages, beurre, yaourts.",
+    machineKind: "laiterie",
+    minStartCash: 40000,
+    inputs: [
+      { id: "milk", qty: 1.5 },
+      { id: "salt", qty: 0.01 },
+    ],
+    output: { id: "fromage", qty: 1.0 },
+  },
+  chocolaterie: {
+    id: "chocolaterie",
+    name: "Chocolaterie",
+    glyph: "🍫",
+    description: "Fabrique chocolat noir, lait, blanc et confiseries.",
+    machineKind: "chocolaterie",
+    minStartCash: 30000,
+    inputs: [
+      { id: "cocoa", qty: 0.5 },
+      { id: "sugar", qty: 0.3 },
+    ],
+    output: { id: "chocolat_noir", qty: 1.0 },
+  },
+  conserverie: {
+    id: "conserverie",
+    name: "Conserverie",
+    glyph: "🥫",
+    description: "Conserve légumes et plats préparés.",
+    machineKind: "conserverie",
+    minStartCash: 50000,
+    inputs: [
+      { id: "vegetables", qty: 1.0 },
+      { id: "salt", qty: 0.05 },
+    ],
+    output: { id: "conserve", qty: 1.0 },
+  },
+};
+
+// Produits intermédiaires (outputs d'usines).
+export const SKYLINE_INTERMEDIATE_PRODUCTS: Record<
+  string,
+  { id: string; name: string; glyph: string; refSellPrice: number }
+> = {
+  farine: { id: "farine", name: "Farine", glyph: "🌾", refSellPrice: 0.6 },
+  pain_emballe: {
+    id: "pain_emballe",
+    name: "Pain emballé",
+    glyph: "🍞",
+    refSellPrice: 1.0,
+  },
+  fromage: { id: "fromage", name: "Fromage", glyph: "🧀", refSellPrice: 8 },
+  spiritueux: {
+    id: "spiritueux",
+    name: "Spiritueux",
+    glyph: "🥃",
+    refSellPrice: 25,
+  },
+  conserve: {
+    id: "conserve",
+    name: "Conserve",
+    glyph: "🥫",
+    refSellPrice: 4,
+  },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4.7. NIVEAUX DE MACHINES (P5)
+// ──────────────────────────────────────────────────────────────────────────
+
+export const SKYLINE_MACHINE_LEVELS: {
+  id: SkylineMachineLevel;
+  name: string;
+  skillRequired: number;
+  multiplier: string;
+}[] = [
+  { id: "basic", name: "Basique", skillRequired: 30, multiplier: "1×" },
+  { id: "pro", name: "Pro", skillRequired: 60, multiplier: "5×" },
+  { id: "elite", name: "Élite", skillRequired: 85, multiplier: "20×" },
+  { id: "hightech", name: "High-tech", skillRequired: 95, multiplier: "80×" },
+];
+
+export type SkylineMachineRow = {
+  id: string;
+  company_id: string;
+  kind: string;
+  level: SkylineMachineLevel;
+  cost: number;
+  capacity_per_day: number;
+  condition: number;
+  installed_at: string;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // 5. PRÉSENTOIRS / ÉQUIPEMENT (P1 — placement abstrait)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -1042,6 +1278,8 @@ export type SkylineMarketCourseRow = {
   ref_price: number;
   trend_24h: number; // % variation
   volume_24h: number;
+  high_30d: number;
+  low_30d: number;
   updated_at: string;
 };
 
