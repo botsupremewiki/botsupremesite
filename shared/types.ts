@@ -228,11 +228,16 @@ export const BLACKJACK_CONFIG = {
 // ────────────────────────────── Mines ──────────────────────────────
 
 export const MINES_CONFIG = {
-  minSize: 3,
-  maxSize: 10,
+  // Grille fixe 5×5 = 25 cases. Le seul levier joueur est le nombre de mines.
+  gridSize: 5,
+  minMines: 1,
+  maxMines: 24,
   minBet: 10,
   maxBet: 10_000_000,
-  rtp: 0.97,
+  // RTP interpolé linéairement entre minMines (rtpAtMin) et maxMines
+  // (rtpAtMax). 1 mine = 90% (long jeu), 24 mines = 95% (one-shot 25× quasi).
+  rtpAtMin: 0.9,
+  rtpAtMax: 0.95,
 } as const;
 
 // ────────────────────────────── Roulette ──────────────────────────────
@@ -338,8 +343,7 @@ export type MinesStatus =
 export type MinesTile = "hidden" | "safe" | "mine";
 
 export type MinesGameState = {
-  gridRows: number;
-  gridCols: number;
+  // Toujours MINES_CONFIG.gridSize × MINES_CONFIG.gridSize.
   minesCount: number;
   bet: number;
   revealedCount: number;
@@ -347,19 +351,13 @@ export type MinesGameState = {
   potentialPayout: number;
   nextMultiplier: number;
   status: MinesStatus;
-  tiles: MinesTile[]; // row-major
+  tiles: MinesTile[]; // row-major, length = gridSize²
   // Only present when game ended (busted or cashed):
   minesMap?: number[]; // indices where mines were
 };
 
 export type MinesClientMessage =
-  | {
-      type: "mines-start";
-      rows: number;
-      cols: number;
-      minesCount: number;
-      bet: number;
-    }
+  | { type: "mines-start"; minesCount: number; bet: number }
   | { type: "mines-reveal"; index: number }
   | { type: "mines-cash-out" };
 

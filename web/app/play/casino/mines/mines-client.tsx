@@ -34,16 +34,9 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [gold, setGold] = useState<number>(profile?.gold ?? 0);
   const [game, setGame] = useState<MinesGameState | null>(null);
-  const [gridSize, setGridSize] = useState<number>(5);
   const [minesCount, setMinesCount] = useState<number>(3);
   const [betDraft, setBetDraft] = useState<string>("10");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Clamp minesCount when gridSize changes so it stays in [1, N²-1].
-  useEffect(() => {
-    const max = gridSize * gridSize - 1;
-    setMinesCount((prev) => Math.max(1, Math.min(prev, max)));
-  }, [gridSize]);
 
   const globalChat = useAuxChat({
     partyName: "global",
@@ -155,13 +148,11 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
       if (!betValid) return;
       send({
         type: "mines-start",
-        rows: gridSize,
-        cols: gridSize,
         minesCount,
         bet: parsedBet,
       });
     },
-    [betValid, gridSize, minesCount, parsedBet, send],
+    [betValid, minesCount, parsedBet, send],
   );
 
   const revealTile = useCallback(
@@ -215,8 +206,6 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
           {!inGame && !ended && (
             <SetupPanel
               gold={gold}
-              gridSize={gridSize}
-              setGridSize={setGridSize}
               minesCount={minesCount}
               setMinesCount={setMinesCount}
               betDraft={betDraft}
@@ -304,8 +293,6 @@ export function MinesClient({ profile }: { profile: Profile | null }) {
 
 function SetupPanel({
   gold,
-  gridSize,
-  setGridSize,
   minesCount,
   setMinesCount,
   betDraft,
@@ -318,8 +305,6 @@ function SetupPanel({
   profile,
 }: {
   gold: number;
-  gridSize: number;
-  setGridSize: (v: number) => void;
   minesCount: number;
   setMinesCount: (v: number) => void;
   betDraft: string;
@@ -331,12 +316,18 @@ function SetupPanel({
   onStart: (e?: FormEvent) => void;
   profile: Profile | null;
 }) {
-  const sizes = Array.from(
-    { length: MINES_CONFIG.maxSize - MINES_CONFIG.minSize + 1 },
-    (_, i) => MINES_CONFIG.minSize + i,
-  );
-  const totalTiles = gridSize * gridSize;
-  const maxMines = totalTiles - 1;
+  const totalTiles = MINES_CONFIG.gridSize * MINES_CONFIG.gridSize;
+  const minMines = MINES_CONFIG.minMines;
+  const maxMines = MINES_CONFIG.maxMines;
+
+  // Mirror the server-side rtpForMines so the player can see what RTP
+  // they're picking. Keep this formula in sync with mines-math.ts.
+  const rtpPct = Math.round(
+    (MINES_CONFIG.rtpAtMin +
+      (MINES_CONFIG.rtpAtMax - MINES_CONFIG.rtpAtMin) *
+        ((minesCount - minMines) / (maxMines - minMines))) *
+      1000,
+  ) / 10;
 
   return (
     <motion.div
@@ -347,69 +338,49 @@ function SetupPanel({
       <div>
         <h1 className="text-xl font-semibold text-zinc-100">Mines</h1>
         <p className="mt-1 text-xs text-zinc-500">
-          Choisis la taille de la grille, le nombre de mines et ta mise.
+          Grille {MINES_CONFIG.gridSize}×{MINES_CONFIG.gridSize}.
+          Choisis le nombre de mines (de {minMines} à {maxMines}) et ta mise.
           Plus il y a de mines, plus le multiplicateur grimpe vite — mais
           une seule case piégée et c&apos;est perdu.
         </p>
       </div>
 
       <div>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
-          Taille de la grille
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {sizes.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setGridSize(s)}
-              className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                gridSize === s
-                  ? "border-emerald-400/60 bg-emerald-400/20 text-emerald-200"
-                  : "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
-              }`}
-            >
-              {s}×{s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
         <div className="mb-2 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
           <span>Nombre de mines</span>
           <span className="normal-case tracking-normal text-zinc-500">
-            1 à {maxMines}
+            {minMines} à {maxMines}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <input
             type="range"
-            min={1}
+            min={minMines}
             max={maxMines}
             step={1}
-            value={Math.min(minesCount, maxMines)}
+            value={Math.max(minMines, Math.min(minesCount, maxMines))}
             onChange={(e) => setMinesCount(parseInt(e.target.value, 10))}
             className="flex-1 accent-rose-400"
           />
           <input
             type="number"
-            min={1}
+            min={minMines}
             max={maxMines}
             step={1}
             value={minesCount}
             onChange={(e) => {
               const v = parseInt(e.target.value, 10);
               if (Number.isFinite(v)) {
-                setMinesCount(Math.max(1, Math.min(maxMines, v)));
+                setMinesCount(Math.max(minMines, Math.min(maxMines, v)));
               }
             }}
             className="w-16 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-right text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-rose-400"
           />
         </div>
         <div className="mt-1 text-[10px] text-zinc-500">
-          {minesCount} mine{minesCount > 1 ? "s" : ""} sur {totalTiles} cases
-          ({Math.round((minesCount / totalTiles) * 100)}% piégées)
+          {minesCount} mine{minesCount > 1 ? "s" : ""} sur {totalTiles}{" "}
+          cases ({Math.round((minesCount / totalTiles) * 100)}% piégées) ·
+          RTP {rtpPct}%
         </div>
       </div>
 
@@ -482,7 +453,10 @@ function GameHud({
   const hasReveals = game.revealedCount > 0;
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
-      <Pill label="Grille" value={`${game.gridRows}×${game.gridCols}`} />
+      <Pill
+        label="Grille"
+        value={`${MINES_CONFIG.gridSize}×${MINES_CONFIG.gridSize}`}
+      />
       <Pill label="Mines" value={String(game.minesCount)} accent="rose" />
       <Pill
         label="Mise"
@@ -546,7 +520,10 @@ function MinesGrid({
   game: MinesGameState;
   onReveal: (index: number) => void;
 }) {
-  const tileSize = Math.max(28, Math.min(64, 560 / game.gridCols));
+  const cols = MINES_CONFIG.gridSize;
+  // 5×5 grid → fixed comfortable tile size; the formula is kept as a guard
+  // in case the config changes.
+  const tileSize = Math.max(28, Math.min(72, 560 / cols));
   const gap = Math.max(4, Math.round(tileSize / 10));
 
   return (
@@ -554,7 +531,7 @@ function MinesGrid({
       className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-sm"
       style={{
         display: "grid",
-        gridTemplateColumns: `repeat(${game.gridCols}, ${tileSize}px)`,
+        gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`,
         gap,
       }}
     >

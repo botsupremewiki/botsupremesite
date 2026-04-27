@@ -1,3 +1,5 @@
+import { MINES_CONFIG } from "../../../shared/types";
+
 /**
  * Payout multiplier for a Mines game.
  * Standard formula: rtp * product over i=0..k-1 of (N - i) / (N - M - i)
@@ -7,7 +9,7 @@ export function minesMultiplier(
   totalTiles: number,
   minesCount: number,
   safeRevealed: number,
-  rtp = 0.97,
+  rtp: number,
 ): number {
   if (safeRevealed <= 0) return 0;
   const safeTotal = totalTiles - minesCount;
@@ -20,14 +22,28 @@ export function minesMultiplier(
   return mul;
 }
 
-export function pickMinesCount(
+/**
+ * Linear RTP interpolation between rtpAtMin (at minMines) and rtpAtMax (at
+ * maxMines). With current config that's 90% with a single mine (long
+ * grindy game) up to 95% with 24 mines (effectively a 1-in-25 lottery).
+ */
+export function rtpForMines(minesCount: number): number {
+  const { minMines, maxMines, rtpAtMin, rtpAtMax } = MINES_CONFIG;
+  if (maxMines === minMines) return rtpAtMin;
+  const t = (minesCount - minMines) / (maxMines - minMines);
+  const clamped = Math.max(0, Math.min(1, t));
+  return rtpAtMin + (rtpAtMax - rtpAtMin) * clamped;
+}
+
+export function pickMinePositions(
   totalTiles: number,
-  minFraction: number,
-  maxFraction: number,
-): number {
-  const lo = Math.max(1, Math.floor(totalTiles * minFraction));
-  const hi = Math.max(lo, Math.floor(totalTiles * maxFraction));
-  return lo + Math.floor(Math.random() * (hi - lo + 1));
+  minesCount: number,
+): Set<number> {
+  const positions = new Set<number>();
+  while (positions.size < minesCount) {
+    positions.add(Math.floor(Math.random() * totalTiles));
+  }
+  return positions;
 }
 
 export function pickMinePositions(

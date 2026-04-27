@@ -9,7 +9,11 @@ import type {
 import { MINES_CONFIG, PLAZA_CONFIG } from "../../shared/types";
 import { fetchProfile, patchProfileGold } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
-import { minesMultiplier, pickMinePositions } from "./lib/mines-math";
+import {
+  minesMultiplier,
+  pickMinePositions,
+  rtpForMines,
+} from "./lib/mines-math";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,8 +28,7 @@ type ConnInfo = {
 const GUEST_SANDBOX_GOLD = 1000;
 
 type GameState = {
-  rows: number;
-  cols: number;
+  // Total tiles is always MINES_CONFIG.gridSize². No more rows/cols.
   minesCount: number;
   bet: number;
   mineSet: Set<number>;
@@ -137,7 +140,7 @@ export default class MinesServer implements Party.Server {
   private async handleStart(
     conn: Party.Connection,
     info: ConnInfo,
-    data: { rows: number; cols: number; minesCount: number; bet: number },
+    data: { minesCount: number; bet: number },
   ) {
     if (this.games.get(conn.id)?.status === "playing") {
       this.sendTo(conn, {
@@ -146,33 +149,17 @@ export default class MinesServer implements Party.Server {
       });
       return;
     }
-    const rows = Math.floor(data.rows);
-    const cols = Math.floor(data.cols);
+    const total = MINES_CONFIG.gridSize * MINES_CONFIG.gridSize;
     const bet = Math.floor(data.bet);
     const minesCount = Math.floor(data.minesCount);
     if (
-      !Number.isInteger(rows) ||
-      !Number.isInteger(cols) ||
-      rows < MINES_CONFIG.minSize ||
-      rows > MINES_CONFIG.maxSize ||
-      cols < MINES_CONFIG.minSize ||
-      cols > MINES_CONFIG.maxSize
-    ) {
-      this.sendTo(conn, {
-        type: "mines-error",
-        message: `Grille entre ${MINES_CONFIG.minSize}×${MINES_CONFIG.minSize} et ${MINES_CONFIG.maxSize}×${MINES_CONFIG.maxSize}.`,
-      });
-      return;
-    }
-    const total = rows * cols;
-    if (
       !Number.isInteger(minesCount) ||
-      minesCount < 1 ||
-      minesCount > total - 1
+      minesCount < MINES_CONFIG.minMines ||
+      minesCount > MINES_CONFIG.maxMines
     ) {
       this.sendTo(conn, {
         type: "mines-error",
-        message: `Entre 1 et ${total - 1} mines.`,
+        message: `Entre ${MINES_CONFIG.minMines} et ${MINES_CONFIG.maxMines} mines.`,
       });
       return;
     }
@@ -203,8 +190,6 @@ export default class MinesServer implements Party.Server {
     this.sendTo(conn, { type: "gold-update", gold: info.gold });
 
     const game: GameState = {
-      rows,
-      cols,
       minesCount,
       bet,
       mineSet,
@@ -227,7 +212,7 @@ export default class MinesServer implements Party.Server {
     const game = this.games.get(conn.id);
     if (!game || game.status !== "playing") return;
     const index = Math.floor(indexRaw);
-    const total = game.rows * game.cols;
+    const total = MINES_CONFIG.gridSize * MINES_CONFIG.gridSize;
     if (!Number.isInteger(index) || index < 0 || index >= total) return;
     if (game.revealed.has(index)) return;
 
@@ -243,8 +228,7 @@ export default class MinesServer implements Party.Server {
     }
 
     game.revealed.add(index);
-    const safeRemaining =
-      game.rows * game.cols - game.minesCount - game.revealed.size;
+    const safeRemaining = total - game.minesCount - game.revealed.size;
     if (safeRemaining === 0) {
       // Cleared the whole board → auto cash out.
       await this.cashOut(conn, info, game);
@@ -274,13 +258,9 @@ export default class MinesServer implements Party.Server {
     info: ConnInfo,
     game: GameState,
   ) {
-    const total = game.rows * game.cols;
-    const mul = minesMultiplier(
-      total,
-      game.minesCount,
-      game.revealed.size,
-      MINES_CONFIG.rtp,
-    );
+    const total = MINES_CONFIG.gridSize * MINES_CONFIG.gridSize;
+    const rtp = rtpForMines(game.minesCount);
+    const mul = minesMultiplier(total, game.minesCount, game.revealed.size, rtp);
     const payout = Math.floor(game.bet * mul);
     game.status = "cashed";
     info.gold += payout;
@@ -293,7 +273,7 @@ export default class MinesServer implements Party.Server {
   }
 
   private snapshotGame(game: GameState): MinesGameState {
-    const total = game.rows * game.cols;
+    const total = MINES_CONFIG.gridSize * MINES_CONFIG.gridSize;
     const tiles: MinesTile[] = new Array(total).fill("hidden");
 
     for (const idx of game.revealed) {
@@ -313,23 +293,20 @@ export default class MinesServer implements Party.Server {
     const safeRevealed = Array.from(game.revealed).filter(
       (i) => !game.mineSet.has(i),
     ).length;
+    const rtp = rtpForMines(game.minesCount);
     const multiplier =
       safeRevealed > 0 && game.status !== "busted"
-        ? minesMultiplier(total, game.minesCount, safeRevealed, MINES_CONFIG.rtp)
-        : game.status === "busted"
-          ? 0
-          : 0;
+        ? minesMultiplier(total, game.minesCount, safeRevealed, rtp)
+        : 0;
     const nextMultiplier = minesMultiplier(
       total,
       game.minesCount,
       safeRevealed + 1,
-      MINES_CONFIG.rtp,
+      rtp,
     );
     const potentialPayout = Math.floor(game.bet * multiplier);
 
     return {
-      gridRows: game.rows,
-      gridCols: game.cols,
       minesCount: game.minesCount,
       bet: game.bet,
       revealedCount: safeRevealed,
