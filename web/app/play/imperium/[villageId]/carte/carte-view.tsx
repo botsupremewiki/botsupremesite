@@ -275,6 +275,10 @@ function CellInfoPanel({
         </Link>
       )}
 
+      {cell.kind === "player_village" && !isMine && cell.village_id && (
+        <ProfileLink villageId={cell.village_id} />
+      )}
+
       {!isMine && cell.kind !== "empty" && dist > 0 && (
         <>
           <div>
@@ -363,6 +367,33 @@ function UnitPicker({
         className="w-16 rounded border border-white/10 bg-black/40 px-1 py-0.5 text-right text-zinc-100 outline-none"
       />
     </div>
+  );
+}
+
+function ProfileLink({ villageId }: { villageId: string }) {
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    const supabase = createClient();
+    if (!supabase) return;
+    const { data } = await supabase
+      .from("imperium_villages")
+      .select("user_id")
+      .eq("id", villageId)
+      .maybeSingle();
+    if (data?.user_id) {
+      window.location.href = `/play/imperium/joueur/${data.user_id}`;
+    }
+    setBusy(false);
+  }
+  return (
+    <button
+      onClick={go}
+      disabled={busy}
+      className="rounded border border-zinc-400/40 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5 disabled:opacity-50"
+    >
+      👤 Voir profil joueur
+    </button>
   );
 }
 

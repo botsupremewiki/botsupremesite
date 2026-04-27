@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { createClient } from "@/lib/supabase/server";
 import {
   fetchImperiumVillage,
   fetchImperiumBuildings,
@@ -9,6 +10,8 @@ import {
   fetchImperiumUnits,
 } from "../_lib/supabase-helpers";
 import { VillageView } from "./village-view";
+import { TutorialBanner } from "../_components/tutorial-banner";
+import { UNIT_BASIC_INFANTRY } from "@shared/imperium-units";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,28 @@ export default async function VillagePage({
     fetchImperiumQueue(villageId),
     fetchImperiumUnits(villageId),
   ]);
+
+  // Tutoriel : flags pour les 3 premières étapes
+  const fieldKinds = ["wood_field", "clay_field", "iron_field", "wheat_field"];
+  const hasUpgradedField = buildings.some(
+    (b) => fieldKinds.includes(b.kind) && b.level >= 2,
+  );
+  const basicInf = UNIT_BASIC_INFANTRY[village.faction];
+  const basicCount =
+    units.find((u) => u.unit_kind === basicInf)?.count ?? 0;
+  const hasRecruitedUnits = basicCount >= 5;
+
+  const supabase = await createClient();
+  let hasRaided = false;
+  if (supabase) {
+    const { data } = await supabase
+      .from("imperium_achievements")
+      .select("achievement_id")
+      .eq("user_id", profile.id)
+      .in("achievement_id", ["ach_first_raid", "ach_first_barbarian"])
+      .limit(1);
+    hasRaided = (data ?? []).length > 0;
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -74,6 +99,13 @@ export default async function VillagePage({
         </div>
       </header>
       <main className="flex flex-1 flex-col overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(245,158,11,0.06),transparent_60%)]">
+        <div className="mx-auto w-full max-w-6xl px-6 pt-6">
+          <TutorialBanner
+            hasUpgradedField={hasUpgradedField}
+            hasRecruitedUnits={hasRecruitedUnits}
+            hasRaided={hasRaided}
+          />
+        </div>
         <VillageView
           initialVillage={village}
           initialBuildings={buildings}
