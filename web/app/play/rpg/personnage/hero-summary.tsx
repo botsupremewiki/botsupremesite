@@ -133,11 +133,38 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
         )}
       </Link>
 
-      {/* Quêtes / Pass / Profil — placeholders Phase 11 */}
+      {/* Quêtes / Pass / Bestiaire */}
       <section className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <PlaceholderTile icon="📜" label="Quêtes" phase="P11" />
-        <PlaceholderTile icon="🎟️" label="Pass Suprême" phase="P11" />
-        <PlaceholderTile icon="🏆" label="Profil / Achievements" phase="P11" />
+        <Link
+          href="/play/rpg/personnage/quetes"
+          className="flex items-center justify-between rounded-md border border-amber-400/30 bg-black/40 p-3 hover:bg-white/[0.04]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-xl">📜</span>
+            <span className="text-sm text-amber-200">Quêtes</span>
+          </span>
+          <span className="text-amber-300">→</span>
+        </Link>
+        <Link
+          href="/play/rpg/personnage/pass"
+          className="flex items-center justify-between rounded-md border border-amber-400/30 bg-black/40 p-3 hover:bg-white/[0.04]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-xl">🎟️</span>
+            <span className="text-sm text-amber-200">Pass Suprême</span>
+          </span>
+          <span className="text-amber-300">→</span>
+        </Link>
+        <Link
+          href="/play/rpg/personnage/bestiaire"
+          className="flex items-center justify-between rounded-md border border-amber-400/30 bg-black/40 p-3 hover:bg-white/[0.04]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-xl">📖</span>
+            <span className="text-sm text-amber-200">Bestiaire</span>
+          </span>
+          <span className="text-amber-300">→</span>
+        </Link>
       </section>
     </div>
   );

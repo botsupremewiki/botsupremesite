@@ -102,7 +102,6 @@ export default async function EternumHub() {
               accent="text-emerald-200"
               border="border-emerald-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
-              soon
             />
           </div>
 
