@@ -3776,3 +3776,390 @@ begin
 end;
 $$;
 
+-- ══════════════════════════════════════════════════════════════════════
+-- 23. P9 — SERVICES SCALABLES (17 secteurs)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Tarif moyen par prestation et compétence principale par secteur service.
+create or replace function public.skyline_service_sector_spec(p_sector text)
+returns jsonb language sql immutable as $$
+  select case p_sector
+    -- Bureau / digital
+    when 'tech_digital'    then jsonb_build_object('rate', 200,  'skill', 'machine_use',    'name', 'Tech / Digital')
+    when 'conseil_audit'   then jsonb_build_object('rate', 300,  'skill', 'compta',         'name', 'Conseil / Audit')
+    when 'expertise_compta' then jsonb_build_object('rate', 180,  'skill', 'compta',         'name', 'Expertise compta')
+    when 'juridique'       then jsonb_build_object('rate', 350,  'skill', 'compta',         'name', 'Cabinet juridique')
+    when 'immobilier'      then jsonb_build_object('rate', 250,  'skill', 'negociation',    'name', 'Agence immobilière')
+    when 'ecommerce'       then jsonb_build_object('rate', 100,  'skill', 'machine_use',    'name', 'Plateforme e-commerce')
+    -- Beauté / esthétique
+    when 'coiffure'        then jsonb_build_object('rate', 50,   'skill', 'soins',          'name', 'Salon coiffure')
+    when 'esthetique'      then jsonb_build_object('rate', 80,   'skill', 'soins',          'name', 'Salon esthétique / spa')
+    -- Sport
+    when 'salle_sport'     then jsonb_build_object('rate', 40,   'skill', 'soins',          'name', 'Salle de sport')
+    -- Logistique
+    when 'transport'       then jsonb_build_object('rate', 150,  'skill', 'manuel',         'name', 'Société transport')
+    when 'taxi_vtc'        then jsonb_build_object('rate', 25,   'skill', 'manuel',         'name', 'Taxi / VTC')
+    -- Sécurité / nettoyage
+    when 'securite'        then jsonb_build_object('rate', 120,  'skill', 'securite',       'name', 'Société sécurité')
+    when 'nettoyage'       then jsonb_build_object('rate', 60,   'skill', 'entretien',      'name', 'Société nettoyage')
+    -- Lourd / spécialisé
+    when 'btp_construction' then jsonb_build_object('rate', 800,  'skill', 'manuel',         'name', 'BTP / Construction')
+    when 'sante_clinique'  then jsonb_build_object('rate', 400,  'skill', 'medical',        'name', 'Clinique privée')
+    when 'medias_studio'   then jsonb_build_object('rate', 600,  'skill', 'presentation',   'name', 'Studio médias')
+    when 'casino'          then jsonb_build_object('rate', 1500, 'skill', 'service_client', 'name', 'Casino')
+    when 'banque_commerciale' then jsonb_build_object('rate', 2500, 'skill', 'compta',       'name', 'Banque commerciale')
+    when 'aerien'          then jsonb_build_object('rate', 5000, 'skill', 'machine_use',    'name', 'Compagnie aérienne')
+    when 'diffusion_tv'    then jsonb_build_object('rate', 1200, 'skill', 'presentation',   'name', 'Chaîne TV / Radio')
+    else null
+  end;
+$$;
+
+-- Coût et capacité d'un équipement service selon (kind = sector, level basic/pro/elite/hightech).
+create or replace function public.skyline_service_equipment_spec(p_kind text, p_level text)
+returns jsonb language sql immutable as $$
+  select case p_kind || '/' || p_level
+    -- Bureau (Tech, Conseil, Juridique, Compta, Immobilier, E-commerce)
+    when 'office/basic'    then jsonb_build_object('cost', 2500,    'capacity', 5,     'name', 'Poste de travail basique')
+    when 'office/pro'      then jsonb_build_object('cost', 8000,    'capacity', 12,    'name', 'Workstation pro')
+    when 'office/elite'    then jsonb_build_object('cost', 25000,   'capacity', 30,    'name', 'Workstation IA')
+    when 'office/hightech' then jsonb_build_object('cost', 80000,   'capacity', 80,    'name', 'Suite logicielle premium')
+    -- Salon (coiffure, esthétique)
+    when 'salon/basic'    then jsonb_build_object('cost', 3000,    'capacity', 4,     'name', 'Fauteuil basique')
+    when 'salon/pro'      then jsonb_build_object('cost', 9000,    'capacity', 10,    'name', 'Fauteuil pro avec accessoires')
+    when 'salon/elite'    then jsonb_build_object('cost', 25000,   'capacity', 25,    'name', 'Cabine premium complète')
+    when 'salon/hightech' then jsonb_build_object('cost', 80000,   'capacity', 60,    'name', 'Cabine spa luxe')
+    -- Sport
+    when 'gym/basic'    then jsonb_build_object('cost', 8000,    'capacity', 30,    'name', 'Lot machines basiques')
+    when 'gym/pro'      then jsonb_build_object('cost', 25000,   'capacity', 80,    'name', 'Plateau musculation pro')
+    when 'gym/elite'    then jsonb_build_object('cost', 80000,   'capacity', 200,   'name', 'Salle premium connectée')
+    when 'gym/hightech' then jsonb_build_object('cost', 250000,  'capacity', 500,   'name', 'Salle premium IA')
+    -- Transport / véhicules
+    when 'vehicle/basic'    then jsonb_build_object('cost', 15000,   'capacity', 8,     'name', 'Véhicule occasion')
+    when 'vehicle/pro'      then jsonb_build_object('cost', 45000,   'capacity', 20,    'name', 'Véhicule récent')
+    when 'vehicle/elite'    then jsonb_build_object('cost', 120000,  'capacity', 50,    'name', 'Camion / utilitaire pro')
+    when 'vehicle/hightech' then jsonb_build_object('cost', 400000,  'capacity', 150,   'name', 'Flotte autonome IA')
+    -- Médical
+    when 'medical/basic'    then jsonb_build_object('cost', 30000,   'capacity', 10,    'name', 'Cabinet basique')
+    when 'medical/pro'      then jsonb_build_object('cost', 100000,  'capacity', 25,    'name', 'Cabinet équipé')
+    when 'medical/elite'    then jsonb_build_object('cost', 400000,  'capacity', 60,    'name', 'Bloc opératoire')
+    when 'medical/hightech' then jsonb_build_object('cost', 1500000, 'capacity', 200,   'name', 'Imagerie + IA diagnostique')
+    -- BTP / construction
+    when 'btp/basic'    then jsonb_build_object('cost', 50000,   'capacity', 5,     'name', 'Outils + 1 engin')
+    when 'btp/pro'      then jsonb_build_object('cost', 200000,  'capacity', 15,    'name', 'Flotte d''engins')
+    when 'btp/elite'    then jsonb_build_object('cost', 800000,  'capacity', 50,    'name', 'Grue + équipement lourd')
+    when 'btp/hightech' then jsonb_build_object('cost', 3000000, 'capacity', 200,   'name', 'BIM + grues automatisées')
+    -- Médias / studio
+    when 'studio/basic'    then jsonb_build_object('cost', 25000,   'capacity', 8,     'name', 'Caméra + montage basique')
+    when 'studio/pro'      then jsonb_build_object('cost', 100000,  'capacity', 25,    'name', 'Studio cinéma pro')
+    when 'studio/elite'    then jsonb_build_object('cost', 500000,  'capacity', 80,    'name', 'Plateau cinéma premium')
+    when 'studio/hightech' then jsonb_build_object('cost', 2000000, 'capacity', 250,   'name', 'Plateau LED virtuel + IA')
+    -- Casino
+    when 'casino/basic'    then jsonb_build_object('cost', 200000,  'capacity', 30,    'name', 'Salle de jeu basique')
+    when 'casino/pro'      then jsonb_build_object('cost', 1000000, 'capacity', 100,   'name', 'Casino moyen')
+    when 'casino/elite'    then jsonb_build_object('cost', 5000000, 'capacity', 300,   'name', 'Casino prestige + VIP')
+    when 'casino/hightech' then jsonb_build_object('cost', 25000000,'capacity', 1000,  'name', 'Méga-casino + hôtel')
+    -- Banque
+    when 'bank/basic'    then jsonb_build_object('cost', 500000,   'capacity', 50,    'name', 'Agence basique')
+    when 'bank/pro'      then jsonb_build_object('cost', 2500000,  'capacity', 200,   'name', 'Réseau régional')
+    when 'bank/elite'    then jsonb_build_object('cost', 15000000, 'capacity', 800,   'name', 'Réseau national')
+    when 'bank/hightech' then jsonb_build_object('cost', 80000000, 'capacity', 3000,  'name', 'Banque mondiale digitale')
+    -- Aérien
+    when 'airline/basic'    then jsonb_build_object('cost', 50000000,   'capacity', 200,    'name', 'Avion régional')
+    when 'airline/pro'      then jsonb_build_object('cost', 200000000,  'capacity', 1000,   'name', 'Long-courrier')
+    when 'airline/elite'    then jsonb_build_object('cost', 800000000,  'capacity', 4000,   'name', 'Flotte moyenne')
+    when 'airline/hightech' then jsonb_build_object('cost', 3000000000, 'capacity', 15000,  'name', 'Flotte mondiale + IA ops')
+    -- Diffusion (TV, radio)
+    when 'broadcast/basic'    then jsonb_build_object('cost', 1000000,  'capacity', 100,   'name', 'Studio régional')
+    when 'broadcast/pro'      then jsonb_build_object('cost', 5000000,  'capacity', 500,   'name', 'Chaîne nationale')
+    when 'broadcast/elite'    then jsonb_build_object('cost', 25000000, 'capacity', 2000,  'name', 'Groupe média')
+    when 'broadcast/hightech' then jsonb_build_object('cost', 100000000,'capacity', 8000,  'name', 'Empire média mondial')
+    else null
+  end;
+$$;
+
+-- Mapping secteur service → kind d'équipement.
+create or replace function public.skyline_service_equipment_kind(p_sector text)
+returns text language sql immutable as $$
+  select case
+    when p_sector in ('tech_digital', 'conseil_audit', 'expertise_compta', 'juridique',
+                      'immobilier', 'ecommerce', 'securite', 'nettoyage')
+      then 'office'
+    when p_sector in ('coiffure', 'esthetique') then 'salon'
+    when p_sector = 'salle_sport' then 'gym'
+    when p_sector in ('transport', 'taxi_vtc') then 'vehicle'
+    when p_sector = 'sante_clinique' then 'medical'
+    when p_sector = 'btp_construction' then 'btp'
+    when p_sector = 'medias_studio' then 'studio'
+    when p_sector = 'casino' then 'casino'
+    when p_sector = 'banque_commerciale' then 'bank'
+    when p_sector = 'aerien' then 'airline'
+    when p_sector = 'diffusion_tv' then 'broadcast'
+    else null
+  end;
+$$;
+
+-- Acheter équipement service (réutilise table skyline_machines).
+create or replace function public.skyline_buy_service_equipment(
+  p_company_id uuid,
+  p_level      text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_company public.skyline_companies%rowtype;
+  v_kind    text;
+  v_spec    jsonb;
+  v_cost    numeric;
+  v_cap     int;
+  v_id      uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id and category = 'service';
+  if not found then raise exception 'Pas un service ou pas trouvé'; end if;
+
+  v_kind := public.skyline_service_equipment_kind(v_company.sector);
+  if v_kind is null then raise exception 'Secteur service non géré'; end if;
+
+  v_spec := public.skyline_service_equipment_spec(v_kind, p_level);
+  if v_spec is null then raise exception 'Niveau équipement inconnu'; end if;
+
+  v_cost := (v_spec->>'cost')::numeric;
+  v_cap := (v_spec->>'capacity')::int;
+
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_cost then
+      raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+    end if;
+  end;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_machines (company_id, kind, level, cost, capacity_per_day)
+  values (p_company_id, v_kind, p_level, v_cost, v_cap)
+  returning id into v_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'equipment', -v_cost,
+    'Équipement ' || v_kind || ' : ' || (v_spec->>'name'));
+
+  return v_id;
+end;
+$$;
+
+-- Production de service (lazy via tick) : revenus = capacité × employés × heures × tarif × quality.
+-- Quality = avg(skill_avg) pondéré par compétence principale du secteur.
+create or replace function public.skyline_service_produce(p_company_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_user_id   uuid := auth.uid();
+  v_spec      jsonb;
+  v_skill     text;
+  v_rate      numeric;
+  v_total_cap int;
+  v_emp_count int;
+  v_skill_sum int;
+  v_now       timestamptz := now();
+  v_elapsed_h numeric;
+  v_capacity_h numeric;
+  v_quality   numeric;
+  v_revenue   numeric;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return 0; end if;
+  if v_company.category <> 'service' then return 0; end if;
+
+  v_spec := public.skyline_service_sector_spec(v_company.sector);
+  if v_spec is null then return 0; end if;
+  v_skill := v_spec->>'skill';
+  v_rate := (v_spec->>'rate')::numeric;
+
+  -- Capacité totale équipement.
+  select coalesce(sum(capacity_per_day), 0) into v_total_cap
+    from public.skyline_machines where company_id = p_company_id;
+
+  -- Employés.
+  select count(*), coalesce(sum(coalesce((skills->>v_skill)::int, 30)), 0)
+    into v_emp_count, v_skill_sum
+    from public.skyline_employees where company_id = p_company_id;
+
+  if v_total_cap = 0 or v_emp_count = 0 then return 0; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return 0; end if;
+
+  -- Capacité réelle : MIN(equipment, employees) au prorata des heures.
+  v_capacity_h := least(v_total_cap, v_emp_count * 8) * v_elapsed_h / 24.0;
+
+  -- Quality factor (0.3 → 1.5 selon skill moyen).
+  v_quality := 0.3 + (v_skill_sum / nullif(v_emp_count, 0)) / 100.0 * 1.2;
+
+  v_revenue := v_capacity_h * v_rate * v_quality;
+  if v_revenue <= 0 then return 0; end if;
+
+  -- Crédite revenus.
+  update public.skyline_profiles
+    set cash = cash + v_revenue, updated_at = v_now
+    where user_id = v_user_id;
+  update public.skyline_companies
+    set monthly_revenue = v_revenue,
+        last_tick_at = v_now,
+        updated_at = v_now
+    where id = p_company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'sale', v_revenue,
+    'Prestations service (' || round(v_elapsed_h, 1) || 'h, qualité ' ||
+    round(v_quality, 2) || ')');
+
+  return v_revenue;
+end;
+$$;
+
+-- Wrapper tick étendu avec service.
+create or replace function public.skyline_tick_company_full(p_company_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cat text;
+begin
+  select category into v_cat from public.skyline_companies where id = p_company_id;
+  if v_cat is null then return; end if;
+
+  perform public.skyline_tick_company(p_company_id);
+
+  if v_cat = 'commerce' then
+    perform public.skyline_process_sales(p_company_id);
+  elsif v_cat = 'factory' then
+    perform public.skyline_factory_produce(p_company_id);
+  elsif v_cat = 'raw' then
+    perform public.skyline_raw_extract(p_company_id);
+  elsif v_cat = 'service' then
+    perform public.skyline_service_produce(p_company_id);
+  end if;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 24. P9 — APPRENTISSAGE JOUEUR (16 compétences)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Démarre une session de formation pour le joueur.
+-- Durée : 14h réelles (2 semaines jeu). Coût : 5k$ basique → 15k$ avancé.
+create or replace function public.skyline_start_player_training(
+  p_skill text,
+  p_target_level int default 50
+)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_profile public.skyline_profiles%rowtype;
+  v_cost    numeric;
+  v_ends_at timestamptz;
+  v_current int;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_target_level <= 0 or p_target_level > 100 then
+    raise exception 'Niveau cible invalide';
+  end if;
+
+  select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  if not found then
+    perform public.skyline_init_profile();
+    select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  end if;
+
+  if v_profile.current_skill_training is not null then
+    raise exception 'Déjà en formation : %', v_profile.current_skill_training;
+  end if;
+
+  -- Skill courant (0 si jamais formé).
+  v_current := coalesce((v_profile.player_skills->>p_skill)::int, 0);
+  if p_target_level <= v_current then
+    raise exception 'Tu maîtrises déjà ce niveau (actuel : %)', v_current;
+  end if;
+
+  -- Coût scaled selon delta de niveau visé.
+  v_cost := 5000 + (p_target_level - v_current) * 200;
+  if v_profile.cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_profile.cash, 2);
+  end if;
+
+  -- Durée : 14h réelles (2 semaines jeu).
+  v_ends_at := now() + interval '14 hours';
+
+  update public.skyline_profiles
+    set cash = cash - v_cost,
+        current_skill_training = p_skill,
+        skill_training_ends_at = v_ends_at,
+        updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_transactions (user_id, kind, amount, description)
+  values (v_user_id, 'other', -v_cost,
+    'Formation : ' || p_skill || ' → niveau ' || p_target_level);
+
+  return v_ends_at;
+end;
+$$;
+
+-- Finalise une formation joueur si timer écoulé.
+create or replace function public.skyline_finish_player_training()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_profile public.skyline_profiles%rowtype;
+  v_skill   text;
+  v_current int;
+  v_new     int;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  if not found then return false; end if;
+  if v_profile.current_skill_training is null then return false; end if;
+  if v_profile.skill_training_ends_at > now() then return false; end if;
+
+  v_skill := v_profile.current_skill_training;
+  v_current := coalesce((v_profile.player_skills->>v_skill)::int, 0);
+  -- Gain : entre +25 et +40 points.
+  v_new := least(100, v_current + 25 + floor(random() * 15)::int);
+
+  update public.skyline_profiles
+    set player_skills = player_skills || jsonb_build_object(v_skill, v_new),
+        current_skill_training = null,
+        skill_training_ends_at = null,
+        updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_transactions (user_id, kind, amount, description)
+  values (v_user_id, 'other', 0,
+    'Formation terminée : ' || v_skill || ' ' || v_current || ' → ' || v_new);
+
+  return true;
+end;
+$$;
+

@@ -41,6 +41,7 @@ import {
   buyFurnitureAction,
   buyMachineAction,
   buyRawMachineAction,
+  buyServiceEquipmentAction,
   cleanCompanyAction,
   fireEmployeeAction,
   ipoCompanyAction,
@@ -52,6 +53,7 @@ import {
   removeFurnitureAction,
   setSellPriceAction,
 } from "../_lib/actions";
+import { SKYLINE_SERVICE_SECTORS, type SkylineServiceSector } from "@shared/skyline";
 
 type Tab =
   | "stocks"
@@ -66,7 +68,9 @@ type Tab =
   | "production"
   | "extraction"
   | "market"
-  | "bourse";
+  | "bourse"
+  | "service_prod"
+  | "service_eq";
 
 type ShareInfo = {
   id: string;
@@ -102,8 +106,15 @@ export function CompanyView({
   const isFactory = company.category === "factory";
   const isRaw = company.category === "raw";
   const isCommerce = company.category === "commerce";
+  const isService = company.category === "service";
   const [tab, setTab] = useState<Tab>(
-    isFactory ? "production" : isRaw ? "extraction" : "stocks",
+    isFactory
+      ? "production"
+      : isRaw
+      ? "extraction"
+      : isService
+      ? "service_prod"
+      : "stocks",
   );
   const commerceSectorMeta = isCommerce
     ? SKYLINE_COMMERCE_SECTORS[company.sector as SkylineCommerceSector]
@@ -114,7 +125,11 @@ export function CompanyView({
   const rawSectorMeta = isRaw
     ? SKYLINE_RAW_SECTORS[company.sector as SkylineRawSector]
     : null;
-  const sectorMeta = commerceSectorMeta ?? factorySectorMeta ?? rawSectorMeta;
+  const serviceSectorMeta = isService
+    ? SKYLINE_SERVICE_SECTORS[company.sector as SkylineServiceSector]
+    : null;
+  const sectorMeta =
+    commerceSectorMeta ?? factorySectorMeta ?? rawSectorMeta ?? serviceSectorMeta;
   const districtMeta = SKYLINE_DISTRICTS[company.district];
   const sizeMeta = SKYLINE_LOCAL_SIZES[company.local_size];
   const rent = skylineRentMonthly(company.district, company.local_size);
@@ -189,6 +204,15 @@ export function CompanyView({
               </TabButton>
               <TabButton current={tab} value="market" onClick={setTab}>
                 📈 Marché B2B
+              </TabButton>
+            </>
+          ) : isService ? (
+            <>
+              <TabButton current={tab} value="service_prod" onClick={setTab}>
+                🔧 Prestations
+              </TabButton>
+              <TabButton current={tab} value="service_eq" onClick={setTab}>
+                ⚙️ Équipement ({machines.length})
               </TabButton>
             </>
           ) : (
@@ -293,6 +317,22 @@ export function CompanyView({
             companyName={company.name}
             share={share}
             isOwner={true}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "service_prod" && serviceSectorMeta ? (
+          <ServiceProdTab
+            sectorMeta={serviceSectorMeta}
+            machines={machines}
+            employees={employees}
+            company={company}
+          />
+        ) : null}
+        {tab === "service_eq" && serviceSectorMeta ? (
+          <ServiceEquipmentTab
+            companyId={company.id}
+            sectorMeta={serviceSectorMeta}
+            machines={machines}
             cash={cash}
           />
         ) : null}
@@ -2412,6 +2452,273 @@ function ListedView({
         </Link>{" "}
         pour acheter/vendre des actions.
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglets P9 : SERVICES SCALABLES
+// ──────────────────────────────────────────────────────────────────
+
+type ServiceSectorMeta =
+  (typeof SKYLINE_SERVICE_SECTORS)[SkylineServiceSector];
+
+function ServiceProdTab({
+  sectorMeta,
+  machines,
+  employees,
+  company,
+}: {
+  sectorMeta: ServiceSectorMeta;
+  machines: SkylineMachineRow[];
+  employees: SkylineEmployeeRow[];
+  company: SkylineCompanyRow;
+}) {
+  const totalCapacity = machines.reduce(
+    (s, m) => s + Number(m.capacity_per_day),
+    0,
+  );
+  const empCount = employees.length;
+  const realCapacity = Math.min(totalCapacity, empCount * 8);
+  const skill = sectorMeta.primarySkill;
+  const skillAvg =
+    empCount === 0
+      ? 0
+      : employees.reduce((s, e) => {
+          const sk = (e.skills ?? {}) as Record<string, number>;
+          return s + Number(sk[skill] ?? 30);
+        }, 0) / empCount;
+  const quality = 0.3 + (skillAvg / 100) * 1.2;
+  const skillMeta = SKYLINE_SKILLS[skill];
+  const bottleneck =
+    totalCapacity === 0
+      ? "Pas d'équipement"
+      : empCount === 0
+      ? "Pas d'employé"
+      : empCount * 8 < totalCapacity
+      ? "Manque d'employés"
+      : "Manque d'équipement";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-blue-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-blue-200">
+          🔧 Prestations — {sectorMeta.name}
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Revenus = capacité réelle × tarif × qualité. La capacité réelle = MIN(équipement,
+          employés × 8h). Recrute et upgrade pour scaler.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Tarif moyen / prestation"
+            value={skylineFormatCashFR(sectorMeta.rate)}
+            accent="text-blue-200"
+          />
+          <Stat
+            label="Capacité réelle / jour"
+            value={realCapacity.toLocaleString("fr-FR")}
+            accent="text-cyan-200"
+          />
+          <Stat
+            label="Revenus mensuels"
+            value={skylineFormatCashFR(Number(company.monthly_revenue))}
+            accent="text-emerald-200"
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Capacité équipement
+            </div>
+            <div className="mt-1 text-base font-semibold text-zinc-200 tabular-nums">
+              {totalCapacity.toLocaleString("fr-FR")}
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              {machines.length} unité(s)
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Capacité personnel (8h/jour)
+            </div>
+            <div className="mt-1 text-base font-semibold text-zinc-200 tabular-nums">
+              {(empCount * 8).toLocaleString("fr-FR")}
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              {empCount} employé(s)
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Qualité ({skillMeta?.name})
+            </div>
+            <div className="mt-1 text-base font-semibold text-zinc-200 tabular-nums">
+              {(quality * 100).toFixed(0)}%
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Skill moy. {skillAvg.toFixed(0)} / 100
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <strong>Goulot d&apos;étranglement :</strong> {bottleneck}.
+          {totalCapacity === 0
+            ? " Achète des équipements dans l'onglet ⚙️ Équipement."
+            : empCount === 0
+            ? " Embauche depuis le marché de l'emploi."
+            : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const SERVICE_EQUIPMENT_COSTS: Record<
+  string,
+  Record<SkylineMachineLevel, number>
+> = {
+  office: { basic: 2500, pro: 8000, elite: 25000, hightech: 80000 },
+  salon: { basic: 3000, pro: 9000, elite: 25000, hightech: 80000 },
+  gym: { basic: 8000, pro: 25000, elite: 80000, hightech: 250000 },
+  vehicle: { basic: 15000, pro: 45000, elite: 120000, hightech: 400000 },
+  medical: { basic: 30000, pro: 100000, elite: 400000, hightech: 1500000 },
+  btp: { basic: 50000, pro: 200000, elite: 800000, hightech: 3000000 },
+  studio: { basic: 25000, pro: 100000, elite: 500000, hightech: 2000000 },
+  casino: { basic: 200000, pro: 1000000, elite: 5000000, hightech: 25000000 },
+  bank: { basic: 500000, pro: 2500000, elite: 15000000, hightech: 80000000 },
+  airline: {
+    basic: 50000000,
+    pro: 200000000,
+    elite: 800000000,
+    hightech: 3000000000,
+  },
+  broadcast: {
+    basic: 1000000,
+    pro: 5000000,
+    elite: 25000000,
+    hightech: 100000000,
+  },
+};
+
+function ServiceEquipmentTab({
+  companyId,
+  sectorMeta,
+  machines,
+  cash,
+}: {
+  companyId: string;
+  sectorMeta: ServiceSectorMeta;
+  machines: SkylineMachineRow[];
+  cash: number;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          ⚙️ Équipement — {sectorMeta.name}
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Plus l&apos;équipement est haut de gamme, plus ta capacité augmente —
+          mais il faut des employés compétents pour l&apos;utiliser.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {SKYLINE_MACHINE_LEVELS.map((lvl) => (
+            <ServiceEquipCard
+              key={lvl.id}
+              companyId={companyId}
+              kind={sectorMeta.equipmentKind}
+              level={lvl.id}
+              levelName={lvl.name}
+              skillRequired={lvl.skillRequired}
+              multiplier={lvl.multiplier}
+              cash={cash}
+            />
+          ))}
+        </div>
+      </div>
+
+      {machines.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Mon équipement ({machines.length})
+          </h3>
+          <ul className="mt-3 space-y-1 text-xs">
+            {machines.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded border border-white/5 bg-white/[0.02] px-3 py-2"
+              >
+                <span className="text-zinc-200">
+                  ⚙️ {m.kind} · niveau {m.level}
+                </span>
+                <span className="text-zinc-400 tabular-nums">
+                  {m.capacity_per_day} clients/jour
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ServiceEquipCard({
+  companyId,
+  kind,
+  level,
+  levelName,
+  skillRequired,
+  multiplier,
+  cash,
+}: {
+  companyId: string;
+  kind: string;
+  level: SkylineMachineLevel;
+  levelName: string;
+  skillRequired: number;
+  multiplier: string;
+  cash: number;
+}) {
+  const cost = SERVICE_EQUIPMENT_COSTS[kind]?.[level] ?? 0;
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canAfford = cash >= cost;
+
+  const handleBuy = () => {
+    if (!canAfford || pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("level", level);
+    startTransition(async () => {
+      const res = await buyServiceEquipmentAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-zinc-100">
+          ⚙️ {levelName} ({multiplier})
+        </div>
+        <div className="text-xs text-zinc-400">Comp. ≥ {skillRequired}</div>
+      </div>
+      <button
+        onClick={handleBuy}
+        disabled={!canAfford || pending}
+        className="rounded-md border border-blue-400/50 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-200 transition-colors hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending ? "..." : `Acheter · ${skylineFormatCashFR(cost)}`}
+      </button>
+      {error ? (
+        <div className="text-[10px] text-rose-300">{error}</div>
+      ) : null}
     </div>
   );
 }

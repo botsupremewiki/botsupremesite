@@ -5,11 +5,13 @@ import {
   SKYLINE_FACTORY_SECTORS,
   SKYLINE_RAW_MATERIALS,
   SKYLINE_RAW_SECTORS,
+  SKYLINE_SERVICE_SECTORS,
   type SkylineCommerceSector,
   type SkylineDistrict,
   type SkylineFactorySector,
   type SkylineLocalSize,
   type SkylineRawSector,
+  type SkylineServiceSector,
   skylineRentMonthly,
   skylinePurchaseCost,
   skylineFormatCashFR,
@@ -40,12 +42,15 @@ type Size = {
   sqm: number;
 };
 
-type Category = "commerce" | "factory" | "raw";
+type Category = "commerce" | "factory" | "raw" | "service";
 
 const FACTORY_SECTORS = Object.values(SKYLINE_FACTORY_SECTORS).sort(
   (a, b) => a.minStartCash - b.minStartCash,
 );
 const RAW_SECTORS = Object.values(SKYLINE_RAW_SECTORS).sort(
+  (a, b) => a.minStartCash - b.minStartCash,
+);
+const SERVICE_SECTORS = Object.values(SKYLINE_SERVICE_SECTORS).sort(
   (a, b) => a.minStartCash - b.minStartCash,
 );
 
@@ -70,6 +75,9 @@ export function CreationForm({
   const [rawSector, setRawSector] = useState<SkylineRawSector>(
     RAW_SECTORS[0].id,
   );
+  const [serviceSector, setServiceSector] = useState<SkylineServiceSector>(
+    SERVICE_SECTORS[0].id,
+  );
   const [name, setName] = useState("");
   const [district, setDistrict] = useState<SkylineDistrict>("populaire");
   const [size, setSize] = useState<SkylineLocalSize>("xs");
@@ -79,18 +87,23 @@ export function CreationForm({
   const commerceSectorMeta = sectors.find((s) => s.id === commerceSector)!;
   const factorySectorMeta = SKYLINE_FACTORY_SECTORS[factorySector];
   const rawSectorMeta = SKYLINE_RAW_SECTORS[rawSector];
+  const serviceSectorMeta = SKYLINE_SERVICE_SECTORS[serviceSector];
   const sectorId =
     category === "commerce"
       ? commerceSector
       : category === "factory"
       ? factorySector
-      : rawSector;
+      : category === "raw"
+      ? rawSector
+      : serviceSector;
   const sectorMeta =
     category === "commerce"
       ? commerceSectorMeta
       : category === "factory"
       ? factorySectorMeta
-      : rawSectorMeta;
+      : category === "raw"
+      ? rawSectorMeta
+      : serviceSectorMeta;
   const rent = skylineRentMonthly(district, size);
   const buyCost = skylinePurchaseCost(district, size);
   const totalCost = purchase ? buyCost : rent;
@@ -115,7 +128,7 @@ export function CreationForm({
         <div className="text-[11px] uppercase tracking-widest text-zinc-400">
           Type d&apos;entreprise
         </div>
-        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <button
             type="button"
             onClick={() => setCategory("commerce")}
@@ -144,7 +157,7 @@ export function CreationForm({
           >
             <div className="text-2xl">🏭</div>
             <div className="mt-1 text-sm font-semibold text-zinc-100">
-              Usine de transformation
+              Usine
             </div>
             <div className="text-[10px] text-zinc-500">
               2 matières → produit fini
@@ -164,7 +177,24 @@ export function CreationForm({
               Matière première
             </div>
             <div className="text-[10px] text-zinc-500">
-              Champ, élevage, mine, forêt...
+              Champ, mine, élevage...
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategory("service")}
+            className={`rounded-lg border p-3 text-left transition-colors ${
+              category === "service"
+                ? "border-blue-400/60 bg-blue-500/10"
+                : "border-white/10 bg-white/[0.02] hover:border-white/20"
+            }`}
+          >
+            <div className="text-2xl">🔧</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">
+              Service
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Tech, conseil, sport, BTP...
             </div>
           </button>
         </div>
@@ -221,7 +251,7 @@ export function CreationForm({
               </button>
             ))}
           </div>
-        ) : (
+        ) : category === "raw" ? (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {RAW_SECTORS.map((s) => (
               <button
@@ -231,6 +261,29 @@ export function CreationForm({
                 className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
                   rawSector === s.id
                     ? "border-emerald-400/60 bg-emerald-500/10"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                }`}
+              >
+                <span className="text-2xl">{s.glyph}</span>
+                <span className="text-xs font-semibold text-zinc-100">
+                  {s.name}
+                </span>
+                <span className="text-[10px] text-zinc-500">
+                  ~{s.minStartCash.toLocaleString("fr-FR")}$ démarrage
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {SERVICE_SECTORS.map((s) => (
+              <button
+                type="button"
+                key={s.id}
+                onClick={() => setServiceSector(s.id)}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  serviceSector === s.id
+                    ? "border-blue-400/60 bg-blue-500/10"
                     : "border-white/10 bg-white/[0.02] hover:border-white/20"
                 }`}
               >
@@ -269,6 +322,17 @@ export function CreationForm({
             </span>
             <span className="text-zinc-500">
               · machines {rawSectorMeta.machineKind}
+            </span>
+          </div>
+        ) : null}
+        {category === "service" ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+            <span className="text-zinc-400">Tarif moyen :</span>
+            <span className="rounded-full border border-blue-400/40 bg-blue-500/10 px-2 py-0.5 text-blue-200 tabular-nums">
+              {skylineFormatCashFR(serviceSectorMeta.rate)} / prestation
+            </span>
+            <span className="text-zinc-500">
+              · compétence clé {serviceSectorMeta.primarySkill}
             </span>
           </div>
         ) : null}

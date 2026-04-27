@@ -800,6 +800,80 @@ export const SKYLINE_RAW_SECTORS: Record<
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// 4.6.6. SECTEURS SERVICES (P9)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineServiceSector =
+  | "tech_digital"
+  | "conseil_audit"
+  | "expertise_compta"
+  | "juridique"
+  | "immobilier"
+  | "ecommerce"
+  | "coiffure"
+  | "esthetique"
+  | "salle_sport"
+  | "transport"
+  | "taxi_vtc"
+  | "securite"
+  | "nettoyage"
+  | "btp_construction"
+  | "sante_clinique"
+  | "medias_studio"
+  | "casino"
+  | "banque_commerciale"
+  | "aerien"
+  | "diffusion_tv";
+
+export type SkylineServiceEquipmentKind =
+  | "office"
+  | "salon"
+  | "gym"
+  | "vehicle"
+  | "medical"
+  | "btp"
+  | "studio"
+  | "casino"
+  | "bank"
+  | "airline"
+  | "broadcast";
+
+export const SKYLINE_SERVICE_SECTORS: Record<
+  SkylineServiceSector,
+  {
+    id: SkylineServiceSector;
+    name: string;
+    glyph: string;
+    description: string;
+    minStartCash: number;
+    rate: number; // tarif moyen / prestation
+    primarySkill: SkylineSkill;
+    equipmentKind: SkylineServiceEquipmentKind;
+  }
+> = {
+  tech_digital: { id: "tech_digital", name: "Tech / Digital", glyph: "💻", description: "Dev, design, e-commerce, agence digitale.", minStartCash: 10000, rate: 200, primarySkill: "machine_use", equipmentKind: "office" },
+  conseil_audit: { id: "conseil_audit", name: "Conseil / Audit", glyph: "📞", description: "Cabinet conseil, missions clients.", minStartCash: 20000, rate: 300, primarySkill: "compta", equipmentKind: "office" },
+  expertise_compta: { id: "expertise_compta", name: "Expertise compta", glyph: "📊", description: "Compta externalisée pour autres entreprises.", minStartCash: 100000, rate: 180, primarySkill: "compta", equipmentKind: "office" },
+  juridique: { id: "juridique", name: "Cabinet juridique", glyph: "⚖️", description: "Avocats, droit des affaires.", minStartCash: 150000, rate: 350, primarySkill: "compta", equipmentKind: "office" },
+  immobilier: { id: "immobilier", name: "Agence immobilière", glyph: "🏘️", description: "Vente, location, commissions.", minStartCash: 80000, rate: 250, primarySkill: "negociation", equipmentKind: "office" },
+  ecommerce: { id: "ecommerce", name: "Plateforme e-commerce", glyph: "🛒", description: "Marketplace, commission sur ventes.", minStartCash: 2000000, rate: 100, primarySkill: "machine_use", equipmentKind: "office" },
+  coiffure: { id: "coiffure", name: "Salon coiffure", glyph: "💈", description: "Coupe, coloration, soins.", minStartCash: 50000, rate: 50, primarySkill: "soins", equipmentKind: "salon" },
+  esthetique: { id: "esthetique", name: "Salon esthétique / spa", glyph: "💅", description: "Soins, manucure, massages.", minStartCash: 80000, rate: 80, primarySkill: "soins", equipmentKind: "salon" },
+  salle_sport: { id: "salle_sport", name: "Salle de sport", glyph: "🏋️", description: "Abonnements, coachs perso.", minStartCash: 200000, rate: 40, primarySkill: "soins", equipmentKind: "gym" },
+  transport: { id: "transport", name: "Société transport", glyph: "🚚", description: "Livraison B2B, fret.", minStartCash: 500000, rate: 150, primarySkill: "manuel", equipmentKind: "vehicle" },
+  taxi_vtc: { id: "taxi_vtc", name: "Taxi / VTC", glyph: "🚕", description: "Courses urbaines.", minStartCash: 30000, rate: 25, primarySkill: "manuel", equipmentKind: "vehicle" },
+  securite: { id: "securite", name: "Société sécurité", glyph: "🛡️", description: "Vigiles, télésurveillance.", minStartCash: 100000, rate: 120, primarySkill: "securite", equipmentKind: "office" },
+  nettoyage: { id: "nettoyage", name: "Société nettoyage", glyph: "🧹", description: "Contrats nettoyage entreprises.", minStartCash: 50000, rate: 60, primarySkill: "entretien", equipmentKind: "office" },
+  btp_construction: { id: "btp_construction", name: "BTP / Construction", glyph: "🏗️", description: "Chantiers, rénovation.", minStartCash: 1000000, rate: 800, primarySkill: "manuel", equipmentKind: "btp" },
+  sante_clinique: { id: "sante_clinique", name: "Clinique privée", glyph: "🏥", description: "Consultations, opérations.", minStartCash: 5000000, rate: 400, primarySkill: "medical", equipmentKind: "medical" },
+  medias_studio: { id: "medias_studio", name: "Studio médias", glyph: "🎬", description: "Films, pubs, séries.", minStartCash: 500000, rate: 600, primarySkill: "presentation", equipmentKind: "studio" },
+  casino: { id: "casino", name: "Casino", glyph: "🎰", description: "Jeux d'argent, VIP, hôtel attaché.", minStartCash: 50000000, rate: 1500, primarySkill: "service_client", equipmentKind: "casino" },
+  banque_commerciale: { id: "banque_commerciale", name: "Banque commerciale", glyph: "🏦", description: "Prêts, gestion patrimoine.", minStartCash: 200000000, rate: 2500, primarySkill: "compta", equipmentKind: "bank" },
+  aerien: { id: "aerien", name: "Compagnie aérienne", glyph: "✈️", description: "Vols passagers.", minStartCash: 500000000, rate: 5000, primarySkill: "machine_use", equipmentKind: "airline" },
+  diffusion_tv: { id: "diffusion_tv", name: "Chaîne TV / Radio", glyph: "📺", description: "Diffusion, audiences, pub.", minStartCash: 50000000, rate: 1200, primarySkill: "presentation", equipmentKind: "broadcast" },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // 4.7. NIVEAUX DE MACHINES (P5)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -1223,6 +1297,9 @@ export type SkylineProfileRow = {
   os_to_dollars_today: number; // OS convertis en $ aujourd'hui (cap quotidien)
   shell_dollars_this_week: number; // $ convertis via shell cette semaine
   last_dollar_to_os_audit_at: string | null;
+  current_skill_training: string | null;
+  skill_training_ends_at: string | null;
+  player_skills: Record<string, number>;
   created_at: string;
   updated_at: string;
 };

@@ -194,6 +194,14 @@ export default async function SkylineHub() {
                 accent="text-purple-200"
                 border="border-purple-400/40"
               />
+              <MenuButton
+                href="/play/skyline/apprentissage"
+                icon="🎓"
+                title="Apprentissage"
+                description="Forme-toi à une compétence (joueur 5× plus rapide)"
+                accent="text-fuchsia-200"
+                border="border-fuchsia-400/40"
+              />
             </div>
           </section>
 

@@ -470,3 +470,54 @@ export async function buyRawMachineAction(formData: FormData): Promise<Result> {
   revalidatePath(`/play/skyline/${companyId}`);
   return { ok: true, data: null };
 }
+
+// ───── P9 : Services + Apprentissage joueur ─────
+
+export async function buyServiceEquipmentAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const level = String(formData.get("level") ?? "");
+  if (!companyId || !level)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_buy_service_equipment", {
+    p_company_id: companyId,
+    p_level: level,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data: null };
+}
+
+export async function startPlayerTrainingAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const skill = String(formData.get("skill") ?? "");
+  const targetLevel = Number(formData.get("target_level") ?? 50);
+  if (!skill || targetLevel <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_start_player_training", {
+    p_skill: skill,
+    p_target_level: targetLevel,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline");
+  return { ok: true, data };
+}
+
+export async function finishPlayerTrainingAction(): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const { data, error } = await supabase.rpc(
+    "skyline_finish_player_training",
+  );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline");
+  return { ok: true, data };
+}
