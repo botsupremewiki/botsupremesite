@@ -476,6 +476,8 @@ function CollectionPicker({
   // de deck). Les énergies de base sont toujours considérées comme acquises.
   const [ownedFilter, setOwnedFilter] = useState<PickerOwned>("owned");
   const [sortMode, setSortMode] = useState<PickerSort>("number");
+  // Carte sélectionnée pour preview (modal zoom avec bouton "Ajouter au deck").
+  const [previewCard, setPreviewCard] = useState<PokemonCardData | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -613,20 +615,17 @@ function CollectionPicker({
             {sorted.map((card) => {
               const owned = collection.get(card.id) ?? 0;
               const inDeck = draftEntries.get(card.id) ?? 0;
-              const cap = Math.min(owned, MAX_COPIES);
-              const canAdd = inDeck < cap;
               const ownedAtAll = owned > 0;
               return (
                 <button
                   key={card.id}
-                  disabled={!ownedAtAll || !canAdd}
-                  onClick={() => onAdd(card)}
-                  className={`group relative flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all ${
+                  onClick={() => setPreviewCard(card)}
+                  className={`group relative flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all hover:scale-[1.03] hover:bg-white/5 ${
                     ownedAtAll
-                      ? RARITY_BORDER[card.rarity] +
-                        (canAdd ? " hover:bg-white/5" : " opacity-60")
+                      ? RARITY_BORDER[card.rarity]
                       : "border-white/5 opacity-30"
-                  } disabled:cursor-not-allowed`}
+                  }`}
+                  title={card.name}
                 >
                   <CardFace card={card} />
                   <div className="flex items-center justify-between text-[10px]">
@@ -644,6 +643,87 @@ function CollectionPicker({
             })}
           </div>
         )}
+      </div>
+
+      {/* Modal preview : zoom de la carte + bouton Ajouter au deck. */}
+      {previewCard && (
+        <PreviewWithAddModal
+          card={previewCard}
+          owned={collection.get(previewCard.id) ?? 0}
+          inDeck={draftEntries.get(previewCard.id) ?? 0}
+          maxCopies={MAX_COPIES}
+          onAdd={() => {
+            onAdd(previewCard);
+          }}
+          onClose={() => setPreviewCard(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Modal carte zoomée + bouton "Ajouter au deck" + croix.
+ *  Click outside ou croix = ferme. Click "Ajouter" = ajoute (mais ne ferme PAS,
+ *  pour permettre d'ajouter plusieurs copies sans ré-ouvrir). */
+function PreviewWithAddModal({
+  card,
+  owned,
+  inDeck,
+  maxCopies,
+  onAdd,
+  onClose,
+}: {
+  card: PokemonCardData;
+  owned: number;
+  inDeck: number;
+  maxCopies: number;
+  onAdd: () => void;
+  onClose: () => void;
+}) {
+  const cap = Math.min(owned, maxCopies);
+  const canAdd = inDeck < cap;
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex max-h-[92vh] flex-col items-center gap-3"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={card.image}
+          alt={card.name}
+          className="h-[78vh] w-auto rounded-lg object-contain shadow-2xl"
+        />
+        <button
+          onClick={onClose}
+          className="absolute -right-3 -top-3 rounded-full bg-zinc-900 p-2 text-zinc-200 shadow-lg ring-1 ring-white/20 hover:bg-zinc-800"
+          aria-label="Fermer"
+        >
+          ✕
+        </button>
+        <div className="flex items-center gap-3 rounded-full border border-white/15 bg-zinc-900/95 px-4 py-2 text-sm text-zinc-200">
+          <span className="font-semibold text-zinc-100">{card.name}</span>
+          <span className="text-xs text-zinc-500">
+            · {owned} possédée{owned > 1 ? "s" : ""}
+            {inDeck > 0 ? ` · ${inDeck} dans le deck` : ""}
+          </span>
+          <button
+            onClick={onAdd}
+            disabled={!canAdd}
+            className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {!canAdd
+              ? owned === 0
+                ? "Pas en collection"
+                : `Max ${maxCopies} copies`
+              : `+ Ajouter au deck (${inDeck}/${cap})`}
+          </button>
+        </div>
       </div>
     </div>
   );

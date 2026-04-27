@@ -346,145 +346,161 @@ function BattleBoard({
   const [attachEnergyMode, setAttachEnergyMode] = useState(false);
   const [pendingEvolveIdx, setPendingEvolveIdx] = useState<number | null>(null);
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
+  // Carte sous le curseur (main ou board) → preview en grand dans la sidebar.
+  const [hoveredCard, setHoveredCard] = useState<PokemonCardData | null>(null);
   const cancelPending = () => {
     setAttachEnergyMode(false);
     setPendingEvolveIdx(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
+  const attachModeHandler = attachEnergyMode
+    ? (uid: string) => {
+        onAttachEnergy(uid);
+        setAttachEnergyMode(false);
+      }
+    : pendingEvolveIdx !== null
+      ? (uid: string) => {
+          onEvolve(pendingEvolveIdx, uid);
+          setPendingEvolveIdx(null);
+        }
+      : null;
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Sidebar récap : log de match (text only — preview se fait via zoom modal) */}
-      <RecapSidebar log={state.log} />
+      {/* Sidebar gauche : preview de la carte hover OU log de match. */}
+      <RecapSidebar log={state.log} hoveredCard={hoveredCard} />
 
-      {/* Centre : opponent / self zones bien centrés et plus grands */}
+      {/* Centre : 2 colonnes côte à côte (joueur à gauche, adversaire à droite)
+          + hand pleine largeur en bas. */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Opponent zone */}
-        {state.opponent && (
-          <div className="flex-shrink-0 border-b border-white/10 bg-black/30 p-3">
-            <PlayerInfo player={state.opponent} isOpponent />
-            <div className="mt-2 flex items-center justify-center gap-4">
-              <BackRow side="opp" koCount={state.opponent.koCount} deckSize={state.opponent.deckSize} discardCount={state.opponent.discardCount} />
-              <BoardArea
-                active={state.opponent.active}
-                bench={state.opponent.bench}
-                cardById={cardById}
-                isOpponent
-                onZoomCard={setZoomedCard}
-              />
-              <HandHidden count={state.opponent.handCount} />
-            </div>
-          </div>
-        )}
-
         {promptPromote && (
-          <div className="border-y border-amber-400/40 bg-amber-400/10 p-2 text-center text-sm text-amber-200">
+          <div className="border-b border-amber-400/40 bg-amber-400/10 p-2 text-center text-sm text-amber-200">
             Ton Pokémon Actif a été mis K.O. Choisis un Pokémon de ton Banc.
           </div>
         )}
 
-        {/* Spacer pour pousser le self vers le bas et centrer visuellement */}
-        <div className="flex-1" />
-
-        {/* Self zone */}
-        {state.self && (
-          <div className="flex-shrink-0 border-t border-white/10 bg-black/30 p-3">
-            <div className="flex items-center justify-center gap-4">
-              <BackRow side="self" koCount={state.self.koCount} deckSize={state.self.deckSize} discardCount={state.self.discardCount} />
-              <BoardArea
-                active={state.self.active}
-                bench={state.self.bench}
-                cardById={cardById}
-                isOpponent={false}
-                onZoomCard={setZoomedCard}
-                attachMode={
-                  attachEnergyMode
-                    ? (uid) => {
-                        onAttachEnergy(uid);
-                        setAttachEnergyMode(false);
-                      }
-                    : pendingEvolveIdx !== null
-                      ? (uid) => {
-                          onEvolve(pendingEvolveIdx, uid);
-                          setPendingEvolveIdx(null);
-                        }
+        <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto p-4">
+          {/* ── Colonne joueur (gauche) ── */}
+          {state.self && (
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-3">
+              <PlayerInfo player={state.self} isOpponent={false} />
+              <div className="flex items-start gap-3">
+                <BackRow
+                  side="self"
+                  koCount={state.self.koCount}
+                  deckSize={state.self.deckSize}
+                  discardCount={state.self.discardCount}
+                />
+                <BoardArea
+                  active={state.self.active}
+                  bench={state.self.bench}
+                  cardById={cardById}
+                  isOpponent={false}
+                  onZoomCard={setZoomedCard}
+                  onHoverCard={setHoveredCard}
+                  attachMode={attachModeHandler}
+                  promoteMode={promptPromote ?? false}
+                  onPromote={onPromoteActive}
+                  onRetreat={
+                    state.phase === "playing" &&
+                    isMyTurn &&
+                    !state.self.hasRetreatedThisTurn &&
+                    !state.self.mustPromoteActive
+                      ? onRetreat
                       : null
-                }
-                promoteMode={promptPromote ?? false}
-                onPromote={onPromoteActive}
-                onRetreat={
-                  state.phase === "playing" &&
-                  isMyTurn &&
-                  !state.self.hasRetreatedThisTurn &&
-                  !state.self.mustPromoteActive
-                    ? onRetreat
-                    : null
-                }
-              />
-              <SelfControls
-                state={state}
-                isMyTurn={isMyTurn}
-                cardById={cardById}
-                onConfirmSetup={onConfirmSetup}
-                onEndTurn={onEndTurn}
-                onAttack={onAttack}
-              />
-            </div>
-            <PlayerInfo player={state.self} isOpponent={false} />
+                  }
+                />
+                <SelfControls
+                  state={state}
+                  isMyTurn={isMyTurn}
+                  cardById={cardById}
+                  onConfirmSetup={onConfirmSetup}
+                  onEndTurn={onEndTurn}
+                  onAttack={onAttack}
+                />
+              </div>
 
-            {/* Énergie auto Pocket : "ball" draggable + bouton "Attacher". */}
-            {state.self.pendingEnergy &&
-              !state.self.energyAttachedThisTurn &&
-              isMyTurn &&
-              !attachEnergyMode &&
-              pendingEvolveIdx === null && (
-                <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-                  <span
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/x-tcg-energy", "1");
-                      e.dataTransfer.effectAllowed = "link";
-                      // Important : active le mode pendant le drag pour que les
-                      // dropzones s'arment (sinon makeDropProps retourne {}).
-                      setAttachEnergyMode(true);
-                    }}
-                    onDragEnd={() => {
-                      // Si on a drop avec succès, attachEnergyMode est passé à
-                      // false par le handler. Sinon on le repasse à false ici.
-                      setAttachEnergyMode(false);
-                    }}
-                    className="cursor-grab select-none rounded-full bg-amber-300 px-2 py-0.5 text-base text-amber-950 shadow active:cursor-grabbing"
-                    title="Glisse cette énergie sur un Pokémon"
-                  >
-                    ⚡ {state.self.pendingEnergy}
-                  </span>
-                  <span className="text-zinc-300">
-                    Glisse-la sur un Pokémon, ou clique « Attacher ».
-                  </span>
+              {/* Énergie auto Pocket : "ball" draggable + bouton "Attacher". */}
+              {state.self.pendingEnergy &&
+                !state.self.energyAttachedThisTurn &&
+                isMyTurn &&
+                !attachEnergyMode &&
+                pendingEvolveIdx === null && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
+                    <span
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/x-tcg-energy", "1");
+                        e.dataTransfer.effectAllowed = "link";
+                        setAttachEnergyMode(true);
+                      }}
+                      onDragEnd={() => {
+                        setAttachEnergyMode(false);
+                      }}
+                      className="cursor-grab select-none rounded-full bg-amber-300 px-2 py-0.5 text-base text-amber-950 shadow active:cursor-grabbing"
+                      title="Glisse cette énergie sur un Pokémon"
+                    >
+                      ⚡ {state.self.pendingEnergy}
+                    </span>
+                    <span className="text-zinc-300">
+                      Glisse-la sur un Pokémon, ou clique « Attacher ».
+                    </span>
+                    <button
+                      onClick={() => setAttachEnergyMode(true)}
+                      className="ml-auto rounded border border-amber-400/40 bg-amber-400/20 px-2 py-0.5 text-amber-100 hover:bg-amber-400/30"
+                    >
+                      Attacher
+                    </button>
+                  </div>
+                )}
+
+              {(attachEnergyMode || pendingEvolveIdx !== null) && (
+                <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
+                  {attachEnergyMode
+                    ? "Choisis un Pokémon à qui attacher l'Énergie."
+                    : "Choisis le Pokémon à faire évoluer."}
                   <button
-                    onClick={() => setAttachEnergyMode(true)}
-                    className="ml-auto rounded border border-amber-400/40 bg-amber-400/20 px-2 py-0.5 text-amber-100 hover:bg-amber-400/30"
+                    onClick={cancelPending}
+                    className="ml-auto rounded border border-white/10 bg-white/5 px-2 py-0.5 text-zinc-200 hover:bg-white/10"
                   >
-                    Attacher
+                    Annuler
                   </button>
                 </div>
               )}
+            </div>
+          )}
 
-            {(attachEnergyMode || pendingEvolveIdx !== null) && (
-              <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-                {attachEnergyMode
-                  ? "Choisis un Pokémon à qui attacher l'Énergie."
-                  : "Choisis le Pokémon à faire évoluer."}
-                <button
-                  onClick={cancelPending}
-                  className="ml-auto rounded border border-white/10 bg-white/5 px-2 py-0.5 text-zinc-200 hover:bg-white/10"
-                >
-                  Annuler
-                </button>
+          {/* Séparateur vertical */}
+          <div className="w-px shrink-0 self-stretch bg-white/10" />
+
+          {/* ── Colonne adversaire (droite) ── */}
+          {state.opponent && (
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-3">
+              <PlayerInfo player={state.opponent} isOpponent />
+              <div className="flex items-start gap-3">
+                <BackRow
+                  side="opp"
+                  koCount={state.opponent.koCount}
+                  deckSize={state.opponent.deckSize}
+                  discardCount={state.opponent.discardCount}
+                />
+                <BoardArea
+                  active={state.opponent.active}
+                  bench={state.opponent.bench}
+                  cardById={cardById}
+                  isOpponent
+                  onZoomCard={setZoomedCard}
+                  onHoverCard={setHoveredCard}
+                />
+                <HandHidden count={state.opponent.handCount} />
               </div>
-            )}
+            </div>
+          )}
+        </div>
 
-            {/* Hand */}
+        {/* Hand pleine largeur en bas (cartes visibles en entier). */}
+        {state.self && (
+          <div className="shrink-0 border-t border-white/10 bg-black/40 p-3">
             <SelfHand
               state={state}
               cardById={cardById}
@@ -493,7 +509,7 @@ function BattleBoard({
               onAddBench={onAddBench}
               onRemoveBench={onRemoveBench}
               onPlayBasic={onPlayBasic}
-              onZoomCard={setZoomedCard}
+              onHoverCard={setHoveredCard}
               onSelectEvolve={(i) => {
                 setAttachEnergyMode(false);
                 setPendingEvolveIdx(i);
@@ -502,7 +518,7 @@ function BattleBoard({
           </div>
         )}
 
-        {/* Modal zoom carte (combat board ou main) */}
+        {/* Modal zoom carte (depuis click sur board uniquement) */}
         <CardZoomModal card={zoomedCard} onClose={() => setZoomedCard(null)} />
 
         {state.winner && (
@@ -523,8 +539,67 @@ function BattleBoard({
   );
 }
 
-/** Sidebar gauche du board : log de match (preview cartes via zoom modal). */
-function RecapSidebar({ log }: { log: string[] }) {
+/** Sidebar gauche du board : preview de la carte hover OU log de match. */
+function RecapSidebar({
+  log,
+  hoveredCard,
+}: {
+  log: string[];
+  hoveredCard: PokemonCardData | null;
+}) {
+  if (hoveredCard) {
+    return (
+      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40 p-3">
+        <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
+          Aperçu
+        </div>
+        <div className="aspect-[5/7] w-full max-w-[260px]">
+          <CardFace card={hoveredCard} large />
+        </div>
+        <div className="mt-2 text-xs font-semibold text-zinc-100">
+          {hoveredCard.name}
+        </div>
+        {hoveredCard.kind === "pokemon" && (
+          <>
+            <div className="mt-1 text-[10px] text-zinc-400">
+              PV {hoveredCard.hp} ·{" "}
+              {hoveredCard.stage === "basic"
+                ? "De base"
+                : hoveredCard.stage === "stage1"
+                  ? "Niveau 1"
+                  : "Niveau 2"}
+              {hoveredCard.evolvesFrom
+                ? ` · évolue de ${hoveredCard.evolvesFrom}`
+                : ""}
+            </div>
+            <div className="mt-2 flex flex-col gap-1 text-[10px] text-zinc-300">
+              {hoveredCard.attacks.map((a, i) => (
+                <div
+                  key={i}
+                  className="rounded border border-white/10 bg-black/30 p-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-100">
+                      {a.name}
+                    </span>
+                    {a.damage !== undefined && (
+                      <span className="font-bold text-rose-300">
+                        {a.damage}
+                        {a.damageSuffix ?? ""}
+                      </span>
+                    )}
+                  </div>
+                  {a.text && (
+                    <div className="mt-0.5 text-zinc-400">{a.text}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </aside>
+    );
+  }
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
       <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
@@ -640,6 +715,7 @@ function BoardArea({
   onPromote,
   onRetreat,
   onZoomCard,
+  onHoverCard,
 }: {
   active: BattleCard | null;
   bench: BattleCard[];
@@ -650,6 +726,7 @@ function BoardArea({
   onPromote?: (benchIndex: number) => void;
   onRetreat?: ((benchIndex: number) => void) | null;
   onZoomCard?: (card: PokemonCardData) => void;
+  onHoverCard?: (card: PokemonCardData | null) => void;
 }) {
   const ownActions = !isOpponent;
 
@@ -713,6 +790,8 @@ function BoardArea({
             return (
               <button
                 onClick={handler}
+                onMouseEnter={() => onHoverCard?.(data)}
+                onMouseLeave={() => onHoverCard?.(null)}
                 {...makeDropProps(active)}
                 className={`rounded-lg transition-all ${
                   ownActions && attachMode
@@ -751,6 +830,8 @@ function BoardArea({
             <button
               key={i}
               onClick={handler}
+              onMouseEnter={() => onHoverCard?.(data)}
+              onMouseLeave={() => onHoverCard?.(null)}
               {...makeDropProps(card)}
               className={`rounded-lg transition-all ${
                 ownActions && (attachMode || promoteMode)
@@ -1001,7 +1082,7 @@ function SelfHand({
   onRemoveBench,
   onPlayBasic,
   onSelectEvolve,
-  onZoomCard,
+  onHoverCard,
 }: {
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
@@ -1011,7 +1092,7 @@ function SelfHand({
   onRemoveBench: (benchIndex: number) => void;
   onPlayBasic: (handIndex: number) => void;
   onSelectEvolve: (handIndex: number) => void;
-  onZoomCard?: (card: PokemonCardData) => void;
+  onHoverCard?: (card: PokemonCardData | null) => void;
 }) {
   const self = state.self;
   if (!self) return null;
@@ -1019,48 +1100,64 @@ function SelfHand({
   const inMain =
     state.phase === "playing" && isMyTurn && !self.mustPromoteActive;
   const benchCap = BATTLE_CONFIG.maxBench;
+  // Capture pour les closures (TS perd le narrowing de state.self).
+  const hasActive = !!self.active;
+  const benchLen = self.bench.length;
+
+  // Pour chaque carte de la main, choisit la SEULE action principale qui
+  // s'applique au click (priorité claire).
+  function getAction(card: PokemonCardData, i: number): {
+    label: string;
+    handler: () => void;
+  } | null {
+    if (card.kind !== "pokemon") return null;
+    const isBasic = card.stage === "basic";
+    const isEvolution = card.stage !== "basic" && !!card.evolvesFrom;
+    if (inSetup && isBasic && !hasActive) {
+      return { label: "→ Mettre Actif", handler: () => onSetActive(i) };
+    }
+    if (inSetup && isBasic && hasActive && benchLen < benchCap) {
+      return { label: "→ Ajouter au Banc", handler: () => onAddBench(i) };
+    }
+    if (inMain && isBasic && benchLen < benchCap) {
+      return { label: "→ Poser au Banc", handler: () => onPlayBasic(i) };
+    }
+    if (inMain && isEvolution) {
+      return {
+        label: "→ Choisir cible évolution",
+        handler: () => onSelectEvolve(i),
+      };
+    }
+    return null;
+  }
 
   return (
-    <div className="mt-2 border-t border-white/10 pt-2">
-      <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">
-        Ta main ({self.hand.length})
+    <div>
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+          Ta main ({self.hand.length})
+        </span>
+        <span className="text-[10px] text-zinc-600">
+          · clic = jouer · survole = aperçu
+        </span>
       </div>
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {self.hand.map((cardId, i) => {
           const data = cardById.get(cardId);
           if (!data) return null;
-          const isBasicPoke = data.kind === "pokemon" && data.stage === "basic";
-          const isEvolution =
-            data.kind === "pokemon" && data.stage !== "basic" && !!data.evolvesFrom;
-          // Setup-phase actions
-          const setupSetActive =
-            inSetup && isBasicPoke && !self.active ? () => onSetActive(i) : undefined;
-          const setupAddBench =
-            inSetup && isBasicPoke && !!self.active && self.bench.length < benchCap
-              ? () => onAddBench(i)
-              : undefined;
-          // Main-phase actions
-          const playBench =
-            inMain && isBasicPoke && self.bench.length < benchCap
-              ? () => onPlayBasic(i)
-              : undefined;
-          const evolveCard = inMain && isEvolution ? () => onSelectEvolve(i) : undefined;
-
+          const action = getAction(data, i);
           return (
             <HandCard
               key={`${i}-${cardId}`}
               data={data}
-              onSetActive={setupSetActive}
-              onAddBench={setupAddBench}
-              onPlayBench={playBench}
-              onEvolve={evolveCard}
-              onZoom={onZoomCard}
+              action={action}
+              onHover={onHoverCard}
             />
           );
         })}
       </div>
       {inSetup && self.bench.length > 0 && (
-        <div className="mt-2 flex gap-1.5 border-t border-white/5 pt-2">
+        <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/5 pt-2">
           <span className="text-[10px] text-zinc-500">Retirer du banc :</span>
           {self.bench.map((c, i) => {
             const data = cardById.get(c.cardId);
@@ -1070,7 +1167,7 @@ function SelfHand({
                 onClick={() => onRemoveBench(i)}
                 className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-rose-500/20"
               >
-                {data?.kind === "pokemon" ? data.name.slice(0, 8) : ""} ✕
+                {data?.kind === "pokemon" ? data.name.slice(0, 12) : ""} ✕
               </button>
             );
           })}
@@ -1082,30 +1179,30 @@ function SelfHand({
 
 function HandCard({
   data,
-  onSetActive,
-  onAddBench,
-  onPlayBench,
-  onEvolve,
-  onZoom,
+  action,
+  onHover,
 }: {
   data: PokemonCardData;
-  onSetActive?: () => void;
-  onAddBench?: () => void;
-  onPlayBench?: () => void;
-  onEvolve?: () => void;
-  onZoom?: (card: PokemonCardData) => void;
+  // L'action principale au click (ou null si la carte n'est pas jouable
+  // dans la phase courante).
+  action: { label: string; handler: () => void } | null;
+  onHover?: (card: PokemonCardData | null) => void;
 }) {
-  const hasAction = onSetActive || onAddBench || onPlayBench || onEvolve;
+  const playable = !!action;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      onClick={() => onZoom?.(data)}
-      className={`relative cursor-pointer overflow-hidden rounded border border-white/10 transition-all hover:ring-2 hover:ring-white/30 ${
-        hasAction ? "mb-5" : ""
+      onClick={() => action?.handler()}
+      onMouseEnter={() => onHover?.(data)}
+      onMouseLeave={() => onHover?.(null)}
+      className={`relative shrink-0 overflow-hidden rounded border transition-all ${
+        playable
+          ? "cursor-pointer border-emerald-400/50 ring-1 ring-emerald-400/30 hover:scale-[1.04] hover:ring-2 hover:ring-emerald-300"
+          : "cursor-default border-white/10 opacity-90 hover:ring-1 hover:ring-white/20"
       }`}
-      style={{ width: 80, height: 112 }}
-      title={data.name}
+      style={{ width: 100, height: 140 }}
+      title={action ? `${data.name} — clic : ${action.label.replace("→ ", "")}` : data.name}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -1115,44 +1212,9 @@ function HandCard({
         loading="lazy"
         draggable={false}
       />
-      {hasAction && (
-        <div className="absolute inset-x-0 -bottom-5 flex justify-center gap-0.5">
-          {onSetActive && (
-            <button
-              onClick={onSetActive}
-              className="rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-emerald-950 hover:bg-emerald-400"
-              title="Mettre Actif"
-            >
-              ★
-            </button>
-          )}
-          {onAddBench && (
-            <button
-              onClick={onAddBench}
-              className="rounded bg-amber-500 px-1 py-0.5 text-[8px] font-bold text-amber-950 hover:bg-amber-400"
-              title="Ajouter au Banc"
-            >
-              ↓
-            </button>
-          )}
-          {onPlayBench && (
-            <button
-              onClick={onPlayBench}
-              className="rounded bg-amber-500 px-1 py-0.5 text-[8px] font-bold text-amber-950 hover:bg-amber-400"
-              title="Poser au Banc"
-            >
-              ↓
-            </button>
-          )}
-          {onEvolve && (
-            <button
-              onClick={onEvolve}
-              className="rounded bg-violet-500 px-1 py-0.5 text-[8px] font-bold text-violet-950 hover:bg-violet-400"
-              title="Évoluer"
-            >
-              ↑
-            </button>
-          )}
+      {action && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-900/90 via-emerald-900/60 to-transparent p-1 text-center text-[10px] font-bold text-emerald-100">
+          {action.label}
         </div>
       )}
     </motion.div>
