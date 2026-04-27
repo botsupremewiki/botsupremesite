@@ -145,8 +145,8 @@ export function BoostersClient({
             <div>
               <h1 className="text-2xl font-bold text-zinc-100">🎴 Boosters</h1>
               <p className="mt-1 text-sm text-zinc-400">
-                Choisis ton booster thématique. 5 cartes par paquet (3
-                thématiques + 2 mixés).
+                5 cartes par paquet — distribution Pocket-style (≈ 3-4 communes,
+                1-2 rares, ~30% chance d&apos;une très rare).
               </p>
             </div>
             <div className="flex items-center gap-4">

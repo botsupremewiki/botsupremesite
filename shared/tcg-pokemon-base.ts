@@ -1,653 +1,770 @@
-// Pokémon Génération 1 — les 151 cartes réparties sur 4 packs thématiques.
-//   Dracaufeu  : Feu / Combat / Sol / Roche / Vol-Normal musclés        (39)
-//   Tortank    : Eau / Glace                                             (34)
-//   Florizarre : Plante / Insecte / Poison                               (38)
-//   Mewtwo     : Psy / Spectre / Électrique / Dragon / Normal spéciaux   (40)
-// + 6 énergies de base partagées entre tous les packs.
+// Pokémon Génération 1 — 151 Pokémon × 3 raretés (common, rare, holo-rare).
+//
+// Stats identiques entre les 3 versions d'un même Pokémon (option "skins").
+// Visuels = vraies cartes officielles via pokemontcg.io.
+// Généré par scripts/json-to-ts.mjs — ne pas éditer à la main.
 
 import type { PokemonCardData } from "./types";
 
 const POKEMON: PokemonCardData[] = [
-  // ═══════════════════════════ PACK DRACAUFEU (39) ═══════════════════════════
-  // Ligne Salamèche
-  { kind: "pokemon", id: "g1-004", number: 4, name: "Salamèche", type: "fire", stage: "basic", hp: 50, weakness: "water", retreatCost: 1,
-    attacks: [{ name: "Griffe", cost: ["colorless"], damage: 10 }, { name: "Flammèche", cost: ["fire", "colorless"], damage: 30, text: "Défausse 1 Énergie Feu attachée." }],
-    rarity: "common", art: "🦎", pack: "charizard" },
-  { kind: "pokemon", id: "g1-005", number: 5, name: "Reptincel", type: "fire", stage: "stage1", evolvesFrom: "Salamèche", hp: 80, weakness: "water", retreatCost: 1,
-    attacks: [{ name: "Tranche", cost: ["colorless", "colorless", "colorless"], damage: 30 }, { name: "Lance-Flammes", cost: ["fire", "fire", "colorless"], damage: 50, text: "Défausse 1 Énergie Feu attachée." }],
-    rarity: "uncommon", art: "🔥", pack: "charizard" },
-  { kind: "pokemon", id: "g1-006", number: 6, name: "Dracaufeu", type: "fire", stage: "stage2", evolvesFrom: "Reptincel", hp: 120, weakness: "water", resistance: "fighting", retreatCost: 3,
-    ability: { name: "Brûlure d'Énergie", text: "Toute Énergie attachée à Dracaufeu compte comme Énergie Feu.", effect: { kind: "energy-burn" } },
-    attacks: [{ name: "Tempête de Feu", cost: ["fire", "fire", "fire", "fire"], damage: 100, text: "Défausse 2 Énergies attachées à Dracaufeu.", effects: [{ kind: "discard-energy", count: 2 }] }],
-    rarity: "holo-rare", art: "🐉", pack: "charizard" },
-
-  // Oiseaux normaux/vol
-  { kind: "pokemon", id: "g1-016", number: 16, name: "Roucool", type: "colorless", stage: "basic", hp: 40, weakness: "lightning", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Vent", cost: ["colorless"], damage: 10 }],
-    rarity: "common", art: "🐦", pack: "charizard" },
-  { kind: "pokemon", id: "g1-017", number: 17, name: "Roucoups", type: "colorless", stage: "stage1", evolvesFrom: "Roucool", hp: 60, weakness: "lightning", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Volte", cost: ["colorless", "colorless"], damage: 20 }, { name: "Pic Tornade", cost: ["colorless", "colorless", "colorless"], damage: 30 }],
-    rarity: "uncommon", art: "🦅", pack: "charizard" },
-  { kind: "pokemon", id: "g1-018", number: 18, name: "Roucarnage", type: "colorless", stage: "stage2", evolvesFrom: "Roucoups", hp: 80, weakness: "lightning", resistance: "fighting", retreatCost: 0,
-    attacks: [{ name: "Cyclone", cost: ["colorless", "colorless", "colorless"], damage: 40, text: "Échange un Pokémon de Banc adverse avec l'Actif." }],
-    rarity: "holo-rare", art: "🦅", pack: "charizard" },
-  { kind: "pokemon", id: "g1-021", number: 21, name: "Piafabec", type: "colorless", stage: "basic", hp: 40, weakness: "lightning", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Picpic", cost: ["colorless"], damage: 10 }],
-    rarity: "common", art: "🐤", pack: "charizard" },
-  { kind: "pokemon", id: "g1-022", number: 22, name: "Rapasdepic", type: "colorless", stage: "stage1", evolvesFrom: "Piafabec", hp: 70, weakness: "lightning", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Coup de Bec", cost: ["colorless", "colorless"], damage: 20 }, { name: "Miroir Aérien", cost: ["colorless", "colorless", "colorless"], damage: 40 }],
-    rarity: "rare", art: "🦅", pack: "charizard" },
-
-  // Sol / Sable
-  { kind: "pokemon", id: "g1-027", number: 27, name: "Sabelette", type: "fighting", stage: "basic", hp: 40, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Coup de Griffes", cost: ["fighting"], damage: 10 }, { name: "Sable Volant", cost: ["fighting", "colorless"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse ne peut pas attaquer le tour suivant." }],
-    rarity: "common", art: "🦔", pack: "charizard" },
-  { kind: "pokemon", id: "g1-028", number: 28, name: "Sablaireau", type: "fighting", stage: "stage1", evolvesFrom: "Sabelette", hp: 70, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Coup de Griffes", cost: ["fighting"], damage: 20 }, { name: "Pic", cost: ["fighting", "fighting", "colorless"], damage: 40 }],
-    rarity: "uncommon", art: "🦔", pack: "charizard" },
-
-  // Goupix
-  { kind: "pokemon", id: "g1-037", number: 37, name: "Goupix", type: "fire", stage: "basic", hp: 50, weakness: "water", retreatCost: 1,
-    attacks: [{ name: "Vapeur Brûlante", cost: ["fire", "fire"], damage: 20, text: "Lance une pièce. Pile, le Pokémon Adverse est Brûlé." }],
-    rarity: "common", art: "🦊", pack: "charizard" },
-  { kind: "pokemon", id: "g1-038", number: 38, name: "Feunard", type: "fire", stage: "stage1", evolvesFrom: "Goupix", hp: 80, weakness: "water", retreatCost: 1,
-    attacks: [{ name: "Aura Mystique", cost: ["fire"], text: "Le Pokémon Adverse est Confus." }, { name: "Geyser de Feu", cost: ["fire", "fire", "fire", "fire"], damage: 80, text: "Défausse 2 Énergies Feu attachées." }],
-    rarity: "holo-rare", art: "🦊", pack: "charizard" },
-
-  // Taupiqueur
-  { kind: "pokemon", id: "g1-050", number: 50, name: "Taupiqueur", type: "fighting", stage: "basic", hp: 30, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Frappe-Tête", cost: ["fighting"], damage: 10 }, { name: "Tunnel", cost: ["fighting", "fighting"], damage: 20, text: "Avant cette attaque, évite tous les dégâts." }],
-    rarity: "common", art: "⛏️", pack: "charizard" },
-  { kind: "pokemon", id: "g1-051", number: 51, name: "Triopikeur", type: "fighting", stage: "stage1", evolvesFrom: "Taupiqueur", hp: 70, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Coup de Boule", cost: ["fighting"], damage: 20 }, { name: "Tremblement", cost: ["fighting", "fighting", "fighting"], damage: 50, text: "Inflige 10 dégâts à chacun de tes Pokémon de Banc." }],
-    rarity: "uncommon", art: "⛏️", pack: "charizard" },
-
-  // Férosinge
-  { kind: "pokemon", id: "g1-056", number: 56, name: "Férosinge", type: "fighting", stage: "basic", hp: 40, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Vis Caisse", cost: ["fighting"], damage: 20, text: "Inflige 10 dégâts à Férosinge." }],
-    rarity: "common", art: "🐒", pack: "charizard" },
-  { kind: "pokemon", id: "g1-057", number: 57, name: "Colossinge", type: "fighting", stage: "stage1", evolvesFrom: "Férosinge", hp: 70, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Coup de Tête", cost: ["fighting"], damage: 10 }, { name: "Combo Coup", cost: ["fighting", "colorless"], damage: 30, damageSuffix: "x", text: "Lance 2 pièces, 30× faces." }],
-    rarity: "rare", art: "🦍", pack: "charizard" },
-
-  // Caninos
-  { kind: "pokemon", id: "g1-058", number: 58, name: "Caninos", type: "fire", stage: "basic", hp: 50, weakness: "water", retreatCost: 1,
-    attacks: [{ name: "Morsure", cost: ["fire"], damage: 10 }, { name: "Roulade", cost: ["fire", "colorless"], damage: 20 }],
-    rarity: "common", art: "🐕", pack: "charizard" },
-  { kind: "pokemon", id: "g1-059", number: 59, name: "Arcanin", type: "fire", stage: "stage1", evolvesFrom: "Caninos", hp: 100, weakness: "water", retreatCost: 2,
-    attacks: [{ name: "Flammèche", cost: ["fire", "colorless"], damage: 30 }, { name: "Buster de Feu", cost: ["fire", "fire", "fire"], damage: 80, text: "Défausse 2 Énergies Feu attachées." }],
-    rarity: "holo-rare", art: "🐕", pack: "charizard" },
-
-  // Machoc
-  { kind: "pokemon", id: "g1-066", number: 66, name: "Machoc", type: "fighting", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Coup Bas", cost: ["fighting"], damage: 10 }, { name: "Frappe Atlas", cost: ["fighting", "fighting"], damage: 20 }],
-    rarity: "common", art: "💪", pack: "charizard" },
-  { kind: "pokemon", id: "g1-067", number: 67, name: "Machopeur", type: "fighting", stage: "stage1", evolvesFrom: "Machoc", hp: 80, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Poing Karaté", cost: ["fighting", "colorless"], damage: 20 }, { name: "Piqué Plongé", cost: ["fighting", "fighting", "colorless"], damage: 40 }],
-    rarity: "uncommon", art: "💪", pack: "charizard" },
-  { kind: "pokemon", id: "g1-068", number: 68, name: "Mackogneur", type: "fighting", stage: "stage2", evolvesFrom: "Machopeur", hp: 100, weakness: "psychic", retreatCost: 3,
-    ability: { name: "Riposte", text: "Quand un Pokémon attaquant blesse Mackogneur, il subit 10 dégâts.", effect: { kind: "counter-attack", amount: 10 } },
-    attacks: [{ name: "Frappe Sismique", cost: ["fighting", "fighting", "colorless", "colorless"], damage: 60 }],
-    rarity: "holo-rare", art: "💪", pack: "charizard" },
-
-  // Racaillou
-  { kind: "pokemon", id: "g1-074", number: 74, name: "Racaillou", type: "fighting", stage: "basic", hp: 50, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Coup de Poing", cost: ["fighting"], damage: 10 }],
-    rarity: "common", art: "🪨", pack: "charizard" },
-  { kind: "pokemon", id: "g1-075", number: 75, name: "Gravalanch", type: "fighting", stage: "stage1", evolvesFrom: "Racaillou", hp: 70, weakness: "grass", resistance: "lightning", retreatCost: 2,
-    attacks: [{ name: "Roulade", cost: ["fighting", "colorless"], damage: 30 }, { name: "Éboulement", cost: ["fighting", "fighting", "colorless"], damage: 40 }],
-    rarity: "uncommon", art: "🪨", pack: "charizard" },
-  { kind: "pokemon", id: "g1-076", number: 76, name: "Grolem", type: "fighting", stage: "stage2", evolvesFrom: "Gravalanch", hp: 90, weakness: "grass", resistance: "lightning", retreatCost: 3,
-    attacks: [{ name: "Tremblement", cost: ["fighting", "fighting", "colorless"], damage: 40, text: "Inflige 10 dégâts à chacun de tes Pokémon de Banc." }, { name: "Damoclès", cost: ["fighting", "fighting", "fighting", "colorless"], damage: 80, text: "Grolem se fait 20 dégâts." }],
-    rarity: "holo-rare", art: "🪨", pack: "charizard" },
-
-  // Ponyta
-  { kind: "pokemon", id: "g1-077", number: 77, name: "Ponyta", type: "fire", stage: "basic", hp: 40, weakness: "water", retreatCost: 0,
-    attacks: [{ name: "Piétinement", cost: ["fire"], damage: 20 }],
-    rarity: "common", art: "🐴", pack: "charizard" },
-  { kind: "pokemon", id: "g1-078", number: 78, name: "Galopa", type: "fire", stage: "stage1", evolvesFrom: "Ponyta", hp: 70, weakness: "water", retreatCost: 0,
-    attacks: [{ name: "Détourne-Flamme", cost: ["fire"], damage: 20, text: "Lance une pièce. Pile, cette attaque ne fait rien." }, { name: "Agilité", cost: ["fire", "colorless"], damage: 20, text: "Lance une pièce. Face, ignore les effets/dégâts du tour adverse." }],
-    rarity: "uncommon", art: "🐴", pack: "charizard" },
-
-  // Onix
-  { kind: "pokemon", id: "g1-095", number: 95, name: "Onix", type: "fighting", stage: "basic", hp: 90, weakness: "grass", retreatCost: 3,
-    attacks: [{ name: "Riposte", cost: ["fighting"], text: "Lance une pièce. Face, inflige 10 dégâts." }, { name: "Frappe", cost: ["fighting", "fighting", "fighting"], damage: 30 }],
-    rarity: "uncommon", art: "🐍", pack: "charizard" },
-
-  // Osselait
-  { kind: "pokemon", id: "g1-104", number: 104, name: "Osselait", type: "fighting", stage: "basic", hp: 50, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Os Boomerang", cost: ["fighting"], damage: 10 }],
-    rarity: "common", art: "🦴", pack: "charizard" },
-  { kind: "pokemon", id: "g1-105", number: 105, name: "Ossatueur", type: "fighting", stage: "stage1", evolvesFrom: "Osselait", hp: 70, weakness: "grass", resistance: "lightning", retreatCost: 1,
-    attacks: [{ name: "Os Boomerang", cost: ["fighting", "colorless"], damage: 30 }, { name: "Massue Os", cost: ["fighting", "fighting"], damage: 20, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "rare", art: "🦴", pack: "charizard" },
-
-  // Kicklee / Tygnon
-  { kind: "pokemon", id: "g1-106", number: 106, name: "Kicklee", type: "fighting", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Pied Sauté", cost: ["fighting"], damage: 20 }, { name: "Pied Voltige", cost: ["fighting", "fighting", "colorless"], damage: 50, text: "Lance une pièce. Pile, cette attaque ne fait rien." }],
-    rarity: "rare", art: "🦵", pack: "charizard" },
-  { kind: "pokemon", id: "g1-107", number: 107, name: "Tygnon", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Direct", cost: ["fighting"], damage: 20 }, { name: "Coup Spécial", cost: ["fighting", "fighting", "colorless"], damage: 40 }],
-    rarity: "holo-rare", art: "🥊", pack: "charizard" },
-
-  // Rhinocorne
-  { kind: "pokemon", id: "g1-111", number: 111, name: "Rhinocorne", type: "fighting", stage: "basic", hp: 70, weakness: "grass", resistance: "lightning", retreatCost: 2,
-    attacks: [{ name: "Coup de Corne", cost: ["fighting", "colorless"], damage: 20 }, { name: "Bélier", cost: ["fighting", "fighting", "colorless"], damage: 30, text: "Rhinocorne se fait 10 dégâts." }],
-    rarity: "common", art: "🦏", pack: "charizard" },
-  { kind: "pokemon", id: "g1-112", number: 112, name: "Rhinoféros", type: "fighting", stage: "stage1", evolvesFrom: "Rhinocorne", hp: 100, weakness: "grass", resistance: "lightning", retreatCost: 3,
-    attacks: [{ name: "Cornadure", cost: ["fighting", "fighting", "colorless"], damage: 40 }, { name: "Roulade", cost: ["fighting", "fighting", "fighting", "colorless"], damage: 70 }],
-    rarity: "rare", art: "🦏", pack: "charizard" },
-
-  // Kangourex (basic unique)
-  { kind: "pokemon", id: "g1-115", number: 115, name: "Kangourex", type: "colorless", stage: "basic", hp: 90, weakness: "fighting", retreatCost: 3,
-    attacks: [{ name: "Coup de Pied", cost: ["colorless", "colorless"], damage: 20 }, { name: "Méga-Coup d'Pince", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 30, damageSuffix: "x", text: "Lance 2 pièces, 30× faces." }],
-    rarity: "rare", art: "🦘", pack: "charizard" },
-
-  // Magmar
-  { kind: "pokemon", id: "g1-126", number: 126, name: "Magmar", type: "fire", stage: "basic", hp: 70, weakness: "water", retreatCost: 2,
-    attacks: [{ name: "Fire Punch", cost: ["fire", "colorless"], damage: 30 }, { name: "Explosion de Flammes", cost: ["fire", "fire", "colorless"], damage: 50, text: "Défausse 1 Énergie Feu attachée." }],
-    rarity: "rare", art: "🔥", pack: "charizard" },
-
-  // Tauros
-  { kind: "pokemon", id: "g1-128", number: 128, name: "Tauros", type: "colorless", stage: "basic", hp: 60, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Coup de Corne", cost: ["colorless", "colorless", "colorless"], damage: 20, damageSuffix: "+", text: "+10 par marqueur de dégât déjà sur Tauros." }, { name: "Charge", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 30 }],
-    rarity: "rare", art: "🐂", pack: "charizard" },
-
-  // Pyroli (évolution Évoli → Feu)
-  { kind: "pokemon", id: "g1-136", number: 136, name: "Pyroli", type: "fire", stage: "stage1", evolvesFrom: "Évoli", hp: 70, weakness: "water", retreatCost: 1,
-    attacks: [{ name: "Morsure de Feu", cost: ["fire"], damage: 20 }, { name: "Lance-Flammes", cost: ["fire", "fire", "colorless"], damage: 60, text: "Défausse 1 Énergie Feu attachée." }],
-    rarity: "holo-rare", art: "🦊", pack: "charizard" },
-
-  // Aérodactyl (fossile rare)
-  { kind: "pokemon", id: "g1-142", number: 142, name: "Aérodactyl", type: "fighting", stage: "basic", hp: 60, weakness: "grass", resistance: "lightning", retreatCost: 2,
-    ability: { name: "Cri Préhistorique", text: "Aucune évolution du Set Fossile n'est possible tant qu'Aérodactyl est en jeu (cosmétique pour l'instant)." },
-    attacks: [{ name: "Coup d'Aile", cost: ["fighting", "colorless", "colorless"], damage: 30 }],
-    rarity: "holo-rare", art: "🦅", pack: "charizard" },
-
-  // Sulfura (légendaire)
-  { kind: "pokemon", id: "g1-146", number: 146, name: "Sulfura", type: "fire", stage: "basic", hp: 70, weakness: "water", resistance: "fighting", retreatCost: 2,
-    attacks: [{ name: "Geyser de Feu", cost: ["fire", "fire", "colorless"], damage: 40, text: "Lance une pièce. Pile, défausse 1 Énergie Feu." }, { name: "Plume Torride", cost: ["fire", "fire", "colorless", "colorless"], damage: 80, text: "Défausse 2 Énergies Feu attachées." }],
-    rarity: "holo-rare", art: "🔥", pack: "charizard" },
-
-  // ═══════════════════════════ PACK TORTANK (34) ═══════════════════════════
-  // Ligne Carapuce
-  { kind: "pokemon", id: "g1-007", number: 7, name: "Carapuce", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Bulle d'O", cost: ["water"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }, { name: "Repli", cost: ["water", "colorless"], text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }],
-    rarity: "common", art: "🐢", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-008", number: 8, name: "Carabaffe", type: "water", stage: "stage1", evolvesFrom: "Carapuce", hp: 80, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Morsure", cost: ["water"], damage: 20 }, { name: "Détourne-Eau", cost: ["water", "colorless"], damage: 10, text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }],
-    rarity: "uncommon", art: "🐢", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-009", number: 9, name: "Tortank", type: "water", stage: "stage2", evolvesFrom: "Carabaffe", hp: 100, weakness: "lightning", retreatCost: 3,
-    ability: { name: "Danse Pluie", text: "Tu peux attacher autant d'Énergies Eau que tu veux à tes Pokémon ⚡ Eau.", effect: { kind: "rain-dance" } },
-    attacks: [{ name: "Hydrocanon", cost: ["water", "water", "water"], damage: 40, damageSuffix: "+", text: "+10 par Énergie Eau supplémentaire (max +20)." }],
-    rarity: "holo-rare", art: "🌊", pack: "blastoise" },
-
-  // Psykokwak
-  { kind: "pokemon", id: "g1-054", number: 54, name: "Psykokwak", type: "water", stage: "basic", hp: 50, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Picpic", cost: ["water"], damage: 10 }, { name: "Mal de Tête", cost: ["water", "colorless"], text: "L'adversaire ne peut jouer aucun Dresseur le tour suivant." }],
-    rarity: "common", art: "🦆", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-055", number: 55, name: "Akwakwak", type: "water", stage: "stage1", evolvesFrom: "Psykokwak", hp: 70, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Canardeau", cost: ["water"], damage: 20 }, { name: "Jet d'Eau", cost: ["water", "water"], damage: 20, damageSuffix: "+", text: "+10 par Énergie Eau supplémentaire." }],
-    rarity: "uncommon", art: "🦆", pack: "blastoise" },
-
-  // Ptitard
-  { kind: "pokemon", id: "g1-060", number: 60, name: "Ptitard", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Bulles d'O", cost: ["water"], damage: 10 }],
-    rarity: "common", art: "🐸", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-061", number: 61, name: "Têtarte", type: "water", stage: "stage1", evolvesFrom: "Ptitard", hp: 60, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Hypnose", cost: ["water"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }, { name: "Bulles d'O", cost: ["water", "water"], damage: 20 }],
-    rarity: "uncommon", art: "🐸", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-062", number: 62, name: "Tartard", type: "water", stage: "stage2", evolvesFrom: "Têtarte", hp: 90, weakness: "lightning", retreatCost: 3,
-    attacks: [{ name: "Direct", cost: ["fighting", "colorless"], damage: 30 }, { name: "Hydrocanon", cost: ["water", "water", "colorless"], damage: 40 }],
-    rarity: "holo-rare", art: "🐸", pack: "blastoise" },
-
-  // Tentacool
-  { kind: "pokemon", id: "g1-072", number: 72, name: "Tentacool", type: "water", stage: "basic", hp: 30, weakness: "lightning", retreatCost: 0,
-    attacks: [{ name: "Cingle", cost: ["water"], damage: 10 }],
-    rarity: "common", art: "🪼", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-073", number: 73, name: "Tentacruel", type: "water", stage: "stage1", evolvesFrom: "Tentacool", hp: 60, weakness: "lightning", retreatCost: 0,
-    attacks: [{ name: "Tentacule", cost: ["water"], damage: 10, damageSuffix: "x", text: "Lance 3 pièces, 10× faces." }, { name: "Poison Jelly", cost: ["water", "water", "colorless"], damage: 30, text: "Lance une pièce. Face, le Pokémon Adverse est Empoisonné." }],
-    rarity: "rare", art: "🪼", pack: "blastoise" },
-
-  // Ramoloss
-  { kind: "pokemon", id: "g1-079", number: 79, name: "Ramoloss", type: "water", stage: "basic", hp: 50, weakness: "lightning", retreatCost: 2,
-    attacks: [{ name: "Lecher", cost: ["colorless"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }, { name: "Bâille", cost: ["water", "colorless"], text: "Le Pokémon Adverse est Endormi." }],
-    rarity: "common", art: "🦛", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-080", number: 80, name: "Flagadoss", type: "water", stage: "stage1", evolvesFrom: "Ramoloss", hp: 80, weakness: "lightning", retreatCost: 2,
-    attacks: [{ name: "Pincer", cost: ["water", "colorless"], damage: 20 }, { name: "Tempête Psy", cost: ["water", "water", "psychic"], damage: 40 }],
-    rarity: "rare", art: "🐚", pack: "blastoise" },
-
-  // Otaria
-  { kind: "pokemon", id: "g1-086", number: 86, name: "Otaria", type: "water", stage: "basic", hp: 50, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Aurore Blanche", cost: ["water"], damage: 10 }],
-    rarity: "common", art: "🦭", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-087", number: 87, name: "Lamantine", type: "water", stage: "stage1", evolvesFrom: "Otaria", hp: 80, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Onde Froide", cost: ["water", "colorless"], damage: 30 }, { name: "Glaciation", cost: ["water", "water", "colorless"], damage: 40, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "rare", art: "🦭", pack: "blastoise" },
-
-  // Kokiyas
-  { kind: "pokemon", id: "g1-090", number: 90, name: "Kokiyas", type: "water", stage: "basic", hp: 30, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Bulles d'O", cost: ["water"], damage: 10 }],
-    rarity: "common", art: "🐚", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-091", number: 91, name: "Crustabri", type: "water", stage: "stage1", evolvesFrom: "Kokiyas", hp: 70, weakness: "lightning", retreatCost: 3,
-    attacks: [{ name: "Pincer", cost: ["water"], damage: 20 }, { name: "Coquille", cost: ["water", "water", "colorless"], damage: 50, text: "Soigne 20 dégâts à Crustabri." }],
-    rarity: "rare", art: "🐚", pack: "blastoise" },
-
-  // Krabby
-  { kind: "pokemon", id: "g1-098", number: 98, name: "Krabby", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Pince Rouille", cost: ["water"], damage: 10 }, { name: "Tac-Au-But", cost: ["water", "colorless"], damage: 20 }],
-    rarity: "common", art: "🦀", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-099", number: 99, name: "Krabboss", type: "water", stage: "stage1", evolvesFrom: "Krabby", hp: 70, weakness: "lightning", retreatCost: 3,
-    attacks: [{ name: "Pince-Marteau", cost: ["water", "colorless"], damage: 30 }, { name: "Frappe Ultra-Son", cost: ["water", "water", "colorless"], damage: 50 }],
-    rarity: "uncommon", art: "🦀", pack: "blastoise" },
-
-  // Hypotrempe
-  { kind: "pokemon", id: "g1-116", number: 116, name: "Hypotrempe", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Cingle", cost: ["water"], damage: 10 }],
-    rarity: "common", art: "🐉", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-117", number: 117, name: "Hypocéan", type: "water", stage: "stage1", evolvesFrom: "Hypotrempe", hp: 70, weakness: "lightning", retreatCost: 2,
-    attacks: [{ name: "Pic Cornu", cost: ["water", "water"], damage: 30 }, { name: "Agilité", cost: ["water", "water", "colorless"], damage: 20, text: "Face, ignore les dégâts adverses." }],
-    rarity: "rare", art: "🌊", pack: "blastoise" },
-
-  // Poissirène
-  { kind: "pokemon", id: "g1-118", number: 118, name: "Poissirène", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Pic Cornu", cost: ["water"], damage: 10 }, { name: "Cornadure", cost: ["water", "water"], damage: 30 }],
-    rarity: "common", art: "🐠", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-119", number: 119, name: "Poissoroy", type: "water", stage: "stage1", evolvesFrom: "Poissirène", hp: 70, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Cornadure", cost: ["water", "water"], damage: 30 }, { name: "Bélier", cost: ["water", "water", "colorless"], damage: 40, text: "Poissoroy se fait 10 dégâts." }],
-    rarity: "uncommon", art: "🐡", pack: "blastoise" },
-
-  // Stari
-  { kind: "pokemon", id: "g1-120", number: 120, name: "Stari", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Tourniquet", cost: ["water"], damage: 20, damageSuffix: "x", text: "Lance 2 pièces, 20× faces." }],
-    rarity: "common", art: "⭐", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-121", number: 121, name: "Staross", type: "water", stage: "stage1", evolvesFrom: "Stari", hp: 60, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Recovery", cost: ["water"], text: "Défausse 1 Énergie. Soigne tous les dégâts de Staross." }, { name: "Tourniquet Stellaire", cost: ["water", "colorless"], damage: 40 }],
-    rarity: "rare", art: "⭐", pack: "blastoise" },
-
-  // Lippoutou (psychic/glace → classée eau thématiquement)
-  { kind: "pokemon", id: "g1-124", number: 124, name: "Lippoutou", type: "water", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Mélodie Berçante", cost: ["water"], text: "Le Pokémon Adverse est Endormi." }, { name: "Tempête Glacée", cost: ["water", "water", "colorless"], damage: 30, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "rare", art: "💋", pack: "blastoise" },
-
-  // Magicarpe → Léviator
-  { kind: "pokemon", id: "g1-129", number: 129, name: "Magicarpe", type: "water", stage: "basic", hp: 30, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Saute", cost: ["water"], text: "Lance une pièce. Face, ignore les dégâts pendant le tour adverse." }, { name: "Trempette", cost: ["water", "colorless", "colorless"], damage: 10 }],
-    rarity: "common", art: "🐟", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-130", number: 130, name: "Léviator", type: "water", stage: "stage1", evolvesFrom: "Magicarpe", hp: 100, weakness: "lightning", resistance: "fighting", retreatCost: 3,
-    attacks: [{ name: "Bulles d'O", cost: ["water", "water", "water"], damage: 40 }, { name: "Colère", cost: ["water", "water", "water", "water"], damage: 50 }],
-    rarity: "holo-rare", art: "🐉", pack: "blastoise" },
-
-  // Lokhlass (iconic basic)
-  { kind: "pokemon", id: "g1-131", number: 131, name: "Lokhlass", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2,
-    attacks: [{ name: "Chant", cost: ["water"], text: "Le Pokémon Adverse est Endormi." }, { name: "Laser Glace", cost: ["water", "water", "colorless"], damage: 30, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "holo-rare", art: "🦕", pack: "blastoise" },
-
-  // Aquali (évolution Évoli)
-  { kind: "pokemon", id: "g1-134", number: 134, name: "Aquali", type: "water", stage: "stage1", evolvesFrom: "Évoli", hp: 80, weakness: "lightning", retreatCost: 1,
-    attacks: [{ name: "Pistolet à O", cost: ["water", "water"], damage: 30, damageSuffix: "+", text: "+10 par Énergie Eau supplémentaire." }, { name: "Saut Aquatique", cost: ["water", "water", "water"], damage: 40 }],
-    rarity: "holo-rare", art: "🐬", pack: "blastoise" },
-
-  // Fossiles aquatiques
-  { kind: "pokemon", id: "g1-138", number: 138, name: "Amonita", type: "water", stage: "basic", hp: 40, weakness: "grass", retreatCost: 1,
-    attacks: [{ name: "Coup Minuscule", cost: ["water"], damage: 10 }, { name: "Frappe Eau", cost: ["water", "water"], damage: 20 }],
-    rarity: "common", art: "🐚", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-139", number: 139, name: "Amonistar", type: "water", stage: "stage1", evolvesFrom: "Amonita", hp: 70, weakness: "grass", retreatCost: 2,
-    attacks: [{ name: "Tentacules", cost: ["water", "water"], damage: 30 }, { name: "Frappe Spirale", cost: ["water", "water", "colorless"], damage: 40 }],
-    rarity: "uncommon", art: "🐚", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-140", number: 140, name: "Kabuto", type: "water", stage: "basic", hp: 30, weakness: "grass", retreatCost: 1,
-    attacks: [{ name: "Cachette", cost: ["water"], text: "Lance une pièce. Face, ignore les dégâts adverses." }],
-    rarity: "common", art: "🦞", pack: "blastoise" },
-  { kind: "pokemon", id: "g1-141", number: 141, name: "Kabutops", type: "water", stage: "stage1", evolvesFrom: "Kabuto", hp: 70, weakness: "grass", retreatCost: 2,
-    attacks: [{ name: "Tranche-Faux", cost: ["water", "water"], damage: 30 }, { name: "Frappe Sang-Froid", cost: ["water", "water", "colorless"], damage: 50 }],
-    rarity: "rare", art: "🦀", pack: "blastoise" },
-
-  // Artikodin (légendaire)
-  { kind: "pokemon", id: "g1-144", number: 144, name: "Artikodin", type: "water", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2,
-    attacks: [{ name: "Vent Glacial", cost: ["water", "water"], damage: 30 }, { name: "Laser Glace", cost: ["water", "water", "water"], damage: 50, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "holo-rare", art: "❄️", pack: "blastoise" },
-
-  // ═══════════════════════════ PACK FLORIZARRE (38) ═══════════════════════════
-  // Ligne Bulbizarre
-  { kind: "pokemon", id: "g1-001", number: 1, name: "Bulbizarre", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Vampigraine", cost: ["grass", "grass"], damage: 20, text: "Soigne 10 dégâts à Bulbizarre.", effects: [{ kind: "heal", amount: 10 }] }],
-    rarity: "common", art: "🌱", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-002", number: 2, name: "Herbizarre", type: "grass", stage: "stage1", evolvesFrom: "Bulbizarre", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Vampigraine", cost: ["grass", "grass"], damage: 20, text: "Soigne 10 dégâts.", effects: [{ kind: "heal", amount: 10 }] }],
-    rarity: "uncommon", art: "🌿", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-003", number: 3, name: "Florizarre", type: "grass", stage: "stage2", evolvesFrom: "Herbizarre", hp: 100, weakness: "fire", retreatCost: 2,
-    ability: { name: "Transfert d'Énergie", text: "Déplace une Énergie Plante d'un de tes Pokémon à un autre." },
-    attacks: [{ name: "Lance-Soleil", cost: ["grass", "grass", "grass", "grass"], damage: 60 }],
-    rarity: "holo-rare", art: "🌺", pack: "venusaur" },
-
-  // Chenipan
-  { kind: "pokemon", id: "g1-010", number: 10, name: "Chenipan", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Sécrétion", cost: ["grass"], damage: 10, text: "Coût de retraite adverse +1 le tour suivant." }],
-    rarity: "common", art: "🐛", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-011", number: 11, name: "Chrysacier", type: "grass", stage: "stage1", evolvesFrom: "Chenipan", hp: 60, weakness: "fire", retreatCost: 2,
-    attacks: [{ name: "Armure", cost: ["colorless"], text: "Pendant le tour adverse, ignore les 20 premiers dégâts." }],
-    rarity: "uncommon", art: "🪲", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-012", number: 12, name: "Papilusion", type: "grass", stage: "stage2", evolvesFrom: "Chrysacier", hp: 70, weakness: "fire", resistance: "fighting", retreatCost: 0,
-    attacks: [{ name: "Poudre Dodo", cost: ["grass"], damage: 20, text: "Le Pokémon Adverse est Endormi." }, { name: "Poudre Toxik", cost: ["grass", "grass", "colorless"], damage: 20, text: "Le Pokémon Adverse est Empoisonné." }],
-    rarity: "holo-rare", art: "🦋", pack: "venusaur" },
-
-  // Aspicot
-  { kind: "pokemon", id: "g1-013", number: 13, name: "Aspicot", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Dard-Venin", cost: ["grass"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Empoisonné." }],
-    rarity: "common", art: "🐛", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-014", number: 14, name: "Coconfort", type: "grass", stage: "stage1", evolvesFrom: "Aspicot", hp: 50, weakness: "fire", retreatCost: 2,
-    attacks: [{ name: "Dur", cost: ["grass"], text: "Ignore tous les effets." }],
-    rarity: "uncommon", art: "🪲", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-015", number: 15, name: "Dardargnan", type: "grass", stage: "stage2", evolvesFrom: "Coconfort", hp: 80, weakness: "fire", resistance: "fighting", retreatCost: 0,
-    attacks: [{ name: "Attaque Essaim", cost: ["grass"], damage: 10, damageSuffix: "x", text: "Lance 4 pièces, 10× faces." }, { name: "Double Dard-Venin", cost: ["grass", "grass", "colorless"], damage: 40, text: "Le Pokémon Adverse est Empoisonné." }],
-    rarity: "holo-rare", art: "🐝", pack: "venusaur" },
-
-  // Abo
-  { kind: "pokemon", id: "g1-023", number: 23, name: "Abo", type: "grass", stage: "basic", hp: 40, weakness: "psychic", retreatCost: 0,
-    attacks: [{ name: "Morsure Venin", cost: ["grass"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Empoisonné." }],
-    rarity: "common", art: "🐍", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-024", number: 24, name: "Arbok", type: "grass", stage: "stage1", evolvesFrom: "Abo", hp: 60, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Crochet Venin", cost: ["grass"], damage: 20, text: "Lance une pièce. Face, le Pokémon Adverse est Empoisonné." }, { name: "Étreinte", cost: ["grass", "grass", "colorless"], damage: 30 }],
-    rarity: "rare", art: "🐍", pack: "venusaur" },
-
-  // Nidoran♀ line
-  { kind: "pokemon", id: "g1-029", number: 29, name: "Nidoran♀", type: "grass", stage: "basic", hp: 40, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Pic Fourchu", cost: ["grass"], damage: 10 }],
-    rarity: "common", art: "🦌", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-030", number: 30, name: "Nidorina", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♀", hp: 70, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Griffe", cost: ["grass"], damage: 20 }, { name: "Supersonique", cost: ["grass", "colorless"], text: "Le Pokémon Adverse est Confus." }],
-    rarity: "uncommon", art: "🦌", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-031", number: 31, name: "Nidoqueen", type: "grass", stage: "stage2", evolvesFrom: "Nidorina", hp: 90, weakness: "psychic", retreatCost: 3,
-    attacks: [{ name: "Coup de Poing", cost: ["grass", "grass"], damage: 30 }, { name: "Écrase-Mâchoire", cost: ["grass", "grass", "colorless"], damage: 40, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "holo-rare", art: "👸", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-032", number: 32, name: "Nidoran♂", type: "grass", stage: "basic", hp: 40, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Dard-Venin", cost: ["grass"], damage: 10, text: "Lance une pièce. Face, Empoisonné." }],
-    rarity: "common", art: "🦌", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-033", number: 33, name: "Nidorino", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♂", hp: 60, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Coup de Corne", cost: ["grass", "colorless"], damage: 20 }, { name: "Double Pique", cost: ["grass", "grass", "colorless"], damage: 20, damageSuffix: "x", text: "Lance 2 pièces, 20× faces." }],
-    rarity: "uncommon", art: "🦌", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-034", number: 34, name: "Nidoking", type: "grass", stage: "stage2", evolvesFrom: "Nidorino", hp: 90, weakness: "psychic", retreatCost: 3,
-    attacks: [{ name: "Cornadure", cost: ["grass", "grass"], damage: 30 }, { name: "Coup de Pied Sauté", cost: ["grass", "grass", "colorless", "colorless"], damage: 60 }],
-    rarity: "holo-rare", art: "🦏", pack: "venusaur" },
-
-  // Nosferapti
-  { kind: "pokemon", id: "g1-041", number: 41, name: "Nosferapti", type: "grass", stage: "basic", hp: 40, weakness: "psychic", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Vol-Vie", cost: ["grass"], damage: 10, text: "Soigne 10 dégâts à Nosferapti." }],
-    rarity: "common", art: "🦇", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-042", number: 42, name: "Nosferalto", type: "grass", stage: "stage1", evolvesFrom: "Nosferapti", hp: 70, weakness: "psychic", resistance: "fighting", retreatCost: 0,
-    attacks: [{ name: "Vol-Vie", cost: ["grass", "colorless"], damage: 20, text: "Soigne 10 dégâts à Nosferalto." }, { name: "Ultrason", cost: ["grass", "colorless", "colorless"], damage: 30, text: "Lance une pièce. Face, le Pokémon Adverse est Confus." }],
-    rarity: "uncommon", art: "🦇", pack: "venusaur" },
-
-  // Mystherbe / Ortide / Rafflesia
-  { kind: "pokemon", id: "g1-043", number: 43, name: "Mystherbe", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Poudre Toxik", cost: ["grass"], damage: 10, text: "Le Pokémon Adverse est Empoisonné." }],
-    rarity: "common", art: "🌿", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-044", number: 44, name: "Ortide", type: "grass", stage: "stage1", evolvesFrom: "Mystherbe", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Poudre Soporifik", cost: ["grass", "colorless"], text: "Le Pokémon Adverse est Endormi." }, { name: "Pétale Danse", cost: ["grass", "grass", "colorless"], damage: 40 }],
-    rarity: "uncommon", art: "🌺", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-045", number: 45, name: "Rafflesia", type: "grass", stage: "stage2", evolvesFrom: "Ortide", hp: 80, weakness: "fire", retreatCost: 2,
-    ability: { name: "Spores de Pollen", text: "Lance 1 pièce à chaque attaque de Rafflesia. Face, le Pokémon Adverse est Endormi.", effect: { kind: "post-attack-status-coin", status: "asleep" } },
-    attacks: [{ name: "Pétale Danse", cost: ["grass", "grass", "grass"], damage: 40, damageSuffix: "x", text: "Lance 3 pièces, 40× faces. Rafflesia est Confus." }],
-    rarity: "holo-rare", art: "🌺", pack: "venusaur" },
-
-  // Paras
-  { kind: "pokemon", id: "g1-046", number: 46, name: "Paras", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Spore", cost: ["grass"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }],
-    rarity: "common", art: "🍄", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-047", number: 47, name: "Parasect", type: "grass", stage: "stage1", evolvesFrom: "Paras", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Spore", cost: ["grass"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }, { name: "Fonce", cost: ["grass", "grass", "colorless"], damage: 40 }],
-    rarity: "uncommon", art: "🍄", pack: "venusaur" },
-
-  // Mimitoss
-  { kind: "pokemon", id: "g1-048", number: 48, name: "Mimitoss", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Dard Collant", cost: ["grass"], damage: 10, text: "Coût de retraite adverse +1 le tour suivant." }],
-    rarity: "common", art: "🐛", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-049", number: 49, name: "Aéromite", type: "grass", stage: "stage1", evolvesFrom: "Mimitoss", hp: 60, weakness: "fire", retreatCost: 0,
-    attacks: [{ name: "Poudre Dodo", cost: ["grass", "colorless"], text: "Le Pokémon Adverse est Endormi." }, { name: "Laser Lent", cost: ["grass", "colorless", "colorless"], damage: 30 }],
-    rarity: "uncommon", art: "🦋", pack: "venusaur" },
-
-  // Chétiflor
-  { kind: "pokemon", id: "g1-069", number: 69, name: "Chétiflor", type: "grass", stage: "basic", hp: 40, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Vol-Vie", cost: ["grass"], damage: 10, text: "Soigne 10 dégâts." }],
-    rarity: "common", art: "🌱", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-070", number: 70, name: "Boustiflor", type: "grass", stage: "stage1", evolvesFrom: "Chétiflor", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Vol-Vie", cost: ["grass"], damage: 10, text: "Soigne 10 dégâts." }, { name: "Liane", cost: ["grass", "colorless"], damage: 20 }],
-    rarity: "uncommon", art: "🌿", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-071", number: 71, name: "Empiflor", type: "grass", stage: "stage2", evolvesFrom: "Boustiflor", hp: 80, weakness: "fire", retreatCost: 2,
-    attacks: [{ name: "Poudre Soporifik", cost: ["grass", "colorless"], text: "Le Pokémon Adverse est Endormi." }, { name: "Acide", cost: ["grass", "grass", "colorless"], damage: 40, text: "Lance une pièce. Face, Empoisonné." }],
-    rarity: "holo-rare", art: "🌺", pack: "venusaur" },
-
-  // Tadmorv
-  { kind: "pokemon", id: "g1-088", number: 88, name: "Tadmorv", type: "grass", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Émanation", cost: ["grass"], damage: 10, text: "Lance une pièce. Face, Empoisonné." }],
-    rarity: "common", art: "🦠", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-089", number: 89, name: "Grotadmorv", type: "grass", stage: "stage1", evolvesFrom: "Tadmorv", hp: 80, weakness: "psychic", retreatCost: 3,
-    attacks: [{ name: "Nauséeux", cost: ["grass"], damage: 20, text: "Le Pokémon Adverse est Empoisonné." }, { name: "Frappe Visqueuse", cost: ["grass", "grass", "colorless"], damage: 30 }],
-    rarity: "rare", art: "🦠", pack: "venusaur" },
-
-  // Noeunoeuf
-  { kind: "pokemon", id: "g1-102", number: 102, name: "Noeunoeuf", type: "grass", stage: "basic", hp: 50, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Pique Mental", cost: ["grass"], damage: 10 }],
-    rarity: "common", art: "🥚", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-103", number: 103, name: "Noadkoko", type: "grass", stage: "stage1", evolvesFrom: "Noeunoeuf", hp: 80, weakness: "fire", retreatCost: 3,
-    attacks: [{ name: "Balle de Psy", cost: ["psychic", "colorless"], damage: 20 }, { name: "Lance-Soleil", cost: ["grass", "grass", "colorless"], damage: 40 }],
-    rarity: "rare", art: "🌴", pack: "venusaur" },
-
-  // Smogo
-  { kind: "pokemon", id: "g1-109", number: 109, name: "Smogo", type: "grass", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Buée Noire", cost: ["grass"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Empoisonné." }],
-    rarity: "common", art: "💨", pack: "venusaur" },
-  { kind: "pokemon", id: "g1-110", number: 110, name: "Smogogo", type: "grass", stage: "stage1", evolvesFrom: "Smogo", hp: 70, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Détonation", cost: ["grass", "grass"], damage: 30 }, { name: "Gaz Explosif", cost: ["grass", "grass", "colorless"], damage: 40, text: "Smogogo se fait 10 dégâts." }],
-    rarity: "rare", art: "💨", pack: "venusaur" },
-
-  // Saquedeneu (basic unique)
-  { kind: "pokemon", id: "g1-114", number: 114, name: "Saquedeneu", type: "grass", stage: "basic", hp: 60, weakness: "fire", retreatCost: 1,
-    attacks: [{ name: "Fouet Lianes", cost: ["grass"], damage: 20 }, { name: "Étreinte", cost: ["grass", "grass", "colorless"], damage: 30 }],
-    rarity: "rare", art: "🌿", pack: "venusaur" },
-
-  // Insécateur
-  { kind: "pokemon", id: "g1-123", number: 123, name: "Insécateur", type: "grass", stage: "basic", hp: 70, weakness: "fire", resistance: "fighting", retreatCost: 0,
-    attacks: [{ name: "Plane", cost: ["colorless"], damage: 30, text: "Lance une pièce. Pile, cette attaque ne fait rien." }, { name: "Tranchécroix", cost: ["grass", "grass", "colorless"], damage: 30 }],
-    rarity: "holo-rare", art: "🦗", pack: "venusaur" },
-
-  // Scarabrute
-  { kind: "pokemon", id: "g1-127", number: 127, name: "Scarabrute", type: "grass", stage: "basic", hp: 60, weakness: "fire", retreatCost: 2,
-    attacks: [{ name: "Bagarre", cost: ["grass"], damage: 10 }, { name: "Guillotine", cost: ["grass", "grass", "colorless", "colorless"], damage: 50 }],
-    rarity: "rare", art: "🪲", pack: "venusaur" },
-
-  // ═══════════════════════════ PACK MEWTWO (40) ═══════════════════════════
-  // Rattata
-  { kind: "pokemon", id: "g1-019", number: 19, name: "Rattata", type: "colorless", stage: "basic", hp: 30, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Morsure", cost: ["colorless"], damage: 10 }],
-    rarity: "common", art: "🐭", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-020", number: 20, name: "Rattatac", type: "colorless", stage: "stage1", evolvesFrom: "Rattata", hp: 60, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Morsure Féroce", cost: ["colorless", "colorless"], damage: 20 }, { name: "Super Crocs", cost: ["colorless", "colorless", "colorless"], damage: 20, damageSuffix: "+", text: "Lance une pièce. Face, +20." }],
-    rarity: "uncommon", art: "🐀", pack: "mewtwo" },
-
-  // Pikachu
-  { kind: "pokemon", id: "g1-025", number: 25, name: "Pikachu", type: "lightning", stage: "basic", hp: 40, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Mordille", cost: ["colorless"], damage: 10 }, { name: "Choc Foudre", cost: ["lightning", "colorless"], damage: 30, text: "Lance une pièce. Pile, Pikachu se fait 10 dégâts.", effects: [{ kind: "self-damage", amount: 10, coin: "tails" }] }],
-    rarity: "common", art: "⚡", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-026", number: 26, name: "Raichu", type: "lightning", stage: "stage1", evolvesFrom: "Pikachu", hp: 80, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Vivacité", cost: ["lightning", "colorless"], damage: 20, text: "Lance une pièce. Face, ignore les effets adverses." }, { name: "Tonnerre", cost: ["lightning", "lightning", "colorless", "colorless"], damage: 60 }],
-    rarity: "holo-rare", art: "⚡", pack: "mewtwo" },
-
-  // Mélofée
-  { kind: "pokemon", id: "g1-035", number: 35, name: "Mélofée", type: "colorless", stage: "basic", hp: 40, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Émanation", cost: ["colorless"], damage: 10 }],
-    rarity: "common", art: "🧚", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-036", number: 36, name: "Mélodelfe", type: "colorless", stage: "stage1", evolvesFrom: "Mélofée", hp: 70, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Métronome", cost: ["colorless", "colorless", "colorless"], text: "Choisis une attaque du Pokémon Adverse et utilise-la (sans coût)." }],
-    rarity: "rare", art: "✨", pack: "mewtwo" },
-
-  // Rondoudou
-  { kind: "pokemon", id: "g1-039", number: 39, name: "Rondoudou", type: "colorless", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Berceuse", cost: ["colorless"], text: "Le Pokémon Adverse est Endormi." }, { name: "Double Claque", cost: ["colorless", "colorless"], damage: 10, damageSuffix: "x", text: "Lance 2 pièces, 10× faces." }],
-    rarity: "common", art: "🎀", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-040", number: 40, name: "Grodoudou", type: "colorless", stage: "stage1", evolvesFrom: "Rondoudou", hp: 70, weakness: "fighting", retreatCost: 2,
-    attacks: [{ name: "Voix Enjôleuse", cost: ["colorless"], text: "Tous les Pokémon actifs adverses sont Endormis." }, { name: "Tacle Lourd", cost: ["colorless", "colorless", "colorless"], damage: 30 }],
-    rarity: "holo-rare", art: "🎀", pack: "mewtwo" },
-
-  // Miaouss
-  { kind: "pokemon", id: "g1-052", number: 52, name: "Miaouss", type: "colorless", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Griffes", cost: ["colorless"], damage: 10 }, { name: "Picsou", cost: ["colorless", "colorless"], text: "Pioche 2 cartes." }],
-    rarity: "common", art: "🐈", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-053", number: 53, name: "Persian", type: "colorless", stage: "stage1", evolvesFrom: "Miaouss", hp: 70, weakness: "fighting", retreatCost: 0,
-    attacks: [{ name: "Pause Sieste", cost: ["colorless"], text: "Persian est Endormi. Soigne 20 dégâts." }, { name: "Coup de Patte", cost: ["colorless", "colorless"], damage: 20 }],
-    rarity: "rare", art: "🐱", pack: "mewtwo" },
-
-  // Abra
-  { kind: "pokemon", id: "g1-063", number: 63, name: "Abra", type: "psychic", stage: "basic", hp: 30, weakness: "psychic", retreatCost: 0,
-    attacks: [{ name: "Téléport", cost: ["psychic"], text: "Échange Abra avec un de tes Pokémon de Banc." }],
-    rarity: "common", art: "🔮", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-064", number: 64, name: "Kadabra", type: "psychic", stage: "stage1", evolvesFrom: "Abra", hp: 60, weakness: "psychic", retreatCost: 0,
-    attacks: [{ name: "Regard Troublant", cost: ["psychic"], text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }, { name: "Super Psy", cost: ["psychic", "psychic", "colorless"], damage: 30 }],
-    rarity: "uncommon", art: "🔮", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-065", number: 65, name: "Alakazam", type: "psychic", stage: "stage2", evolvesFrom: "Kadabra", hp: 80, weakness: "psychic", retreatCost: 3,
-    ability: { name: "Échange de Dégâts", text: "Une fois par tour, déplace 1 marqueur de dégât d'un Pokémon à un autre." },
-    attacks: [{ name: "Onde Mentale", cost: ["psychic", "psychic", "psychic"], damage: 30, text: "Lance une pièce. Pile, le Pokémon Adverse est Confus." }],
-    rarity: "holo-rare", art: "🔮", pack: "mewtwo" },
-
-  // Magnéti
-  { kind: "pokemon", id: "g1-081", number: 81, name: "Magnéti", type: "lightning", stage: "basic", hp: 40, weakness: "fighting", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Vis Tonnerre", cost: ["lightning"], damage: 10 }, { name: "Choc Tonnerre", cost: ["lightning", "colorless"], damage: 20, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }],
-    rarity: "common", art: "🧲", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-082", number: 82, name: "Magnéton", type: "lightning", stage: "stage1", evolvesFrom: "Magnéti", hp: 60, weakness: "fighting", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Choc Foudre", cost: ["lightning", "lightning"], damage: 30 }, { name: "Tempête de Foudre", cost: ["lightning", "lightning", "lightning", "lightning"], damage: 80, text: "Inflige 10 dégâts à chacun de tes Pokémon de Banc." }],
-    rarity: "holo-rare", art: "🧲", pack: "mewtwo" },
-
-  // Canarticho
-  { kind: "pokemon", id: "g1-083", number: 83, name: "Canarticho", type: "colorless", stage: "basic", hp: 50, weakness: "lightning", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Assaut Poireau", cost: ["colorless"], damage: 10 }, { name: "Frappe Poireau", cost: ["colorless", "colorless"], damage: 30 }],
-    rarity: "rare", art: "🦆", pack: "mewtwo" },
-
-  // Doduo
-  { kind: "pokemon", id: "g1-084", number: 84, name: "Doduo", type: "colorless", stage: "basic", hp: 50, weakness: "lightning", resistance: "fighting", retreatCost: 1,
-    attacks: [{ name: "Fureur", cost: ["colorless"], damage: 10, damageSuffix: "x", text: "Lance 2 pièces, 10× faces." }],
-    rarity: "common", art: "🦆", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-085", number: 85, name: "Dodrio", type: "colorless", stage: "stage1", evolvesFrom: "Doduo", hp: 70, weakness: "lightning", resistance: "fighting", retreatCost: 0,
-    attacks: [{ name: "Fureur à Trois", cost: ["colorless"], damage: 20, damageSuffix: "x", text: "Lance 3 pièces, 20× faces." }, { name: "Agilité", cost: ["colorless", "colorless", "colorless"], damage: 20, text: "Face, ignore les dégâts adverses." }],
-    rarity: "uncommon", art: "🦜", pack: "mewtwo" },
-
-  // Fantominus
-  { kind: "pokemon", id: "g1-092", number: 92, name: "Fantominus", type: "psychic", stage: "basic", hp: 30, weakness: "psychic", retreatCost: 0,
-    attacks: [{ name: "Choc Mental", cost: ["psychic"], damage: 10 }, { name: "Léchouille", cost: ["psychic"], text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }],
-    rarity: "common", art: "👻", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-093", number: 93, name: "Spectrum", type: "psychic", stage: "stage1", evolvesFrom: "Fantominus", hp: 50, weakness: "psychic", retreatCost: 0,
-    attacks: [{ name: "Rêve Éveillé", cost: ["psychic"], damage: 10, text: "Le Pokémon Adverse est Endormi." }, { name: "Onde Nocturne", cost: ["psychic", "psychic"], damage: 30 }],
-    rarity: "uncommon", art: "👻", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-094", number: 94, name: "Ectoplasma", type: "psychic", stage: "stage2", evolvesFrom: "Spectrum", hp: 80, weakness: "psychic", retreatCost: 0,
-    ability: { name: "Sombre Rêve", text: "Tant qu'Ectoplasma est sur le Banc et le Pokémon Adverse Endormi, inflige 10 dégâts à l'adversaire entre les tours.", effect: { kind: "bench-aura-asleep", amount: 10 } },
-    attacks: [{ name: "Damoclès Énergétique", cost: ["psychic", "psychic", "psychic"], damage: 50, text: "Défausse 1 Énergie Psy." }],
-    rarity: "holo-rare", art: "👻", pack: "mewtwo" },
-
-  // Soporifik
-  { kind: "pokemon", id: "g1-096", number: 96, name: "Soporifik", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    attacks: [{ name: "Choc Mental", cost: ["psychic"], damage: 10 }, { name: "Hypnose", cost: ["psychic", "psychic"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }],
-    rarity: "common", art: "😴", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-097", number: 97, name: "Hypnomade", type: "psychic", stage: "stage1", evolvesFrom: "Soporifik", hp: 90, weakness: "psychic", retreatCost: 2,
-    attacks: [{ name: "Hypnose", cost: ["psychic"], text: "Le Pokémon Adverse est Endormi.", effects: [{ kind: "apply-status", target: "opponent", status: "asleep" }] }, { name: "Prophétie", cost: ["psychic", "psychic"], text: "Regarde les 3 cartes du dessus de ton deck et réorganise-les." }],
-    rarity: "rare", art: "😴", pack: "mewtwo" },
-
-  // Voltorbe
-  { kind: "pokemon", id: "g1-100", number: 100, name: "Voltorbe", type: "lightning", stage: "basic", hp: 40, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Tacle", cost: ["lightning"], damage: 10 }],
-    rarity: "common", art: "🔴", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-101", number: 101, name: "Électrode", type: "lightning", stage: "stage1", evolvesFrom: "Voltorbe", hp: 70, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Auto-destruction", cost: ["lightning", "lightning", "lightning"], damage: 50, text: "Inflige 10 à chaque Pokémon de Banc. Électrode se KO." }],
-    rarity: "rare", art: "🔴", pack: "mewtwo" },
-
-  // Excelangue
-  { kind: "pokemon", id: "g1-108", number: 108, name: "Excelangue", type: "colorless", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 2,
-    attacks: [{ name: "Léchouille", cost: ["colorless"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "rare", art: "👅", pack: "mewtwo" },
-
-  // Leveinard
-  { kind: "pokemon", id: "g1-113", number: 113, name: "Leveinard", type: "colorless", stage: "basic", hp: 120, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Encaissement", cost: ["colorless", "colorless"], text: "Lance une pièce. Face, ignore tous les dégâts adverses." }, { name: "Damoclès", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 80, text: "Leveinard se fait 80 dégâts." }],
-    rarity: "holo-rare", art: "🥚", pack: "mewtwo" },
-
-  // M. Mime
-  { kind: "pokemon", id: "g1-122", number: 122, name: "M. Mime", type: "psychic", stage: "basic", hp: 40, weakness: "psychic", retreatCost: 1,
-    ability: { name: "Mur de Lumière", text: "Ignore tous les dégâts ≥ 30 infligés à M. Mime.", effect: { kind: "damage-cap", threshold: 30 } },
-    attacks: [{ name: "Méditation", cost: ["psychic", "colorless"], damage: 10, damageSuffix: "+", text: "+10 par carte dans la main de l'adversaire." }],
-    rarity: "holo-rare", art: "🤡", pack: "mewtwo" },
-
-  // Élektek
-  { kind: "pokemon", id: "g1-125", number: 125, name: "Élektek", type: "lightning", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2,
-    attacks: [{ name: "Choc Foudre", cost: ["lightning", "colorless"], damage: 30 }, { name: "Tonnerre", cost: ["lightning", "lightning", "colorless"], damage: 50, text: "Lance une pièce. Pile, Élektek se fait 10 dégâts.", effects: [{ kind: "self-damage", amount: 10, coin: "tails" }] }],
-    rarity: "rare", art: "⚡", pack: "mewtwo" },
-
-  // Métamorph
-  { kind: "pokemon", id: "g1-132", number: 132, name: "Métamorph", type: "colorless", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1,
-    ability: { name: "Morphing", text: "Copie les attaques du Pokémon Adverse Actif (sans payer leur coût)." },
-    attacks: [{ name: "Tacle", cost: ["colorless"], damage: 10 }],
-    rarity: "rare", art: "🫠", pack: "mewtwo" },
-
-  // Évoli
-  { kind: "pokemon", id: "g1-133", number: 133, name: "Évoli", type: "colorless", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Crocs", cost: ["colorless", "colorless"], damage: 30 }],
-    rarity: "common", art: "🦊", pack: "mewtwo" },
-
-  // Voltali
-  { kind: "pokemon", id: "g1-135", number: 135, name: "Voltali", type: "lightning", stage: "stage1", evolvesFrom: "Évoli", hp: 70, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Mâchouille", cost: ["colorless"], damage: 10 }, { name: "Fil Foudre", cost: ["lightning", "lightning"], damage: 30, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé." }],
-    rarity: "holo-rare", art: "⚡", pack: "mewtwo" },
-
-  // Porygon
-  { kind: "pokemon", id: "g1-137", number: 137, name: "Porygon", type: "colorless", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1,
-    attacks: [{ name: "Conversion", cost: ["colorless"], text: "Choisis un type. La faiblesse de Porygon devient ce type." }, { name: "Laser", cost: ["colorless", "colorless"], damage: 20 }],
-    rarity: "rare", art: "📐", pack: "mewtwo" },
-
-  // Ronflex
-  { kind: "pokemon", id: "g1-143", number: 143, name: "Ronflex", type: "colorless", stage: "basic", hp: 90, weakness: "fighting", retreatCost: 4,
-    ability: { name: "Sans Garde", text: "Tant que Ronflex est Endormi, ignore les dégâts qui lui sont infligés.", effect: { kind: "asleep-immunity" } },
-    attacks: [{ name: "Frappe Lourde", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 60 }],
-    rarity: "holo-rare", art: "🐻", pack: "mewtwo" },
-
-  // Électhor
-  { kind: "pokemon", id: "g1-145", number: 145, name: "Électhor", type: "lightning", stage: "basic", hp: 90, weakness: "fighting", resistance: "fighting", retreatCost: 3,
-    attacks: [{ name: "Choc-Mental", cost: ["lightning"], damage: 10, text: "Lance une pièce. Face, le Pokémon Adverse est Paralysé.", effects: [{ kind: "apply-status", target: "opponent", status: "paralyzed", coin: "heads" }] }, { name: "Tonnerre", cost: ["lightning", "lightning", "lightning", "lightning"], damage: 60, text: "Lance une pièce. Pile, Électhor se fait 30 dégâts.", effects: [{ kind: "self-damage", amount: 30, coin: "tails" }] }],
-    rarity: "holo-rare", art: "⚡", pack: "mewtwo" },
-
-  // Minidraco
-  { kind: "pokemon", id: "g1-147", number: 147, name: "Minidraco", type: "colorless", stage: "basic", hp: 40, weakness: "colorless", retreatCost: 1,
-    attacks: [{ name: "Crocs", cost: ["colorless", "colorless"], damage: 20 }],
-    rarity: "common", art: "🐉", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-148", number: 148, name: "Draco", type: "colorless", stage: "stage1", evolvesFrom: "Minidraco", hp: 70, weakness: "colorless", retreatCost: 2,
-    attacks: [{ name: "Agilité", cost: ["colorless", "colorless"], damage: 20, text: "Face, ignore les dégâts adverses." }, { name: "Ultrason", cost: ["colorless", "colorless", "colorless"], damage: 30, text: "Lance une pièce. Face, Confus." }],
-    rarity: "uncommon", art: "🐉", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-149", number: 149, name: "Dracolosse", type: "colorless", stage: "stage2", evolvesFrom: "Draco", hp: 100, weakness: "colorless", retreatCost: 2,
-    attacks: [{ name: "Pic Toxik", cost: ["colorless", "colorless"], damage: 20, text: "Lance une pièce. Face, Empoisonné.", effects: [{ kind: "apply-status", target: "opponent", status: "poisoned", coin: "heads" }] }, { name: "Super Tonnerre", cost: ["colorless", "colorless", "colorless", "colorless"], damage: 80, text: "Défausse 1 Énergie.", effects: [{ kind: "discard-energy", count: 1 }] }],
-    rarity: "holo-rare", art: "🐲", pack: "mewtwo" },
-
-  // Mewtwo & Mew
-  { kind: "pokemon", id: "g1-150", number: 150, name: "Mewtwo", type: "psychic", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 3,
-    attacks: [{ name: "Psy", cost: ["psychic", "psychic", "colorless"], damage: 10, damageSuffix: "+", text: "+10 par Énergie attachée au Pokémon Adverse." }, { name: "Barrière", cost: ["psychic", "psychic"], text: "Défausse 1 Énergie Psy. Ignore les dégâts adverses le tour suivant." }],
-    rarity: "holo-rare", art: "🧠", pack: "mewtwo" },
-  { kind: "pokemon", id: "g1-151", number: 151, name: "Mew", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1,
-    ability: { name: "Esquive Neutre", text: "Si un Pokémon évolué attaque Mew, lance une pièce. Face, les dégâts sont ignorés.", effect: { kind: "evolved-attacker-coin" } },
-    attacks: [{ name: "Dévoreur", cost: ["psychic"], text: "Copie 1 attaque basique d'un Pokémon du Banc adverse et utilise-la." }],
-    rarity: "holo-rare", art: "💮", pack: "mewtwo" },
-
-  // ═══════════════════════════ ÉNERGIES DE BASE (6) ═══════════════════════════
-  { kind: "energy", id: "g1-energy-fire", number: 200, name: "Énergie Feu", energyType: "fire", rarity: "energy", art: "🔥" },
-  { kind: "energy", id: "g1-energy-water", number: 201, name: "Énergie Eau", energyType: "water", rarity: "energy", art: "💧" },
-  { kind: "energy", id: "g1-energy-grass", number: 202, name: "Énergie Plante", energyType: "grass", rarity: "energy", art: "🍃" },
-  { kind: "energy", id: "g1-energy-lightning", number: 203, name: "Énergie Électrique", energyType: "lightning", rarity: "energy", art: "⚡" },
-  { kind: "energy", id: "g1-energy-psychic", number: 204, name: "Énergie Psy", energyType: "psychic", rarity: "energy", art: "🌀" },
-  { kind: "energy", id: "g1-energy-fighting", number: 205, name: "Énergie Combat", energyType: "fighting", rarity: "energy", art: "👊" },
+  // #1 Bulbizarre (grass, HP 90, basic)
+  { kind: "pokemon", id: "g1-001-common", number: 1, name: "Bulbizarre", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base1/44_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-001-rare", number: 1, name: "Bulbizarre", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/67_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-001-holo-rare", number: 1, name: "Bulbizarre", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/166_hires.png", pack: "kanto" },
+
+  // #2 Herbizarre (grass, HP 120, stage1)
+  { kind: "pokemon", id: "g1-002-common", number: 2, name: "Herbizarre", type: "grass", stage: "stage1", evolvesFrom: "Bulbizarre", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base1/30_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-002-rare", number: 2, name: "Herbizarre", type: "grass", stage: "stage1", evolvesFrom: "Bulbizarre", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/44_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-002-holo-rare", number: 2, name: "Herbizarre", type: "grass", stage: "stage1", evolvesFrom: "Bulbizarre", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/167_hires.png", pack: "kanto" },
+
+  // #3 Florizarre (grass, HP 160, stage2)
+  { kind: "pokemon", id: "g1-003-common", number: 3, name: "Florizarre", type: "grass", stage: "stage2", evolvesFrom: "Herbizarre", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 50 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/basep/13_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-003-rare", number: 3, name: "Florizarre", type: "grass", stage: "stage2", evolvesFrom: "Herbizarre", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 50 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/15_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-003-holo-rare", number: 3, name: "Florizarre", type: "grass", stage: "stage2", evolvesFrom: "Herbizarre", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 50 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/112_hires.png", pack: "kanto" },
+
+  // #4 Salamèche (fire, HP 80, basic)
+  { kind: "pokemon", id: "g1-004-common", number: 4, name: "Salamèche", type: "fire", stage: "basic", hp: 80, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/46_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-004-rare", number: 4, name: "Salamèche", type: "fire", stage: "basic", hp: 80, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/69_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-004-holo-rare", number: 4, name: "Salamèche", type: "fire", stage: "basic", hp: 80, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex3/98_hires.png", pack: "kanto" },
+
+  // #5 Reptincel (fire, HP 120, stage1)
+  { kind: "pokemon", id: "g1-005-common", number: 5, name: "Reptincel", type: "fire", stage: "stage1", evolvesFrom: "Salamèche", hp: 120, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 30 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base1/24_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-005-rare", number: 5, name: "Reptincel", type: "fire", stage: "stage1", evolvesFrom: "Salamèche", hp: 120, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 30 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-005-holo-rare", number: 5, name: "Reptincel", type: "fire", stage: "stage1", evolvesFrom: "Salamèche", hp: 120, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 30 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex3/99_hires.png", pack: "kanto" },
+
+  // #6 Dracaufeu (fire, HP 160, stage2)
+  { kind: "pokemon", id: "g1-006-common", number: 6, name: "Dracaufeu", type: "fire", stage: "stage2", evolvesFrom: "Reptincel", hp: 160, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["fire", "colorless"], damage: 60 }, { name: "Feu d'Enfer", cost: ["fire", "fire", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/dpp/DP45_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-006-rare", number: 6, name: "Dracaufeu", type: "fire", stage: "stage2", evolvesFrom: "Reptincel", hp: 160, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["fire", "colorless"], damage: 60 }, { name: "Feu d'Enfer", cost: ["fire", "fire", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/4_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-006-holo-rare", number: 6, name: "Dracaufeu", type: "fire", stage: "stage2", evolvesFrom: "Reptincel", hp: 160, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["fire", "colorless"], damage: 60 }, { name: "Feu d'Enfer", cost: ["fire", "fire", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard3/146_hires.png", pack: "kanto" },
+
+  // #7 Carapuce (water, HP 90, basic)
+  { kind: "pokemon", id: "g1-007-common", number: 7, name: "Carapuce", type: "water", stage: "basic", hp: 90, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/63_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-007-rare", number: 7, name: "Carapuce", type: "water", stage: "basic", hp: 90, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/93_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-007-holo-rare", number: 7, name: "Carapuce", type: "water", stage: "basic", hp: 90, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/170_hires.png", pack: "kanto" },
+
+  // #8 Carabaffe (water, HP 120, stage1)
+  { kind: "pokemon", id: "g1-008-common", number: 8, name: "Carabaffe", type: "water", stage: "stage1", evolvesFrom: "Carapuce", hp: 120, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/42_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-008-rare", number: 8, name: "Carabaffe", type: "water", stage: "stage1", evolvesFrom: "Carapuce", hp: 120, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/63_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-008-holo-rare", number: 8, name: "Carabaffe", type: "water", stage: "stage1", evolvesFrom: "Carapuce", hp: 120, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/171_hires.png", pack: "kanto" },
+
+  // #9 Tortank (water, HP 160, stage2)
+  { kind: "pokemon", id: "g1-009-common", number: 9, name: "Tortank", type: "water", stage: "stage2", evolvesFrom: "Carabaffe", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["water", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 90 }], rarity: "common", art: "https://images.pokemontcg.io/xyp/XY30_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-009-rare", number: 9, name: "Tortank", type: "water", stage: "stage2", evolvesFrom: "Carabaffe", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["water", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 90 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/2_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-009-holo-rare", number: 9, name: "Tortank", type: "water", stage: "stage2", evolvesFrom: "Carabaffe", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["water", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 90 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/104_hires.png", pack: "kanto" },
+
+  // #10 Chenipan (grass, HP 90, basic)
+  { kind: "pokemon", id: "g1-010-common", number: 10, name: "Chenipan", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/45_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-010-rare", number: 10, name: "Chenipan", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/68_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-010-holo-rare", number: 10, name: "Chenipan", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/172_hires.png", pack: "kanto" },
+
+  // #11 Chrysacier (grass, HP 100, stage1)
+  { kind: "pokemon", id: "g1-011-common", number: 11, name: "Chrysacier", type: "grass", stage: "stage1", evolvesFrom: "Chenipan", hp: 100, weakness: "fire", retreatCost: 2, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base1/54_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-011-rare", number: 11, name: "Chrysacier", type: "grass", stage: "stage1", evolvesFrom: "Chenipan", hp: 100, weakness: "fire", retreatCost: 2, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/81_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-011-holo-rare", number: 11, name: "Chrysacier", type: "grass", stage: "stage1", evolvesFrom: "Chenipan", hp: 100, weakness: "fire", retreatCost: 2, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/neo2/42_hires.png", pack: "kanto" },
+
+  // #12 Papilusion (grass, HP 120, stage2)
+  { kind: "pokemon", id: "g1-012-common", number: 12, name: "Papilusion", type: "grass", stage: "stage2", evolvesFrom: "Chrysacier", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base2/33_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-012-rare", number: 12, name: "Papilusion", type: "grass", stage: "stage2", evolvesFrom: "Chrysacier", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/neo2/19_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-012-holo-rare", number: 12, name: "Papilusion", type: "grass", stage: "stage2", evolvesFrom: "Chrysacier", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh3/1_hires.png", pack: "kanto" },
+
+  // #13 Aspicot (grass, HP 80, basic)
+  { kind: "pokemon", id: "g1-013-common", number: 13, name: "Aspicot", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/69_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-013-rare", number: 13, name: "Aspicot", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/100_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-013-holo-rare", number: 13, name: "Aspicot", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/82_hires.png", pack: "kanto" },
+
+  // #14 Coconfort (grass, HP 90, stage1)
+  { kind: "pokemon", id: "g1-014-common", number: 14, name: "Coconfort", type: "grass", stage: "stage1", evolvesFrom: "Aspicot", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/33_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-014-rare", number: 14, name: "Coconfort", type: "grass", stage: "stage1", evolvesFrom: "Aspicot", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/47_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-014-holo-rare", number: 14, name: "Coconfort", type: "grass", stage: "stage1", evolvesFrom: "Aspicot", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/47_hires.png", pack: "kanto" },
+
+  // #15 Dardargnan (grass, HP 130, stage2)
+  { kind: "pokemon", id: "g1-015-common", number: 15, name: "Dardargnan", type: "grass", stage: "stage2", evolvesFrom: "Coconfort", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/pl4/53_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-015-rare", number: 15, name: "Dardargnan", type: "grass", stage: "stage2", evolvesFrom: "Coconfort", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/17_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-015-holo-rare", number: 15, name: "Dardargnan", type: "grass", stage: "stage2", evolvesFrom: "Coconfort", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh10/1_hires.png", pack: "kanto" },
+
+  // #16 Roucool (colorless, HP 80, basic)
+  { kind: "pokemon", id: "g1-016-common", number: 16, name: "Roucool", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/57_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-016-rare", number: 16, name: "Roucool", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/86_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-016-holo-rare", number: 16, name: "Roucool", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3/207_hires.png", pack: "kanto" },
+
+  // #17 Roucoups (colorless, HP 130, stage1)
+  { kind: "pokemon", id: "g1-017-common", number: 17, name: "Roucoups", type: "colorless", stage: "stage1", evolvesFrom: "Roucool", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/ecard1/88_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-017-rare", number: 17, name: "Roucoups", type: "colorless", stage: "stage1", evolvesFrom: "Roucool", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/22_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-017-holo-rare", number: 17, name: "Roucoups", type: "colorless", stage: "stage1", evolvesFrom: "Roucool", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3/208_hires.png", pack: "kanto" },
+
+  // #18 Roucarnage (colorless, HP 170, stage2)
+  { kind: "pokemon", id: "g1-018-common", number: 18, name: "Roucarnage", type: "colorless", stage: "stage2", evolvesFrom: "Roucoups", hp: 170, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 50 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 90 }], rarity: "common", art: "https://images.pokemontcg.io/si1/2_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-018-rare", number: 18, name: "Roucarnage", type: "colorless", stage: "stage2", evolvesFrom: "Roucoups", hp: 170, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 50 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 90 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/8_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-018-holo-rare", number: 18, name: "Roucarnage", type: "colorless", stage: "stage2", evolvesFrom: "Roucoups", hp: 170, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 50 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 90 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy12/64_hires.png", pack: "kanto" },
+
+  // #19 Rattata (colorless, HP 60, basic)
+  { kind: "pokemon", id: "g1-019-common", number: 19, name: "Rattata", type: "colorless", stage: "basic", hp: 60, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/61_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-019-rare", number: 19, name: "Rattata", type: "colorless", stage: "basic", hp: 60, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/89_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-019-holo-rare", number: 19, name: "Rattata", type: "colorless", stage: "basic", hp: 60, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base5/66_hires.png", pack: "kanto" },
+
+  // #20 Rattatac (colorless, HP 110, stage1)
+  { kind: "pokemon", id: "g1-020-common", number: 20, name: "Rattatac", type: "colorless", stage: "stage1", evolvesFrom: "Rattata", hp: 110, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-020-rare", number: 20, name: "Rattatac", type: "colorless", stage: "stage1", evolvesFrom: "Rattata", hp: 110, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/ex7/17_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-020-holo-rare", number: 20, name: "Rattatac", type: "colorless", stage: "stage1", evolvesFrom: "Rattata", hp: 110, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy9/89_hires.png", pack: "kanto" },
+
+  // #21 Piafabec (colorless, HP 80, basic)
+  { kind: "pokemon", id: "g1-021-common", number: 21, name: "Piafabec", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base2/62_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-021-rare", number: 21, name: "Piafabec", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/92_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-021-holo-rare", number: 21, name: "Piafabec", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/me1/151_hires.png", pack: "kanto" },
+
+  // #22 Rapasdepic (colorless, HP 130, stage1)
+  { kind: "pokemon", id: "g1-022-common", number: 22, name: "Rapasdepic", type: "colorless", stage: "stage1", evolvesFrom: "Piafabec", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 40 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base2/36_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-022-rare", number: 22, name: "Rapasdepic", type: "colorless", stage: "stage1", evolvesFrom: "Piafabec", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 40 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-022-holo-rare", number: 22, name: "Rapasdepic", type: "colorless", stage: "stage1", evolvesFrom: "Piafabec", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 40 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard1/11_hires.png", pack: "kanto" },
+
+  // #23 Abo (grass, HP 70, basic)
+  { kind: "pokemon", id: "g1-023-common", number: 23, name: "Abo", type: "grass", stage: "basic", hp: 70, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/46_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-023-rare", number: 23, name: "Abo", type: "grass", stage: "basic", hp: 70, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/56_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-023-holo-rare", number: 23, name: "Abo", type: "grass", stage: "basic", hp: 70, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/77_hires.png", pack: "kanto" },
+
+  // #24 Arbok (grass, HP 120, stage1)
+  { kind: "pokemon", id: "g1-024-common", number: 24, name: "Arbok", type: "grass", stage: "stage1", evolvesFrom: "Abo", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base3/31_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-024-rare", number: 24, name: "Arbok", type: "grass", stage: "stage1", evolvesFrom: "Abo", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/2_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-024-holo-rare", number: 24, name: "Arbok", type: "grass", stage: "stage1", evolvesFrom: "Abo", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/185_hires.png", pack: "kanto" },
+
+  // #25 Pikachu (lightning, HP 70, basic)
+  { kind: "pokemon", id: "g1-025-common", number: 25, name: "Pikachu", type: "lightning", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/58_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-025-rare", number: 25, name: "Pikachu", type: "lightning", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/ex13/104_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-025-holo-rare", number: 25, name: "Pikachu", type: "lightning", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex12/93_hires.png", pack: "kanto" },
+
+  // #26 Raichu (lightning, HP 120, stage2)
+  { kind: "pokemon", id: "g1-026-common", number: 26, name: "Raichu", type: "lightning", stage: "stage2", evolvesFrom: "Pikachu", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["lightning", "colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "lightning", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/ex13/51_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-026-rare", number: 26, name: "Raichu", type: "lightning", stage: "stage2", evolvesFrom: "Pikachu", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["lightning", "colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "lightning", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/14_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-026-holo-rare", number: 26, name: "Raichu", type: "lightning", stage: "stage2", evolvesFrom: "Pikachu", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["lightning", "colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "lightning", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base5/83_hires.png", pack: "kanto" },
+
+  // #27 Sabelette (fighting, HP 100, basic)
+  { kind: "pokemon", id: "g1-027-common", number: 27, name: "Sabelette", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base1/62_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-027-rare", number: 27, name: "Sabelette", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/91_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-027-holo-rare", number: 27, name: "Sabelette", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/71_hires.png", pack: "kanto" },
+
+  // #28 Sablaireau (fighting, HP 150, stage1)
+  { kind: "pokemon", id: "g1-028-common", number: 28, name: "Sablaireau", type: "fighting", stage: "stage1", evolvesFrom: "Sabelette", hp: 150, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base3/41_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-028-rare", number: 28, name: "Sablaireau", type: "fighting", stage: "stage1", evolvesFrom: "Sabelette", hp: 150, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/23_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-028-holo-rare", number: 28, name: "Sablaireau", type: "fighting", stage: "stage1", evolvesFrom: "Sabelette", hp: 150, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex2/21_hires.png", pack: "kanto" },
+
+  // #29 Nidoran♀ (grass, HP 110, basic)
+  { kind: "pokemon", id: "g1-029-common", number: 29, name: "Nidoran♀", type: "grass", stage: "basic", hp: 110, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base2/57_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-029-rare", number: 29, name: "Nidoran♀", type: "grass", stage: "basic", hp: 110, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/82_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-029-holo-rare", number: 29, name: "Nidoran♀", type: "grass", stage: "basic", hp: 110, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base6/82_hires.png", pack: "kanto" },
+
+  // #30 Nidorina (grass, HP 140, stage1)
+  { kind: "pokemon", id: "g1-030-common", number: 30, name: "Nidorina", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♀", hp: 140, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base2/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-030-rare", number: 30, name: "Nidorina", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♀", hp: 140, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/53_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-030-holo-rare", number: 30, name: "Nidorina", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♀", hp: 140, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/44_hires.png", pack: "kanto" },
+
+  // #31 Nidoqueen (grass, HP 180, stage2)
+  { kind: "pokemon", id: "g1-031-common", number: 31, name: "Nidoqueen", type: "grass", stage: "stage2", evolvesFrom: "Nidorina", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/xy5/68_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-031-rare", number: 31, name: "Nidoqueen", type: "grass", stage: "stage2", evolvesFrom: "Nidorina", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-031-holo-rare", number: 31, name: "Nidoqueen", type: "grass", stage: "stage2", evolvesFrom: "Nidorina", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base2/23_hires.png", pack: "kanto" },
+
+  // #32 Nidoran♂ (grass, HP 90, basic)
+  { kind: "pokemon", id: "g1-032-common", number: 32, name: "Nidoran♂", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/55_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-032-rare", number: 32, name: "Nidoran♂", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/83_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-032-holo-rare", number: 32, name: "Nidoran♂", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base6/83_hires.png", pack: "kanto" },
+
+  // #33 Nidorino (grass, HP 120, stage1)
+  { kind: "pokemon", id: "g1-033-common", number: 33, name: "Nidorino", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♂", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/37_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-033-rare", number: 33, name: "Nidorino", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♂", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/54_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-033-holo-rare", number: 33, name: "Nidorino", type: "grass", stage: "stage1", evolvesFrom: "Nidoran♂", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/45_hires.png", pack: "kanto" },
+
+  // #34 Nidoking (grass, HP 160, stage2)
+  { kind: "pokemon", id: "g1-034-common", number: 34, name: "Nidoking", type: "grass", stage: "stage2", evolvesFrom: "Nidorino", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/base1/11_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-034-rare", number: 34, name: "Nidoking", type: "grass", stage: "stage2", evolvesFrom: "Nidorino", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/11_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-034-holo-rare", number: 34, name: "Nidoking", type: "grass", stage: "stage2", evolvesFrom: "Nidorino", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard2/150_hires.png", pack: "kanto" },
+
+  // #35 Mélofée (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-035-common", number: 35, name: "Mélofée", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/gym2/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-035-rare", number: 35, name: "Mélofée", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/5_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-035-holo-rare", number: 35, name: "Mélofée", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv9/173_hires.png", pack: "kanto" },
+
+  // #36 Mélodelfe (colorless, HP 190, stage2)
+  { kind: "pokemon", id: "g1-036-common", number: 36, name: "Mélodelfe", type: "colorless", stage: "stage2", evolvesFrom: "Mélofée", hp: 190, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 60 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/ex10/36_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-036-rare", number: 36, name: "Mélodelfe", type: "colorless", stage: "stage2", evolvesFrom: "Mélofée", hp: 190, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 60 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/1_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-036-holo-rare", number: 36, name: "Mélodelfe", type: "colorless", stage: "stage2", evolvesFrom: "Mélofée", hp: 190, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 60 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/106_hires.png", pack: "kanto" },
+
+  // #37 Goupix (fire, HP 80, basic)
+  { kind: "pokemon", id: "g1-037-common", number: 37, name: "Goupix", type: "fire", stage: "basic", hp: 80, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/68_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-037-rare", number: 37, name: "Goupix", type: "fire", stage: "basic", hp: 80, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/pl1/SH6_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-037-holo-rare", number: 37, name: "Goupix", type: "fire", stage: "basic", hp: 80, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sma/SV8_hires.png", pack: "kanto" },
+
+  // #38 Feunard (fire, HP 150, stage1)
+  { kind: "pokemon", id: "g1-038-common", number: 38, name: "Feunard", type: "fire", stage: "stage1", evolvesFrom: "Goupix", hp: 150, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/neo4/50_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-038-rare", number: 38, name: "Feunard", type: "fire", stage: "stage1", evolvesFrom: "Goupix", hp: 150, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/12_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-038-holo-rare", number: 38, name: "Feunard", type: "fire", stage: "stage1", evolvesFrom: "Goupix", hp: 150, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex5/96_hires.png", pack: "kanto" },
+
+  // #39 Rondoudou (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-039-common", number: 39, name: "Rondoudou", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/54_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-039-rare", number: 39, name: "Rondoudou", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/basep/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-039-holo-rare", number: 39, name: "Rondoudou", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm12/165_hires.png", pack: "kanto" },
+
+  // #40 Grodoudou (colorless, HP 220, stage2)
+  { kind: "pokemon", id: "g1-040-common", number: 40, name: "Grodoudou", type: "colorless", stage: "stage2", evolvesFrom: "Rondoudou", hp: 220, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 60 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 120 }], rarity: "common", art: "https://images.pokemontcg.io/neo4/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-040-rare", number: 40, name: "Grodoudou", type: "colorless", stage: "stage2", evolvesFrom: "Rondoudou", hp: 220, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 60 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 120 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/16_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-040-holo-rare", number: 40, name: "Grodoudou", type: "colorless", stage: "stage2", evolvesFrom: "Rondoudou", hp: 220, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 60 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 120 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex5/101_hires.png", pack: "kanto" },
+
+  // #41 Nosferapti (grass, HP 80, basic)
+  { kind: "pokemon", id: "g1-041-common", number: 41, name: "Nosferapti", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/57_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-041-rare", number: 41, name: "Nosferapti", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/24_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-041-holo-rare", number: 41, name: "Nosferapti", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base5/70_hires.png", pack: "kanto" },
+
+  // #42 Nosferalto (grass, HP 150, stage1)
+  { kind: "pokemon", id: "g1-042-common", number: 42, name: "Nosferalto", type: "grass", stage: "stage1", evolvesFrom: "Nosferapti", hp: 150, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base3/34_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-042-rare", number: 42, name: "Nosferalto", type: "grass", stage: "stage1", evolvesFrom: "Nosferapti", hp: 150, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-042-holo-rare", number: 42, name: "Nosferalto", type: "grass", stage: "stage1", evolvesFrom: "Nosferapti", hp: 150, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base5/24_hires.png", pack: "kanto" },
+
+  // #43 Mystherbe (grass, HP 90, basic)
+  { kind: "pokemon", id: "g1-043-common", number: 43, name: "Mystherbe", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base2/58_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-043-rare", number: 43, name: "Mystherbe", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/63_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-043-holo-rare", number: 43, name: "Mystherbe", type: "grass", stage: "basic", hp: 90, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4pt5/92_hires.png", pack: "kanto" },
+
+  // #44 Ortide (grass, HP 120, stage1)
+  { kind: "pokemon", id: "g1-044-common", number: 44, name: "Ortide", type: "grass", stage: "stage1", evolvesFrom: "Mystherbe", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base2/37_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-044-rare", number: 44, name: "Ortide", type: "grass", stage: "stage1", evolvesFrom: "Mystherbe", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/36_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-044-holo-rare", number: 44, name: "Ortide", type: "grass", stage: "stage1", evolvesFrom: "Mystherbe", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3/198_hires.png", pack: "kanto" },
+
+  // #45 Rafflesia (grass, HP 150, stage2)
+  { kind: "pokemon", id: "g1-045-common", number: 45, name: "Rafflesia", type: "grass", stage: "stage2", evolvesFrom: "Ortide", hp: 150, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 50 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/si1/17_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-045-rare", number: 45, name: "Rafflesia", type: "grass", stage: "stage2", evolvesFrom: "Ortide", hp: 150, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 50 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/15_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-045-holo-rare", number: 45, name: "Rafflesia", type: "grass", stage: "stage2", evolvesFrom: "Ortide", hp: 150, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 50 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex5/100_hires.png", pack: "kanto" },
+
+  // #46 Paras (grass, HP 70, basic)
+  { kind: "pokemon", id: "g1-046-common", number: 46, name: "Paras", type: "grass", stage: "basic", hp: 70, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base2/59_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-046-rare", number: 46, name: "Paras", type: "grass", stage: "basic", hp: 70, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/swsh12pt5gg/GG32_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-046-holo-rare", number: 46, name: "Paras", type: "grass", stage: "basic", hp: 70, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base4/85_hires.png", pack: "kanto" },
+
+  // #47 Parasect (grass, HP 120, stage1)
+  { kind: "pokemon", id: "g1-047-common", number: 47, name: "Parasect", type: "grass", stage: "stage1", evolvesFrom: "Paras", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base2/41_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-047-rare", number: 47, name: "Parasect", type: "grass", stage: "stage1", evolvesFrom: "Paras", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard2/27_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-047-holo-rare", number: 47, name: "Parasect", type: "grass", stage: "stage1", evolvesFrom: "Paras", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 30 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/pl3/38_hires.png", pack: "kanto" },
+
+  // #48 Mimitoss (grass, HP 120, basic)
+  { kind: "pokemon", id: "g1-048-common", number: 48, name: "Mimitoss", type: "grass", stage: "basic", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/63_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-048-rare", number: 48, name: "Mimitoss", type: "grass", stage: "basic", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/97_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-048-holo-rare", number: 48, name: "Mimitoss", type: "grass", stage: "basic", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/96_hires.png", pack: "kanto" },
+
+  // #49 Aéromite (grass, HP 140, stage1)
+  { kind: "pokemon", id: "g1-049-common", number: 49, name: "Aéromite", type: "grass", stage: "stage1", evolvesFrom: "Mimitoss", hp: 140, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/neo4/53_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-049-rare", number: 49, name: "Aéromite", type: "grass", stage: "stage1", evolvesFrom: "Mimitoss", hp: 140, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/13_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-049-holo-rare", number: 49, name: "Aéromite", type: "grass", stage: "stage1", evolvesFrom: "Mimitoss", hp: 140, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm10/12_hires.png", pack: "kanto" },
+
+  // #50 Taupiqueur (fighting, HP 30, basic)
+  { kind: "pokemon", id: "g1-050-common", number: 50, name: "Taupiqueur", type: "fighting", stage: "basic", hp: 30, weakness: "psychic", retreatCost: 1, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }], rarity: "common", art: "https://images.pokemontcg.io/base1/47_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-050-rare", number: 50, name: "Taupiqueur", type: "fighting", stage: "basic", hp: 30, weakness: "psychic", retreatCost: 1, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/71_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-050-holo-rare", number: 50, name: "Taupiqueur", type: "fighting", stage: "basic", hp: 30, weakness: "psychic", retreatCost: 1, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base5/52_hires.png", pack: "kanto" },
+
+  // #51 Triopikeur (fighting, HP 70, stage1)
+  { kind: "pokemon", id: "g1-051-common", number: 51, name: "Triopikeur", type: "fighting", stage: "stage1", evolvesFrom: "Taupiqueur", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 20 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/ecard3/52_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-051-rare", number: 51, name: "Triopikeur", type: "fighting", stage: "stage1", evolvesFrom: "Taupiqueur", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 20 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/19_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-051-holo-rare", number: 51, name: "Triopikeur", type: "fighting", stage: "stage1", evolvesFrom: "Taupiqueur", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 20 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv8/208_hires.png", pack: "kanto" },
+
+  // #52 Miaouss (colorless, HP 80, basic)
+  { kind: "pokemon", id: "g1-052-common", number: 52, name: "Miaouss", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base2/56_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-052-rare", number: 52, name: "Miaouss", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.scrydex.com/pokemon/me3-62/large", pack: "kanto" },
+  { kind: "pokemon", id: "g1-052-holo-rare", number: 52, name: "Miaouss", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/bw3/102_hires.png", pack: "kanto" },
+
+  // #53 Persian (colorless, HP 130, stage1)
+  { kind: "pokemon", id: "g1-053-common", number: 53, name: "Persian", type: "colorless", stage: "stage1", evolvesFrom: "Miaouss", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base2/42_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-053-rare", number: 53, name: "Persian", type: "colorless", stage: "stage1", evolvesFrom: "Miaouss", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/gym2/8_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-053-holo-rare", number: 53, name: "Persian", type: "colorless", stage: "stage1", evolvesFrom: "Miaouss", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex10/116_hires.png", pack: "kanto" },
+
+  // #54 Psykokwak (water, HP 100, basic)
+  { kind: "pokemon", id: "g1-054-common", number: 54, name: "Psykokwak", type: "water", stage: "basic", hp: 100, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base3/53_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-054-rare", number: 54, name: "Psykokwak", type: "water", stage: "basic", hp: 100, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/basep/20_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-054-holo-rare", number: 54, name: "Psykokwak", type: "water", stage: "basic", hp: 100, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm11/35_hires.png", pack: "kanto" },
+
+  // #55 Akwakwak (water, HP 160, stage1)
+  { kind: "pokemon", id: "g1-055-common", number: 55, name: "Akwakwak", type: "water", stage: "stage1", evolvesFrom: "Psykokwak", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/base3/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-055-rare", number: 55, name: "Akwakwak", type: "water", stage: "stage1", evolvesFrom: "Psykokwak", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/gym2/12_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-055-holo-rare", number: 55, name: "Akwakwak", type: "water", stage: "stage1", evolvesFrom: "Psykokwak", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy9/18_hires.png", pack: "kanto" },
+
+  // #56 Férosinge (fighting, HP 80, basic)
+  { kind: "pokemon", id: "g1-056-common", number: 56, name: "Férosinge", type: "fighting", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base2/55_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-056-rare", number: 56, name: "Férosinge", type: "fighting", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/61_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-056-holo-rare", number: 56, name: "Férosinge", type: "fighting", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4pt5/169_hires.png", pack: "kanto" },
+
+  // #57 Colossinge (fighting, HP 130, stage1)
+  { kind: "pokemon", id: "g1-057-common", number: 57, name: "Colossinge", type: "fighting", stage: "stage1", evolvesFrom: "Férosinge", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base2/43_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-057-rare", number: 57, name: "Colossinge", type: "fighting", stage: "stage1", evolvesFrom: "Férosinge", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard2/29_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-057-holo-rare", number: 57, name: "Colossinge", type: "fighting", stage: "stage1", evolvesFrom: "Férosinge", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4pt5/170_hires.png", pack: "kanto" },
+
+  // #58 Caninos (fire, HP 110, basic)
+  { kind: "pokemon", id: "g1-058-common", number: 58, name: "Caninos", type: "fire", stage: "basic", hp: 110, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/28_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-058-rare", number: 58, name: "Caninos", type: "fire", stage: "basic", hp: 110, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/42_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-058-holo-rare", number: 58, name: "Caninos", type: "fire", stage: "basic", hp: 110, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv6/181_hires.png", pack: "kanto" },
+
+  // #59 Arcanin (fire, HP 180, stage1)
+  { kind: "pokemon", id: "g1-059-common", number: 59, name: "Arcanin", type: "fire", stage: "stage1", evolvesFrom: "Caninos", hp: 180, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 70 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 130 }], rarity: "common", art: "https://images.pokemontcg.io/base1/23_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-059-rare", number: 59, name: "Arcanin", type: "fire", stage: "stage1", evolvesFrom: "Caninos", hp: 180, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 70 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 130 }], rarity: "rare", art: "https://images.pokemontcg.io/gym2/1_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-059-holo-rare", number: 59, name: "Arcanin", type: "fire", stage: "stage1", evolvesFrom: "Caninos", hp: 180, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 70 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 130 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex12/83_hires.png", pack: "kanto" },
+
+  // #60 Ptitard (water, HP 80, basic)
+  { kind: "pokemon", id: "g1-060-common", number: 60, name: "Ptitard", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/59_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-060-rare", number: 60, name: "Ptitard", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/88_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-060-holo-rare", number: 60, name: "Ptitard", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/87_hires.png", pack: "kanto" },
+
+  // #61 Têtarte (water, HP 130, stage1)
+  { kind: "pokemon", id: "g1-061-common", number: 61, name: "Têtarte", type: "water", stage: "stage1", evolvesFrom: "Ptitard", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/38_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-061-rare", number: 61, name: "Têtarte", type: "water", stage: "stage1", evolvesFrom: "Ptitard", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/57_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-061-holo-rare", number: 61, name: "Têtarte", type: "water", stage: "stage1", evolvesFrom: "Ptitard", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/176_hires.png", pack: "kanto" },
+
+  // #62 Tartard (water, HP 180, stage2)
+  { kind: "pokemon", id: "g1-062-common", number: 62, name: "Tartard", type: "water", stage: "stage2", evolvesFrom: "Têtarte", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["water", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/sv3pt5/62_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-062-rare", number: 62, name: "Tartard", type: "water", stage: "stage2", evolvesFrom: "Têtarte", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["water", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/13_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-062-holo-rare", number: 62, name: "Tartard", type: "water", stage: "stage2", evolvesFrom: "Têtarte", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["water", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base4/15_hires.png", pack: "kanto" },
+
+  // #63 Abra (psychic, HP 50, basic)
+  { kind: "pokemon", id: "g1-063-common", number: 63, name: "Abra", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }], rarity: "common", art: "https://images.pokemontcg.io/base1/43_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-063-rare", number: 63, name: "Abra", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }], rarity: "rare", art: "https://images.pokemontcg.io/basep/19_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-063-holo-rare", number: 63, name: "Abra", type: "psychic", stage: "basic", hp: 50, weakness: "psychic", retreatCost: 1, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4pt5/148_hires.png", pack: "kanto" },
+
+  // #64 Kadabra (psychic, HP 80, stage1)
+  { kind: "pokemon", id: "g1-064-common", number: 64, name: "Kadabra", type: "psychic", stage: "stage1", evolvesFrom: "Abra", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 20 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base1/32_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-064-rare", number: 64, name: "Kadabra", type: "psychic", stage: "stage1", evolvesFrom: "Abra", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 20 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/46_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-064-holo-rare", number: 64, name: "Kadabra", type: "psychic", stage: "stage1", evolvesFrom: "Abra", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 20 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4pt5/149_hires.png", pack: "kanto" },
+
+  // #65 Alakazam (psychic, HP 110, stage2)
+  { kind: "pokemon", id: "g1-065-common", number: 65, name: "Alakazam", type: "psychic", stage: "stage2", evolvesFrom: "Kadabra", hp: 110, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["psychic", "colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/pl2/38_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-065-rare", number: 65, name: "Alakazam", type: "psychic", stage: "stage2", evolvesFrom: "Kadabra", hp: 110, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["psychic", "colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/1_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-065-holo-rare", number: 65, name: "Alakazam", type: "psychic", stage: "stage2", evolvesFrom: "Kadabra", hp: 110, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["psychic", "colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy10/25_hires.png", pack: "kanto" },
+
+  // #66 Machoc (fighting, HP 130, basic)
+  { kind: "pokemon", id: "g1-066-common", number: 66, name: "Machoc", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/52_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-066-rare", number: 66, name: "Machoc", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/78_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-066-holo-rare", number: 66, name: "Machoc", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base5/59_hires.png", pack: "kanto" },
+
+  // #67 Machopeur (fighting, HP 160, stage1)
+  { kind: "pokemon", id: "g1-067-common", number: 67, name: "Machopeur", type: "fighting", stage: "stage1", evolvesFrom: "Machoc", hp: 160, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base1/34_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-067-rare", number: 67, name: "Machopeur", type: "fighting", stage: "stage1", evolvesFrom: "Machoc", hp: 160, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/49_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-067-holo-rare", number: 67, name: "Machopeur", type: "fighting", stage: "stage1", evolvesFrom: "Machoc", hp: 160, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/177_hires.png", pack: "kanto" },
+
+  // #68 Mackogneur (fighting, HP 180, stage2)
+  { kind: "pokemon", id: "g1-068-common", number: 68, name: "Mackogneur", type: "fighting", stage: "stage2", evolvesFrom: "Machopeur", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["fighting", "colorless"], damage: 70 }, { name: "Frappe Tellurique", cost: ["fighting", "fighting", "colorless"], damage: 120 }], rarity: "common", art: "https://images.pokemontcg.io/basep/43_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-068-rare", number: 68, name: "Mackogneur", type: "fighting", stage: "stage2", evolvesFrom: "Machopeur", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["fighting", "colorless"], damage: 70 }, { name: "Frappe Tellurique", cost: ["fighting", "fighting", "colorless"], damage: 120 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/8_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-068-holo-rare", number: 68, name: "Mackogneur", type: "fighting", stage: "stage2", evolvesFrom: "Machopeur", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["fighting", "colorless"], damage: 70 }, { name: "Frappe Tellurique", cost: ["fighting", "fighting", "colorless"], damage: 120 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/hgss4/95_hires.png", pack: "kanto" },
+
+  // #69 Chétiflor (grass, HP 100, basic)
+  { kind: "pokemon", id: "g1-069-common", number: 69, name: "Chétiflor", type: "grass", stage: "basic", hp: 100, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/49_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-069-rare", number: 69, name: "Chétiflor", type: "grass", stage: "basic", hp: 100, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/66_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-069-holo-rare", number: 69, name: "Chétiflor", type: "grass", stage: "basic", hp: 100, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/75_hires.png", pack: "kanto" },
+
+  // #70 Boustiflor (grass, HP 130, stage1)
+  { kind: "pokemon", id: "g1-070-common", number: 70, name: "Boustiflor", type: "grass", stage: "stage1", evolvesFrom: "Chétiflor", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base2/48_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-070-rare", number: 70, name: "Boustiflor", type: "grass", stage: "stage1", evolvesFrom: "Chétiflor", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/64_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-070-holo-rare", number: 70, name: "Boustiflor", type: "grass", stage: "stage1", evolvesFrom: "Chétiflor", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/48_hires.png", pack: "kanto" },
+
+  // #71 Empiflor (grass, HP 160, stage2)
+  { kind: "pokemon", id: "g1-071-common", number: 71, name: "Empiflor", type: "grass", stage: "stage2", evolvesFrom: "Boustiflor", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/sv3pt5/71_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-071-rare", number: 71, name: "Empiflor", type: "grass", stage: "stage2", evolvesFrom: "Boustiflor", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/14_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-071-holo-rare", number: 71, name: "Empiflor", type: "grass", stage: "stage2", evolvesFrom: "Boustiflor", hp: 160, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["grass", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "grass", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base2/30_hires.png", pack: "kanto" },
+
+  // #72 Tentacool (water, HP 80, basic)
+  { kind: "pokemon", id: "g1-072-common", number: 72, name: "Tentacool", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/56_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-072-rare", number: 72, name: "Tentacool", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/32_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-072-holo-rare", number: 72, name: "Tentacool", type: "water", stage: "basic", hp: 80, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/57_hires.png", pack: "kanto" },
+
+  // #73 Tentacruel (water, HP 160, stage1)
+  { kind: "pokemon", id: "g1-073-common", number: 73, name: "Tentacruel", type: "water", stage: "stage1", evolvesFrom: "Tentacool", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base3/44_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-073-rare", number: 73, name: "Tentacruel", type: "water", stage: "stage1", evolvesFrom: "Tentacool", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/10_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-073-holo-rare", number: 73, name: "Tentacruel", type: "water", stage: "stage1", evolvesFrom: "Tentacool", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard2/H26_hires.png", pack: "kanto" },
+
+  // #74 Racaillou (fighting, HP 80, basic)
+  { kind: "pokemon", id: "g1-074-common", number: 74, name: "Racaillou", type: "fighting", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/47_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-074-rare", number: 74, name: "Racaillou", type: "fighting", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/38_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-074-holo-rare", number: 74, name: "Racaillou", type: "fighting", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/66_hires.png", pack: "kanto" },
+
+  // #75 Gravalanch (fighting, HP 110, stage1)
+  { kind: "pokemon", id: "g1-075-common", number: 75, name: "Gravalanch", type: "fighting", stage: "stage1", evolvesFrom: "Racaillou", hp: 110, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 30 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base3/37_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-075-rare", number: 75, name: "Gravalanch", type: "fighting", stage: "stage1", evolvesFrom: "Racaillou", hp: 110, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 30 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-075-holo-rare", number: 75, name: "Gravalanch", type: "fighting", stage: "stage1", evolvesFrom: "Racaillou", hp: 110, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 30 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/34_hires.png", pack: "kanto" },
+
+  // #76 Grolem (fighting, HP 160, stage2)
+  { kind: "pokemon", id: "g1-076-common", number: 76, name: "Grolem", type: "fighting", stage: "stage2", evolvesFrom: "Gravalanch", hp: 160, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["fighting", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "fighting", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/base3/36_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-076-rare", number: 76, name: "Grolem", type: "fighting", stage: "stage2", evolvesFrom: "Gravalanch", hp: 160, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["fighting", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "fighting", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/20_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-076-holo-rare", number: 76, name: "Grolem", type: "fighting", stage: "stage2", evolvesFrom: "Gravalanch", hp: 160, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["fighting", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "fighting", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard3/148_hires.png", pack: "kanto" },
+
+  // #77 Ponyta (fire, HP 100, basic)
+  { kind: "pokemon", id: "g1-077-common", number: 77, name: "Ponyta", type: "fire", stage: "basic", hp: 100, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/60_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-077-rare", number: 77, name: "Ponyta", type: "fire", stage: "basic", hp: 100, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/pl4/SH11_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-077-holo-rare", number: 77, name: "Ponyta", type: "fire", stage: "basic", hp: 100, weakness: "water", retreatCost: 2, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 10 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh45sv/SV047_hires.png", pack: "kanto" },
+
+  // #78 Galopa (fire, HP 130, stage1)
+  { kind: "pokemon", id: "g1-078-common", number: 78, name: "Galopa", type: "fire", stage: "stage1", evolvesFrom: "Ponyta", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base2/44_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-078-rare", number: 78, name: "Galopa", type: "fire", stage: "stage1", evolvesFrom: "Ponyta", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard1/26_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-078-holo-rare", number: 78, name: "Galopa", type: "fire", stage: "stage1", evolvesFrom: "Ponyta", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh45sv/SV048_hires.png", pack: "kanto" },
+
+  // #79 Ramoloss (water, HP 130, basic)
+  { kind: "pokemon", id: "g1-079-common", number: 79, name: "Ramoloss", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base3/55_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-079-rare", number: 79, name: "Ramoloss", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/67_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-079-holo-rare", number: 79, name: "Ramoloss", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm11/35_hires.png", pack: "kanto" },
+
+  // #80 Flagadoss (water, HP 180, stage1)
+  { kind: "pokemon", id: "g1-080-common", number: 80, name: "Flagadoss", type: "water", stage: "stage1", evolvesFrom: "Ramoloss", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/base3/43_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-080-rare", number: 80, name: "Flagadoss", type: "water", stage: "stage1", evolvesFrom: "Ramoloss", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/12_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-080-holo-rare", number: 80, name: "Flagadoss", type: "water", stage: "stage1", evolvesFrom: "Ramoloss", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy12/26_hires.png", pack: "kanto" },
+
+  // #81 Magnéti (lightning, HP 50, basic)
+  { kind: "pokemon", id: "g1-081-common", number: 81, name: "Magnéti", type: "lightning", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }], rarity: "common", art: "https://images.pokemontcg.io/base1/53_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-081-rare", number: 81, name: "Magnéti", type: "lightning", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }], rarity: "rare", art: "https://images.pokemontcg.io/neo2/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-081-holo-rare", number: 81, name: "Magnéti", type: "lightning", stage: "basic", hp: 50, weakness: "fighting", retreatCost: 1, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sma/SV27_hires.png", pack: "kanto" },
+
+  // #82 Magnéton (lightning, HP 100, stage1)
+  { kind: "pokemon", id: "g1-082-common", number: 82, name: "Magnéton", type: "lightning", stage: "stage1", evolvesFrom: "Magnéti", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 30 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/ex3/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-082-rare", number: 82, name: "Magnéton", type: "lightning", stage: "stage1", evolvesFrom: "Magnéti", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 30 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/9_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-082-holo-rare", number: 82, name: "Magnéton", type: "lightning", stage: "stage1", evolvesFrom: "Magnéti", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 30 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sma/SV28_hires.png", pack: "kanto" },
+
+  // #83 Canarticho (colorless, HP 100, basic)
+  { kind: "pokemon", id: "g1-083-common", number: 83, name: "Canarticho", type: "colorless", stage: "basic", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/27_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-083-rare", number: 83, name: "Canarticho", type: "colorless", stage: "basic", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/ex6/23_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-083-holo-rare", number: 83, name: "Canarticho", type: "colorless", stage: "basic", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex9/107_hires.png", pack: "kanto" },
+
+  // #84 Doduo (colorless, HP 70, basic)
+  { kind: "pokemon", id: "g1-084-common", number: 84, name: "Doduo", type: "colorless", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/48_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-084-rare", number: 84, name: "Doduo", type: "colorless", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/72_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-084-holo-rare", number: 84, name: "Doduo", type: "colorless", stage: "basic", hp: 70, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy12/112_hires.png", pack: "kanto" },
+
+  // #85 Dodrio (colorless, HP 120, stage1)
+  { kind: "pokemon", id: "g1-085-common", number: 85, name: "Dodrio", type: "colorless", stage: "stage1", evolvesFrom: "Doduo", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 40 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base2/34_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-085-rare", number: 85, name: "Dodrio", type: "colorless", stage: "stage1", evolvesFrom: "Doduo", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 40 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/ex6/21_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-085-holo-rare", number: 85, name: "Dodrio", type: "colorless", stage: "stage1", evolvesFrom: "Doduo", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 40 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh8/201_hires.png", pack: "kanto" },
+
+  // #86 Otaria (water, HP 130, basic)
+  { kind: "pokemon", id: "g1-086-common", number: 86, name: "Otaria", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/41_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-086-rare", number: 86, name: "Otaria", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/61_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-086-holo-rare", number: 86, name: "Otaria", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym1/88_hires.png", pack: "kanto" },
+
+  // #87 Lamantine (water, HP 180, stage1)
+  { kind: "pokemon", id: "g1-087-common", number: 87, name: "Lamantine", type: "water", stage: "stage1", evolvesFrom: "Otaria", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 90 }], rarity: "common", art: "https://images.pokemontcg.io/base1/25_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-087-rare", number: 87, name: "Lamantine", type: "water", stage: "stage1", evolvesFrom: "Otaria", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 90 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard3/H6_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-087-holo-rare", number: 87, name: "Lamantine", type: "water", stage: "stage1", evolvesFrom: "Otaria", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 90 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/me2/97_hires.png", pack: "kanto" },
+
+  // #88 Tadmorv (grass, HP 130, basic)
+  { kind: "pokemon", id: "g1-088-common", number: 88, name: "Tadmorv", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base3/48_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-088-rare", number: 88, name: "Tadmorv", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/57_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-088-holo-rare", number: 88, name: "Tadmorv", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/gym2/78_hires.png", pack: "kanto" },
+
+  // #89 Grotadmorv (grass, HP 180, stage1)
+  { kind: "pokemon", id: "g1-089-common", number: 89, name: "Grotadmorv", type: "grass", stage: "stage1", evolvesFrom: "Tadmorv", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/base5/41_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-089-rare", number: 89, name: "Grotadmorv", type: "grass", stage: "stage1", evolvesFrom: "Tadmorv", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/13_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-089-holo-rare", number: 89, name: "Grotadmorv", type: "grass", stage: "stage1", evolvesFrom: "Tadmorv", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 60 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex3/96_hires.png", pack: "kanto" },
+
+  // #90 Kokiyas (water, HP 60, basic)
+  { kind: "pokemon", id: "g1-090-common", number: 90, name: "Kokiyas", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/54_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-090-rare", number: 90, name: "Kokiyas", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/89_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-090-holo-rare", number: 90, name: "Kokiyas", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard1/129_hires.png", pack: "kanto" },
+
+  // #91 Crustabri (water, HP 100, stage1)
+  { kind: "pokemon", id: "g1-091-common", number: 91, name: "Crustabri", type: "water", stage: "stage1", evolvesFrom: "Kokiyas", hp: 100, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base3/32_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-091-rare", number: 91, name: "Crustabri", type: "water", stage: "stage1", evolvesFrom: "Kokiyas", hp: 100, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/29_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-091-holo-rare", number: 91, name: "Crustabri", type: "water", stage: "stage1", evolvesFrom: "Kokiyas", hp: 100, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard1/8_hires.png", pack: "kanto" },
+
+  // #92 Fantominus (psychic, HP 60, basic)
+  { kind: "pokemon", id: "g1-092-common", number: 92, name: "Fantominus", type: "psychic", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/50_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-092-rare", number: 92, name: "Fantominus", type: "psychic", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/33_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-092-holo-rare", number: 92, name: "Fantominus", type: "psychic", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv5/177_hires.png", pack: "kanto" },
+
+  // #93 Spectrum (psychic, HP 90, stage1)
+  { kind: "pokemon", id: "g1-093-common", number: 93, name: "Spectrum", type: "psychic", stage: "stage1", evolvesFrom: "Fantominus", hp: 90, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 30 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/29_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-093-rare", number: 93, name: "Spectrum", type: "psychic", stage: "stage1", evolvesFrom: "Fantominus", hp: 90, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 30 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/6_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-093-holo-rare", number: 93, name: "Spectrum", type: "psychic", stage: "stage1", evolvesFrom: "Fantominus", hp: 90, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 30 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base3/21_hires.png", pack: "kanto" },
+
+  // #94 Ectoplasma (psychic, HP 120, stage2)
+  { kind: "pokemon", id: "g1-094-common", number: 94, name: "Ectoplasma", type: "psychic", stage: "stage2", evolvesFrom: "Spectrum", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["psychic", "colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/pl2/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-094-rare", number: 94, name: "Ectoplasma", type: "psychic", stage: "stage2", evolvesFrom: "Spectrum", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["psychic", "colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/5_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-094-holo-rare", number: 94, name: "Ectoplasma", type: "psychic", stage: "stage2", evolvesFrom: "Spectrum", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["psychic", "colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/108_hires.png", pack: "kanto" },
+
+  // #95 Onix (fighting, HP 70, basic)
+  { kind: "pokemon", id: "g1-095-common", number: 95, name: "Onix", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/56_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-095-rare", number: 95, name: "Onix", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/21_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-095-holo-rare", number: 95, name: "Onix", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm115/36_hires.png", pack: "kanto" },
+
+  // #96 Soporifik (psychic, HP 120, basic)
+  { kind: "pokemon", id: "g1-096-common", number: 96, name: "Soporifik", type: "psychic", stage: "basic", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base1/49_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-096-rare", number: 96, name: "Soporifik", type: "psychic", stage: "basic", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/73_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-096-holo-rare", number: 96, name: "Soporifik", type: "psychic", stage: "basic", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv1/210_hires.png", pack: "kanto" },
+
+  // #97 Hypnomade (psychic, HP 170, stage1)
+  { kind: "pokemon", id: "g1-097-common", number: 97, name: "Hypnomade", type: "psychic", stage: "stage1", evolvesFrom: "Soporifik", hp: 170, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 50 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 90 }], rarity: "common", art: "https://images.pokemontcg.io/gym2/56_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-097-rare", number: 97, name: "Hypnomade", type: "psychic", stage: "stage1", evolvesFrom: "Soporifik", hp: 170, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 50 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 90 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/8_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-097-holo-rare", number: 97, name: "Hypnomade", type: "psychic", stage: "stage1", evolvesFrom: "Soporifik", hp: 170, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Psyko", cost: ["colorless", "colorless"], damage: 50 }, { name: "Souffle Psy", cost: ["psychic", "colorless", "colorless"], damage: 90 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base3/23_hires.png", pack: "kanto" },
+
+  // #98 Krabby (water, HP 60, basic)
+  { kind: "pokemon", id: "g1-098-common", number: 98, name: "Krabby", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/51_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-098-rare", number: 98, name: "Krabby", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard1/115_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-098-holo-rare", number: 98, name: "Krabby", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/66_hires.png", pack: "kanto" },
+
+  // #99 Krabboss (water, HP 110, stage1)
+  { kind: "pokemon", id: "g1-099-common", number: 99, name: "Krabboss", type: "water", stage: "stage1", evolvesFrom: "Krabby", hp: 110, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 40 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base3/38_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-099-rare", number: 99, name: "Krabboss", type: "water", stage: "stage1", evolvesFrom: "Krabby", hp: 110, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 40 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard1/15_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-099-holo-rare", number: 99, name: "Krabboss", type: "water", stage: "stage1", evolvesFrom: "Krabby", hp: 110, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 40 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh9/28_hires.png", pack: "kanto" },
+
+  // #100 Voltorbe (lightning, HP 80, basic)
+  { kind: "pokemon", id: "g1-100-common", number: 100, name: "Voltorbe", type: "lightning", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/67_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-100-rare", number: 100, name: "Voltorbe", type: "lightning", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/dp7/SH3_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-100-holo-rare", number: 100, name: "Voltorbe", type: "lightning", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 10 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sma/SV13_hires.png", pack: "kanto" },
+
+  // #101 Électrode (lightning, HP 120, stage1)
+  { kind: "pokemon", id: "g1-101-common", number: 101, name: "Électrode", type: "lightning", stage: "stage1", evolvesFrom: "Voltorbe", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 30 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base5/34_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-101-rare", number: 101, name: "Électrode", type: "lightning", stage: "stage1", evolvesFrom: "Voltorbe", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 30 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/21_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-101-holo-rare", number: 101, name: "Électrode", type: "lightning", stage: "stage1", evolvesFrom: "Voltorbe", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 30 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/107_hires.png", pack: "kanto" },
+
+  // #102 Noeunoeuf (grass, HP 120, basic)
+  { kind: "pokemon", id: "g1-102-common", number: 102, name: "Noeunoeuf", type: "grass", stage: "basic", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/52_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-102-rare", number: 102, name: "Noeunoeuf", type: "grass", stage: "basic", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/74_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-102-holo-rare", number: 102, name: "Noeunoeuf", type: "grass", stage: "basic", hp: 120, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/bw10/102_hires.png", pack: "kanto" },
+
+  // #103 Noadkoko (grass, HP 180, stage1)
+  { kind: "pokemon", id: "g1-103-common", number: 103, name: "Noadkoko", type: "grass", stage: "stage1", evolvesFrom: "Noeunoeuf", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 70 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 140 }], rarity: "common", art: "https://images.pokemontcg.io/base2/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-103-rare", number: 103, name: "Noadkoko", type: "grass", stage: "stage1", evolvesFrom: "Noeunoeuf", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 70 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 140 }], rarity: "rare", art: "https://images.pokemontcg.io/base6/23_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-103-holo-rare", number: 103, name: "Noadkoko", type: "grass", stage: "stage1", evolvesFrom: "Noeunoeuf", hp: 180, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 70 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 140 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy12/109_hires.png", pack: "kanto" },
+
+  // #104 Osselait (fighting, HP 100, basic)
+  { kind: "pokemon", id: "g1-104-common", number: 104, name: "Osselait", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base2/50_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-104-rare", number: 104, name: "Osselait", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/70_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-104-holo-rare", number: 104, name: "Osselait", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard1/103_hires.png", pack: "kanto" },
+
+  // #105 Ossatueur (fighting, HP 120, stage1)
+  { kind: "pokemon", id: "g1-105-common", number: 105, name: "Ossatueur", type: "fighting", stage: "stage1", evolvesFrom: "Osselait", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 30 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/39_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-105-rare", number: 105, name: "Ossatueur", type: "fighting", stage: "stage1", evolvesFrom: "Osselait", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 30 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/ex6/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-105-holo-rare", number: 105, name: "Ossatueur", type: "fighting", stage: "stage1", evolvesFrom: "Osselait", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 30 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy8/79_hires.png", pack: "kanto" },
+
+  // #106 Kicklee (fighting, HP 100, basic)
+  { kind: "pokemon", id: "g1-106-common", number: 106, name: "Kicklee", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/neo4/42_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-106-rare", number: 106, name: "Kicklee", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-106-holo-rare", number: 106, name: "Kicklee", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base3/22_hires.png", pack: "kanto" },
+
+  // #107 Tygnon (fighting, HP 100, basic)
+  { kind: "pokemon", id: "g1-107-common", number: 107, name: "Tygnon", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/neo4/69_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-107-rare", number: 107, name: "Tygnon", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/7_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-107-holo-rare", number: 107, name: "Tygnon", type: "fighting", stage: "basic", hp: 100, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/98_hires.png", pack: "kanto" },
+
+  // #108 Excelangue (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-108-common", number: 108, name: "Excelangue", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/38_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-108-rare", number: 108, name: "Excelangue", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/ex15/19_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-108-holo-rare", number: 108, name: "Excelangue", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv5/180_hires.png", pack: "kanto" },
+
+  // #109 Smogo (grass, HP 80, basic)
+  { kind: "pokemon", id: "g1-109-common", number: 109, name: "Smogo", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/51_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-109-rare", number: 109, name: "Smogo", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/58_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-109-holo-rare", number: 109, name: "Smogo", type: "grass", stage: "basic", hp: 80, weakness: "fire", retreatCost: 2, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 10 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm12/243_hires.png", pack: "kanto" },
+
+  // #110 Smogogo (grass, HP 130, stage1)
+  { kind: "pokemon", id: "g1-110-common", number: 110, name: "Smogogo", type: "grass", stage: "stage1", evolvesFrom: "Smogo", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base3/45_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-110-rare", number: 110, name: "Smogogo", type: "grass", stage: "stage1", evolvesFrom: "Smogo", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base5/14_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-110-holo-rare", number: 110, name: "Smogogo", type: "grass", stage: "stage1", evolvesFrom: "Smogo", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Tranch'Herbe", cost: ["colorless", "colorless"], damage: 40 }, { name: "Soin Mortel", cost: ["grass", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/swsh45sv/SV077_hires.png", pack: "kanto" },
+
+  // #111 Rhinocorne (fighting, HP 130, basic)
+  { kind: "pokemon", id: "g1-111-common", number: 111, name: "Rhinocorne", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/base2/61_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-111-rare", number: 111, name: "Rhinocorne", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/22_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-111-holo-rare", number: 111, name: "Rhinocorne", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base4/90_hires.png", pack: "kanto" },
+
+  // #112 Rhinoféros (fighting, HP 180, stage1)
+  { kind: "pokemon", id: "g1-112-common", number: 112, name: "Rhinoféros", type: "fighting", stage: "stage1", evolvesFrom: "Rhinocorne", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 60 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/base2/45_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-112-rare", number: 112, name: "Rhinoféros", type: "fighting", stage: "stage1", evolvesFrom: "Rhinocorne", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 60 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/2_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-112-holo-rare", number: 112, name: "Rhinoféros", type: "fighting", stage: "stage1", evolvesFrom: "Rhinocorne", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 60 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base6/35_hires.png", pack: "kanto" },
+
+  // #113 Leveinard (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-113-common", number: 113, name: "Leveinard", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "common", art: "https://images.pokemontcg.io/neo4/31_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-113-rare", number: 113, name: "Leveinard", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/3_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-113-holo-rare", number: 113, name: "Leveinard", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 50 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/96_hires.png", pack: "kanto" },
+
+  // #114 Saquedeneu (grass, HP 130, basic)
+  { kind: "pokemon", id: "g1-114-common", number: 114, name: "Saquedeneu", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base1/66_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-114-rare", number: 114, name: "Saquedeneu", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/ex6/30_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-114-holo-rare", number: 114, name: "Saquedeneu", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/178_hires.png", pack: "kanto" },
+
+  // #115 Kangourex (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-115-common", number: 115, name: "Kangourex", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/gym1/36_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-115-rare", number: 115, name: "Kangourex", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/5_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-115-holo-rare", number: 115, name: "Kangourex", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy2/78_hires.png", pack: "kanto" },
+
+  // #116 Hypotrempe (water, HP 60, basic)
+  { kind: "pokemon", id: "g1-116-common", number: 116, name: "Hypotrempe", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/49_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-116-rare", number: 116, name: "Hypotrempe", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/86_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-116-holo-rare", number: 116, name: "Hypotrempe", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv6pt5/67_hires.png", pack: "kanto" },
+
+  // #117 Hypocéan (water, HP 110, stage1)
+  { kind: "pokemon", id: "g1-117-common", number: 117, name: "Hypocéan", type: "water", stage: "stage1", evolvesFrom: "Hypotrempe", hp: 110, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base3/42_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-117-rare", number: 117, name: "Hypocéan", type: "water", stage: "stage1", evolvesFrom: "Hypotrempe", hp: 110, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/9_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-117-holo-rare", number: 117, name: "Hypocéan", type: "water", stage: "stage1", evolvesFrom: "Hypotrempe", hp: 110, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex15/22_hires.png", pack: "kanto" },
+
+  // #118 Poissirène (water, HP 90, basic)
+  { kind: "pokemon", id: "g1-118-common", number: 118, name: "Poissirène", type: "water", stage: "basic", hp: 90, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base2/53_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-118-rare", number: 118, name: "Poissirène", type: "water", stage: "basic", hp: 90, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/gym1/30_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-118-holo-rare", number: 118, name: "Poissirène", type: "water", stage: "basic", hp: 90, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base4/76_hires.png", pack: "kanto" },
+
+  // #119 Poissoroy (water, HP 160, stage1)
+  { kind: "pokemon", id: "g1-119-common", number: 119, name: "Poissoroy", type: "water", stage: "stage1", evolvesFrom: "Poissirène", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 90 }], rarity: "common", art: "https://images.pokemontcg.io/base2/46_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-119-rare", number: 119, name: "Poissoroy", type: "water", stage: "stage1", evolvesFrom: "Poissirène", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 90 }], rarity: "rare", art: "https://images.pokemontcg.io/ex1/21_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-119-holo-rare", number: 119, name: "Poissoroy", type: "water", stage: "stage1", evolvesFrom: "Poissirène", hp: 160, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 50 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 90 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex8/24_hires.png", pack: "kanto" },
+
+  // #120 Stari (water, HP 60, basic)
+  { kind: "pokemon", id: "g1-120-common", number: 120, name: "Stari", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/65_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-120-rare", number: 120, name: "Stari", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/base4/95_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-120-holo-rare", number: 120, name: "Stari", type: "water", stage: "basic", hp: 60, weakness: "lightning", retreatCost: 2, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4pt5/118_hires.png", pack: "kanto" },
+
+  // #121 Staross (water, HP 120, stage1)
+  { kind: "pokemon", id: "g1-121-common", number: 121, name: "Staross", type: "water", stage: "stage1", evolvesFrom: "Stari", hp: 120, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 40 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base1/64_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-121-rare", number: 121, name: "Staross", type: "water", stage: "stage1", evolvesFrom: "Stari", hp: 120, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 40 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/neo3/25_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-121-holo-rare", number: 121, name: "Staross", type: "water", stage: "stage1", evolvesFrom: "Stari", hp: 120, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 40 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy12/32_hires.png", pack: "kanto" },
+
+  // #122 M. Mime (psychic, HP 80, basic)
+  { kind: "pokemon", id: "g1-122-common", number: 122, name: "M. Mime", type: "psychic", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/gym1/94_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-122-rare", number: 122, name: "M. Mime", type: "psychic", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/6_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-122-holo-rare", number: 122, name: "M. Mime", type: "psychic", stage: "basic", hp: 80, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 10 }, { name: "Souffle Psy", cost: ["psychic", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/110_hires.png", pack: "kanto" },
+
+  // #123 Insécateur (grass, HP 130, basic)
+  { kind: "pokemon", id: "g1-123-common", number: 123, name: "Insécateur", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/neo2/46_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-123-rare", number: 123, name: "Insécateur", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/10_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-123-holo-rare", number: 123, name: "Insécateur", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/102_hires.png", pack: "kanto" },
+
+  // #124 Lippoutou (water, HP 130, basic)
+  { kind: "pokemon", id: "g1-124-common", number: 124, name: "Lippoutou", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 20 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base1/31_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-124-rare", number: 124, name: "Lippoutou", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 20 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base6/26_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-124-holo-rare", number: 124, name: "Lippoutou", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 20 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/191_hires.png", pack: "kanto" },
+
+  // #125 Élektek (lightning, HP 130, basic)
+  { kind: "pokemon", id: "g1-125-common", number: 125, name: "Élektek", type: "lightning", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 20 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/neo1/33_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-125-rare", number: 125, name: "Élektek", type: "lightning", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 20 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/20_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-125-holo-rare", number: 125, name: "Élektek", type: "lightning", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 20 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/97_hires.png", pack: "kanto" },
+
+  // #126 Magmar (fire, HP 130, basic)
+  { kind: "pokemon", id: "g1-126-common", number: 126, name: "Magmar", type: "fire", stage: "basic", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 20 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 90 }], rarity: "common", art: "https://images.pokemontcg.io/base1/36_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-126-rare", number: 126, name: "Magmar", type: "fire", stage: "basic", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 20 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 90 }], rarity: "rare", art: "https://images.pokemontcg.io/ex12/21_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-126-holo-rare", number: 126, name: "Magmar", type: "fire", stage: "basic", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 20 }, { name: "Feu d'Enfer", cost: ["fire", "colorless"], damage: 90 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/100_hires.png", pack: "kanto" },
+
+  // #127 Scarabrute (grass, HP 130, basic)
+  { kind: "pokemon", id: "g1-127-common", number: 127, name: "Scarabrute", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/ecard2/101_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-127-rare", number: 127, name: "Scarabrute", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/9_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-127-holo-rare", number: 127, name: "Scarabrute", type: "grass", stage: "basic", hp: 130, weakness: "fire", retreatCost: 3, attacks: [{ name: "Fouet Lianes", cost: ["colorless"], damage: 20 }, { name: "Soin Mortel", cost: ["grass", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm115/6_hires.png", pack: "kanto" },
+
+  // #128 Tauros (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-128-common", number: 128, name: "Tauros", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base2/47_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-128-rare", number: 128, name: "Tauros", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/ex6/16_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-128-holo-rare", number: 128, name: "Tauros", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm1/100_hires.png", pack: "kanto" },
+
+  // #129 Magicarpe (water, HP 40, basic)
+  { kind: "pokemon", id: "g1-129-common", number: 129, name: "Magicarpe", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }], rarity: "common", art: "https://images.pokemontcg.io/base1/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-129-rare", number: 129, name: "Magicarpe", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }], rarity: "rare", art: "https://images.pokemontcg.io/neo3/66_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-129-holo-rare", number: 129, name: "Magicarpe", type: "water", stage: "basic", hp: 40, weakness: "lightning", retreatCost: 1, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 10 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm9/160_hires.png", pack: "kanto" },
+
+  // #130 Léviator (water, HP 180, stage1)
+  { kind: "pokemon", id: "g1-130-common", number: 130, name: "Léviator", type: "water", stage: "stage1", evolvesFrom: "Magicarpe", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/ex3/32_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-130-rare", number: 130, name: "Léviator", type: "water", stage: "stage1", evolvesFrom: "Magicarpe", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/6_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-130-holo-rare", number: 130, name: "Léviator", type: "water", stage: "stage1", evolvesFrom: "Magicarpe", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/109_hires.png", pack: "kanto" },
+
+  // #131 Lokhlass (water, HP 130, basic)
+  { kind: "pokemon", id: "g1-131-common", number: 131, name: "Lokhlass", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 20 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/si1/12_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-131-rare", number: 131, name: "Lokhlass", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 20 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/10_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-131-holo-rare", number: 131, name: "Lokhlass", type: "water", stage: "basic", hp: 130, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 20 }, { name: "Vague Déferlante", cost: ["water", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/99_hires.png", pack: "kanto" },
+
+  // #132 Métamorph (colorless, HP 100, basic)
+  { kind: "pokemon", id: "g1-132-common", number: 132, name: "Métamorph", type: "colorless", stage: "basic", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/ecard3/51_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-132-rare", number: 132, name: "Métamorph", type: "colorless", stage: "basic", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/3_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-132-holo-rare", number: 132, name: "Métamorph", type: "colorless", stage: "basic", hp: 100, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm8/154_hires.png", pack: "kanto" },
+
+  // #133 Évoli (colorless, HP 110, basic)
+  { kind: "pokemon", id: "g1-133-common", number: 133, name: "Évoli", type: "colorless", stage: "basic", hp: 110, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 40 }], rarity: "common", art: "https://images.pokemontcg.io/base2/51_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-133-rare", number: 133, name: "Évoli", type: "colorless", stage: "basic", hp: 110, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 40 }], rarity: "rare", art: "https://images.pokemontcg.io/sm115/48_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-133-holo-rare", number: 133, name: "Évoli", type: "colorless", stage: "basic", hp: 110, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 40 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sm9/120_hires.png", pack: "kanto" },
+
+  // #134 Aquali (water, HP 180, stage1)
+  { kind: "pokemon", id: "g1-134-common", number: 134, name: "Aquali", type: "water", stage: "stage1", evolvesFrom: "Évoli", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/base5/45_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-134-rare", number: 134, name: "Aquali", type: "water", stage: "stage1", evolvesFrom: "Évoli", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/12_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-134-holo-rare", number: 134, name: "Aquali", type: "water", stage: "stage1", evolvesFrom: "Évoli", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Hydrocanon", cost: ["colorless", "colorless"], damage: 60 }, { name: "Vague Déferlante", cost: ["water", "colorless", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex11/110_hires.png", pack: "kanto" },
+
+  // #135 Voltali (lightning, HP 130, stage1)
+  { kind: "pokemon", id: "g1-135-common", number: 135, name: "Voltali", type: "lightning", stage: "stage1", evolvesFrom: "Évoli", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base5/38_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-135-rare", number: 135, name: "Voltali", type: "lightning", stage: "stage1", evolvesFrom: "Évoli", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/4_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-135-holo-rare", number: 135, name: "Voltali", type: "lightning", stage: "stage1", evolvesFrom: "Évoli", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Tonnerre", cost: ["colorless", "colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex11/109_hires.png", pack: "kanto" },
+
+  // #136 Pyroli (fire, HP 130, stage1)
+  { kind: "pokemon", id: "g1-136-common", number: 136, name: "Pyroli", type: "fire", stage: "stage1", evolvesFrom: "Évoli", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 50 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 100 }], rarity: "common", art: "https://images.pokemontcg.io/base5/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-136-rare", number: 136, name: "Pyroli", type: "fire", stage: "stage1", evolvesFrom: "Évoli", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 50 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 100 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/3_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-136-holo-rare", number: 136, name: "Pyroli", type: "fire", stage: "stage1", evolvesFrom: "Évoli", hp: 130, weakness: "water", retreatCost: 3, attacks: [{ name: "Lance-Flammes", cost: ["colorless", "colorless"], damage: 50 }, { name: "Feu d'Enfer", cost: ["fire", "colorless", "colorless"], damage: 100 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex11/108_hires.png", pack: "kanto" },
+
+  // #137 Porygon (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-137-common", number: 137, name: "Porygon", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base1/39_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-137-rare", number: 137, name: "Porygon", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/dp4/6_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-137-holo-rare", number: 137, name: "Porygon", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv4/214_hires.png", pack: "kanto" },
+
+  // #138 Amonita (fighting, HP 70, basic)
+  { kind: "pokemon", id: "g1-138-common", number: 138, name: "Amonita", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/52_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-138-rare", number: 138, name: "Amonita", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/neo2/60_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-138-holo-rare", number: 138, name: "Amonita", type: "fighting", stage: "basic", hp: 70, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/180_hires.png", pack: "kanto" },
+
+  // #139 Amonistar (fighting, HP 140, stage1)
+  { kind: "pokemon", id: "g1-139-common", number: 139, name: "Amonistar", type: "fighting", stage: "stage1", evolvesFrom: "Amonita", hp: 140, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/base3/40_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-139-rare", number: 139, name: "Amonistar", type: "fighting", stage: "stage1", evolvesFrom: "Amonita", hp: 140, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/neo4/19_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-139-holo-rare", number: 139, name: "Amonistar", type: "fighting", stage: "stage1", evolvesFrom: "Amonita", hp: 140, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 50 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/xy10/19_hires.png", pack: "kanto" },
+
+  // #140 Kabuto (fighting, HP 60, basic)
+  { kind: "pokemon", id: "g1-140-common", number: 140, name: "Kabuto", type: "fighting", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base3/50_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-140-rare", number: 140, name: "Kabuto", type: "fighting", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/neo2/56_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-140-holo-rare", number: 140, name: "Kabuto", type: "fighting", stage: "basic", hp: 60, weakness: "psychic", retreatCost: 2, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 10 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/base6/48_hires.png", pack: "kanto" },
+
+  // #141 Kabutops (fighting, HP 120, stage1)
+  { kind: "pokemon", id: "g1-141-common", number: 141, name: "Kabutops", type: "fighting", stage: "stage1", evolvesFrom: "Kabuto", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/base3/9_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-141-rare", number: 141, name: "Kabutops", type: "fighting", stage: "stage1", evolvesFrom: "Kabuto", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/24_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-141-holo-rare", number: 141, name: "Kabutops", type: "fighting", stage: "stage1", evolvesFrom: "Kabuto", hp: 120, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup d'Karaté", cost: ["colorless", "colorless"], damage: 40 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ecard3/150_hires.png", pack: "kanto" },
+
+  // #142 Ptéra (fighting, HP 130, basic)
+  { kind: "pokemon", id: "g1-142-common", number: 142, name: "Ptéra", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 20 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 70 }], rarity: "common", art: "https://images.pokemontcg.io/ex13/35_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-142-rare", number: 142, name: "Ptéra", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 20 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 70 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/1_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-142-holo-rare", number: 142, name: "Ptéra", type: "fighting", stage: "basic", hp: 130, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Coup-Poing", cost: ["colorless"], damage: 20 }, { name: "Frappe Tellurique", cost: ["fighting", "colorless"], damage: 70 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex2/94_hires.png", pack: "kanto" },
+
+  // #143 Ronflex (colorless, HP 130, basic)
+  { kind: "pokemon", id: "g1-143-common", number: 143, name: "Ronflex", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 80 }], rarity: "common", art: "https://images.pokemontcg.io/basep/49_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-143-rare", number: 143, name: "Ronflex", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 80 }], rarity: "rare", art: "https://images.pokemontcg.io/base2/11_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-143-holo-rare", number: 143, name: "Ronflex", type: "colorless", stage: "basic", hp: 130, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Charge", cost: ["colorless"], damage: 20 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 80 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex7/104_hires.png", pack: "kanto" },
+
+  // #144 Artikodin (water, HP 180, basic)
+  { kind: "pokemon", id: "g1-144-common", number: 144, name: "Artikodin", type: "water", stage: "basic", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 110 }], rarity: "common", art: "https://images.pokemontcg.io/basep/22_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-144-rare", number: 144, name: "Artikodin", type: "water", stage: "basic", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 110 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/2_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-144-holo-rare", number: 144, name: "Artikodin", type: "water", stage: "basic", hp: 180, weakness: "lightning", retreatCost: 3, attacks: [{ name: "Pistolet à O", cost: ["colorless"], damage: 30 }, { name: "Vague Déferlante", cost: ["water", "water", "colorless"], damage: 110 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/114_hires.png", pack: "kanto" },
+
+  // #145 Électhor (lightning, HP 180, basic)
+  { kind: "pokemon", id: "g1-145-common", number: 145, name: "Électhor", type: "lightning", stage: "basic", hp: 180, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "lightning", "colorless"], damage: 130 }], rarity: "common", art: "https://images.pokemontcg.io/basep/23_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-145-rare", number: 145, name: "Électhor", type: "lightning", stage: "basic", hp: 180, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "lightning", "colorless"], damage: 130 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/16_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-145-holo-rare", number: 145, name: "Électhor", type: "lightning", stage: "basic", hp: 180, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Choc Statique", cost: ["colorless"], damage: 40 }, { name: "Tonnerre Massif", cost: ["lightning", "lightning", "colorless"], damage: 130 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/116_hires.png", pack: "kanto" },
+
+  // #146 Sulfura (fire, HP 180, basic)
+  { kind: "pokemon", id: "g1-146-common", number: 146, name: "Sulfura", type: "fire", stage: "basic", hp: 180, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "fire", "colorless"], damage: 140 }], rarity: "common", art: "https://images.pokemontcg.io/basep/21_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-146-rare", number: 146, name: "Sulfura", type: "fire", stage: "basic", hp: 180, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "fire", "colorless"], damage: 140 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/12_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-146-holo-rare", number: 146, name: "Sulfura", type: "fire", stage: "basic", hp: 180, weakness: "water", retreatCost: 3, attacks: [{ name: "Flammèche", cost: ["colorless"], damage: 40 }, { name: "Feu d'Enfer", cost: ["fire", "fire", "colorless"], damage: 140 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex6/115_hires.png", pack: "kanto" },
+
+  // #147 Minidraco (colorless, HP 80, basic)
+  { kind: "pokemon", id: "g1-147-common", number: 147, name: "Minidraco", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "common", art: "https://images.pokemontcg.io/base1/26_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-147-rare", number: 147, name: "Minidraco", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "rare", art: "https://images.pokemontcg.io/dv1/1_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-147-holo-rare", number: 147, name: "Minidraco", type: "colorless", stage: "basic", hp: 80, weakness: "fighting", retreatCost: 2, attacks: [{ name: "Charge", cost: ["colorless"], damage: 10 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless"], damage: 30 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/dv1/2_hires.png", pack: "kanto" },
+
+  // #148 Draco (colorless, HP 120, stage1)
+  { kind: "pokemon", id: "g1-148-common", number: 148, name: "Draco", type: "colorless", stage: "stage1", evolvesFrom: "Minidraco", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 60 }], rarity: "common", art: "https://images.pokemontcg.io/base5/33_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-148-rare", number: 148, name: "Draco", type: "colorless", stage: "stage1", evolvesFrom: "Minidraco", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 60 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/18_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-148-holo-rare", number: 148, name: "Draco", type: "colorless", stage: "stage1", evolvesFrom: "Minidraco", hp: 120, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 30 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 60 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/sv3pt5/181_hires.png", pack: "kanto" },
+
+  // #149 Dracolosse (colorless, HP 180, stage2)
+  { kind: "pokemon", id: "g1-149-common", number: 149, name: "Dracolosse", type: "colorless", stage: "stage2", evolvesFrom: "Draco", hp: 180, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 80 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 140 }], rarity: "common", art: "https://images.pokemontcg.io/basep/5_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-149-rare", number: 149, name: "Dracolosse", type: "colorless", stage: "stage2", evolvesFrom: "Draco", hp: 180, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 80 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 140 }], rarity: "rare", art: "https://images.pokemontcg.io/base3/4_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-149-holo-rare", number: 149, name: "Dracolosse", type: "colorless", stage: "stage2", evolvesFrom: "Draco", hp: 180, weakness: "fighting", retreatCost: 3, attacks: [{ name: "Coup d'Boule", cost: ["colorless", "colorless"], damage: 80 }, { name: "Hyper-Frappe", cost: ["colorless", "colorless", "colorless"], damage: 140 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex3/90_hires.png", pack: "kanto" },
+
+  // #150 Mewtwo (psychic, HP 180, basic)
+  { kind: "pokemon", id: "g1-150-common", number: 150, name: "Mewtwo", type: "psychic", stage: "basic", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 140 }], rarity: "common", art: "https://images.pokemontcg.io/basep/3_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-150-rare", number: 150, name: "Mewtwo", type: "psychic", stage: "basic", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 140 }], rarity: "rare", art: "https://images.pokemontcg.io/base1/10_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-150-holo-rare", number: 150, name: "Mewtwo", type: "psychic", stage: "basic", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 40 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 140 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex1/101_hires.png", pack: "kanto" },
+
+  // #151 Mew (psychic, HP 180, basic)
+  { kind: "pokemon", id: "g1-151-common", number: 151, name: "Mew", type: "psychic", stage: "basic", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 30 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 120 }], rarity: "common", art: "https://images.pokemontcg.io/basep/8_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-151-rare", number: 151, name: "Mew", type: "psychic", stage: "basic", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 30 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 120 }], rarity: "rare", art: "https://images.pokemontcg.io/ecard1/19_hires.png", pack: "kanto" },
+  { kind: "pokemon", id: "g1-151-holo-rare", number: 151, name: "Mew", type: "psychic", stage: "basic", hp: 180, weakness: "psychic", retreatCost: 3, attacks: [{ name: "Confusion", cost: ["colorless"], damage: 30 }, { name: "Souffle Psy", cost: ["psychic", "psychic", "colorless"], damage: 120 }], rarity: "holo-rare", art: "https://images.pokemontcg.io/ex12/88_hires.png", pack: "kanto" },
 ];
 
-export const POKEMON_GEN1: PokemonCardData[] = POKEMON;
+export const POKEMON_BASE_SET: PokemonCardData[] = POKEMON;
 
-export const POKEMON_GEN1_BY_ID: Map<string, PokemonCardData> = new Map(
+export const POKEMON_BASE_SET_BY_ID: Record<string, PokemonCardData> = Object.fromEntries(
   POKEMON.map((c) => [c.id, c]),
 );
-
-// Aliases pour rétrocompatibilité avec les imports existants (clients web
-// et serveur party qui importaient encore POKEMON_BASE_SET).
-export const POKEMON_BASE_SET: PokemonCardData[] = POKEMON_GEN1;
-export const POKEMON_BASE_SET_BY_ID: Map<string, PokemonCardData> =
-  POKEMON_GEN1_BY_ID;

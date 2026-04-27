@@ -60,21 +60,24 @@ function getThemedPool(
   return pool.length > 0 ? pool : null;
 }
 
-// Pack rarity slots: 4 "regular" + 1 "rare" slot.
+// Pack rarity slots : 4 "regular" + 1 "rare" slot. Distribution calquée sur
+// Pokémon TCG Pocket — sur un pack de 5, en moyenne ~3.5 commons + ~1.2 rares
+// + ~0.3 très rares. uncommon/energy sont à 0 car le set Gen 1 n'utilise plus
+// ces raretés (Pocket-style : 3 raretés common/rare/holo-rare uniquement).
 const REGULAR_SLOT_WEIGHTS: Record<TcgRarity, number> = {
-  common: 60,
-  energy: 18, // basic energies always available
-  uncommon: 17,
-  rare: 4,
-  "holo-rare": 1,
+  common: 88,
+  rare: 10,
+  "holo-rare": 2,
+  uncommon: 0,
+  energy: 0,
 };
 
 const RARE_SLOT_WEIGHTS: Record<TcgRarity, number> = {
-  uncommon: 55,
-  rare: 30,
-  "holo-rare": 15,
-  // Rare slot never rolls common or energy.
+  rare: 80,
+  "holo-rare": 20,
+  // Rare slot ne tire jamais de common.
   common: 0,
+  uncommon: 0,
   energy: 0,
 };
 

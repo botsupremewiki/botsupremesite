@@ -81,6 +81,7 @@ export function CardFace({
   large?: boolean;
 }) {
   if (card.kind === "energy") {
+    // Cartes énergie (legacy) — rendu emoji centré.
     const bg = TYPE_BG[card.energyType] ?? TYPE_BG.colorless;
     return (
       <div
@@ -95,6 +96,35 @@ export function CardFace({
       </div>
     );
   }
+
+  // Pokémon : vraies cartes officielles (URL pokemontcg.io). On affiche
+  // l'image full-card — HP, attacks, weakness sont déjà dessinés dessus.
+  const isUrl = card.art?.startsWith("http");
+  if (isUrl) {
+    const glow =
+      card.rarity === "holo-rare"
+        ? "shadow-[0_0_20px_rgba(252,211,77,0.55)]"
+        : card.rarity === "rare"
+          ? "shadow-[0_0_12px_rgba(125,211,252,0.4)]"
+          : "";
+    return (
+      <div
+        className={`relative overflow-hidden rounded-md ${
+          large ? "h-full" : "aspect-[5/7]"
+        } ${glow} ${faded ? "grayscale opacity-50" : ""}`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={card.art}
+          alt={card.name}
+          className="h-full w-full object-contain"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
+  // Fallback rendu HTML (legacy emoji-based) — pour cartes anciennes encore en base.
   const bg = TYPE_BG[card.type] ?? TYPE_BG.colorless;
   return (
     <div

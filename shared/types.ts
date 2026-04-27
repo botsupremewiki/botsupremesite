@@ -1110,16 +1110,12 @@ export type TcgClientMessage =
   // Le serveur re-fetch + envoie un tcg-welcome aux connexions concernées.
   | { type: "tcg-notify-tx"; userIds: string[] };
 
-// ─── Pokémon — boosters thématiques par mascotte (Gen 1) ──────────────────
-// 4 packs par génération = 3 starters + le légendaire emblématique. Les 151
-// Pokémon de la Gen 1 sont répartis équitablement entre ces 4 packs selon
-// leur affinité thématique.
+// ─── Pokémon — pack unique "Kanto" (Gen 1) ───────────────────────────────
+// Un seul pack pour les 151 Pokémon Gen 1. Chaque Pokémon existe en 3 raretés
+// (common / rare / holo-rare) avec stats identiques mais visuels différents.
+// Visuels = vraies cartes officielles via pokemontcg.io.
 
-export type PokemonPackTypeId =
-  | "charizard"
-  | "blastoise"
-  | "venusaur"
-  | "mewtwo";
+export type PokemonPackTypeId = "kanto";
 
 export type PokemonPackType = {
   id: PokemonPackTypeId;
@@ -1132,45 +1128,15 @@ export type PokemonPackType = {
 };
 
 export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
-  charizard: {
-    id: "charizard",
-    name: "Pack Dracaufeu",
+  kanto: {
+    id: "kanto",
+    name: "Pack Kanto",
     description:
-      "Feu, Combat, Sol, Roche, Vol — Dracaufeu, Mackogneur, Onix, Aérodactyl, Sulfura…",
-    glyph: "🔥",
+      "Génération 1 — les 151 Pokémon de Kanto, chacun en 3 raretés (common, rare, très rare).",
+    glyph: "🌳",
     active: true,
-    accent: "text-orange-300",
-    border: "border-orange-500/50",
-  },
-  blastoise: {
-    id: "blastoise",
-    name: "Pack Tortank",
-    description:
-      "Eau, Glace — Tortank, Léviator, Lokhlass, Kabutops, Artikodin, Lippoutou…",
-    glyph: "🌊",
-    active: true,
-    accent: "text-sky-300",
-    border: "border-sky-500/50",
-  },
-  venusaur: {
-    id: "venusaur",
-    name: "Pack Florizarre",
-    description:
-      "Plante, Insecte, Poison — Florizarre, Rafflesia, Papilusion, Nidoking, Arbok…",
-    glyph: "🌿",
-    active: true,
-    accent: "text-emerald-300",
-    border: "border-emerald-500/50",
-  },
-  mewtwo: {
-    id: "mewtwo",
-    name: "Pack Mewtwo",
-    description:
-      "Psy, Spectre, Électrique, Dragon, Normal spéciaux — Mewtwo, Mew, Ectoplasma, Dracolosse…",
-    glyph: "🧠",
-    active: true,
-    accent: "text-fuchsia-300",
-    border: "border-fuchsia-500/50",
+    accent: "text-amber-300",
+    border: "border-amber-400/50",
   },
 };
 
