@@ -6,16 +6,25 @@ import { motion, AnimatePresence } from "framer-motion";
 import type {
   PokemonCardData,
   PokemonPackType,
+  PokemonPackTypeId,
   TcgClientMessage,
   TcgGameId,
   TcgPackResult,
+  TcgRarity,
   TcgServerMessage,
 } from "@shared/types";
 import { POKEMON_PACK_TYPES, TCG_GAMES } from "@shared/types";
-import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
+import { POKEMON_BASE_SET, POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
-import { CardFace, RARITY_COLOR } from "../_components/card-visuals";
+import {
+  CardFace,
+  CardZoomModal,
+  RARITY_COLOR,
+  RARITY_GLYPH,
+  RARITY_LABEL,
+  RARITY_TIER,
+} from "../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -35,6 +44,10 @@ export function BoostersClient({
   const [freePacks, setFreePacks] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [revealing, setRevealing] = useState<TcgPackResult | null>(null);
+  // Détail booster ouvert (liste des cartes droppables) + zoom carte au sein
+  // du détail (modal sur modal).
+  const [detailPack, setDetailPack] = useState<PokemonPackTypeId | null>(null);
+  const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,7 +190,7 @@ export function BoostersClient({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {packs.map((pack) => (
               <PackTypeCard
                 key={pack.id}
@@ -188,6 +201,7 @@ export function BoostersClient({
                 connected={status === "connected"}
                 hasProfile={!!profile}
                 onBuy={buyPack}
+                onShowDetail={() => setDetailPack(pack.id)}
               />
             ))}
           </div>
@@ -203,6 +217,18 @@ export function BoostersClient({
             />
           )}
         </AnimatePresence>
+
+        {/* Modal "détail booster" : toutes les cartes droppables groupées par rareté. */}
+        {detailPack && (
+          <BoosterDetailModal
+            packId={detailPack}
+            onClose={() => setDetailPack(null)}
+            onZoomCard={(c) => setZoomedCard(c)}
+          />
+        )}
+
+        {/* Zoom carte (depuis le détail booster) — modal au-dessus du détail. */}
+        <CardZoomModal card={zoomedCard} onClose={() => setZoomedCard(null)} />
       </main>
     </div>
   );
@@ -216,6 +242,7 @@ function PackTypeCard({
   connected,
   hasProfile,
   onBuy,
+  onShowDetail,
 }: {
   pack: PokemonPackType;
   freePacks: number;
@@ -224,6 +251,7 @@ function PackTypeCard({
   connected: boolean;
   hasProfile: boolean;
   onBuy: (packTypeId: string) => void;
+  onShowDetail: () => void;
 }) {
   const useFree = freePacks > 0;
   const canPay = gold >= packPrice;
@@ -240,22 +268,33 @@ function PackTypeCard({
           Bientôt
         </span>
       )}
-      <div className="flex items-center justify-center pt-2">
-        <div
-          className="flex h-20 w-20 items-center justify-center rounded-xl border border-white/10 bg-black/60 text-4xl shadow-inner"
-          aria-hidden
-        >
-          {pack.glyph}
+      {/* Zone cliquable (preview) : ouvre le détail du booster. */}
+      <button
+        onClick={onShowDetail}
+        disabled={!pack.active}
+        className="flex flex-col gap-2 rounded-lg p-1 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed"
+        title="Voir les cartes du booster"
+      >
+        <div className="flex items-center justify-center pt-2">
+          <div
+            className="flex h-24 w-24 items-center justify-center rounded-xl border border-white/10 bg-black/60 text-5xl shadow-inner"
+            aria-hidden
+          >
+            {pack.glyph}
+          </div>
         </div>
-      </div>
-      <div className="text-center">
-        <div className={`text-sm font-semibold ${pack.accent}`}>
-          {pack.name}
+        <div className="text-center">
+          <div className={`text-base font-semibold ${pack.accent}`}>
+            {pack.name}
+          </div>
+          <div className="mt-0.5 line-clamp-2 text-[10px] text-zinc-400">
+            {pack.description}
+          </div>
+          <div className="mt-1 text-[10px] uppercase tracking-widest text-zinc-500">
+            👁️ Voir les cartes
+          </div>
         </div>
-        <div className="mt-0.5 line-clamp-2 text-[10px] text-zinc-400">
-          {pack.description}
-        </div>
-      </div>
+      </button>
       <button
         onClick={() => onBuy(pack.id)}
         disabled={disabled}
@@ -270,12 +309,148 @@ function PackTypeCard({
           : !pack.active
             ? "Bientôt"
             : useFree
-              ? `🎁 GRATUIT`
-              : `${packPrice.toLocaleString("fr-FR")} OS`}
+              ? `🎁 OUVRIR GRATUITEMENT`
+              : `🎴 OUVRIR — ${packPrice.toLocaleString("fr-FR")} OS`}
       </button>
     </div>
   );
 }
+
+/** Modal détail d'un booster : liste toutes les cartes droppables, groupées
+ *  par rareté (du plus commun au plus rare). Click sur une carte = zoom modal. */
+function BoosterDetailModal({
+  packId,
+  onClose,
+  onZoomCard,
+}: {
+  packId: PokemonPackTypeId;
+  onClose: () => void;
+  onZoomCard: (card: PokemonCardData) => void;
+}) {
+  const pack = POKEMON_PACK_TYPES[packId];
+  // Filtre identique à getThemedPool côté serveur : pack principal OU extraPacks.
+  const cards = POKEMON_BASE_SET.filter(
+    (c) =>
+      c.kind === "pokemon" &&
+      (c.pack === packId || c.extraPacks?.includes(packId)),
+  );
+  // Groupement par rareté, du plus commun au plus rare.
+  const RARITY_ORDER: TcgRarity[] = [
+    "diamond-1",
+    "diamond-2",
+    "diamond-3",
+    "diamond-4",
+    "star-1",
+    "star-2",
+    "star-3",
+    "crown",
+    "promo",
+  ];
+  const grouped: Partial<Record<TcgRarity, PokemonCardData[]>> = {};
+  for (const c of cards) {
+    if (!grouped[c.rarity]) grouped[c.rarity] = [];
+    grouped[c.rarity]!.push(c);
+  }
+  for (const r of RARITY_ORDER) {
+    grouped[r]?.sort(
+      (a, b) =>
+        (a.pokedexId ?? 999) - (b.pokedexId ?? 999) ||
+        a.name.localeCompare(b.name),
+    );
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl"
+      >
+        <header className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl" aria-hidden>
+              {pack.glyph}
+            </span>
+            <div>
+              <h2 className={`text-lg font-bold ${pack.accent}`}>{pack.name}</h2>
+              <p className="text-xs text-zinc-400">
+                {cards.length} cartes droppables · {pack.description}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full bg-white/5 p-2 text-zinc-300 hover:bg-white/10"
+            aria-label="Fermer"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {RARITY_ORDER.map((rarity) => {
+            const list = grouped[rarity];
+            if (!list || list.length === 0) return null;
+            return (
+              <section key={rarity} className="mb-6 last:mb-0">
+                <div className="mb-2 flex items-baseline gap-2 border-b border-white/5 pb-1">
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-bold ${
+                      RARITY_COLOR[rarity]
+                    }`}
+                  >
+                    {RARITY_GLYPH[rarity]}
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-200">
+                    {RARITY_LABEL[rarity]}
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    · {list.length} cartes
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+                  {list.map((card) => (
+                    <button
+                      key={card.id}
+                      onClick={() => onZoomCard(card)}
+                      className={`relative aspect-[5/7] overflow-hidden rounded-md border bg-black/40 transition-transform hover:scale-[1.04] hover:ring-2 hover:ring-white/30 ${
+                        RARITY_COLOR[rarity]
+                      }`}
+                      title={card.name}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={card.image}
+                        alt={card.name}
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <footer className="shrink-0 border-t border-white/10 px-5 py-2 text-center text-[11px] text-zinc-500">
+          Trié du plus commun au plus rare · Clique une carte pour la zoomer ·
+          {" "}
+          <span className="text-zinc-400">
+            les ★ et 👑 sont très rares (≪ 5% chance par pack)
+          </span>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+// Le RARITY_TIER est gardé pour usage potentiel futur (sort par rareté).
+void RARITY_TIER;
 
 function PackRevealOverlay({
   pack,
