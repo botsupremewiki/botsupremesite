@@ -32,7 +32,7 @@ const PLAZA_PORTALS = [
   { id: "tcg", color: 0x22c55e, label: "TCG · Bientôt" },
   { id: "rpg", color: 0xf59e0b, label: "Eternum", href: "/play/rpg" },
   { id: "medieval", color: 0x6366f1, label: "Médiéval · Bientôt" },
-  { id: "tycoon", color: 0xec4899, label: "Tycoon · Bientôt" },
+  { id: "tycoon", color: 0xec4899, label: "Skyline", href: "/play/skyline" },
 ];
 const PLAZA_RING = ringPositions(
   PLAZA_PORTALS.length,
