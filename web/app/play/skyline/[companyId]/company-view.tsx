@@ -181,6 +181,21 @@ export function CompanyView({
       className={`flex flex-1 flex-col overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(236,72,153,0.06),transparent_60%)] p-6`}
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+        {/* Alerte fermeture sanitaire */}
+        {company.closed_until &&
+        new Date(company.closed_until) > new Date() ? (
+          <div className="rounded-xl border border-rose-400/50 bg-rose-500/10 p-4 text-sm">
+            <div className="font-semibold text-rose-200">
+              🚨 Fermeture sanitaire en cours
+            </div>
+            <div className="mt-1 text-xs text-rose-300">
+              Inspection sanitaire ratée. Réouverture le{" "}
+              {new Date(company.closed_until).toLocaleString("fr-FR")}. Aucune
+              vente ne sera enregistrée d&apos;ici là — pense à monter ta
+              propreté à 100 et embaucher une femme de ménage.
+            </div>
+          </div>
+        ) : null}
         {/* Banner */}
         <div className={`rounded-xl border bg-black/40 p-4 ${districtMeta.border}`}>
           <div className="flex items-start justify-between gap-3">

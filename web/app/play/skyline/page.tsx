@@ -11,6 +11,7 @@ import {
   ensureSkylineProfile,
   fetchSkylineCompanies,
   fetchSkylineTransactions,
+  runRandomAudit,
 } from "./_lib/supabase-helpers";
 import { SkylineHeader } from "./_components/skyline-header";
 
@@ -33,6 +34,8 @@ export default async function SkylineHub() {
   }
 
   const skyProfile = await ensureSkylineProfile();
+  // Audit fiscal aléatoire (très faible proba à chaque visite — réduit si comptable embauché).
+  await runRandomAudit();
   const companies = await fetchSkylineCompanies(profile.id);
   const recentTx = await fetchSkylineTransactions(profile.id, null, 5);
 
@@ -201,6 +204,14 @@ export default async function SkylineHub() {
                 description="Forme-toi à une compétence (joueur 5× plus rapide)"
                 accent="text-fuchsia-200"
                 border="border-fuchsia-400/40"
+              />
+              <MenuButton
+                href="/play/skyline/job"
+                icon="💼"
+                title="Salariat joueur"
+                description="Postule auprès d'autres joueurs pour un revenu passif"
+                accent="text-blue-200"
+                border="border-blue-400/40"
               />
               <MenuButton
                 href="/play/skyline/holdings"

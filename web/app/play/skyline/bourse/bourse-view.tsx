@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { skylineFormatCashFR } from "@shared/skyline";
-import { placeShareOrderAction } from "../_lib/actions";
+import { skylineFormatCashFR, type SkylineShortPositionRow } from "@shared/skyline";
+import {
+  cancelShareOrderAction,
+  closeShortPositionAction,
+  openShortPositionAction,
+  placeShareLimitOrderAction,
+  placeShareOrderAction,
+} from "../_lib/actions";
 
 type Listed = {
   id: string;
@@ -27,14 +33,36 @@ type Holding = {
   current_price?: number;
 };
 
+type OpenOrder = {
+  id: string;
+  user_id: string;
+  company_id: string;
+  side: "buy" | "sell";
+  order_kind: "market" | "limit";
+  quantity: number;
+  limit_price: number | null;
+  status: string;
+  created_at: string;
+  company_name?: string;
+};
+
+type OpenShort = SkylineShortPositionRow & {
+  company_name?: string;
+  current_price?: number;
+};
+
 export function BourseView({
   listed,
   holdings,
+  openOrders,
+  openShorts,
   cash,
   userId,
 }: {
   listed: Listed[];
   holdings: Holding[];
+  openOrders: OpenOrder[];
+  openShorts: OpenShort[];
   cash: number;
   userId: string;
 }) {
@@ -132,6 +160,34 @@ export function BourseView({
           )}
         </section>
 
+        {/* Ordres limit en cours */}
+        {openOrders.length > 0 ? (
+          <section className="rounded-xl border border-cyan-400/40 bg-black/40 p-4">
+            <h2 className="text-sm font-semibold text-cyan-200">
+              📋 Ordres limit en cours ({openOrders.length})
+            </h2>
+            <ul className="mt-3 space-y-1 text-xs">
+              {openOrders.map((o) => (
+                <OpenOrderRow key={o.id} order={o} />
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* Positions short en cours */}
+        {openShorts.length > 0 ? (
+          <section className="rounded-xl border border-rose-400/40 bg-black/40 p-4">
+            <h2 className="text-sm font-semibold text-rose-200">
+              📉 Positions short ({openShorts.length})
+            </h2>
+            <div className="mt-3 space-y-2">
+              {openShorts.map((s) => (
+                <OpenShortRow key={s.id} short={s} cash={cash} />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {/* Cotations */}
         <section className="rounded-xl border border-white/10 bg-black/40 p-4">
           <h2 className="text-sm font-semibold text-zinc-200">
@@ -191,8 +247,12 @@ function ListedCard({
   cash: number;
   isFounder: boolean;
 }) {
+  const [mode, setMode] = useState<"market" | "limit" | "short">("market");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [qty, setQty] = useState(10);
+  const [limitPrice, setLimitPrice] = useState(
+    Number(listed.current_price.toFixed(2)),
+  );
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,29 +264,74 @@ function ListedCard({
 
   const handleSubmit = () => {
     if (pending || qty <= 0) return;
-    if (side === "buy" && total > cash) {
-      setError("Cash insuffisant");
-      return;
-    }
     setError(null);
     setResult(null);
-    const fd = new FormData();
-    fd.set("company_id", listed.company_id);
-    fd.set("side", side);
-    fd.set("quantity", String(qty));
-    startTransition(async () => {
-      const res = await placeShareOrderAction(fd);
-      if (res.ok) {
-        const d = res.data as { price?: number; total?: number; shares?: number };
-        setResult(
-          `✓ ${side === "buy" ? "Acheté" : "Vendu"} ${d?.shares ?? qty} @ ${skylineFormatCashFR(
-            d?.price ?? 0,
-          )} = ${skylineFormatCashFR(d?.total ?? 0)}`,
-        );
-      } else {
-        setError(res.error);
+
+    if (mode === "market") {
+      if (side === "buy" && total > cash) {
+        setError("Cash insuffisant");
+        return;
       }
-    });
+      const fd = new FormData();
+      fd.set("company_id", listed.company_id);
+      fd.set("side", side);
+      fd.set("quantity", String(qty));
+      startTransition(async () => {
+        const res = await placeShareOrderAction(fd);
+        if (res.ok) {
+          const d = res.data as { price?: number; total?: number; shares?: number };
+          setResult(
+            `✓ ${side === "buy" ? "Acheté" : "Vendu"} ${d?.shares ?? qty} @ ${skylineFormatCashFR(
+              d?.price ?? 0,
+            )} = ${skylineFormatCashFR(d?.total ?? 0)}`,
+          );
+        } else {
+          setError(res.error);
+        }
+      });
+    } else if (mode === "limit") {
+      if (limitPrice <= 0) {
+        setError("Prix limite invalide");
+        return;
+      }
+      const fd = new FormData();
+      fd.set("company_id", listed.company_id);
+      fd.set("side", side);
+      fd.set("quantity", String(qty));
+      fd.set("limit_price", String(limitPrice));
+      startTransition(async () => {
+        const res = await placeShareLimitOrderAction(fd);
+        if (res.ok) {
+          setResult(
+            `✓ Ordre limit ${side} ${qty} @ ${skylineFormatCashFR(limitPrice)} placé`,
+          );
+        } else {
+          setError(res.error);
+        }
+      });
+    } else {
+      // short
+      const collateral = total * 0.5;
+      if (collateral > cash) {
+        setError(`Cash insuffisant (collateral ${skylineFormatCashFR(collateral)})`);
+        return;
+      }
+      const fd = new FormData();
+      fd.set("company_id", listed.company_id);
+      fd.set("quantity", String(qty));
+      startTransition(async () => {
+        const res = await openShortPositionAction(fd);
+        if (res.ok) {
+          setResult(
+            `✓ Short ouvert : ${qty} actions vendues à ${skylineFormatCashFR(
+              Number(listed.current_price),
+            )}`,
+          );
+        } else {
+          setError(res.error);
+        }
+      });
+    }
   };
 
   return (
@@ -273,26 +378,60 @@ function ListedCard({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
           <button
-            onClick={() => setSide("buy")}
-            className={`rounded-md border px-3 py-1 text-xs font-semibold ${
-              side === "buy"
-                ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+            onClick={() => setMode("market")}
+            className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${
+              mode === "market"
+                ? "border-purple-400/60 bg-purple-500/15 text-purple-100"
                 : "border-white/10 bg-white/[0.02] text-zinc-400"
             }`}
           >
-            Acheter
+            Market
           </button>
           <button
-            onClick={() => setSide("sell")}
-            className={`rounded-md border px-3 py-1 text-xs font-semibold ${
-              side === "sell"
-                ? "border-rose-400/50 bg-rose-500/15 text-rose-200"
+            onClick={() => setMode("limit")}
+            className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${
+              mode === "limit"
+                ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100"
                 : "border-white/10 bg-white/[0.02] text-zinc-400"
             }`}
           >
-            Vendre
+            Limit
+          </button>
+          <button
+            onClick={() => setMode("short")}
+            className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${
+              mode === "short"
+                ? "border-rose-400/60 bg-rose-500/15 text-rose-100"
+                : "border-white/10 bg-white/[0.02] text-zinc-400"
+            }`}
+          >
+            Short
           </button>
         </div>
+        {mode !== "short" ? (
+          <div className="flex gap-1">
+            <button
+              onClick={() => setSide("buy")}
+              className={`rounded-md border px-3 py-1 text-xs font-semibold ${
+                side === "buy"
+                  ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+                  : "border-white/10 bg-white/[0.02] text-zinc-400"
+              }`}
+            >
+              Acheter
+            </button>
+            <button
+              onClick={() => setSide("sell")}
+              className={`rounded-md border px-3 py-1 text-xs font-semibold ${
+                side === "sell"
+                  ? "border-rose-400/50 bg-rose-500/15 text-rose-200"
+                  : "border-white/10 bg-white/[0.02] text-zinc-400"
+              }`}
+            >
+              Vendre
+            </button>
+          </div>
+        ) : null}
         <input
           type="number"
           min={1}
@@ -300,16 +439,36 @@ function ListedCard({
           value={qty}
           onChange={(e) => setQty(Math.max(1, Number(e.target.value)))}
           className="w-24 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/50"
+          placeholder="Qté"
         />
+        {mode === "limit" ? (
+          <input
+            type="number"
+            step={0.01}
+            min={0.01}
+            value={limitPrice}
+            onChange={(e) => setLimitPrice(Math.max(0.01, Number(e.target.value)))}
+            className="w-24 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-cyan-400/50 tabular-nums"
+            placeholder="Prix limite"
+          />
+        ) : null}
         <span className="text-xs tabular-nums text-zinc-400">
-          Total : {skylineFormatCashFR(total)}
+          {mode === "short"
+            ? `Collat. ${skylineFormatCashFR(total * 0.5)}`
+            : `Total : ${skylineFormatCashFR(mode === "limit" ? qty * limitPrice : total)}`}
         </span>
         <button
           onClick={handleSubmit}
           disabled={pending || qty <= 0}
           className="ml-auto rounded-md border border-purple-400/50 bg-purple-500/15 px-3 py-1 text-xs font-semibold text-purple-200 transition-colors hover:bg-purple-500/25 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {pending ? "..." : `Passer l'ordre`}
+          {pending
+            ? "..."
+            : mode === "short"
+            ? "Short"
+            : mode === "limit"
+            ? "Placer ordre limit"
+            : "Passer l'ordre"}
         </button>
       </div>
       {result ? (
@@ -317,6 +476,133 @@ function ListedCard({
       ) : null}
       {error ? (
         <div className="mt-2 text-[11px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function OpenOrderRow({ order }: { order: OpenOrder }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCancel = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("order_id", order.id);
+    startTransition(async () => {
+      const res = await cancelShareOrderAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <li className="flex items-center justify-between rounded border border-white/5 bg-white/[0.02] px-3 py-1.5">
+      <div>
+        <span className="text-zinc-200">
+          {order.company_name ?? order.company_id}
+        </span>
+        <span className="ml-2 text-zinc-500">
+          {order.side === "buy" ? "Acheter" : "Vendre"} {order.quantity} @{" "}
+          {order.limit_price
+            ? skylineFormatCashFR(order.limit_price) + " (limit)"
+            : "marché"}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-zinc-500">
+          {new Date(order.created_at).toLocaleDateString("fr-FR")}
+        </span>
+        <button
+          onClick={handleCancel}
+          disabled={pending}
+          className="text-[10px] text-rose-300 hover:text-rose-200 disabled:opacity-40"
+        >
+          Annuler
+        </button>
+      </div>
+      {error ? (
+        <span className="text-[10px] text-rose-300">{error}</span>
+      ) : null}
+    </li>
+  );
+}
+
+function OpenShortRow({
+  short,
+  cash,
+}: {
+  short: OpenShort;
+  cash: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const closeCost = short.shares_borrowed * (short.current_price ?? short.sold_price);
+  const collateralAvailable = short.collateral;
+  const cashNeeded = Math.max(0, closeCost - collateralAvailable);
+  const projectedPnl = short.proceeds - closeCost;
+
+  const handleClose = () => {
+    if (pending || cash < cashNeeded) return;
+    if (
+      !confirm(
+        `Fermer ce short ? P&L estimé : ${projectedPnl >= 0 ? "+" : ""}${skylineFormatCashFR(
+          projectedPnl,
+        )}`,
+      )
+    )
+      return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("short_id", short.id);
+    startTransition(async () => {
+      const res = await closeShortPositionAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-rose-400/30 bg-rose-500/5 p-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            📉 {short.company_name ?? short.company_id}
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            {short.shares_borrowed} actions · vendues à{" "}
+            {skylineFormatCashFR(short.sold_price)} ·{" "}
+            collatéral {skylineFormatCashFR(short.collateral)}
+          </div>
+        </div>
+        <div className="text-right tabular-nums">
+          <div
+            className={`text-base font-bold ${
+              projectedPnl >= 0 ? "text-emerald-300" : "text-rose-300"
+            }`}
+          >
+            {projectedPnl >= 0 ? "+" : ""}
+            {skylineFormatCashFR(projectedPnl)}
+          </div>
+          <div className="text-[10px] text-zinc-500">
+            cours actuel{" "}
+            {skylineFormatCashFR(short.current_price ?? short.sold_price)}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={handleClose}
+        disabled={pending || cash < cashNeeded}
+        className="mt-2 w-full rounded-md border border-rose-400/50 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-500/20 disabled:opacity-40"
+      >
+        {pending
+          ? "Fermeture..."
+          : cash < cashNeeded
+          ? `Cash insuffisant (besoin ${skylineFormatCashFR(cashNeeded)})`
+          : `Racheter & fermer (coût ${skylineFormatCashFR(closeCost)})`}
+      </button>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
       ) : null}
     </div>
   );

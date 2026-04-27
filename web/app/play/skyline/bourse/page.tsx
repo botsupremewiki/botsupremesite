@@ -3,6 +3,8 @@ import { getProfile } from "@/lib/auth";
 import {
   ensureSkylineProfile,
   fetchListedCompanies,
+  fetchOpenShareOrders,
+  fetchOpenShortsForUser,
   fetchShareHoldingsForUser,
   tickShareCourses,
 } from "../_lib/supabase-helpers";
@@ -18,9 +20,11 @@ export default async function BoursePage() {
   await tickShareCourses();
 
   const skyProfile = await ensureSkylineProfile();
-  const [listed, holdings] = await Promise.all([
+  const [listed, holdings, openOrders, openShorts] = await Promise.all([
     fetchListedCompanies(),
     fetchShareHoldingsForUser(profile.id),
+    fetchOpenShareOrders(profile.id),
+    fetchOpenShortsForUser(profile.id),
   ]);
 
   return (
@@ -35,6 +39,8 @@ export default async function BoursePage() {
       <BourseView
         listed={listed}
         holdings={holdings}
+        openOrders={openOrders}
+        openShorts={openShorts}
         cash={Number(skyProfile?.cash ?? 0)}
         userId={profile.id}
       />

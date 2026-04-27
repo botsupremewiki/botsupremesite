@@ -21,6 +21,7 @@ import type {
   SkylineCompanyForSaleRow,
   SkylineAchievementId,
   SkylineLeaderboardRow,
+  SkylineShortPositionRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -579,4 +580,121 @@ export async function checkAchievements(): Promise<void> {
   const supabase = await createClient();
   if (!supabase) return;
   await supabase.rpc("skyline_check_achievements");
+}
+
+// ───── Session 1 : Audit aléatoire + ordres limit + short ─────
+
+export async function runRandomAudit(): Promise<void> {
+  const supabase = await createClient();
+  if (!supabase) return;
+  await supabase.rpc("skyline_run_random_audit");
+}
+
+export async function fetchOpenShareOrders(
+  userId: string,
+): Promise<
+  Array<{
+    id: string;
+    user_id: string;
+    company_id: string;
+    side: "buy" | "sell";
+    order_kind: "market" | "limit";
+    quantity: number;
+    limit_price: number | null;
+    status: string;
+    created_at: string;
+    company_name?: string;
+  }>
+> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_share_orders")
+    .select("*, skyline_companies!inner(name)")
+    .eq("user_id", userId)
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((r) => {
+    const c = r.skyline_companies as { name: string };
+    return {
+      id: r.id as string,
+      user_id: r.user_id as string,
+      company_id: r.company_id as string,
+      side: r.side as "buy" | "sell",
+      order_kind: r.order_kind as "market" | "limit",
+      quantity: Number(r.quantity),
+      limit_price: r.limit_price ? Number(r.limit_price) : null,
+      status: r.status as string,
+      created_at: r.created_at as string,
+      company_name: c.name,
+    };
+  });
+}
+
+export async function fetchOpenShortsForUser(
+  userId: string,
+): Promise<
+  Array<SkylineShortPositionRow & { company_name?: string; current_price?: number }>
+> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_short_positions")
+    .select(
+      "*, skyline_companies!inner(name), skyline_company_shares!inner(current_price)",
+    )
+    .eq("user_id", userId)
+    .is("closed_at", null)
+    .order("opened_at", { ascending: false });
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id as string,
+    user_id: r.user_id as string,
+    company_id: r.company_id as string,
+    shares_borrowed: Number(r.shares_borrowed),
+    sold_price: Number(r.sold_price),
+    proceeds: Number(r.proceeds),
+    collateral: Number(r.collateral),
+    opened_at: r.opened_at as string,
+    closed_at: (r.closed_at as string) ?? null,
+    close_price: r.close_price ? Number(r.close_price) : null,
+    pnl: r.pnl ? Number(r.pnl) : null,
+    company_name: (r.skyline_companies as { name: string }).name,
+    current_price: Number(
+      (r.skyline_company_shares as { current_price: number }).current_price,
+    ),
+  }));
+}
+
+// ───── Session 1 : Salariat joueur ─────
+
+export async function fetchPlayerCandidates(
+  limit = 30,
+): Promise<
+  Array<{
+    employee_id: string;
+    user_id: string;
+    full_name: string;
+    skills: Record<string, number>;
+    salary_demanded: number;
+  }>
+> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_employees")
+    .select("id, user_id, full_name, skills, salary_demanded")
+    .is("company_id", null)
+    .eq("is_npc", false)
+    .order("salary_demanded", { ascending: true })
+    .limit(limit);
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((r) => ({
+    employee_id: r.id as string,
+    user_id: r.user_id as string,
+    full_name: r.full_name as string,
+    skills: (r.skills ?? {}) as Record<string, number>,
+    salary_demanded: Number(r.salary_demanded),
+  }));
 }

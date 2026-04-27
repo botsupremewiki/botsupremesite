@@ -5090,3 +5090,840 @@ begin
 end;
 $$;
 
+-- ══════════════════════════════════════════════════════════════════════
+-- 30. SESSION 1 — SCHEMA EXTENSIONS
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Fermeture temporaire d'un commerce après inspection sanitaire ratée.
+alter table public.skyline_companies
+  add column if not exists closed_until timestamptz;
+
+-- Le joueur s'expose comme candidat (salariat joueur).
+alter table public.skyline_profiles
+  add column if not exists is_seeking_job boolean not null default false;
+alter table public.skyline_profiles
+  add column if not exists job_min_salary numeric(12, 2) not null default 2000;
+alter table public.skyline_profiles
+  add column if not exists current_job_company_id uuid references public.skyline_companies(id) on delete set null;
+alter table public.skyline_profiles
+  add column if not exists current_job_salary numeric(12, 2);
+alter table public.skyline_profiles
+  add column if not exists current_job_started_at timestamptz;
+
+-- Positions short (vente à découvert).
+create table if not exists public.skyline_short_positions (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  company_id      uuid not null references public.skyline_companies(id) on delete cascade,
+  shares_borrowed bigint not null check (shares_borrowed > 0),
+  sold_price      numeric(12, 2) not null,
+  proceeds        numeric(15, 2) not null,
+  collateral      numeric(15, 2) not null, -- 50% du proceeds bloqué en garantie
+  opened_at       timestamptz not null default now(),
+  closed_at       timestamptz,
+  close_price     numeric(12, 2),
+  pnl             numeric(15, 2)
+);
+
+alter table public.skyline_short_positions enable row level security;
+
+drop policy if exists "skyline_short_read_own" on public.skyline_short_positions;
+create policy "skyline_short_read_own"
+  on public.skyline_short_positions
+  for select
+  using (auth.uid() = user_id OR (select is_admin from public.profiles where id = auth.uid()));
+
+drop policy if exists "skyline_short_write_own" on public.skyline_short_positions;
+create policy "skyline_short_write_own"
+  on public.skyline_short_positions
+  for all
+  using (auth.uid() = user_id);
+
+create index if not exists skyline_short_user_idx on public.skyline_short_positions(user_id);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 31. SESSION 1 — SALARIAT JOUEUR
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Le joueur s'expose au marché de l'emploi (ses player_skills sont visibles).
+create or replace function public.skyline_offer_self_to_market(p_min_salary numeric default 2000)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_username text;
+  v_existing uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_min_salary <= 0 then raise exception 'Salaire minimum invalide'; end if;
+
+  -- Update profile flag.
+  update public.skyline_profiles
+    set is_seeking_job = true,
+        job_min_salary = p_min_salary,
+        updated_at = now()
+    where user_id = v_user_id;
+
+  -- Récupérer username pour la fiche employée.
+  select username into v_username from public.profiles where id = v_user_id;
+  v_username := coalesce(v_username, 'Joueur');
+
+  -- Insérer/mettre à jour la fiche dans skyline_employees (si pas déjà embauché ailleurs).
+  select id into v_existing from public.skyline_employees
+    where user_id = v_user_id and company_id is null
+    limit 1;
+
+  if v_existing is null then
+    insert into public.skyline_employees (
+      user_id, full_name, avatar_seed, is_npc, skills, salary_demanded,
+      morale, available_until
+    )
+    select
+      v_user_id,
+      v_username,
+      v_user_id::text,
+      false,
+      coalesce(player_skills, '{}'::jsonb),
+      p_min_salary,
+      90,
+      now() + interval '90 days'
+    from public.skyline_profiles where user_id = v_user_id;
+  else
+    update public.skyline_employees
+      set salary_demanded = p_min_salary,
+          full_name = v_username,
+          skills = (
+            select coalesce(player_skills, '{}'::jsonb)
+            from public.skyline_profiles where user_id = v_user_id
+          ),
+          available_until = now() + interval '90 days',
+          is_npc = false
+      where id = v_existing;
+  end if;
+end;
+$$;
+
+-- Le joueur retire son profil du marché.
+create or replace function public.skyline_withdraw_self_from_market()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+
+  update public.skyline_profiles
+    set is_seeking_job = false, updated_at = now()
+    where user_id = v_user_id;
+
+  -- Retirer la fiche du marché si pas embauché.
+  delete from public.skyline_employees
+    where user_id = v_user_id and company_id is null;
+end;
+$$;
+
+-- Démissionner d'un job joueur.
+create or replace function public.skyline_player_quit_job()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_emp_id  uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+
+  -- Trouver l'employé (lui-même).
+  select id into v_emp_id from public.skyline_employees
+    where user_id = v_user_id and company_id is not null
+    limit 1;
+
+  if v_emp_id is not null then
+    update public.skyline_employees
+      set company_id = null,
+          salary_paid = 0,
+          hired_at = null,
+          available_until = now() + interval '7 days'
+      where id = v_emp_id;
+  end if;
+
+  update public.skyline_profiles
+    set current_job_company_id = null,
+        current_job_salary = null,
+        current_job_started_at = null,
+        updated_at = now()
+    where user_id = v_user_id;
+end;
+$$;
+
+-- Override : skyline_hire_employee tient compte du salariat joueur.
+-- Quand on embauche un employé qui est un joueur, on update aussi son skyline_profiles.
+create or replace function public.skyline_hire_employee(
+  p_employee_id uuid,
+  p_company_id  uuid,
+  p_salary      numeric default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_emp     public.skyline_employees%rowtype;
+  v_salary  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  select * into v_emp from public.skyline_employees where id = p_employee_id;
+  if not found then raise exception 'Candidat introuvable'; end if;
+  if v_emp.company_id is not null then raise exception 'Déjà embauché ailleurs'; end if;
+
+  v_salary := coalesce(p_salary, v_emp.salary_demanded);
+  if v_salary < v_emp.salary_demanded * 0.8 then
+    raise exception 'Salaire trop bas (le candidat refuse)';
+  end if;
+
+  update public.skyline_employees
+    set company_id = p_company_id,
+        salary_paid = v_salary,
+        hired_at = now(),
+        available_until = null,
+        morale = least(100, morale + case when v_salary >= salary_demanded then 10 else 0 end)
+    where id = p_employee_id;
+
+  -- Si c'est un joueur, on met aussi à jour son skyline_profiles.
+  if v_emp.user_id is not null then
+    update public.skyline_profiles
+      set current_job_company_id = p_company_id,
+          current_job_salary = v_salary,
+          current_job_started_at = now(),
+          is_seeking_job = false,
+          updated_at = now()
+      where user_id = v_emp.user_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', 0,
+    'Embauche : ' || v_emp.full_name || ' (' || v_salary || '$/mois)'
+    || case when v_emp.user_id is not null then ' [JOUEUR]' else '' end);
+end;
+$$;
+
+-- Override skyline_fire_employee pour gérer joueur.
+create or replace function public.skyline_fire_employee(p_employee_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_emp     public.skyline_employees%rowtype;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_emp from public.skyline_employees where id = p_employee_id;
+  if not found then raise exception 'Employé introuvable'; end if;
+  if v_emp.company_id is null then raise exception 'Pas embauché'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = v_emp.company_id and user_id = v_user_id
+  ) then raise exception 'Pas autorisé'; end if;
+
+  update public.skyline_employees
+    set company_id = null,
+        salary_paid = 0,
+        hired_at = null,
+        morale = greatest(20, morale - 30),
+        available_until = now() + interval '14 days'
+    where id = p_employee_id;
+
+  -- Si joueur, reset son skyline_profiles.
+  if v_emp.user_id is not null then
+    update public.skyline_profiles
+      set current_job_company_id = null,
+          current_job_salary = null,
+          current_job_started_at = null,
+          updated_at = now()
+      where user_id = v_emp.user_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, v_emp.company_id, 'other', 0,
+    'Licenciement : ' || v_emp.full_name);
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 32. SESSION 1 — BOURSE : ORDRES LIMIT + SHORT SELLING
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Pose un ordre limit. Si le cours touche le prix limite, exécution.
+create or replace function public.skyline_place_share_limit_order(
+  p_company_id uuid,
+  p_side       text,
+  p_quantity   bigint,
+  p_limit_price numeric
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_order_id  uuid;
+  v_share     public.skyline_company_shares%rowtype;
+  v_user_cash numeric;
+  v_holding   public.skyline_share_holdings%rowtype;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_quantity <= 0 then raise exception 'Quantité invalide'; end if;
+  if p_limit_price <= 0 then raise exception 'Prix limite invalide'; end if;
+  if p_side not in ('buy', 'sell') then raise exception 'Side invalide'; end if;
+
+  select * into v_share from public.skyline_company_shares
+    where company_id = p_company_id and is_listed = true;
+  if not found then raise exception 'Entreprise non cotée'; end if;
+
+  -- Bloquer le cash (buy) ou les actions (sell) en pré-réservation : on stocke juste l'ordre.
+  -- L'exécution prélève au moment du match.
+  if p_side = 'buy' then
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < p_quantity * p_limit_price then
+      raise exception 'Cash insuffisant pour cet ordre limite';
+    end if;
+  else
+    select * into v_holding from public.skyline_share_holdings
+      where user_id = v_user_id and company_id = p_company_id;
+    if not found or v_holding.shares < p_quantity then
+      raise exception 'Actions insuffisantes';
+    end if;
+  end if;
+
+  insert into public.skyline_share_orders (
+    user_id, company_id, side, order_kind, quantity, limit_price, status
+  )
+  values (
+    v_user_id, p_company_id, p_side, 'limit', p_quantity, p_limit_price, 'open'
+  )
+  returning id into v_order_id;
+
+  -- Tenter match immédiat si limit déjà atteinte.
+  perform public.skyline_match_limit_orders(p_company_id);
+
+  return v_order_id;
+end;
+$$;
+
+-- Match les ordres limit pour une entreprise selon le cours actuel.
+create or replace function public.skyline_match_limit_orders(p_company_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_share   public.skyline_company_shares%rowtype;
+  v_order   record;
+  v_count   int := 0;
+  v_total   numeric;
+  v_holding public.skyline_share_holdings%rowtype;
+begin
+  select * into v_share from public.skyline_company_shares
+    where company_id = p_company_id and is_listed = true;
+  if not found then return 0; end if;
+
+  -- Buy limit : si cours <= prix limite, exécuter au cours.
+  for v_order in
+    select * from public.skyline_share_orders
+    where company_id = p_company_id
+      and order_kind = 'limit'
+      and status = 'open'
+      and side = 'buy'
+      and limit_price >= v_share.current_price
+  loop
+    v_total := v_order.quantity * v_share.current_price;
+    -- Vérifier cash dispo.
+    declare v_cash numeric;
+    begin
+      select cash into v_cash from public.skyline_profiles where user_id = v_order.user_id;
+      if v_cash < v_total then
+        update public.skyline_share_orders
+          set status = 'cancelled' where id = v_order.id;
+        continue;
+      end if;
+    end;
+
+    update public.skyline_profiles
+      set cash = cash - v_total, updated_at = now()
+      where user_id = v_order.user_id;
+
+    select * into v_holding from public.skyline_share_holdings
+      where user_id = v_order.user_id and company_id = p_company_id;
+    if not found then
+      insert into public.skyline_share_holdings (user_id, company_id, shares, avg_buy_price)
+      values (v_order.user_id, p_company_id, v_order.quantity, v_share.current_price);
+    else
+      update public.skyline_share_holdings
+        set shares = shares + v_order.quantity,
+            avg_buy_price = (shares * avg_buy_price + v_order.quantity * v_share.current_price)
+                            / (shares + v_order.quantity)
+        where id = v_holding.id;
+    end if;
+
+    update public.skyline_share_orders
+      set status = 'filled',
+          filled_quantity = quantity,
+          avg_fill_price = v_share.current_price,
+          filled_at = now()
+      where id = v_order.id;
+
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_order.user_id, p_company_id, 'other', -v_total,
+      'Limit BUY exécuté : ' || v_order.quantity || ' actions à ' || v_share.current_price || '$');
+
+    v_count := v_count + 1;
+  end loop;
+
+  -- Sell limit : si cours >= prix limite, exécuter au cours.
+  for v_order in
+    select * from public.skyline_share_orders
+    where company_id = p_company_id
+      and order_kind = 'limit'
+      and status = 'open'
+      and side = 'sell'
+      and limit_price <= v_share.current_price
+  loop
+    v_total := v_order.quantity * v_share.current_price;
+    -- Vérifier holdings.
+    select * into v_holding from public.skyline_share_holdings
+      where user_id = v_order.user_id and company_id = p_company_id;
+    if not found or v_holding.shares < v_order.quantity then
+      update public.skyline_share_orders
+        set status = 'cancelled' where id = v_order.id;
+      continue;
+    end if;
+
+    update public.skyline_share_holdings
+      set shares = shares - v_order.quantity
+      where id = v_holding.id;
+    delete from public.skyline_share_holdings
+      where id = v_holding.id and shares = 0;
+
+    update public.skyline_profiles
+      set cash = cash + v_total, updated_at = now()
+      where user_id = v_order.user_id;
+
+    update public.skyline_share_orders
+      set status = 'filled',
+          filled_quantity = quantity,
+          avg_fill_price = v_share.current_price,
+          filled_at = now()
+      where id = v_order.id;
+
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_order.user_id, p_company_id, 'other', v_total,
+      'Limit SELL exécuté : ' || v_order.quantity || ' actions à ' || v_share.current_price || '$');
+
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+-- Annuler un ordre limit.
+create or replace function public.skyline_cancel_share_order(p_order_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  update public.skyline_share_orders
+    set status = 'cancelled'
+    where id = p_order_id and user_id = v_user_id and status = 'open';
+end;
+$$;
+
+-- Ouvre une position short (emprunt + vente immédiate).
+-- Collateral = 50% du proceeds (bloqué jusqu'à fermeture).
+create or replace function public.skyline_open_short_position(
+  p_company_id uuid,
+  p_quantity   bigint
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id    uuid := auth.uid();
+  v_share      public.skyline_company_shares%rowtype;
+  v_proceeds   numeric;
+  v_collateral numeric;
+  v_user_cash  numeric;
+  v_id         uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_quantity <= 0 then raise exception 'Quantité invalide'; end if;
+
+  select * into v_share from public.skyline_company_shares
+    where company_id = p_company_id and is_listed = true;
+  if not found then raise exception 'Entreprise non cotée'; end if;
+
+  v_proceeds := p_quantity * v_share.current_price;
+  v_collateral := v_proceeds * 0.5;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_collateral then
+    raise exception 'Cash insuffisant pour collateral (50%% du short = % $)',
+      round(v_collateral, 2);
+  end if;
+
+  -- Bloquer collateral + créditer proceeds. Net : +proceeds - collateral = +50% du short.
+  update public.skyline_profiles
+    set cash = cash + v_proceeds - v_collateral, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_short_positions (
+    user_id, company_id, shares_borrowed, sold_price, proceeds, collateral
+  )
+  values (
+    v_user_id, p_company_id, p_quantity, v_share.current_price, v_proceeds, v_collateral
+  )
+  returning id into v_id;
+
+  -- Vente short → cours baisse (similaire ordre vente).
+  update public.skyline_company_shares
+    set current_price = current_price * (1 - 0.0005 * p_quantity / nullif(total_shares, 0)),
+        market_cap = current_price * total_shares
+    where company_id = p_company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', v_proceeds - v_collateral,
+    'Short ouvert : ' || p_quantity || ' actions vendues à ' || v_share.current_price ||
+    '$ (collateral ' || round(v_collateral) || '$)');
+
+  return v_id;
+end;
+$$;
+
+-- Ferme un short : rachète au cours actuel + libère collateral. P&L = proceeds - close_price * shares.
+create or replace function public.skyline_close_short_position(p_short_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id    uuid := auth.uid();
+  v_short      public.skyline_short_positions%rowtype;
+  v_share      public.skyline_company_shares%rowtype;
+  v_close_cost numeric;
+  v_pnl        numeric;
+  v_user_cash  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_short from public.skyline_short_positions
+    where id = p_short_id and user_id = v_user_id and closed_at is null;
+  if not found then raise exception 'Short non trouvé ou déjà fermé'; end if;
+
+  select * into v_share from public.skyline_company_shares
+    where company_id = v_short.company_id;
+  if not found then raise exception 'Entreprise plus cotée'; end if;
+
+  v_close_cost := v_short.shares_borrowed * v_share.current_price;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  -- Le user a déjà reçu (proceeds - collateral) à l'ouverture. Le collateral lui est restitué
+  -- au moment de la fermeture, et il paie close_cost. P&L = proceeds - close_cost.
+  if v_user_cash + v_short.collateral < v_close_cost then
+    raise exception 'Cash insuffisant pour racheter (besoin % $)',
+      round(v_close_cost - v_user_cash - v_short.collateral, 2);
+  end if;
+
+  v_pnl := v_short.proceeds - v_close_cost;
+
+  -- Restituer collateral + payer close_cost.
+  update public.skyline_profiles
+    set cash = cash + v_short.collateral - v_close_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  update public.skyline_short_positions
+    set closed_at = now(),
+        close_price = v_share.current_price,
+        pnl = v_pnl
+    where id = p_short_id;
+
+  -- Rachat → cours monte légèrement.
+  update public.skyline_company_shares
+    set current_price = current_price * (1 + 0.0005 * v_short.shares_borrowed / nullif(total_shares, 0)),
+        market_cap = current_price * total_shares
+    where company_id = v_short.company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, v_short.company_id, 'other', v_short.collateral - v_close_cost,
+    'Short fermé : P&L ' || (case when v_pnl >= 0 then '+' else '' end) || round(v_pnl) || '$');
+
+  return v_pnl;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 33. SESSION 1 — AUDIT FISCAL ALÉATOIRE ÉTENDU
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Audit aléatoire global. Probabilité de base 0.5%/visite.
+-- Si comptable (compétence Compta > 50) embauché dans une entreprise du joueur, divisé par 5.
+create or replace function public.skyline_run_random_audit()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_profile   public.skyline_profiles%rowtype;
+  v_assets    numeric;
+  v_fine      numeric;
+  v_has_accountant boolean;
+  v_proba     numeric := 0.005; -- 0.5% par visite
+begin
+  if v_user_id is null then return false; end if;
+  select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  if not found then return false; end if;
+
+  -- Comptable réduit fortement le risque.
+  select exists (
+    select 1 from public.skyline_employees e
+    inner join public.skyline_companies c on c.id = e.company_id
+    where c.user_id = v_user_id
+      and (e.skills->>'compta')::int > 50
+  ) into v_has_accountant;
+  if v_has_accountant then
+    v_proba := v_proba / 5;
+  end if;
+
+  if random() >= v_proba then return false; end if;
+
+  -- Audit déclenché. Amende 1-3% du patrimoine.
+  v_assets := greatest(v_profile.cash, 0) + greatest(v_profile.net_worth, 0);
+  v_fine := v_assets * (0.01 + random() * 0.02);
+  if v_fine < 100 then return false; end if; -- pas la peine pour les petits
+
+  v_fine := least(v_fine, v_profile.cash * 0.5); -- cap à 50% du cash dispo
+
+  update public.skyline_profiles
+    set cash = cash - v_fine, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_audits (user_id, triggered_by, fine_amount, was_paid, description)
+  values (v_user_id, 'random', v_fine, true,
+    'Contrôle fiscal aléatoire — amende ' || round(v_fine) || '$' ||
+    case when v_has_accountant then ' (comptable a réduit l''ampleur)' else '' end);
+
+  insert into public.skyline_transactions (user_id, kind, amount, description)
+  values (v_user_id, 'audit_fine', -v_fine,
+    'Contrôle fiscal aléatoire');
+
+  return true;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 34. SESSION 1 — INSPECTION SANITAIRE AVEC FERMETURE
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Inspection aléatoire d'un commerce. Si propreté < 40, fermeture 7 jours jeu (7h réelles).
+create or replace function public.skyline_random_sanitary_inspection(p_company_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_user_id   uuid := auth.uid();
+  v_proba     numeric := 0.02; -- 2% par tick (mensuel jeu)
+  v_fine      numeric;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return false; end if;
+  if v_company.category <> 'commerce' then return false; end if;
+  if v_company.closed_until is not null and v_company.closed_until > now() then
+    return false; -- déjà fermé
+  end if;
+
+  if random() >= v_proba then return false; end if;
+
+  -- Inspection : si propreté < 40, fermeture + amende.
+  if v_company.cleanliness < 40 then
+    v_fine := 5000 + (40 - v_company.cleanliness) * 500;
+    update public.skyline_companies
+      set closed_until = now() + interval '7 hours', -- 7 jours jeu
+          updated_at = now()
+      where id = p_company_id;
+
+    update public.skyline_profiles
+      set cash = cash - v_fine, updated_at = now()
+      where user_id = v_user_id;
+
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_user_id, p_company_id, 'audit_fine', -v_fine,
+      'Inspection sanitaire ÉCHEC — fermeture 7j + amende ' || round(v_fine) || '$');
+
+    insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+    values ('scandal',
+      '🚨 Inspection sanitaire ratée : ' || v_company.name,
+      v_company.name || ' fermé 7 jours suite à un contrôle sanitaire défavorable. Amende ' ||
+      round(v_fine) || '$.',
+      v_company.sector, -10);
+
+    return true;
+  end if;
+
+  return false;
+end;
+$$;
+
+-- Étendre process_sales pour ne pas vendre si fermé.
+create or replace function public.skyline_process_sales(p_company_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company       public.skyline_companies%rowtype;
+  v_user_id       uuid := auth.uid();
+  v_now           timestamptz := now();
+  v_elapsed_h     numeric;
+  v_district_factor numeric;
+  v_size_factor   numeric;
+  v_clients       int;
+  v_inv_rec       record;
+  v_sold_qty      int;
+  v_revenue       numeric;
+  v_total_sold    int := 0;
+  v_total_revenue numeric := 0;
+  v_star_mult     numeric := 1;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then
+    raise exception 'Entreprise non trouvée';
+  end if;
+
+  -- Si fermé temporairement : pas de vente.
+  if v_company.closed_until is not null and v_company.closed_until > v_now then
+    update public.skyline_companies set last_tick_at = v_now where id = p_company_id;
+    return 0;
+  end if;
+
+  -- Inspection sanitaire aléatoire (si applicable).
+  perform public.skyline_random_sanitary_inspection(p_company_id);
+
+  -- Re-fetch au cas où l'inspection a fermé l'entreprise.
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if v_company.closed_until is not null and v_company.closed_until > v_now then
+    return 0;
+  end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h < 0.01 then return 0; end if;
+
+  v_district_factor := case v_company.district
+    when 'centre'      then 25
+    when 'affaires'    then 20
+    when 'residentiel' then 12
+    when 'peripherie'  then 6
+    when 'populaire'   then 8
+    else 5
+  end;
+  v_size_factor := case v_company.local_size
+    when 'xs' then 0.6
+    when 's'  then 1.0
+    when 'm'  then 1.5
+    when 'l'  then 2.0
+    when 'xl' then 2.8
+    else 1
+  end;
+  v_clients := floor(v_district_factor * v_size_factor * v_elapsed_h)::int;
+
+  -- Multiplicateur étoiles restau.
+  v_star_mult := coalesce(public.skyline_restau_price_multiplier(p_company_id), 1);
+
+  if v_clients <= 0 then
+    update public.skyline_companies set last_tick_at = v_now where id = p_company_id;
+    return 0;
+  end if;
+
+  for v_inv_rec in
+    select * from public.skyline_inventory
+    where company_id = p_company_id and quantity > 0
+  loop
+    declare
+      v_ref_sell  numeric := public.skyline_product_ref_sell(v_inv_rec.product_id);
+      v_price_factor numeric;
+      v_demand_qty int;
+      v_effective_price numeric;
+    begin
+      if v_ref_sell is null or v_ref_sell <= 0 then continue; end if;
+      v_effective_price := v_inv_rec.sell_price * v_star_mult;
+      v_price_factor := least(2.0, greatest(0.1, v_ref_sell * v_star_mult / nullif(v_effective_price, 0)));
+      v_demand_qty := least(
+        v_inv_rec.quantity,
+        floor(v_clients * v_price_factor * 0.15 / greatest(1, (
+          select count(*) from public.skyline_inventory where company_id = p_company_id and quantity > 0
+        )))::int
+      );
+      if v_demand_qty <= 0 then continue; end if;
+
+      v_sold_qty := v_demand_qty;
+      v_revenue := v_sold_qty * v_effective_price;
+
+      update public.skyline_inventory
+        set quantity = quantity - v_sold_qty
+        where id = v_inv_rec.id;
+
+      v_total_sold := v_total_sold + v_sold_qty;
+      v_total_revenue := v_total_revenue + v_revenue;
+    end;
+  end loop;
+
+  if v_total_revenue > 0 then
+    update public.skyline_profiles
+      set cash = cash + v_total_revenue, updated_at = v_now
+      where user_id = v_user_id;
+    update public.skyline_companies
+      set monthly_revenue = v_total_revenue,
+          last_tick_at = v_now,
+          updated_at = v_now
+      where id = p_company_id;
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_user_id, p_company_id, 'sale', v_total_revenue,
+      v_total_sold || ' ventes (' || round(v_elapsed_h, 1) || 'h flux ' || v_clients || ' clients' ||
+      case when v_star_mult > 1 then ' · ×' || v_star_mult || ' étoiles' else '' end || ')');
+  else
+    update public.skyline_companies set last_tick_at = v_now where id = p_company_id;
+  end if;
+
+  return v_total_sold;
+end;
+$$;

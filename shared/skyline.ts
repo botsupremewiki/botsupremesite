@@ -1517,8 +1517,27 @@ export type SkylineProfileRow = {
   current_skill_training: string | null;
   skill_training_ends_at: string | null;
   player_skills: Record<string, number>;
+  is_seeking_job: boolean;
+  job_min_salary: number;
+  current_job_company_id: string | null;
+  current_job_salary: number | null;
+  current_job_started_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type SkylineShortPositionRow = {
+  id: string;
+  user_id: string;
+  company_id: string;
+  shares_borrowed: number;
+  sold_price: number;
+  proceeds: number;
+  collateral: number;
+  opened_at: string;
+  closed_at: string | null;
+  close_price: number | null;
+  pnl: number | null;
 };
 
 export type SkylineCompanyRow = {
@@ -1538,6 +1557,7 @@ export type SkylineCompanyRow = {
   is_open: boolean;
   open_hour: number; // 0-23
   close_hour: number;
+  closed_until: string | null; // fermeture temporaire suite inspection sanitaire
   created_at: string;
   updated_at: string;
   last_tick_at: string;

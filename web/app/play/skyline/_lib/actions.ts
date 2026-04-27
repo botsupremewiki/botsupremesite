@@ -729,3 +729,117 @@ export async function buyCompanyAction(formData: FormData): Promise<Result> {
   revalidatePath("/play/skyline");
   return { ok: true, data: null };
 }
+
+// ───── Session 1 : Salariat joueur ─────
+
+export async function offerSelfToMarketAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const minSalary = Number(formData.get("min_salary") ?? 2000);
+  if (minSalary <= 0) return { ok: false, error: "Salaire invalide" };
+
+  const { error } = await supabase.rpc("skyline_offer_self_to_market", {
+    p_min_salary: minSalary,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/job");
+  revalidatePath("/play/skyline/emploi");
+  return { ok: true, data: null };
+}
+
+export async function withdrawSelfFromMarketAction(): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const { error } = await supabase.rpc("skyline_withdraw_self_from_market");
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/job");
+  revalidatePath("/play/skyline/emploi");
+  return { ok: true, data: null };
+}
+
+export async function playerQuitJobAction(): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const { error } = await supabase.rpc("skyline_player_quit_job");
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/job");
+  return { ok: true, data: null };
+}
+
+// ───── Session 1 : Bourse étendue ─────
+
+export async function placeShareLimitOrderAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const side = String(formData.get("side") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const limitPrice = Number(formData.get("limit_price") ?? 0);
+  if (!companyId || !side || quantity <= 0 || limitPrice <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_place_share_limit_order", {
+    p_company_id: companyId,
+    p_side: side,
+    p_quantity: quantity,
+    p_limit_price: limitPrice,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/bourse");
+  return { ok: true, data };
+}
+
+export async function cancelShareOrderAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const orderId = String(formData.get("order_id") ?? "");
+  if (!orderId) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_cancel_share_order", {
+    p_order_id: orderId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/bourse");
+  return { ok: true, data: null };
+}
+
+export async function openShortPositionAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!companyId || quantity <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_open_short_position", {
+    p_company_id: companyId,
+    p_quantity: quantity,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/bourse");
+  return { ok: true, data };
+}
+
+export async function closeShortPositionAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const shortId = String(formData.get("short_id") ?? "");
+  if (!shortId) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_close_short_position", {
+    p_short_id: shortId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/bourse");
+  return { ok: true, data };
+}
