@@ -7,6 +7,9 @@ import type {
   SkylineInventoryRow,
   SkylineTransactionRow,
   SkylineOffshoreLogRow,
+  SkylineEmployeeRow,
+  SkylineLoanRow,
+  SkylinePermitRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -113,4 +116,84 @@ export async function fetchSkylineOffshoreLog(
     .order("created_at", { ascending: false })
     .limit(limit);
   return (data ?? []) as SkylineOffshoreLogRow[];
+}
+
+// ───── P2 : Employés ─────
+
+export async function fetchEmployeesForCompany(
+  companyId: string,
+): Promise<SkylineEmployeeRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_employees")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("hired_at", { ascending: true });
+  return (data ?? []) as SkylineEmployeeRow[];
+}
+
+export async function fetchEmployeeMarket(
+  limit = 60,
+): Promise<SkylineEmployeeRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_employees")
+    .select("*")
+    .is("company_id", null)
+    .order("salary_demanded", { ascending: true })
+    .limit(limit);
+  return (data ?? []) as SkylineEmployeeRow[];
+}
+
+// Si le marché est vide, on déclenche la seed automatique.
+export async function ensureEmployeeMarket(): Promise<void> {
+  const supabase = await createClient();
+  if (!supabase) return;
+  const { count } = await supabase
+    .from("skyline_employees")
+    .select("*", { count: "exact", head: true })
+    .is("company_id", null);
+  if ((count ?? 0) < 20) {
+    await supabase.rpc("skyline_seed_employees", { p_count: 50 });
+  }
+}
+
+// ───── P2 : Permis ─────
+
+export async function fetchPermitsForCompany(
+  companyId: string,
+): Promise<SkylinePermitRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_permits")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("acquired_at", { ascending: false });
+  return (data ?? []) as SkylinePermitRow[];
+}
+
+// ───── P4 : Prêts ─────
+
+export async function fetchLoansForUser(
+  userId: string,
+): Promise<SkylineLoanRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_loans")
+    .select("*")
+    .eq("user_id", userId)
+    .is("paid_off_at", null)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as SkylineLoanRow[];
+}
+
+export async function checkBankruptcy(): Promise<boolean> {
+  const supabase = await createClient();
+  if (!supabase) return false;
+  const { data } = await supabase.rpc("skyline_check_bankruptcy");
+  return Boolean(data);
 }

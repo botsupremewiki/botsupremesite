@@ -1,42 +1,67 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   SKYLINE_COMMERCE_PRODUCTS,
   SKYLINE_COMMERCE_SECTORS,
   SKYLINE_DISTRICTS,
   SKYLINE_FURNITURE,
   SKYLINE_LOCAL_SIZES,
+  SKYLINE_PERMITS,
   SKYLINE_PRODUCTS,
+  SKYLINE_SECTOR_REQUIRED_PERMITS,
+  SKYLINE_SKILLS,
   skylineFormatCashFR,
   skylineRentMonthly,
   type SkylineCommerceSector,
   type SkylineCompanyRow,
+  type SkylineEmployeeRow,
   type SkylineFurnitureKind,
   type SkylineFurnitureRow,
   type SkylineInventoryRow,
+  type SkylinePermitKind,
+  type SkylinePermitRow,
   type SkylineProductId,
+  type SkylineSkill,
   type SkylineTransactionRow,
 } from "@shared/skyline";
 import {
+  acquirePermitAction,
   buyFurnitureAction,
+  cleanCompanyAction,
+  fireEmployeeAction,
+  placeFurnitureAction,
   purchaseStockAction,
+  removeFurnitureAction,
   setSellPriceAction,
 } from "../_lib/actions";
 
-type Tab = "stocks" | "furniture" | "pricing" | "compta";
+type Tab =
+  | "stocks"
+  | "furniture"
+  | "layout"
+  | "pricing"
+  | "hr"
+  | "hygiene"
+  | "permits"
+  | "compta";
 
 export function CompanyView({
   company,
   furniture,
   inventory,
   transactions,
+  employees,
+  permits,
   cash,
 }: {
   company: SkylineCompanyRow;
   furniture: SkylineFurnitureRow[];
   inventory: SkylineInventoryRow[];
   transactions: SkylineTransactionRow[];
+  employees: SkylineEmployeeRow[];
+  permits: SkylinePermitRow[];
   cash: number;
 }) {
   const [tab, setTab] = useState<Tab>("stocks");
@@ -93,8 +118,20 @@ export function CompanyView({
           <TabButton current={tab} value="furniture" onClick={setTab}>
             🪑 Présentoirs ({furniture.length})
           </TabButton>
+          <TabButton current={tab} value="layout" onClick={setTab}>
+            🏠 Local 2D
+          </TabButton>
           <TabButton current={tab} value="pricing" onClick={setTab}>
             💰 Prix de vente
+          </TabButton>
+          <TabButton current={tab} value="hr" onClick={setTab}>
+            👥 RH ({employees.length})
+          </TabButton>
+          <TabButton current={tab} value="hygiene" onClick={setTab}>
+            🧹 Hygiène
+          </TabButton>
+          <TabButton current={tab} value="permits" onClick={setTab}>
+            📜 Permis
           </TabButton>
           <TabButton current={tab} value="compta" onClick={setTab}>
             📊 Compta
@@ -117,8 +154,29 @@ export function CompanyView({
             cash={cash}
           />
         ) : null}
+        {tab === "layout" ? (
+          <LayoutTab
+            companyId={company.id}
+            sizeId={company.local_size}
+            furniture={furniture}
+          />
+        ) : null}
         {tab === "pricing" ? (
           <PricingTab companyId={company.id} inventory={inventory} />
+        ) : null}
+        {tab === "hr" ? (
+          <HRTab companyId={company.id} employees={employees} />
+        ) : null}
+        {tab === "hygiene" ? (
+          <HygieneTab company={company} employees={employees} />
+        ) : null}
+        {tab === "permits" ? (
+          <PermitsTab
+            companyId={company.id}
+            sector={company.sector as SkylineCommerceSector}
+            permits={permits}
+            cash={cash}
+          />
         ) : null}
         {tab === "compta" ? <ComptaTab transactions={transactions} /> : null}
       </div>
@@ -620,6 +678,513 @@ function ComptaTab({ transactions }: { transactions: SkylineTransactionRow[] }) 
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglet RH
+// ──────────────────────────────────────────────────────────────────
+
+function HRTab({
+  companyId,
+  employees,
+}: {
+  companyId: string;
+  employees: SkylineEmployeeRow[];
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-blue-400/40 bg-black/40 p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-blue-200">
+            👥 Mon équipe ({employees.length})
+          </h3>
+          <Link
+            href="/play/skyline/emploi"
+            className="rounded-md border border-blue-400/50 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200 hover:bg-blue-500/20"
+          >
+            + Recruter
+          </Link>
+        </div>
+        {employees.length === 0 ? (
+          <p className="mt-3 text-xs text-zinc-400">
+            Aucun employé. Va sur le marché de l&apos;emploi pour recruter.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {employees.map((emp) => (
+              <EmployeeCard
+                key={emp.id}
+                companyId={companyId}
+                employee={emp}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmployeeCard({
+  companyId,
+  employee,
+}: {
+  companyId: string;
+  employee: SkylineEmployeeRow;
+}) {
+  const skills = (employee.skills ?? {}) as Record<string, number>;
+  const topSkills = Object.entries(skills)
+    .sort(([, a], [, b]) => Number(b) - Number(a))
+    .slice(0, 3)
+    .filter(([, v]) => Number(v) > 30);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFire = () => {
+    if (pending || !confirm(`Licencier ${employee.full_name} ?`)) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("employee_id", employee.id);
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      const res = await fireEmployeeAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            {employee.full_name}
+          </div>
+          <div className="text-[10px] text-zinc-500 tabular-nums">
+            Salaire {skylineFormatCashFR(Number(employee.salary_paid))}/mois ·
+            Moral {employee.morale}
+          </div>
+        </div>
+        <button
+          onClick={handleFire}
+          disabled={pending}
+          className="rounded-md border border-rose-400/40 bg-rose-500/5 px-2.5 py-1 text-xs text-rose-200 transition-colors hover:bg-rose-500/15 disabled:opacity-40"
+        >
+          Licencier
+        </button>
+      </div>
+      {topSkills.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {topSkills.map(([skill, value]) => {
+            const meta = SKYLINE_SKILLS[skill as SkylineSkill];
+            return (
+              <span
+                key={skill}
+                className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-zinc-300"
+              >
+                {meta?.glyph} {meta?.name ?? skill} · {Number(value)}
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglet Hygiène
+// ──────────────────────────────────────────────────────────────────
+
+function HygieneTab({
+  company,
+  employees,
+}: {
+  company: SkylineCompanyRow;
+  employees: SkylineEmployeeRow[];
+}) {
+  const [pending, startTransition] = useTransition();
+  const [cleaned, setCleaned] = useState(false);
+  const cleanlinessLevel = company.cleanliness;
+  const grade = company.hygiene_grade ?? "A";
+  const hasCleaner = employees.some((e) => {
+    const skills = (e.skills ?? {}) as Record<string, number>;
+    return Number(skills.entretien ?? 0) > 30;
+  });
+
+  const handleClean = () => {
+    if (pending) return;
+    const fd = new FormData();
+    fd.set("company_id", company.id);
+    startTransition(async () => {
+      const res = await cleanCompanyAction(fd);
+      if (res.ok) setCleaned(true);
+    });
+  };
+
+  const cleanlinessColor =
+    cleanlinessLevel >= 70
+      ? "from-emerald-500 to-emerald-300"
+      : cleanlinessLevel >= 40
+      ? "from-amber-500 to-amber-300"
+      : "from-rose-500 to-rose-300";
+
+  const gradeColor =
+    grade === "A" ? "text-emerald-200" : grade === "B" ? "text-amber-200" : "text-rose-200";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          🧹 État de propreté
+        </h3>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Score propreté
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-zinc-100 tabular-nums">
+                {cleanlinessLevel}
+              </span>
+              <span className="text-xs text-zinc-500">/ 100</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/40">
+              <div
+                className={`h-full bg-gradient-to-r ${cleanlinessColor}`}
+                style={{ width: `${cleanlinessLevel}%` }}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Note hygiène (vitrine)
+            </div>
+            <div className={`mt-1 text-2xl font-bold ${gradeColor}`}>
+              {grade}
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              {grade === "A"
+                ? "Aucun impact"
+                : grade === "B"
+                ? "-10% clients"
+                : "-30% clients + risque fermeture"}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            onClick={handleClean}
+            disabled={pending || cleaned}
+            className="rounded-lg border border-emerald-400/50 bg-emerald-500/10 p-4 text-left transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+          >
+            <div className="text-sm font-semibold text-emerald-200">
+              🧽 Nettoyer manuellement
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400">
+              {cleaned
+                ? "✓ Nettoyé. Score → 100"
+                : "Gratuit · reset propreté à 100. À refaire régulièrement."}
+            </div>
+          </button>
+          <div
+            className={`rounded-lg border p-4 ${
+              hasCleaner
+                ? "border-emerald-400/40 bg-emerald-500/5"
+                : "border-white/10 bg-white/[0.02]"
+            }`}
+          >
+            <div className="text-sm font-semibold text-zinc-200">
+              {hasCleaner ? "✓ Femme de ménage embauchée" : "👩‍🦱 Femme de ménage"}
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400">
+              {hasCleaner
+                ? "Maintient la propreté > 80 en continu. Pratique."
+                : "Embauche un employé avec compétence Entretien > 30 dans le marché de l'emploi pour automatiser."}
+            </div>
+            {!hasCleaner ? (
+              <Link
+                href="/play/skyline/emploi"
+                className="mt-2 inline-block rounded-md border border-blue-400/50 bg-blue-500/10 px-3 py-1 text-xs text-blue-200 hover:bg-blue-500/20"
+              >
+                Aller au marché →
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglet Permis
+// ──────────────────────────────────────────────────────────────────
+
+function PermitsTab({
+  companyId,
+  sector,
+  permits,
+  cash,
+}: {
+  companyId: string;
+  sector: SkylineCommerceSector;
+  permits: SkylinePermitRow[];
+  cash: number;
+}) {
+  const required = SKYLINE_SECTOR_REQUIRED_PERMITS[sector] ?? [];
+  const acquired = new Set(permits.map((p) => p.kind));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-zinc-200">
+          📜 Permis & licences
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Certains permis sont obligatoires selon ton secteur. Sans eux, tu
+          risques amendes ou fermeture lors d&apos;une inspection.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {Object.values(SKYLINE_PERMITS).map((p) => {
+            const isRequired = required.includes(p.id);
+            const isAcquired = acquired.has(p.id);
+            return (
+              <PermitCard
+                key={p.id}
+                companyId={companyId}
+                permitId={p.id}
+                name={p.name}
+                glyph={p.glyph}
+                cost={p.cost}
+                description={p.description}
+                isRequired={isRequired}
+                isAcquired={isAcquired}
+                cash={cash}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PermitCard({
+  companyId,
+  permitId,
+  name,
+  glyph,
+  cost,
+  description,
+  isRequired,
+  isAcquired,
+  cash,
+}: {
+  companyId: string;
+  permitId: SkylinePermitKind;
+  name: string;
+  glyph: string;
+  cost: number;
+  description: string;
+  isRequired: boolean;
+  isAcquired: boolean;
+  cash: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAcquire = () => {
+    if (pending || cash < cost) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("kind", permitId);
+    startTransition(async () => {
+      const res = await acquirePermitAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        isAcquired
+          ? "border-emerald-400/40 bg-emerald-500/5"
+          : isRequired
+          ? "border-rose-400/40 bg-rose-500/5"
+          : "border-white/10 bg-white/[0.02]"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            {glyph} {name}
+            {isRequired && !isAcquired ? (
+              <span className="ml-2 rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-[9px] text-rose-200">
+                OBLIGATOIRE
+              </span>
+            ) : null}
+            {isAcquired ? (
+              <span className="ml-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-200">
+                ✓ ACQUIS
+              </span>
+            ) : null}
+          </div>
+          <div className="text-[10px] text-zinc-500">{description}</div>
+        </div>
+        {!isAcquired ? (
+          <button
+            onClick={handleAcquire}
+            disabled={pending || cash < cost}
+            className="rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {pending ? "..." : `Acquérir · ${skylineFormatCashFR(cost)}`}
+          </button>
+        ) : null}
+      </div>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglet Local 2D (drag & drop simplifié HTML/CSS)
+// ──────────────────────────────────────────────────────────────────
+
+function LayoutTab({
+  companyId,
+  sizeId,
+  furniture,
+}: {
+  companyId: string;
+  sizeId: keyof typeof SKYLINE_LOCAL_SIZES;
+  furniture: SkylineFurnitureRow[];
+}) {
+  const size = SKYLINE_LOCAL_SIZES[sizeId];
+  const W = size.gridW;
+  const H = size.gridH;
+  const [items, setItems] = useState(() =>
+    furniture.map((f) => ({ ...f })),
+  );
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const onDragStart = (id: string) => setDragging(id);
+  const onDropCell = (x: number, y: number) => {
+    if (!dragging) return;
+    const item = items.find((it) => it.id === dragging);
+    if (!item) return;
+    const meta = SKYLINE_FURNITURE[item.kind as SkylineFurnitureKind];
+    if (!meta) return;
+    if (x + meta.width > W || y + meta.height > H) return;
+
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === dragging ? { ...it, grid_x: x, grid_y: y } : it,
+      ),
+    );
+    setDragging(null);
+
+    const fd = new FormData();
+    fd.set("furniture_id", dragging);
+    fd.set("grid_x", String(x));
+    fd.set("grid_y", String(y));
+    fd.set("rotation", "0");
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      await placeFurnitureAction(fd);
+    });
+  };
+
+  const handleRemove = (id: string) => {
+    if (!confirm("Retirer ce présentoir ?")) return;
+    setItems((prev) => prev.filter((it) => it.id !== id));
+    const fd = new FormData();
+    fd.set("furniture_id", id);
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      await removeFurnitureAction(fd);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            🏠 Local {size.name} · {size.sqm}m² · grille {W}×{H}
+          </h3>
+          <span className="text-[11px] text-zinc-500">
+            Glisse-dépose les présentoirs sur la grille.{" "}
+            {pending ? "Sauvegarde..." : null}
+          </span>
+        </div>
+
+        <div className="mt-4 flex flex-col items-center gap-1">
+          <div
+            className="grid gap-px rounded-lg border border-white/10 bg-white/[0.02] p-2"
+            style={{
+              gridTemplateColumns: `repeat(${W}, 28px)`,
+              gridTemplateRows: `repeat(${H}, 28px)`,
+            }}
+          >
+            {Array.from({ length: H }).map((_, y) =>
+              Array.from({ length: W }).map((_, x) => {
+                const occupied = items.find(
+                  (it) => it.grid_x === x && it.grid_y === y,
+                );
+                const meta = occupied
+                  ? SKYLINE_FURNITURE[occupied.kind as SkylineFurnitureKind]
+                  : null;
+                return (
+                  <div
+                    key={`${x}-${y}`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => onDropCell(x, y)}
+                    onDoubleClick={() => occupied && handleRemove(occupied.id)}
+                    className={`flex items-center justify-center rounded-sm text-base ${
+                      occupied
+                        ? "cursor-grab bg-pink-500/20"
+                        : "bg-white/[0.02] hover:bg-white/[0.06]"
+                    }`}
+                    draggable={Boolean(occupied)}
+                    onDragStart={() => occupied && onDragStart(occupied.id)}
+                    title={
+                      occupied
+                        ? `${meta?.name} (double-clic pour retirer)`
+                        : `Case (${x}, ${y})`
+                    }
+                  >
+                    {meta ? (
+                      <span className="leading-none">{meta.glyph}</span>
+                    ) : null}
+                  </div>
+                );
+              }),
+            )}
+          </div>
+          <div className="text-[10px] text-zinc-500">
+            Drag & drop pour déplacer · double-clic pour retirer
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="mt-4 rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+            Tu n&apos;as pas encore de présentoirs. Va dans l&apos;onglet
+            <strong> Présentoirs </strong>pour en acheter.
+          </div>
+        ) : null}
       </div>
     </div>
   );

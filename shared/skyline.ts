@@ -694,6 +694,138 @@ export const SKYLINE_SKILLS: Record<
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// 6.5. PERMIS / LICENCES (P2)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylinePermitKind =
+  | "food"
+  | "alcohol"
+  | "pharma"
+  | "enseigne"
+  | "terrasse"
+  | "tobacco"
+  | "firearms"
+  | "medical"
+  | "fire";
+
+export const SKYLINE_PERMITS: Record<
+  SkylinePermitKind,
+  {
+    id: SkylinePermitKind;
+    name: string;
+    glyph: string;
+    cost: number;
+    description: string;
+  }
+> = {
+  food: {
+    id: "food",
+    name: "Licence alimentaire",
+    glyph: "🍽️",
+    cost: 500,
+    description: "Obligatoire pour vendre/préparer des aliments.",
+  },
+  alcohol: {
+    id: "alcohol",
+    name: "Licence IV (alcool)",
+    glyph: "🍷",
+    cost: 1500,
+    description: "Pour vendre des boissons alcoolisées.",
+  },
+  pharma: {
+    id: "pharma",
+    name: "Licence pharmacie",
+    glyph: "💊",
+    cost: 5000,
+    description: "Diplôme officinal requis. Sans ce permis, impossible d'opérer.",
+  },
+  enseigne: {
+    id: "enseigne",
+    name: "Permis enseigne",
+    glyph: "🪧",
+    cost: 200,
+    description: "Pour afficher une enseigne extérieure.",
+  },
+  terrasse: {
+    id: "terrasse",
+    name: "Permis terrasse",
+    glyph: "☂️",
+    cost: 800,
+    description: "Pour installer des tables sur le trottoir.",
+  },
+  tobacco: {
+    id: "tobacco",
+    name: "Permis tabac",
+    glyph: "🚬",
+    cost: 1200,
+    description: "Pour vendre cigarettes et jeux à gratter.",
+  },
+  firearms: {
+    id: "firearms",
+    name: "Licence armes",
+    glyph: "🔫",
+    cost: 3000,
+    description: "Pour vendre armes et munitions (T4 uniquement).",
+  },
+  medical: {
+    id: "medical",
+    name: "Licence médicale",
+    glyph: "⚕️",
+    cost: 4000,
+    description: "Pour exercer la médecine ou ouvrir une clinique.",
+  },
+  fire: {
+    id: "fire",
+    name: "Conformité incendie",
+    glyph: "🚨",
+    cost: 300,
+    description: "Annuelle, obligatoire pour tout local accueillant du public.",
+  },
+};
+
+// Mapping secteur commerce → permis requis (au minimum).
+export const SKYLINE_SECTOR_REQUIRED_PERMITS: Partial<
+  Record<SkylineCommerceSector, SkylinePermitKind[]>
+> = {
+  boulangerie: ["food", "fire"],
+  cafe_bar: ["food", "alcohol", "fire"],
+  pizzeria: ["food", "fire"],
+  fast_food: ["food", "fire"],
+  cave_alcool: ["alcohol", "fire"],
+  boucherie: ["food", "fire"],
+  epicerie_fine: ["food", "alcohol", "fire"],
+  supplette: ["food", "alcohol", "tobacco", "fire"],
+  restaurant_gastro: ["food", "alcohol", "fire", "terrasse"],
+  pharmacie: ["pharma", "fire"],
+  hotel: ["food", "alcohol", "fire"],
+  station_service: ["food", "tobacco", "fire"],
+  fleuriste: ["fire"],
+  boutique_vetements: ["fire"],
+  joaillerie: ["fire"],
+  parfumerie: ["fire"],
+  magasin_meubles: ["fire"],
+  magasin_electronique: ["fire"],
+  bricolage: ["fire"],
+  concessionnaire_auto: ["fire"],
+  animalerie: ["food", "fire"],
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 6.6. DÉMOGRAPHIES PAR QUARTIER (P3)
+// ──────────────────────────────────────────────────────────────────────────
+
+export const SKYLINE_DISTRICT_DEMOGRAPHICS: Record<
+  SkylineDistrict,
+  Partial<Record<SkylineDemographic, number>> // % de chaque profil
+> = {
+  centre: { tourists: 30, wealthy: 25, workers: 25, families: 10, students: 5, retirees: 5 },
+  affaires: { workers: 60, wealthy: 25, families: 5, students: 5, tourists: 5 },
+  residentiel: { families: 40, retirees: 30, workers: 20, students: 5, wealthy: 5 },
+  peripherie: { families: 50, retirees: 30, students: 20 },
+  populaire: { students: 35, families: 35, retirees: 30 },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // 7. FORMULES — duplicate côté client pour affichage rapide
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -893,6 +1025,15 @@ export type SkylineLoanRow = {
   paid_off_at: string | null;
   created_at: string;
   is_starter_loan: boolean;
+};
+
+export type SkylinePermitRow = {
+  id: string;
+  company_id: string;
+  kind: SkylinePermitKind;
+  acquired_at: string;
+  expires_at: string;
+  cost: number;
 };
 
 export type SkylineMarketCourseRow = {

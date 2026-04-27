@@ -147,14 +147,6 @@ export default async function SkylineHub() {
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <MenuButton
-                href="/play/skyline/offshore"
-                icon="🪙"
-                title="Pont $ ↔ OS"
-                description="Convertir tes dollars Skyline en Or Suprême (et inversement)"
-                accent="text-amber-200"
-                border="border-amber-400/40"
-              />
-              <MenuButton
                 href="/play/skyline/creation"
                 icon="🏗️"
                 title="Nouvelle entreprise"
@@ -163,10 +155,43 @@ export default async function SkylineHub() {
                 border="border-emerald-400/40"
               />
               <MenuButton
+                href="/play/skyline/emploi"
+                icon="💼"
+                title="Marché de l'emploi"
+                description="Recruter des employés, voir les candidats disponibles"
+                accent="text-blue-200"
+                border="border-blue-400/40"
+              />
+              <MenuButton
+                href="/play/skyline/banque"
+                icon="🏦"
+                title="Banque"
+                description="Demander un prêt, suivre tes mensualités, score crédit"
+                accent="text-cyan-200"
+                border="border-cyan-400/40"
+              />
+              <MenuButton
+                href="/play/skyline/offshore"
+                icon="🪙"
+                title="Pont $ ↔ OS"
+                description="Convertir tes dollars Skyline en Or Suprême (et inversement)"
+                accent="text-amber-200"
+                border="border-amber-400/40"
+              />
+              <MenuButton
                 href="/play/skyline"
                 icon="📊"
                 title="Marché commun"
                 description="Cours produits & matières (P6 — bientôt)"
+                accent="text-zinc-300"
+                border="border-zinc-400/30"
+                disabled
+              />
+              <MenuButton
+                href="/play/skyline"
+                icon="📈"
+                title="Bourse"
+                description="IPO + trading actions (P7 — bientôt)"
                 accent="text-zinc-300"
                 border="border-zinc-400/30"
                 disabled

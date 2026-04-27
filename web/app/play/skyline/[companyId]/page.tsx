@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import {
   ensureSkylineProfile,
+  fetchEmployeesForCompany,
+  fetchPermitsForCompany,
   fetchSkylineCompany,
   fetchSkylineFurniture,
   fetchSkylineInventory,
@@ -28,11 +30,14 @@ export default async function CompanyPage({
     redirect("/play/skyline");
   }
 
-  const [furniture, inventory, transactions] = await Promise.all([
-    fetchSkylineFurniture(companyId),
-    fetchSkylineInventory(companyId),
-    fetchSkylineTransactions(profile.id, companyId, 30),
-  ]);
+  const [furniture, inventory, transactions, employees, permits] =
+    await Promise.all([
+      fetchSkylineFurniture(companyId),
+      fetchSkylineInventory(companyId),
+      fetchSkylineTransactions(profile.id, companyId, 30),
+      fetchEmployeesForCompany(companyId),
+      fetchPermitsForCompany(companyId),
+    ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -49,6 +54,8 @@ export default async function CompanyPage({
         furniture={furniture}
         inventory={inventory}
         transactions={transactions}
+        employees={employees}
+        permits={permits}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>

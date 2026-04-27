@@ -1811,3 +1811,687 @@ values
   ('SteelWorks Holding', '⚙️', 'industry', 25, 700, 'Aciérie + métallurgie lourde.'),
   ('DesignArt House', '🛋️', 'furniture', 12, 450, 'Mobilier et déco premium.')
 on conflict (name) do nothing;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 14. P2 — TABLES PERMIS + RPCs EMPLOYÉS / HYGIÈNE / PERMIS
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Permis acquis par chaque entreprise (alimentaire, alcool, pharma, enseigne, terrasse...).
+create table if not exists public.skyline_permits (
+  id          uuid primary key default gen_random_uuid(),
+  company_id  uuid not null references public.skyline_companies(id) on delete cascade,
+  kind        text not null,
+  acquired_at timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  cost        numeric(15, 2) not null,
+  unique (company_id, kind)
+);
+
+alter table public.skyline_permits enable row level security;
+
+drop policy if exists "skyline_permits_read_own" on public.skyline_permits;
+create policy "skyline_permits_read_own"
+  on public.skyline_permits
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_permits_write_own" on public.skyline_permits;
+create policy "skyline_permits_write_own"
+  on public.skyline_permits
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+-- Coût d'un permis selon kind.
+create or replace function public.skyline_permit_cost(p_kind text)
+returns numeric language sql immutable as $$
+  select case p_kind
+    when 'food'      then 500    -- Licence alimentaire
+    when 'alcohol'   then 1500   -- Licence IV (alcool)
+    when 'pharma'    then 5000   -- Pharmacie (diplôme)
+    when 'enseigne'  then 200    -- Permis enseigne
+    when 'terrasse'  then 800    -- Permis terrasse
+    when 'tobacco'   then 1200   -- Bureau de tabac
+    when 'firearms'  then 3000   -- Vente d'armes
+    when 'medical'   then 4000   -- Cabinet médical
+    when 'fire'      then 300    -- Conformité incendie
+    else null
+  end;
+$$;
+
+-- Acquérir un permis (paie + ajoute à la table).
+create or replace function public.skyline_acquire_permit(
+  p_company_id uuid,
+  p_kind       text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_cost    numeric;
+  v_permit_id uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  v_cost := public.skyline_permit_cost(p_kind);
+  if v_cost is null then raise exception 'Permis inconnu'; end if;
+
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_cost then
+      raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+    end if;
+  end;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_permits (company_id, kind, expires_at, cost)
+  values (p_company_id, p_kind, now() + interval '360 hours', v_cost) -- 1 an jeu = 15 jours réels = 360h
+  on conflict (company_id, kind) do update
+    set acquired_at = now(),
+        expires_at  = now() + interval '360 hours',
+        cost        = v_cost
+  returning id into v_permit_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'permit', -v_cost, 'Permis ' || p_kind);
+
+  return v_permit_id;
+end;
+$$;
+
+-- Génère / régénère le pool de candidats PNJ sur le marché de l'emploi.
+-- Génère 50 candidats avec compétences randomisées et salaire demandé fonction des compétences.
+create or replace function public.skyline_seed_employees(p_count int default 50)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_first_names text[] := array[
+    'Léa', 'Maxime', 'Camille', 'Léo', 'Manon', 'Hugo', 'Inès', 'Lucas',
+    'Chloé', 'Nathan', 'Emma', 'Théo', 'Sarah', 'Antoine', 'Julie', 'Romain',
+    'Julia', 'Tom', 'Anaïs', 'Paul', 'Lola', 'Adrien', 'Marine', 'Quentin',
+    'Pauline', 'Mathis', 'Clara', 'Alexandre', 'Eva', 'Florian'
+  ];
+  v_last_names text[] := array[
+    'Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand',
+    'Leroy', 'Moreau', 'Simon', 'Laurent', 'Lefebvre', 'Michel', 'Garcia', 'David',
+    'Bertrand', 'Roux', 'Vincent', 'Fournier', 'Morel', 'Girard', 'Andre', 'Lefevre'
+  ];
+  v_skill_keys text[] := array[
+    'vente', 'service_client', 'presentation',
+    'machine_use', 'cuisine', 'soins', 'manuel', 'medical', 'agricole',
+    'rh', 'compta', 'marketing', 'negociation', 'management', 'securite', 'entretien'
+  ];
+  v_count int := 0;
+  v_skills jsonb;
+  v_avg_skill numeric;
+  v_salary numeric;
+  v_first text;
+  v_last text;
+  v_full text;
+  i int;
+  k text;
+begin
+  for i in 1..p_count loop
+    v_skills := '{}'::jsonb;
+    -- Pour chaque candidat : compétences avec biais (profil cohérent : 1-3 skills hauts, le reste bas).
+    foreach k in array v_skill_keys loop
+      v_skills := v_skills || jsonb_build_object(k, floor(random() * 30 + 5)::int);
+    end loop;
+    -- Booster 2-3 skills aléatoires (= spécialité).
+    declare
+      v_specialties int := floor(random() * 2 + 2)::int;
+      v_specialty_idx int;
+      j int;
+    begin
+      for j in 1..v_specialties loop
+        v_specialty_idx := floor(random() * array_length(v_skill_keys, 1) + 1)::int;
+        v_skills := v_skills || jsonb_build_object(
+          v_skill_keys[v_specialty_idx],
+          floor(random() * 50 + 40)::int -- 40-90
+        );
+      end loop;
+    end;
+
+    -- Calcul moy compétences pour salaire.
+    select avg((value)::int) into v_avg_skill from jsonb_each_text(v_skills);
+    v_salary := round(800 + v_avg_skill * 30 + random() * 500); -- 800-3500$/mois
+
+    v_first := v_first_names[1 + floor(random() * array_length(v_first_names, 1))::int];
+    v_last := v_last_names[1 + floor(random() * array_length(v_last_names, 1))::int];
+    v_full := v_first || ' ' || v_last;
+
+    insert into public.skyline_employees (
+      full_name, avatar_seed, is_npc, skills, salary_demanded, morale, available_until
+    )
+    values (
+      v_full,
+      lower(v_first || '-' || substring(md5(random()::text) from 1 for 6)),
+      true,
+      v_skills,
+      v_salary,
+      80 + floor(random() * 20)::int,
+      now() + interval '30 days'
+    );
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+-- Embauche : assigne un employé à une entreprise (le sort du marché public).
+create or replace function public.skyline_hire_employee(
+  p_employee_id uuid,
+  p_company_id  uuid,
+  p_salary      numeric default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_emp     public.skyline_employees%rowtype;
+  v_salary  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  select * into v_emp from public.skyline_employees where id = p_employee_id;
+  if not found then raise exception 'Candidat introuvable'; end if;
+  if v_emp.company_id is not null then raise exception 'Déjà embauché ailleurs'; end if;
+
+  v_salary := coalesce(p_salary, v_emp.salary_demanded);
+  if v_salary < v_emp.salary_demanded * 0.8 then
+    raise exception 'Salaire trop bas (le candidat refuse)';
+  end if;
+
+  update public.skyline_employees
+    set company_id = p_company_id,
+        salary_paid = v_salary,
+        hired_at = now(),
+        available_until = null,
+        morale = least(100, morale + case when v_salary >= salary_demanded then 10 else 0 end)
+    where id = p_employee_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', 0,
+    'Embauche : ' || v_emp.full_name || ' (' || v_salary || '$/mois)');
+end;
+$$;
+
+-- Licencie un employé.
+create or replace function public.skyline_fire_employee(p_employee_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_emp     public.skyline_employees%rowtype;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_emp from public.skyline_employees where id = p_employee_id;
+  if not found then raise exception 'Employé introuvable'; end if;
+  if v_emp.company_id is null then raise exception 'Pas embauché'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = v_emp.company_id and user_id = v_user_id
+  ) then raise exception 'Pas autorisé'; end if;
+
+  update public.skyline_employees
+    set company_id = null,
+        salary_paid = 0,
+        hired_at = null,
+        morale = greatest(20, morale - 30),
+        available_until = now() + interval '14 days'
+    where id = p_employee_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, v_emp.company_id, 'other', 0,
+    'Licenciement : ' || v_emp.full_name);
+end;
+$$;
+
+-- Nettoyage manuel par le joueur (gratuit, reset propreté à 100).
+create or replace function public.skyline_clean_company(p_company_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  update public.skyline_companies
+    set cleanliness = 100,
+        hygiene_grade = 'A',
+        updated_at = now()
+    where id = p_company_id;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 15. P2 — TICK ENRICHI (saleté, salaires, mensualités prêts)
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Réécriture du tick avec saleté progressive + salaires + mensualités.
+-- Mensuel jeu = 30h réelles. Ratio horaire = 1/30.
+create or replace function public.skyline_tick_company(p_company_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company    public.skyline_companies%rowtype;
+  v_now        timestamptz := now();
+  v_elapsed_h  numeric;
+  v_month_h    numeric := 30;
+  v_rent       numeric;
+  v_rent_due   numeric;
+  v_dirt_per_h numeric := 0.5;
+  v_new_clean  int;
+  v_emp_rec    record;
+  v_salary_due numeric;
+  v_total_salaries numeric := 0;
+  v_loan_rec   record;
+  v_loan_due   numeric;
+  v_total_loans numeric := 0;
+  v_has_cleaner boolean;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found then return; end if;
+  if v_company.user_id <> auth.uid() then return; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return; end if;
+
+  -- Loyer prorata (si pas owned).
+  if not v_company.is_owned then
+    v_rent := public.skyline_local_rent_monthly(v_company.district, v_company.local_size);
+    v_rent_due := v_rent * (v_elapsed_h / v_month_h);
+    if v_rent_due > 0 then
+      update public.skyline_profiles
+        set cash = cash - v_rent_due, updated_at = v_now
+        where user_id = v_company.user_id;
+      insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+      values (v_company.user_id, p_company_id, 'rent', -v_rent_due,
+        'Loyer prorata ' || v_company.name || ' (' || round(v_elapsed_h, 1) || 'h)');
+    end if;
+  end if;
+
+  -- Salaires prorata par employé.
+  for v_emp_rec in
+    select * from public.skyline_employees where company_id = p_company_id
+  loop
+    v_salary_due := v_emp_rec.salary_paid * (v_elapsed_h / v_month_h);
+    if v_salary_due > 0 then
+      update public.skyline_profiles
+        set cash = cash - v_salary_due, updated_at = v_now
+        where user_id = v_company.user_id;
+      v_total_salaries := v_total_salaries + v_salary_due;
+    end if;
+  end loop;
+  if v_total_salaries > 0 then
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_company.user_id, p_company_id, 'salary', -v_total_salaries,
+      'Salaires prorata (' || round(v_elapsed_h, 1) || 'h)');
+  end if;
+
+  -- Mensualités prêts (proratisées).
+  for v_loan_rec in
+    select * from public.skyline_loans
+    where (company_id = p_company_id or (company_id is null and user_id = v_company.user_id))
+      and paid_off_at is null
+      and is_default = false
+  loop
+    v_loan_due := v_loan_rec.monthly_payment * (v_elapsed_h / v_month_h);
+    if v_loan_due > 0 and v_loan_rec.amount_remaining > 0 then
+      v_loan_due := least(v_loan_due, v_loan_rec.amount_remaining);
+      update public.skyline_loans
+        set amount_remaining = amount_remaining - v_loan_due,
+            paid_off_at = case when amount_remaining - v_loan_due <= 0 then v_now else null end
+        where id = v_loan_rec.id;
+      update public.skyline_profiles
+        set cash = cash - v_loan_due, updated_at = v_now
+        where user_id = v_company.user_id;
+      v_total_loans := v_total_loans + v_loan_due;
+    end if;
+  end loop;
+  if v_total_loans > 0 then
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_company.user_id, p_company_id, 'loan_payment', -v_total_loans,
+      'Mensualités prêts (' || round(v_elapsed_h, 1) || 'h)');
+  end if;
+
+  -- Saleté progressive (clean si femme de ménage embauchée, sinon dégrade).
+  v_has_cleaner := exists (
+    select 1 from public.skyline_employees
+    where company_id = p_company_id
+      and (skills->>'entretien')::int > 30
+  );
+  if v_has_cleaner then
+    -- La femme de ménage maintient la propreté > 80.
+    v_new_clean := greatest(80, v_company.cleanliness - floor(v_elapsed_h * 0.1)::int);
+  else
+    v_new_clean := greatest(0, v_company.cleanliness - floor(v_elapsed_h * v_dirt_per_h)::int);
+  end if;
+
+  update public.skyline_companies
+    set cleanliness = v_new_clean,
+        hygiene_grade = case
+          when v_new_clean >= 70 then 'A'
+          when v_new_clean >= 40 then 'B'
+          else 'C'
+        end,
+        last_tick_at = v_now,
+        updated_at = v_now
+    where id = p_company_id;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 16. P3 — RPC PLACEMENT FURNITURE (drag & drop)
+-- ══════════════════════════════════════════════════════════════════════
+
+create or replace function public.skyline_place_furniture(
+  p_furniture_id uuid,
+  p_grid_x       int,
+  p_grid_y       int,
+  p_rotation     int default 0
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_grid_x < 0 or p_grid_y < 0 then raise exception 'Coordonnées invalides'; end if;
+  if p_rotation not in (0, 90, 180, 270) then raise exception 'Rotation invalide'; end if;
+
+  update public.skyline_furniture
+    set grid_x = p_grid_x,
+        grid_y = p_grid_y,
+        rotation = p_rotation
+    where id = p_furniture_id
+      and exists (
+        select 1 from public.skyline_companies c
+        where c.id = company_id and c.user_id = v_user_id
+      );
+end;
+$$;
+
+create or replace function public.skyline_remove_furniture(p_furniture_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+
+  delete from public.skyline_furniture
+    where id = p_furniture_id
+      and exists (
+        select 1 from public.skyline_companies c
+        where c.id = company_id and c.user_id = v_user_id
+      );
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 17. P4 — BANQUE : CALCUL TAUX, REQUEST LOAN, CHECK BANKRUPTCY
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Taux d'intérêt selon score crédit (4% bon score → 18% mauvais).
+create or replace function public.skyline_loan_rate(p_credit_score int)
+returns numeric language sql immutable as $$
+  select case
+    when p_credit_score >= 800 then 0.04
+    when p_credit_score >= 600 then 0.07
+    when p_credit_score >= 400 then 0.10
+    when p_credit_score >= 200 then 0.14
+    else 0.18
+  end;
+$$;
+
+-- Mensualité d'un prêt.
+create or replace function public.skyline_loan_monthly_payment(
+  p_amount numeric,
+  p_rate   numeric,
+  p_months int
+)
+returns numeric language sql immutable as $$
+  -- Mensualité = principal * r / (1 - (1+r)^-n)
+  -- r = taux mensuel (rate annuel / 12).
+  select round(
+    p_amount * (p_rate / 12) / (1 - power(1 + p_rate / 12, -p_months)),
+    2
+  );
+$$;
+
+-- Demande de prêt (avec ou sans apport, selon score crédit).
+create or replace function public.skyline_request_loan(
+  p_amount         numeric,
+  p_duration_months int,
+  p_company_id     uuid default null,
+  p_is_starter     boolean default false
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id      uuid := auth.uid();
+  v_profile      public.skyline_profiles%rowtype;
+  v_rate         numeric;
+  v_monthly_pmt  numeric;
+  v_loan_id      uuid;
+  v_existing_starter int;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_amount <= 0 then raise exception 'Montant invalide'; end if;
+  if p_duration_months not in (5*12, 10*12, 15*12, 20*12, 60, 120, 180, 240) then
+    raise exception 'Durée invalide (5/10/15/20 ans en mois jeu)';
+  end if;
+
+  select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  if not found then
+    perform public.skyline_init_profile();
+    select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  end if;
+
+  -- Prêt création débutant : max 40k$, 8% fixe, 1× seulement, sans apport.
+  if p_is_starter then
+    if p_amount > 40000 then raise exception 'Prêt création max 40 000$'; end if;
+    select count(*) into v_existing_starter from public.skyline_loans
+      where user_id = v_user_id and is_starter_loan = true;
+    if v_existing_starter > 0 then raise exception 'Prêt création déjà utilisé'; end if;
+    v_rate := 0.08;
+  else
+    -- Prêt classique : taux selon score crédit.
+    v_rate := public.skyline_loan_rate(v_profile.credit_score);
+  end if;
+
+  v_monthly_pmt := public.skyline_loan_monthly_payment(p_amount, v_rate, p_duration_months);
+
+  -- Créditer le cash.
+  update public.skyline_profiles
+    set cash = cash + p_amount, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_loans (
+    user_id, company_id, amount_initial, amount_remaining, rate, duration_months,
+    monthly_payment, next_payment_at, is_starter_loan
+  )
+  values (
+    v_user_id, p_company_id, p_amount, p_amount, v_rate, p_duration_months,
+    v_monthly_pmt, now() + interval '30 hours', p_is_starter
+  )
+  returning id into v_loan_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', p_amount,
+    'Prêt accordé : ' || p_amount || '$ à ' || (v_rate * 100) || '% sur ' || (p_duration_months / 12) || ' ans');
+
+  return v_loan_id;
+end;
+$$;
+
+-- Remboursement anticipé d'une partie ou totalité du prêt.
+create or replace function public.skyline_repay_loan(
+  p_loan_id uuid,
+  p_amount  numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_loan    public.skyline_loans%rowtype;
+  v_amount  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_loan from public.skyline_loans
+    where id = p_loan_id and user_id = v_user_id and paid_off_at is null;
+  if not found then raise exception 'Prêt non trouvé ou déjà soldé'; end if;
+
+  v_amount := least(p_amount, v_loan.amount_remaining);
+  declare v_user_cash numeric;
+  begin
+    select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+    if v_user_cash < v_amount then
+      raise exception 'Cash insuffisant';
+    end if;
+  end;
+
+  update public.skyline_profiles
+    set cash = cash - v_amount, updated_at = now()
+    where user_id = v_user_id;
+
+  update public.skyline_loans
+    set amount_remaining = amount_remaining - v_amount,
+        paid_off_at = case when amount_remaining - v_amount <= 0 then now() else null end
+    where id = p_loan_id;
+
+  -- Bonus score crédit pour remboursement anticipé.
+  update public.skyline_profiles
+    set credit_score = least(1000, credit_score + 5)
+    where user_id = v_user_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, v_loan.company_id, 'loan_payment', -v_amount,
+    'Remboursement anticipé prêt');
+end;
+$$;
+
+-- Vérifie si l'utilisateur est en faillite imminente (compte_courant < -10% × patrimoine total).
+-- Si oui, démarre la procédure progressive (alerte 7j → vente d'actifs).
+create or replace function public.skyline_check_bankruptcy(p_user_id uuid default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id     uuid := coalesce(p_user_id, auth.uid());
+  v_profile     public.skyline_profiles%rowtype;
+  v_assets      numeric := 0;
+  v_threshold   numeric;
+begin
+  if v_user_id is null then return false; end if;
+  select * into v_profile from public.skyline_profiles where user_id = v_user_id;
+  if not found then return false; end if;
+
+  -- Calcul actifs (cash + valo entreprises + équipement + stocks + bourse).
+  v_assets := v_profile.cash;
+  -- Valeur des entreprises = trésorerie + (revenus mensuels × 6).
+  v_assets := v_assets + coalesce(
+    (select sum(cash + monthly_revenue * 6) from public.skyline_companies where user_id = v_user_id),
+    0
+  );
+  -- Stocks valorisés au prix d'achat.
+  v_assets := v_assets + coalesce(
+    (select sum(quantity * avg_buy_price) from public.skyline_inventory inv
+       inner join public.skyline_companies c on c.id = inv.company_id
+       where c.user_id = v_user_id),
+    0
+  );
+  -- Locaux possédés (100× loyer mensuel).
+  v_assets := v_assets + coalesce(
+    (select sum(public.skyline_local_purchase_cost(district, local_size))
+       from public.skyline_companies
+       where user_id = v_user_id and is_owned = true),
+    0
+  );
+
+  -- Mise à jour du patrimoine cached.
+  update public.skyline_profiles
+    set net_worth = v_assets, updated_at = now()
+    where user_id = v_user_id;
+
+  v_threshold := -0.1 * v_assets;
+  if v_profile.cash < v_threshold then
+    if not v_profile.bankruptcy_pending then
+      update public.skyline_profiles
+        set bankruptcy_pending = true,
+            bankruptcy_started_at = now(),
+            updated_at = now()
+        where user_id = v_user_id;
+    end if;
+    return true;
+  else
+    if v_profile.bankruptcy_pending then
+      update public.skyline_profiles
+        set bankruptcy_pending = false,
+            bankruptcy_started_at = null,
+            updated_at = now()
+        where user_id = v_user_id;
+    end if;
+    return false;
+  end if;
+end;
+$$;
+
