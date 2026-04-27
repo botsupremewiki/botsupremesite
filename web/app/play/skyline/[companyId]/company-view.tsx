@@ -45,6 +45,7 @@ import {
   cleanCompanyAction,
   fireEmployeeAction,
   ipoCompanyAction,
+  listCompanyForSaleAction,
   payDividendAction,
   pharmaCompleteResearchAction,
   pharmaSellAction,
@@ -56,10 +57,12 @@ import {
   removeFurnitureAction,
   saasLaunchAction,
   setSellPriceAction,
+  unlistCompanyAction,
 } from "../_lib/actions";
 import {
   SKYLINE_PHARMA_MOLECULES,
   SKYLINE_SERVICE_SECTORS,
+  type SkylineCompanyForSaleRow,
   type SkylinePharmaMolecule,
   type SkylinePharmaPatentRow,
   type SkylinePharmaResearchRow,
@@ -86,7 +89,8 @@ type Tab =
   | "service_eq"
   | "pharma"
   | "saas"
-  | "stars";
+  | "stars"
+  | "sell";
 
 type ShareInfo = {
   id: string;
@@ -111,6 +115,7 @@ export function CompanyView({
   pharmaPatents,
   saasProducts,
   restauStars,
+  listing,
   cash,
 }: {
   company: SkylineCompanyRow;
@@ -125,6 +130,7 @@ export function CompanyView({
   pharmaPatents: SkylinePharmaPatentRow[];
   saasProducts: SkylineSaasProductRow[];
   restauStars: SkylineRestaurantStarsRow | null;
+  listing: SkylineCompanyForSaleRow | null;
   cash: number;
 }) {
   const isFactory = company.category === "factory";
@@ -291,6 +297,9 @@ export function CompanyView({
           <TabButton current={tab} value="bourse" onClick={setTab}>
             📈 Bourse
           </TabButton>
+          <TabButton current={tab} value="sell" onClick={setTab}>
+            🏷️ Vendre
+          </TabButton>
           <TabButton current={tab} value="compta" onClick={setTab}>
             📊 Compta
           </TabButton>
@@ -400,6 +409,13 @@ export function CompanyView({
           />
         ) : null}
         {tab === "stars" ? <StarsTab stars={restauStars} /> : null}
+        {tab === "sell" ? (
+          <SellTab
+            companyId={company.id}
+            companyName={company.name}
+            listing={listing}
+          />
+        ) : null}
         {tab === "furniture" ? (
           <FurnitureTab
             companyId={company.id}
@@ -3188,6 +3204,110 @@ function ScoreBar({
     >
       <span>{label}</span>
       <span className="tabular-nums">{range}</span>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglet P11 : VENDRE L'ENTREPRISE
+// ──────────────────────────────────────────────────────────────────
+
+function SellTab({
+  companyId,
+  companyName,
+  listing,
+}: {
+  companyId: string;
+  companyName: string;
+  listing: SkylineCompanyForSaleRow | null;
+}) {
+  const [askingPrice, setAskingPrice] = useState(
+    listing ? Number(listing.asking_price) : 100000,
+  );
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const handleList = () => {
+    if (pending || askingPrice <= 0) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("asking_price", String(askingPrice));
+    startTransition(async () => {
+      const res = await listCompanyForSaleAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  const handleUnlist = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      const res = await unlistCompanyAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+      <h3 className="text-sm font-semibold text-amber-200">
+        🏷️ Vendre cette entreprise
+      </h3>
+      <p className="mt-1 text-xs text-zinc-400">
+        Met {companyName} en vente sur le marché d&apos;entreprises. Tout est
+        transféré à l&apos;acheteur : local, équipement, stocks, employés. Tu
+        reçois le prix demandé et perds la propriété.
+      </p>
+
+      {listing ? (
+        <div className="mt-3 rounded-md border border-emerald-400/40 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+          ✓ En vente à{" "}
+          <strong>{skylineFormatCashFR(Number(listing.asking_price))}</strong>{" "}
+          (depuis le{" "}
+          {new Date(listing.listed_at).toLocaleDateString("fr-FR")})
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          min={1000}
+          step={1000}
+          value={askingPrice}
+          onChange={(e) => setAskingPrice(Math.max(1000, Number(e.target.value)))}
+          className="w-32 rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/50 tabular-nums"
+        />
+        <button
+          onClick={handleList}
+          disabled={pending || askingPrice <= 0}
+          className="rounded-md border border-amber-400/50 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-500/25 disabled:opacity-40"
+        >
+          {pending
+            ? "..."
+            : listing
+            ? "Mettre à jour"
+            : `Mettre en vente · ${skylineFormatCashFR(askingPrice)}`}
+        </button>
+        {listing ? (
+          <button
+            onClick={handleUnlist}
+            disabled={pending}
+            className="rounded-md border border-rose-400/40 bg-rose-500/5 px-3 py-1.5 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/15 disabled:opacity-40"
+          >
+            Retirer la vente
+          </button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="mt-2 text-xs text-rose-300">{error}</div>
+      ) : null}
+
+      <div className="mt-3 text-[10px] text-zinc-500">
+        💡 Conseil : prix indicatif = revenus mensuels × 6-12 selon attractivité du secteur.
+      </div>
     </div>
   );
 }

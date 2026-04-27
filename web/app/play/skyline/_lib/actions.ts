@@ -600,3 +600,132 @@ export async function saasLaunchAction(formData: FormData): Promise<Result> {
   revalidatePath(`/play/skyline/${companyId}`);
   return { ok: true, data };
 }
+
+// ───── P11 : Holdings ─────
+
+export async function createHoldingAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { ok: false, error: "Nom invalide" };
+
+  const { data, error } = await supabase.rpc("skyline_create_holding", {
+    p_name: name,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/holdings");
+  return { ok: true, data };
+}
+
+export async function linkCompanyToHoldingAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const holdingId = String(formData.get("holding_id") ?? "");
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!holdingId || !companyId)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_link_company_to_holding", {
+    p_holding_id: holdingId,
+    p_company_id: companyId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/holdings");
+  return { ok: true, data: null };
+}
+
+export async function unlinkCompanyFromHoldingAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const holdingId = String(formData.get("holding_id") ?? "");
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!holdingId || !companyId)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_unlink_company_from_holding", {
+    p_holding_id: holdingId,
+    p_company_id: companyId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/holdings");
+  return { ok: true, data: null };
+}
+
+export async function holdingTransferCashAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const holdingId = String(formData.get("holding_id") ?? "");
+  const fromCompany = String(formData.get("from_company") ?? "");
+  const toCompany = String(formData.get("to_company") ?? "");
+  const amount = Number(formData.get("amount") ?? 0);
+  if (!holdingId || !fromCompany || !toCompany || amount <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_holding_transfer_cash", {
+    p_holding_id: holdingId,
+    p_from_company: fromCompany,
+    p_to_company: toCompany,
+    p_amount: amount,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/holdings");
+  return { ok: true, data: null };
+}
+
+// ───── P11 : Vente d'entreprises ─────
+
+export async function listCompanyForSaleAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const askingPrice = Number(formData.get("asking_price") ?? 0);
+  if (!companyId || askingPrice <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_list_company_for_sale", {
+    p_company_id: companyId,
+    p_asking_price: askingPrice,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  revalidatePath("/play/skyline/marche-entreprises");
+  return { ok: true, data: null };
+}
+
+export async function unlistCompanyAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!companyId) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_unlist_company", {
+    p_company_id: companyId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  revalidatePath("/play/skyline/marche-entreprises");
+  return { ok: true, data: null };
+}
+
+export async function buyCompanyAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!companyId) return { ok: false, error: "Paramètres invalides" };
+
+  const { error } = await supabase.rpc("skyline_buy_company", {
+    p_company_id: companyId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/play/skyline/marche-entreprises");
+  revalidatePath("/play/skyline");
+  return { ok: true, data: null };
+}

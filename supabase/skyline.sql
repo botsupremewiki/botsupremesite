@@ -4628,3 +4628,465 @@ begin
 end;
 $$;
 
+-- ══════════════════════════════════════════════════════════════════════
+-- 28. P11 — HOLDINGS, VENTE D'ENTREPRISES
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Crée une holding (débloquée à 5+ entreprises possédées).
+create or replace function public.skyline_create_holding(p_name text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_company_count int;
+  v_holding_id uuid;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if length(p_name) < 1 or length(p_name) > 50 then
+    raise exception 'Nom invalide (1-50 caractères)';
+  end if;
+
+  select count(*) into v_company_count
+    from public.skyline_companies where user_id = v_user_id;
+  if v_company_count < 5 then
+    raise exception 'Holding débloquée à partir de 5 entreprises (actuel : %)', v_company_count;
+  end if;
+
+  insert into public.skyline_holdings (user_id, name)
+  values (v_user_id, p_name)
+  returning id into v_holding_id;
+
+  return v_holding_id;
+end;
+$$;
+
+-- Lie une entreprise à une holding.
+create or replace function public.skyline_link_company_to_holding(
+  p_holding_id uuid,
+  p_company_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if not exists (
+    select 1 from public.skyline_holdings
+    where id = p_holding_id and user_id = v_user_id
+  ) then raise exception 'Holding non trouvée'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  insert into public.skyline_company_holdings_link (holding_id, company_id)
+  values (p_holding_id, p_company_id)
+  on conflict (holding_id, company_id) do nothing;
+end;
+$$;
+
+-- Délie une entreprise.
+create or replace function public.skyline_unlink_company_from_holding(
+  p_holding_id uuid,
+  p_company_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  delete from public.skyline_company_holdings_link
+    where holding_id = p_holding_id and company_id = p_company_id
+      and exists (
+        select 1 from public.skyline_holdings
+        where id = p_holding_id and user_id = v_user_id
+      );
+end;
+$$;
+
+-- Transfert de cash entre 2 entreprises de la même holding.
+create or replace function public.skyline_holding_transfer_cash(
+  p_holding_id   uuid,
+  p_from_company uuid,
+  p_to_company   uuid,
+  p_amount       numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_amount <= 0 then raise exception 'Montant invalide'; end if;
+  if not exists (
+    select 1 from public.skyline_holdings
+    where id = p_holding_id and user_id = v_user_id
+  ) then raise exception 'Holding non trouvée'; end if;
+
+  if not exists (
+    select 1 from public.skyline_company_holdings_link
+    where holding_id = p_holding_id and company_id = p_from_company
+  ) or not exists (
+    select 1 from public.skyline_company_holdings_link
+    where holding_id = p_holding_id and company_id = p_to_company
+  ) then
+    raise exception 'Les deux entreprises doivent être liées à la holding';
+  end if;
+
+  if (select cash from public.skyline_companies where id = p_from_company) < p_amount then
+    raise exception 'Cash entreprise source insuffisant';
+  end if;
+
+  update public.skyline_companies
+    set cash = cash - p_amount
+    where id = p_from_company;
+  update public.skyline_companies
+    set cash = cash + p_amount
+    where id = p_to_company;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values
+    (v_user_id, p_from_company, 'other', -p_amount,
+     'Transfert holding → autre entreprise'),
+    (v_user_id, p_to_company, 'other', p_amount,
+     'Transfert holding ← autre entreprise');
+end;
+$$;
+
+-- Mettre une entreprise en vente.
+create or replace function public.skyline_list_company_for_sale(
+  p_company_id   uuid,
+  p_asking_price numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_asking_price <= 0 then raise exception 'Prix invalide'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  insert into public.skyline_companies_for_sale (company_id, asking_price)
+  values (p_company_id, p_asking_price)
+  on conflict (company_id) do update
+    set asking_price = excluded.asking_price,
+        listed_at = now();
+end;
+$$;
+
+create or replace function public.skyline_unlist_company(p_company_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  delete from public.skyline_companies_for_sale
+    where company_id = p_company_id
+      and exists (
+        select 1 from public.skyline_companies
+        where id = p_company_id and user_id = v_user_id
+      );
+end;
+$$;
+
+-- Acheter une entreprise listée.
+create or replace function public.skyline_buy_company(p_company_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_buyer_id  uuid := auth.uid();
+  v_listing   public.skyline_companies_for_sale%rowtype;
+  v_company   public.skyline_companies%rowtype;
+  v_seller_id uuid;
+  v_buyer_cash numeric;
+  v_existing_count int;
+begin
+  if v_buyer_id is null then raise exception 'Non authentifié'; end if;
+
+  select * into v_listing from public.skyline_companies_for_sale
+    where company_id = p_company_id;
+  if not found then raise exception 'Entreprise non listée'; end if;
+
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+
+  v_seller_id := v_company.user_id;
+  if v_seller_id = v_buyer_id then
+    raise exception 'Tu ne peux pas acheter ta propre entreprise';
+  end if;
+
+  select count(*) into v_existing_count
+    from public.skyline_companies
+    where user_id = v_buyer_id and sector = v_company.sector;
+  if v_existing_count > 0 then
+    raise exception 'Tu possèdes déjà une entreprise du secteur %', v_company.sector;
+  end if;
+
+  select cash into v_buyer_cash from public.skyline_profiles where user_id = v_buyer_id;
+  if v_buyer_cash is null then
+    perform public.skyline_init_profile();
+    v_buyer_cash := 10000;
+  end if;
+  if v_buyer_cash < v_listing.asking_price then
+    raise exception 'Cash insuffisant : il te manque % $',
+      round(v_listing.asking_price - v_buyer_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_listing.asking_price, updated_at = now()
+    where user_id = v_buyer_id;
+  update public.skyline_profiles
+    set cash = cash + v_listing.asking_price, updated_at = now()
+    where user_id = v_seller_id;
+
+  update public.skyline_companies
+    set user_id = v_buyer_id, updated_at = now()
+    where id = p_company_id;
+
+  delete from public.skyline_company_holdings_link
+    where company_id = p_company_id
+      and holding_id in (
+        select id from public.skyline_holdings where user_id = v_seller_id
+      );
+
+  delete from public.skyline_companies_for_sale where company_id = p_company_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values
+    (v_buyer_id, p_company_id, 'other', -v_listing.asking_price,
+     'Achat entreprise : ' || v_company.name),
+    (v_seller_id, null, 'other', v_listing.asking_price,
+     'Vente entreprise : ' || v_company.name);
+
+  insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+  values ('npc_announce',
+    '🏢 Cession : ' || v_company.name,
+    v_company.name || ' (' || v_company.sector || ') change de propriétaire pour ' ||
+    round(v_listing.asking_price) || '$.',
+    v_company.sector, 0);
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 29. P12 — CLASSEMENTS + ACHIEVEMENTS
+-- ══════════════════════════════════════════════════════════════════════
+
+create or replace function public.skyline_update_leaderboard(p_user_id uuid default null)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user record;
+  v_count int := 0;
+  v_assets numeric;
+  v_companies int;
+  v_market_cap numeric;
+  v_monthly_profit numeric;
+begin
+  for v_user in
+    select user_id from public.skyline_profiles
+    where (p_user_id is null or user_id = p_user_id)
+  loop
+    select coalesce(sum(cash + monthly_revenue * 6), 0) into v_assets
+      from public.skyline_companies where user_id = v_user.user_id;
+    select count(*) into v_companies
+      from public.skyline_companies where user_id = v_user.user_id;
+    select coalesce(sum(s.market_cap), 0) into v_market_cap
+      from public.skyline_company_shares s
+      inner join public.skyline_companies c on c.id = s.company_id
+      where c.user_id = v_user.user_id;
+    select coalesce(sum(monthly_revenue - monthly_expenses), 0) into v_monthly_profit
+      from public.skyline_companies where user_id = v_user.user_id;
+
+    declare v_user_cash numeric;
+    begin
+      select cash into v_user_cash from public.skyline_profiles where user_id = v_user.user_id;
+      v_assets := v_assets + coalesce(v_user_cash, 0);
+    end;
+
+    insert into public.skyline_leaderboard (
+      user_id, net_worth, monthly_profit, companies_count, market_cap_total
+    )
+    values (v_user.user_id, v_assets, v_monthly_profit, v_companies, v_market_cap)
+    on conflict (user_id) do update
+      set net_worth = excluded.net_worth,
+          monthly_profit = excluded.monthly_profit,
+          companies_count = excluded.companies_count,
+          market_cap_total = excluded.market_cap_total,
+          updated_at = now();
+
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+create table if not exists public.skyline_achievements (
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  achievement_id text not null,
+  unlocked_at    timestamptz not null default now(),
+  primary key (user_id, achievement_id)
+);
+
+alter table public.skyline_achievements enable row level security;
+
+drop policy if exists "skyline_achievements_read_all" on public.skyline_achievements;
+create policy "skyline_achievements_read_all"
+  on public.skyline_achievements
+  for select
+  using (true);
+
+drop policy if exists "skyline_achievements_write_own" on public.skyline_achievements;
+create policy "skyline_achievements_write_own"
+  on public.skyline_achievements
+  for all
+  using (auth.uid() = user_id);
+
+create or replace function public.skyline_check_achievements()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id  uuid := auth.uid();
+  v_count int := 0;
+  v_assets numeric;
+  v_company_count int;
+  v_companies_distinct_categories int;
+  v_has_pharma_patent boolean;
+  v_has_listed_company boolean;
+  v_has_holding boolean;
+  v_has_3_stars boolean;
+  v_saas_users int;
+  v_credit_score int;
+begin
+  if v_user_id is null then return 0; end if;
+
+  perform public.skyline_update_leaderboard(v_user_id);
+
+  select net_worth, companies_count into v_assets, v_company_count
+    from public.skyline_leaderboard where user_id = v_user_id;
+
+  select count(distinct category) into v_companies_distinct_categories
+    from public.skyline_companies where user_id = v_user_id;
+
+  select exists (
+    select 1 from public.skyline_patents p
+    inner join public.skyline_companies c on c.id = p.company_id
+    where c.user_id = v_user_id and p.expires_at > now()
+  ) into v_has_pharma_patent;
+
+  select exists (
+    select 1 from public.skyline_company_shares s
+    inner join public.skyline_companies c on c.id = s.company_id
+    where c.user_id = v_user_id and s.is_listed = true
+  ) into v_has_listed_company;
+
+  select exists (
+    select 1 from public.skyline_holdings where user_id = v_user_id
+  ) into v_has_holding;
+
+  select exists (
+    select 1 from public.skyline_restaurant_stars rs
+    inner join public.skyline_companies c on c.id = rs.company_id
+    where c.user_id = v_user_id and rs.stars >= 3
+  ) into v_has_3_stars;
+
+  select coalesce(sum(p.users_count), 0) into v_saas_users
+    from public.skyline_saas_products p
+    inner join public.skyline_companies c on c.id = p.company_id
+    where c.user_id = v_user_id;
+
+  select credit_score into v_credit_score
+    from public.skyline_profiles where user_id = v_user_id;
+
+  if v_company_count >= 1 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'first_company') on conflict do nothing;
+  end if;
+  if v_company_count >= 5 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'five_companies') on conflict do nothing;
+  end if;
+  if v_company_count >= 10 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'ten_companies') on conflict do nothing;
+  end if;
+  if v_companies_distinct_categories >= 4 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'all_categories') on conflict do nothing;
+  end if;
+  if v_assets >= 1000000 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'millionaire') on conflict do nothing;
+  end if;
+  if v_assets >= 100000000 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'hundred_millionaire') on conflict do nothing;
+  end if;
+  if v_assets >= 1000000000 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'billionaire') on conflict do nothing;
+  end if;
+  if v_has_pharma_patent then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'pharma_patent') on conflict do nothing;
+  end if;
+  if v_has_listed_company then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'ipo_done') on conflict do nothing;
+  end if;
+  if v_has_holding then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'holding_creator') on conflict do nothing;
+  end if;
+  if v_has_3_stars then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'three_stars') on conflict do nothing;
+  end if;
+  if v_saas_users >= 10000 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'saas_10k') on conflict do nothing;
+  end if;
+  if v_credit_score >= 800 then
+    insert into public.skyline_achievements (user_id, achievement_id)
+    values (v_user_id, 'excellent_credit') on conflict do nothing;
+  end if;
+
+  select count(*) into v_count
+    from public.skyline_achievements where user_id = v_user_id;
+  return v_count;
+end;
+$$;
+

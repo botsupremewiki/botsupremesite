@@ -961,6 +961,136 @@ export type SkylineRestaurantStarsRow = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// 4.6.10. HOLDINGS + VENTE D'ENTREPRISES (P11)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineHoldingRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  total_cash: number;
+  created_at: string;
+};
+
+export type SkylineCompanyForSaleRow = {
+  company_id: string;
+  asking_price: number;
+  listed_at: string;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4.6.11. ACHIEVEMENTS (P12)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineAchievementId =
+  | "first_company"
+  | "five_companies"
+  | "ten_companies"
+  | "all_categories"
+  | "millionaire"
+  | "hundred_millionaire"
+  | "billionaire"
+  | "pharma_patent"
+  | "ipo_done"
+  | "holding_creator"
+  | "three_stars"
+  | "saas_10k"
+  | "excellent_credit";
+
+export const SKYLINE_ACHIEVEMENTS: Record<
+  SkylineAchievementId,
+  { id: SkylineAchievementId; name: string; glyph: string; description: string }
+> = {
+  first_company: {
+    id: "first_company",
+    name: "Premier pas",
+    glyph: "🏢",
+    description: "Crée ta première entreprise.",
+  },
+  five_companies: {
+    id: "five_companies",
+    name: "Conglomérat débutant",
+    glyph: "🏗️",
+    description: "Possède 5 entreprises.",
+  },
+  ten_companies: {
+    id: "ten_companies",
+    name: "Empire en construction",
+    glyph: "🏰",
+    description: "Possède 10 entreprises.",
+  },
+  all_categories: {
+    id: "all_categories",
+    name: "Tous azimuts",
+    glyph: "🎯",
+    description: "1 entreprise dans chaque catégorie (commerce, usine, matière, service).",
+  },
+  millionaire: {
+    id: "millionaire",
+    name: "Millionnaire",
+    glyph: "💵",
+    description: "Atteint 1 000 000 $ de patrimoine total.",
+  },
+  hundred_millionaire: {
+    id: "hundred_millionaire",
+    name: "Centi-millionnaire",
+    glyph: "💸",
+    description: "Atteint 100 000 000 $ de patrimoine.",
+  },
+  billionaire: {
+    id: "billionaire",
+    name: "Milliardaire",
+    glyph: "💎",
+    description: "Atteint 1 milliard $ de patrimoine.",
+  },
+  pharma_patent: {
+    id: "pharma_patent",
+    name: "Innovateur pharma",
+    glyph: "🧪",
+    description: "Dépose ton premier brevet pharmaceutique.",
+  },
+  ipo_done: {
+    id: "ipo_done",
+    name: "Wall Street",
+    glyph: "📈",
+    description: "Introduis une entreprise en bourse.",
+  },
+  holding_creator: {
+    id: "holding_creator",
+    name: "Architecte de holding",
+    glyph: "🏛️",
+    description: "Crée ta première holding (5+ entreprises).",
+  },
+  three_stars: {
+    id: "three_stars",
+    name: "Gastronomie légendaire",
+    glyph: "⭐",
+    description: "Décroche 3 étoiles au Guide Skyline.",
+  },
+  saas_10k: {
+    id: "saas_10k",
+    name: "Tech mogul",
+    glyph: "☁️",
+    description: "10 000+ utilisateurs cumulés sur tes produits SaaS.",
+  },
+  excellent_credit: {
+    id: "excellent_credit",
+    name: "Banquier modèle",
+    glyph: "🏦",
+    description: "Atteint un score de crédit ≥ 800.",
+  },
+};
+
+export type SkylineLeaderboardRow = {
+  user_id: string;
+  net_worth: number;
+  monthly_profit: number;
+  companies_count: number;
+  market_cap_total: number;
+  updated_at: string;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // 4.7. NIVEAUX DE MACHINES (P5)
 // ──────────────────────────────────────────────────────────────────────────
 

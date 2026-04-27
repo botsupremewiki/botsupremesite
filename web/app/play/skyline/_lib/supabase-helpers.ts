@@ -17,6 +17,10 @@ import type {
   SkylinePharmaResearchRow,
   SkylineSaasProductRow,
   SkylineRestaurantStarsRow,
+  SkylineHoldingRow,
+  SkylineCompanyForSaleRow,
+  SkylineAchievementId,
+  SkylineLeaderboardRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -429,4 +433,150 @@ export async function fetchRestaurantStars(
     .eq("company_id", companyId)
     .maybeSingle();
   return (data as SkylineRestaurantStarsRow | null) ?? null;
+}
+
+// ───── P11 : Holdings + Vente d'entreprises ─────
+
+export async function fetchHoldingsForUser(
+  userId: string,
+): Promise<SkylineHoldingRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_holdings")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  return (data ?? []) as SkylineHoldingRow[];
+}
+
+export async function fetchHoldingCompanies(
+  holdingId: string,
+): Promise<string[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_company_holdings_link")
+    .select("company_id")
+    .eq("holding_id", holdingId);
+  return (data ?? []).map((r) => (r as { company_id: string }).company_id);
+}
+
+export type CompanyForSaleListing = {
+  company_id: string;
+  asking_price: number;
+  listed_at: string;
+  company_name: string;
+  company_sector: string;
+  company_category: string;
+  company_district: string;
+  monthly_revenue: number;
+  seller_user_id: string;
+};
+
+export async function fetchCompaniesForSale(): Promise<CompanyForSaleListing[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_companies_for_sale")
+    .select(
+      "company_id, asking_price, listed_at, skyline_companies!inner(name, sector, category, district, monthly_revenue, user_id)",
+    )
+    .order("listed_at", { ascending: false });
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((row) => {
+    const c = row.skyline_companies as {
+      name: string;
+      sector: string;
+      category: string;
+      district: string;
+      monthly_revenue: number;
+      user_id: string;
+    };
+    return {
+      company_id: row.company_id as string,
+      asking_price: Number(row.asking_price),
+      listed_at: row.listed_at as string,
+      company_name: c.name,
+      company_sector: c.sector,
+      company_category: c.category,
+      company_district: c.district,
+      monthly_revenue: Number(c.monthly_revenue),
+      seller_user_id: c.user_id,
+    };
+  });
+}
+
+export async function fetchListingForCompany(
+  companyId: string,
+): Promise<SkylineCompanyForSaleRow | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("skyline_companies_for_sale")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return (data as SkylineCompanyForSaleRow | null) ?? null;
+}
+
+// ───── P12 : Classements + Achievements ─────
+
+export type LeaderboardEntry = SkylineLeaderboardRow & {
+  username: string;
+  avatar_url: string | null;
+};
+
+export async function fetchLeaderboard(
+  sort: "net_worth" | "monthly_profit" | "market_cap_total" = "net_worth",
+  limit = 50,
+): Promise<LeaderboardEntry[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  // Refresh global (à utiliser avec parcimonie).
+  const { data } = await supabase
+    .from("skyline_leaderboard")
+    .select("*, profiles!inner(username, avatar_url)")
+    .order(sort, { ascending: false })
+    .limit(limit);
+  if (!data) return [];
+  return (data as Array<Record<string, unknown>>).map((row) => {
+    const p = row.profiles as { username: string; avatar_url: string | null };
+    return {
+      user_id: row.user_id as string,
+      net_worth: Number(row.net_worth),
+      monthly_profit: Number(row.monthly_profit),
+      companies_count: Number(row.companies_count),
+      market_cap_total: Number(row.market_cap_total),
+      updated_at: row.updated_at as string,
+      username: p.username,
+      avatar_url: p.avatar_url,
+    };
+  });
+}
+
+export async function refreshOwnLeaderboard(): Promise<void> {
+  const supabase = await createClient();
+  if (!supabase) return;
+  await supabase.rpc("skyline_update_leaderboard");
+}
+
+export async function fetchAchievementsForUser(
+  userId: string,
+): Promise<SkylineAchievementId[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_achievements")
+    .select("achievement_id")
+    .eq("user_id", userId);
+  return (data ?? []).map(
+    (r) => (r as { achievement_id: string }).achievement_id as SkylineAchievementId,
+  );
+}
+
+export async function checkAchievements(): Promise<void> {
+  const supabase = await createClient();
+  if (!supabase) return;
+  await supabase.rpc("skyline_check_achievements");
 }

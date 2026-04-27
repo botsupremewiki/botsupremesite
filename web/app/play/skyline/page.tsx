@@ -202,6 +202,38 @@ export default async function SkylineHub() {
                 accent="text-fuchsia-200"
                 border="border-fuchsia-400/40"
               />
+              <MenuButton
+                href="/play/skyline/holdings"
+                icon="🏛️"
+                title="Holdings"
+                description="Regroupe tes entreprises et transfère du cash entre filiales (5+ entreprises)"
+                accent="text-violet-200"
+                border="border-violet-400/40"
+              />
+              <MenuButton
+                href="/play/skyline/marche-entreprises"
+                icon="🏢"
+                title="Marché d'entreprises"
+                description="Acheter/vendre des entreprises entre joueurs"
+                accent="text-orange-200"
+                border="border-orange-400/40"
+              />
+              <MenuButton
+                href="/play/skyline/classement"
+                icon="🏆"
+                title="Classements"
+                description="Top 50 magnats par patrimoine, profit, capitalisation"
+                accent="text-yellow-200"
+                border="border-yellow-400/40"
+              />
+              <MenuButton
+                href="/play/skyline/achievements"
+                icon="🎖️"
+                title="Achievements"
+                description="Tes 13 trophées de magnat à débloquer"
+                accent="text-rose-200"
+                border="border-rose-400/40"
+              />
             </div>
           </section>
 

@@ -3,6 +3,7 @@ import { getProfile } from "@/lib/auth";
 import {
   ensureSkylineProfile,
   fetchEmployeesForCompany,
+  fetchListingForCompany,
   fetchMachinesForCompany,
   fetchPermitsForCompany,
   fetchPharmaPatents,
@@ -61,12 +62,13 @@ export default async function CompanyPage({
     company.sector,
   );
 
-  const [pharmaResearch, pharmaPatents, saasProducts, restauStars] =
+  const [pharmaResearch, pharmaPatents, saasProducts, restauStars, listing] =
     await Promise.all([
       isPharma ? fetchPharmaResearch(companyId) : Promise.resolve([]),
       isPharma ? fetchPharmaPatents(companyId) : Promise.resolve([]),
       isTech ? fetchSaasProducts(companyId) : Promise.resolve([]),
       isRestau ? fetchRestaurantStars(companyId) : Promise.resolve(null),
+      fetchListingForCompany(companyId),
     ]);
 
   return (
@@ -92,6 +94,7 @@ export default async function CompanyPage({
         pharmaPatents={pharmaPatents}
         saasProducts={saasProducts}
         restauStars={restauStars}
+        listing={listing}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>
