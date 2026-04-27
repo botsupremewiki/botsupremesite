@@ -10,16 +10,18 @@ export type QuestConfig = {
   xpReward: number;
 };
 
+// Daily : nerf −50% OS pour rester cohérent avec l'économie rare.
 export const ETERNUM_DAILY_QUESTS: QuestConfig[] = [
-  { id: "daily-idle", name: "Récolter en idle", description: "Récolte 3× tes gains AFK aujourd'hui.", category: "daily", required: 3, osReward: 500, xpReward: 100 },
-  { id: "daily-dungeon", name: "Compléter 1 donjon", description: "Termine 1 donjon n'importe lequel.", category: "daily", required: 1, osReward: 800, xpReward: 200 },
-  { id: "daily-wb", name: "Frapper le Bot Suprême", description: "Utilise au moins 1 attaque sur le World Boss.", category: "daily", required: 1, osReward: 600, xpReward: 150 },
+  { id: "daily-idle", name: "Récolter en idle", description: "Récolte 3× tes gains AFK aujourd'hui.", category: "daily", required: 3, osReward: 250, xpReward: 100 },
+  { id: "daily-dungeon", name: "Compléter 1 donjon", description: "Termine 1 donjon n'importe lequel.", category: "daily", required: 1, osReward: 400, xpReward: 200 },
+  { id: "daily-wb", name: "Frapper le Bot Suprême", description: "Utilise au moins 1 attaque sur le World Boss.", category: "daily", required: 1, osReward: 300, xpReward: 150 },
 ];
 
+// Weekly : nerf −40% OS.
 export const ETERNUM_WEEKLY_QUESTS: QuestConfig[] = [
-  { id: "weekly-pvp", name: "5 victoires PvP", description: "Gagne 5 matches PvP cette semaine.", category: "weekly", required: 5, osReward: 5000, xpReward: 1500 },
-  { id: "weekly-tower", name: "Tour étage 20", description: "Atteins l'étage 20 de la Tour Infinie.", category: "weekly", required: 20, osReward: 3000, xpReward: 1000 },
-  { id: "weekly-craft", name: "Crafte 10 items", description: "Crafte 10 items de n'importe quelle rareté.", category: "weekly", required: 10, osReward: 4000, xpReward: 1200 },
+  { id: "weekly-pvp", name: "5 victoires PvP", description: "Gagne 5 matches PvP cette semaine.", category: "weekly", required: 5, osReward: 3000, xpReward: 1500 },
+  { id: "weekly-tower", name: "Tour étage 20", description: "Atteins l'étage 20 de la Tour Infinie.", category: "weekly", required: 20, osReward: 1800, xpReward: 1000 },
+  { id: "weekly-craft", name: "Crafte 10 items", description: "Crafte 10 items de n'importe quelle rareté.", category: "weekly", required: 10, osReward: 2400, xpReward: 1200 },
 ];
 
 export const ETERNUM_MAIN_QUESTS: QuestConfig[] = [

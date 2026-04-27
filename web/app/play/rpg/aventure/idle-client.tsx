@@ -10,8 +10,11 @@ import {
   eternumXpForNextLevel,
 } from "@shared/types";
 import { createClient } from "@/lib/supabase/client";
+import { IdleBattleScene } from "@/components/eternum/idle-battle-scene";
 
 const TICK_SECONDS = 30; // doit matcher la SQL
+const IDLE_CAP_HOURS = 4; // doit matcher la SQL (cap_ticks = 14400/30)
+const IDLE_CAP_TICKS = (IDLE_CAP_HOURS * 3600) / TICK_SECONDS;
 
 export function IdleClient({
   initialHero,
@@ -42,16 +45,18 @@ export function IdleClient({
   const xpNeeded = eternumXpForNextLevel(hero.level);
 
   // Estimation OS en attente depuis idleUpdatedAt.
+  // Doit matcher la formule SQL : OS = ticks * stage * 1.5 (via (stage*3)/2),
+  // XP = ticks * stage * 1, cap 4h.
   const pending = useMemo(() => {
     const elapsedSec = Math.max(
       0,
       Math.floor((now - hero.idleUpdatedAt) / 1000),
     );
-    const ticks = Math.min(28800 / TICK_SECONDS, Math.floor(elapsedSec / TICK_SECONDS));
+    const ticks = Math.min(IDLE_CAP_TICKS, Math.floor(elapsedSec / TICK_SECONDS));
     return {
       ticks,
-      os: ticks * hero.idleStage * 5,
-      xp: ticks * hero.idleStage * 2,
+      os: Math.floor((ticks * hero.idleStage * 3) / 2),
+      xp: ticks * hero.idleStage * 1,
       seconds: elapsedSec,
     };
   }, [now, hero.idleUpdatedAt, hero.idleStage]);
@@ -174,8 +179,17 @@ export function IdleClient({
             Stage {hero.idleStage}
           </div>
           <div className="text-xs text-zinc-500">
-            Drop : ressources basse qualité (Phase 3) · OS · XP
+            Combat automatique · Drop OS + XP
           </div>
+        </div>
+
+        {/* Animation combat idle */}
+        <div className="mt-4">
+          <IdleBattleScene
+            classId={hero.classId}
+            elementId={hero.elementId}
+            stage={hero.idleStage}
+          />
         </div>
 
         {/* AFK pending */}
@@ -200,8 +214,8 @@ export function IdleClient({
             </button>
           </div>
           <div className="mt-1 text-[10px] text-zinc-500">
-            Tick toutes les 30s · cap AFK 8h · OS = stage × 5/tick · XP =
-            stage × 2/tick
+            Tick toutes les 30s · cap AFK {IDLE_CAP_HOURS}h · OS = stage × 1.5/tick
+            · XP = stage × 1/tick
           </div>
         </div>
 
