@@ -320,15 +320,6 @@ function SetupPanel({
   const minMines = MINES_CONFIG.minMines;
   const maxMines = MINES_CONFIG.maxMines;
 
-  // Mirror the server-side rtpForMines so the player can see what RTP
-  // they're picking. Keep this formula in sync with mines-math.ts.
-  const rtpPct = Math.round(
-    (MINES_CONFIG.rtpAtMin +
-      (MINES_CONFIG.rtpAtMax - MINES_CONFIG.rtpAtMin) *
-        ((minesCount - minMines) / (maxMines - minMines))) *
-      1000,
-  ) / 10;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -379,8 +370,7 @@ function SetupPanel({
         </div>
         <div className="mt-1 text-[10px] text-zinc-500">
           {minesCount} mine{minesCount > 1 ? "s" : ""} sur {totalTiles}{" "}
-          cases ({Math.round((minesCount / totalTiles) * 100)}% piégées) ·
-          RTP {rtpPct}%
+          cases ({Math.round((minesCount / totalTiles) * 100)}% piégées)
         </div>
       </div>
 

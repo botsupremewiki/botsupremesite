@@ -842,11 +842,8 @@ function Paytable({ machine }: { machine: SlotMachineConfig }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-      <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
-        <span>Paiements</span>
-        <span className={`normal-case tracking-normal ${machine.theme.accent}`}>
-          RTP cible {Math.round(machine.targetRtp * 100)}%
-        </span>
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+        Paiements
       </div>
       <div className="mb-2 text-[10px] text-zinc-500">
         Grille {machine.cols}×{machine.rows} ·{" "}
