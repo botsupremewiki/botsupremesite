@@ -15,12 +15,19 @@ import {
 import {
   buildFamilierUnit,
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
+
+type FightSession = {
+  challenge: ChallengeConfig;
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  forcedWinner: "A" | "B";
+  rewards?: { os: number; resources: string[] };
+};
 
 export function ChallengesClient({
   hero,
@@ -33,11 +40,7 @@ export function ChallengesClient({
 }) {
   const router = useRouter();
   const [done, setDone] = useState<string[]>(doneIds);
-  const [result, setResult] = useState<{
-    challenge: ChallengeConfig;
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
@@ -117,8 +120,14 @@ export function ChallengesClient({
 
   async function fight(c: ChallengeConfig) {
     setError(null);
-    setResult(null);
+    setSession(null);
     if (!supabase) return;
+
+    const built = buildPlayerTeam(c);
+    if (built.error) {
+      setError(built.error);
+      return;
+    }
 
     // ⚠️ Server-authoritative — restrictions vérifiées server-side.
     const { data, error: rpcErr } = await supabase.rpc(
@@ -130,26 +139,33 @@ export function ChallengesClient({
       return;
     }
     const r = data as
-      | { ok: true; won: boolean }
+      | {
+          ok: true;
+          won: boolean;
+          os_gained?: number;
+          resources_gained?: { resource_id: string; count: number }[];
+        }
       | { ok: false; error: string };
     if (!r.ok) {
       setError(r.error);
       return;
     }
 
-    // Log cosmétique : on simule juste pour le show.
-    const built = buildPlayerTeam(c);
-    const enemy = buildEnemy();
-    const maxT = c.id === "speed-run" ? 8 : 50;
-    const battle = simulateBattle(built.units, enemy, maxT);
-
     if (r.won) setDone([...done, c.id]);
-    setResult({
+    setSession({
       challenge: c,
-      winner: r.won ? "A" : "B",
-      log: battle.log,
+      teamA: built.units,
+      teamB: buildEnemy(),
+      forcedWinner: r.won ? "A" : "B",
+      rewards: r.won
+        ? {
+            os: r.os_gained ?? c.rewardOs,
+            resources: (r.resources_gained ?? []).map(
+              (rs) => `${rs.count}× ${rs.resource_id}`,
+            ),
+          }
+        : undefined,
     });
-    router.refresh();
   }
 
   return (
@@ -201,31 +217,19 @@ export function ChallengesClient({
         })}
       </div>
 
-      {result && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setResult(null)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border-2 border-yellow-400/40 bg-zinc-950 p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className={`text-2xl font-bold ${result.winner === "A" ? "text-emerald-300" : "text-rose-300"}`}
-            >
-              {result.winner === "A" ? "🏆 Défi relevé" : "💀 Échec"} — {result.challenge.name}
-            </div>
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md bg-black/40 p-3 text-xs">
-              {result.log.map((l, i) => (
-                <div key={i}>
-                  <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-                  {l.msg}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner={session?.forcedWinner}
+        title={session ? `${session.challenge.glyph} ${session.challenge.name}` : ""}
+        rewards={session?.rewards}
+        onComplete={() => {
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
     </div>
   );
 }

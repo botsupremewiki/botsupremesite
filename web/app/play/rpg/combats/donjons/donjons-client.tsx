@@ -4,14 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ETERNUM_CLASSES,
-  ETERNUM_ELEMENTS,
   type EternumElementId,
   type EternumHero,
 } from "@shared/types";
-import {
-  ETERNUM_FAMILIERS_BY_ID,
-  RARITY_ACCENT,
-} from "@shared/eternum-familiers";
+import { ETERNUM_FAMILIERS_BY_ID } from "@shared/eternum-familiers";
 import {
   ETERNUM_DUNGEONS,
   type DungeonConfig,
@@ -19,12 +15,19 @@ import {
 import {
   buildFamilierUnit,
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
+
+type FightSession = {
+  dungeon: DungeonConfig;
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  forcedWinner: "A" | "B";
+  rewards?: { os: number; xp: number; resources: string[] };
+};
 
 export function DonjonsClient({
   hero,
@@ -36,12 +39,7 @@ export function DonjonsClient({
   progress: { dungeon_id: string; best_floor: number }[];
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<DungeonConfig | null>(null);
-  const [result, setResult] = useState<{
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-    rewards?: { os: number; xp: number; resources: string[] };
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
@@ -97,10 +95,10 @@ export function DonjonsClient({
 
   async function fight(d: DungeonConfig) {
     setError(null);
-    setResult(null);
+    setSession(null);
     if (!supabase) return;
 
-    // ⚠️ Server-authoritative : on demande juste "j'attaque ce donjon",
+    // ⚠️ Server-authoritative : on demande "j'attaque ce donjon",
     // le serveur calcule l'outcome + les rewards.
     const { data, error: rpcErr } = await supabase.rpc(
       "eternum_attempt_dungeon",
@@ -126,32 +124,22 @@ export function DonjonsClient({
       return;
     }
 
-    // Simule un log côté client juste pour l'affichage (cosmétique).
-    const playerTeam = buildPlayerTeam();
-    const enemyTeam = buildEnemyTeam(d);
-    const battle = simulateBattle(playerTeam, enemyTeam);
-
-    if (!r.won) {
-      setResult({
-        winner: "B",
-        log: battle.log,
-      });
-      router.refresh();
-      return;
-    }
-
-    setResult({
-      winner: "A",
-      log: battle.log,
-      rewards: {
-        os: r.os_gained ?? 0,
-        xp: r.xp_gained ?? 0,
-        resources: (r.resources_gained ?? []).map(
-          (rs) => `${rs.count} × ${rs.resource_id}`,
-        ),
-      },
+    // Lance le combat ATB tactique avec le résultat serveur en input.
+    setSession({
+      dungeon: d,
+      teamA: buildPlayerTeam(),
+      teamB: buildEnemyTeam(d),
+      forcedWinner: r.won ? "A" : "B",
+      rewards: r.won
+        ? {
+            os: r.os_gained ?? 0,
+            xp: r.xp_gained ?? 0,
+            resources: (r.resources_gained ?? []).map(
+              (rs) => `${rs.count} × ${rs.resource_id}`,
+            ),
+          }
+        : undefined,
     });
-    router.refresh();
   }
 
   return (
@@ -197,10 +185,7 @@ export function DonjonsClient({
                 {d.rewards.xpMax} XP, ressources
               </div>
               <button
-                onClick={() => {
-                  setSelected(d);
-                  fight(d);
-                }}
+                onClick={() => fight(d)}
                 disabled={team.length === 0 || hero.energy < d.energyCost}
                 className="mt-1 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400 disabled:opacity-40"
               >
@@ -211,95 +196,27 @@ export function DonjonsClient({
         })}
       </div>
 
-      {result && selected && (
-        <CombatResultOverlay
-          dungeon={selected}
-          result={result}
-          onClose={() => {
-            setResult(null);
-            setSelected(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function CombatResultOverlay({
-  dungeon,
-  result,
-  onClose,
-}: {
-  dungeon: DungeonConfig;
-  result: {
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-    rewards?: { os: number; xp: number; resources: string[] };
-  };
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border-2 border-amber-400/40 bg-zinc-950 p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-center justify-between">
-          <div>
-            <div
-              className={`text-2xl font-bold ${
-                result.winner === "A"
-                  ? "text-emerald-300"
-                  : result.winner === "B"
-                    ? "text-rose-300"
-                    : "text-zinc-300"
-              }`}
-            >
-              {result.winner === "A"
-                ? "🏆 Victoire !"
-                : result.winner === "B"
-                  ? "💀 Défaite"
-                  : "🤝 Égalité"}
-            </div>
-            <div className="text-xs text-zinc-400">
-              {dungeon.name} · {result.log.length} actions
-            </div>
-          </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-100">
-            ✕
-          </button>
-        </div>
-
-        {result.rewards && (
-          <div className="mt-3 shrink-0 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm">
-            <div className="font-bold text-amber-200">🎁 Récompenses</div>
-            <div className="mt-1 text-amber-100">
-              +{result.rewards.os.toLocaleString("fr-FR")} OS · +
-              {result.rewards.xp.toLocaleString("fr-FR")} XP
-            </div>
-            {result.rewards.resources.length > 0 && (
-              <div className="mt-1 text-xs text-amber-100">
-                {result.rewards.resources.join(" · ")}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md bg-black/40 p-3 text-xs text-zinc-300">
-          <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
-            Journal de combat
-          </div>
-          {result.log.map((l, i) => (
-            <div key={i} className="leading-snug">
-              <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-              {l.msg}
-            </div>
-          ))}
-        </div>
-      </div>
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner={session?.forcedWinner}
+        title={session ? `${session.dungeon.glyph} ${session.dungeon.name}` : ""}
+        rewards={
+          session?.rewards
+            ? {
+                os: session.rewards.os,
+                xp: session.rewards.xp,
+                resources: session.rewards.resources,
+              }
+            : undefined
+        }
+        onComplete={() => {
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Récupérer & continuer"
+      />
     </div>
   );
 }

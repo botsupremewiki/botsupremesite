@@ -11,9 +11,9 @@ import {
 } from "@shared/types";
 import {
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
+  type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 
 type Opponent = {
@@ -22,6 +22,15 @@ type Opponent = {
   element_id: string;
   level: number;
   pvp_elo: number;
+};
+
+type FightSession = {
+  opp: Opponent;
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  forcedWinner: "A" | "B";
+  eloAfter: number;
+  won: boolean;
 };
 
 export function PvpClient({
@@ -35,18 +44,13 @@ export function PvpClient({
 }) {
   void selfId;
   const router = useRouter();
-  const [result, setResult] = useState<{
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-    eloAfter?: number;
-    opp?: string;
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
   async function challenge(opp: Opponent) {
     setError(null);
-    setResult(null);
+    setSession(null);
     if (!supabase) return;
 
     // ⚠️ Server décide le winner basé sur power comparison.
@@ -58,25 +62,29 @@ export function PvpClient({
       return;
     }
     const r = data as
-      | { ok: true; won: boolean; attacker_elo_after: number; defender_elo_after: number }
+      | {
+          ok: true;
+          won: boolean;
+          attacker_elo_after: number;
+          defender_elo_after: number;
+        }
       | { ok: false; error: string };
     if (!r.ok) {
       setError(r.error);
       return;
     }
 
-    // Log cosmétique côté client.
-    const playerTeam = [
+    const teamA: CombatUnit[] = [
       buildHeroUnit(
         "hero",
-        ETERNUM_CLASSES[hero.classId].name,
+        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
         hero.classId,
         hero.elementId,
         hero.level,
         "A",
       ),
     ];
-    const oppTeam = [
+    const teamB: CombatUnit[] = [
       buildHeroUnit(
         `opp-${opp.user_id}`,
         `${ETERNUM_CLASSES[opp.class_id as EternumClassId].name} adverse`,
@@ -86,15 +94,15 @@ export function PvpClient({
         "B",
       ),
     ];
-    const battle = simulateBattle(playerTeam, oppTeam, 50);
 
-    setResult({
-      winner: r.won ? "A" : "B",
-      log: battle.log,
+    setSession({
+      opp,
+      teamA,
+      teamB,
+      forcedWinner: r.won ? "A" : "B",
       eloAfter: r.attacker_elo_after,
-      opp: ETERNUM_CLASSES[opp.class_id as EternumClassId].name,
+      won: r.won,
     });
-    router.refresh();
   }
 
   return (
@@ -154,34 +162,29 @@ export function PvpClient({
         )}
       </div>
 
-      {result && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setResult(null)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border-2 border-violet-400/40 bg-zinc-950 p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className={`text-2xl font-bold ${result.winner === "A" ? "text-emerald-300" : "text-rose-300"}`}
-            >
-              {result.winner === "A" ? "🏆 Victoire" : "💀 Défaite"} vs {result.opp}
-            </div>
-            {result.eloAfter !== undefined && (
-              <div className="text-sm text-violet-300">ELO : {result.eloAfter}</div>
-            )}
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md bg-black/40 p-3 text-xs">
-              {result.log.map((l, i) => (
-                <div key={i}>
-                  <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-                  {l.msg}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner={session?.forcedWinner}
+        title={
+          session
+            ? `⚔️ PvP vs ${ETERNUM_CLASSES[session.opp.class_id as EternumClassId].name}`
+            : ""
+        }
+        rewards={
+          session
+            ? {
+                custom: `ELO : ${session.eloAfter} ${session.won ? "📈" : "📉"}`,
+              }
+            : undefined
+        }
+        onComplete={() => {
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
     </div>
   );
 }

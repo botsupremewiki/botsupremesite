@@ -10,14 +10,20 @@ import {
 } from "@shared/eternum-familiers";
 import {
   buildFamilierUnit,
-  simulateBattle,
-  type CombatLog,
   type CombatUnit,
 } from "@shared/eternum-combat";
 import type { EternumElementId } from "@shared/types";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
 import type { LeaderboardRow } from "./page";
+
+type FightSession = {
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  damage: number;
+  osGained: number;
+};
 
 export function WorldBossClient({
   team,
@@ -32,11 +38,7 @@ export function WorldBossClient({
 }) {
   const router = useRouter();
   const [attempts, setAttempts] = useState(attemptsToday);
-  const [result, setResult] = useState<{
-    damage: number;
-    log: CombatLog[];
-    osGained: number;
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
@@ -81,7 +83,7 @@ export function WorldBossClient({
 
   async function attack() {
     setError(null);
-    setResult(null);
+    setSession(null);
     if (!supabase) return;
 
     // ⚠️ Server-authoritative : le serveur calcule les dégâts à partir du
@@ -101,14 +103,15 @@ export function WorldBossClient({
       return;
     }
 
-    // Log cosmétique côté client (optionnel — on reuse le simulate pour le show).
-    const playerTeam = buildPlayerTeam();
-    const boss = buildBoss();
-    const battle = simulateBattle(playerTeam, boss, 30);
-
     setAttempts(r.attempts_used);
-    setResult({ damage: r.damage, log: battle.log, osGained: r.os_gained });
-    router.refresh();
+    // Le boss "gagne" toujours côté narratif (HP énorme), on inflige juste
+    // un score de dégâts côté serveur.
+    setSession({
+      teamA: buildPlayerTeam(),
+      teamB: buildBoss(),
+      damage: r.damage,
+      osGained: r.os_gained,
+    });
   }
 
   return (
@@ -183,30 +186,28 @@ export function WorldBossClient({
           </div>
         </section>
 
-        {result && (
-          <section className="flex flex-col overflow-hidden rounded-xl border border-fuchsia-400/40 bg-black/40">
-            <div className="shrink-0 border-b border-white/5 px-4 py-2">
-              <div className="text-base font-bold text-fuchsia-200">
-                ⚔️ Résultat — {result.damage.toLocaleString("fr-FR")} dmg
-              </div>
-              <div className="text-xs text-amber-300">
-                +{result.osGained.toLocaleString("fr-FR")} OS gagnés
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 text-xs text-zinc-300">
-              <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">
-                Journal
-              </div>
-              {result.log.map((l, i) => (
-                <div key={i} className="leading-snug">
-                  <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-                  {l.msg}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
+
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner="B"
+        title={session ? `🤖 ${ETERNUM_WORLD_BOSS.name}` : ""}
+        rewards={
+          session
+            ? {
+                os: session.osGained,
+                custom: `⚔️ ${session.damage.toLocaleString("fr-FR")} dégâts infligés`,
+              }
+            : undefined
+        }
+        onComplete={() => {
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
     </div>
   );
 }

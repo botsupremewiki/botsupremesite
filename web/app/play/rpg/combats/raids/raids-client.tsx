@@ -10,30 +10,32 @@ import { ETERNUM_RAIDS, type RaidConfig } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
+  type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+type FightSession = {
+  raid: RaidConfig;
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  forcedWinner: "A" | "B";
+  rewards?: { os: number; xp: number };
+};
+
 export function RaidsClient({ hero }: { hero: EternumHero }) {
   const router = useRouter();
-  const [result, setResult] = useState<{
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-    rewards?: { os: number; xp: number };
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<RaidConfig | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
   async function fight(r: RaidConfig) {
     setError(null);
-    setResult(null);
-    setSelected(r);
+    setSession(null);
     if (!supabase) return;
 
     const { data, error: rpcErr } = await supabase.rpc(
@@ -52,18 +54,17 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
       return;
     }
 
-    // Log cosmétique
-    const playerTeam = [
+    const teamA: CombatUnit[] = [
       buildHeroUnit(
         "hero",
-        ETERNUM_CLASSES[hero.classId].name,
+        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
         hero.classId,
         hero.elementId,
         hero.level,
         "A",
       ),
     ];
-    const boss = [
+    const teamB: CombatUnit[] = [
       buildFamilierUnit(
         "boss",
         r.bossName,
@@ -74,16 +75,16 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
         "B",
       ),
     ];
-    const battle = simulateBattle(playerTeam, boss, 50);
 
-    setResult({
-      winner: res.won ? "A" : "B",
-      log: battle.log,
+    setSession({
+      raid: r,
+      teamA,
+      teamB,
+      forcedWinner: res.won ? "A" : "B",
       rewards: res.won
         ? { os: res.os_gained ?? 0, xp: res.xp_gained ?? 0 }
         : undefined,
     });
-    router.refresh();
   }
 
   return (
@@ -135,69 +136,19 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
         ))}
       </div>
 
-      {result && selected && (
-        <ResultOverlay
-          name={selected.name}
-          result={result}
-          onClose={() => {
-            setResult(null);
-            setSelected(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function ResultOverlay({
-  name,
-  result,
-  onClose,
-}: {
-  name: string;
-  result: {
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-    rewards?: { os: number; xp: number };
-  };
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border-2 border-emerald-400/40 bg-zinc-950 p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-center justify-between">
-          <div>
-            <div
-              className={`text-2xl font-bold ${result.winner === "A" ? "text-emerald-300" : "text-rose-300"}`}
-            >
-              {result.winner === "A" ? "🏆 Victoire !" : "💀 Défaite"}
-            </div>
-            <div className="text-xs text-zinc-400">{name}</div>
-          </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-100">
-            ✕
-          </button>
-        </div>
-        {result.rewards && (
-          <div className="mt-3 shrink-0 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-amber-100">
-            +{result.rewards.os.toLocaleString("fr-FR")} OS · +{result.rewards.xp} XP
-          </div>
-        )}
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md bg-black/40 p-3 text-xs text-zinc-300">
-          {result.log.map((l, i) => (
-            <div key={i} className="leading-snug">
-              <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-              {l.msg}
-            </div>
-          ))}
-        </div>
-      </div>
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner={session?.forcedWinner}
+        title={session ? `${session.raid.glyph} ${session.raid.name}` : ""}
+        rewards={session?.rewards}
+        onComplete={() => {
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
     </div>
   );
 }

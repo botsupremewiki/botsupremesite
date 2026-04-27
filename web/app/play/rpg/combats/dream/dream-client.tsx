@@ -6,19 +6,25 @@ import {
   ETERNUM_CLASSES,
   type EternumElementId,
   type EternumHero,
-  type EternumRarity,
 } from "@shared/types";
 import { ETERNUM_FAMILIERS_BY_ID } from "@shared/eternum-familiers";
 import { ETERNUM_DREAMS, type DreamConfig } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
+
+type FightSession = {
+  dream: DreamConfig;
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  forcedWinner: "A" | "B";
+  shards?: { resource_id: string; count: number }[];
+};
 
 export function DreamClient({
   hero,
@@ -28,11 +34,7 @@ export function DreamClient({
   team: OwnedFamilier[];
 }) {
   const router = useRouter();
-  const [result, setResult] = useState<{
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-    shards?: { rarity: string; count: number }[];
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
@@ -77,7 +79,7 @@ export function DreamClient({
 
   async function fight(d: DreamConfig) {
     setError(null);
-    setResult(null);
+    setSession(null);
     if (!supabase) return;
 
     // ⚠️ Server-authoritative.
@@ -101,22 +103,13 @@ export function DreamClient({
       return;
     }
 
-    // Log cosmétique
-    const playerTeam = buildPlayerTeam();
-    const enemy = buildEnemy(d);
-    const battle = simulateBattle(playerTeam, enemy, 50);
-
-    setResult({
-      winner: r.won ? "A" : "B",
-      log: battle.log,
-      shards: r.won
-        ? (r.shards ?? []).map((s) => ({
-            rarity: s.resource_id.replace("shard-", ""),
-            count: s.count,
-          }))
-        : undefined,
+    setSession({
+      dream: d,
+      teamA: buildPlayerTeam(),
+      teamB: buildEnemy(d),
+      forcedWinner: r.won ? "A" : "B",
+      shards: r.won ? r.shards ?? [] : undefined,
     });
-    router.refresh();
   }
 
   return (
@@ -158,37 +151,28 @@ export function DreamClient({
         ))}
       </div>
 
-      {result && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setResult(null)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border-2 border-indigo-400/40 bg-zinc-950 p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className={`text-2xl font-bold ${result.winner === "A" ? "text-emerald-300" : "text-rose-300"}`}
-            >
-              {result.winner === "A" ? "🌙 Rêve maîtrisé" : "💀 Englouti par le rêve"}
-            </div>
-            {result.shards && result.shards.length > 0 && (
-              <div className="mt-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-                💎 Shards drops :{" "}
-                {result.shards.map((s) => `${s.count}× shard-${s.rarity}`).join(" · ")}
-              </div>
-            )}
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md bg-black/40 p-3 text-xs">
-              {result.log.map((l, i) => (
-                <div key={i}>
-                  <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-                  {l.msg}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner={session?.forcedWinner}
+        title={session ? `${session.dream.glyph} ${session.dream.name}` : ""}
+        rewards={
+          session?.shards
+            ? {
+                resources: session.shards.map(
+                  (s) => `${s.count}× ${s.resource_id}`,
+                ),
+                custom: "💎 Shards récoltés",
+              }
+            : undefined
+        }
+        onComplete={() => {
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
     </div>
   );
 }

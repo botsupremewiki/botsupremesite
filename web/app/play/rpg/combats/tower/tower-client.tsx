@@ -10,13 +10,20 @@ import {
 import {
   buildFamilierUnit,
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 
 const ELEMENTS: EternumElementId[] = ["fire", "water", "wind", "earth"];
+
+type FightSession = {
+  floor: number;
+  teamA: CombatUnit[];
+  teamB: CombatUnit[];
+  forcedWinner: "A" | "B";
+  rewards?: { os: number; xp: number };
+};
 
 export function TowerClient({
   hero,
@@ -31,10 +38,7 @@ export function TowerClient({
 }) {
   const router = useRouter();
   const [floor, setFloor] = useState(Math.max(1, startFloor));
-  const [result, setResult] = useState<{
-    winner: "A" | "B" | "draw";
-    log: CombatLog[];
-  } | null>(null);
+  const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
@@ -66,7 +70,7 @@ export function TowerClient({
 
   async function fight() {
     setError(null);
-    setResult(null);
+    setSession(null);
     if (!supabase) return;
 
     const { data, error: rpcErr } = await supabase.rpc("eternum_attempt_tower", {
@@ -77,32 +81,38 @@ export function TowerClient({
       return;
     }
     const r = data as
-      | { ok: true; won: boolean; floor?: number }
+      | {
+          ok: true;
+          won: boolean;
+          floor?: number;
+          os_gained?: number;
+          xp_gained?: number;
+        }
       | { ok: false; error: string };
     if (!r.ok) {
       setError(r.error);
       return;
     }
 
-    // Log cosmétique
-    const playerTeam = [
+    const teamA: CombatUnit[] = [
       buildHeroUnit(
         "hero",
-        ETERNUM_CLASSES[hero.classId].name,
+        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
         hero.classId,
         hero.elementId,
         hero.level,
         "A",
       ),
     ];
-    const enemy = buildEnemy(floor);
-    const battle = simulateBattle(playerTeam, enemy, 30);
-    setResult({ winner: r.won ? "A" : "B", log: battle.log });
-
-    if (r.won) {
-      setFloor(floor + 1);
-      router.refresh();
-    }
+    setSession({
+      floor,
+      teamA,
+      teamB: buildEnemy(floor),
+      forcedWinner: r.won ? "A" : "B",
+      rewards: r.won
+        ? { os: r.os_gained ?? 0, xp: r.xp_gained ?? 0 }
+        : undefined,
+    });
   }
 
   return (
@@ -168,31 +178,22 @@ export function TowerClient({
         </div>
       </section>
 
-      {result && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setResult(null)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border-2 border-sky-400/40 bg-zinc-950 p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className={`text-2xl font-bold ${result.winner === "A" ? "text-emerald-300" : "text-rose-300"}`}
-            >
-              {result.winner === "A" ? "🏆 Étage validé !" : "💀 Échec"}
-            </div>
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-md bg-black/40 p-3 text-xs">
-              {result.log.map((l, i) => (
-                <div key={i}>
-                  <span className="mr-1 text-zinc-600">[T{l.turn}]</span>
-                  {l.msg}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <AtbBattleModal
+        open={session !== null}
+        teamA={session?.teamA ?? []}
+        teamB={session?.teamB ?? []}
+        forcedWinner={session?.forcedWinner}
+        title={session ? `🗼 Tour étage ${session.floor}` : ""}
+        rewards={session?.rewards}
+        onComplete={({ winner }) => {
+          if (winner === "A" && session) {
+            setFloor(session.floor + 1);
+          }
+          setSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
     </div>
   );
 }

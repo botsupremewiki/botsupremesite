@@ -11,9 +11,9 @@ import {
 } from "@shared/types";
 import {
   buildHeroUnit,
-  simulateBattle,
-  type CombatLog,
+  type CombatUnit,
 } from "@shared/eternum-combat";
+import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import {
   ETERNUM_FAMILIERS_BY_ID,
   RARITY_ACCENT,
@@ -163,10 +163,12 @@ function GuildView({
 }) {
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
-  const [bossResult, setBossResult] = useState<{
-    log: CombatLog[];
+  const [bossSession, setBossSession] = useState<{
+    teamA: CombatUnit[];
+    teamB: CombatUnit[];
     damage: number;
     hpLeft: number;
+    tier: number;
   } | null>(null);
 
   async function createGuild() {
@@ -202,7 +204,7 @@ function GuildView({
   async function attackBoss() {
     if (!supabase) return;
     setError(null);
-    setBossResult(null);
+    setBossSession(null);
 
     // ⚠️ Server-authoritative — dmg calculé server-side.
     const { data, error: rpcErr } = await supabase.rpc(
@@ -220,24 +222,23 @@ function GuildView({
       return;
     }
 
-    // Log cosmétique
     const tier = r.tier;
-    const playerTeam = [
+    const teamA: CombatUnit[] = [
       buildHeroUnit(
         "hero",
-        ETERNUM_CLASSES[hero.classId].name,
+        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
         hero.classId,
         hero.elementId,
         hero.level,
         "A",
       ),
     ];
-    const boss = [
+    const teamB: CombatUnit[] = [
       {
         id: "guild-boss",
         name: `Boss de guilde T${tier}`,
         isHero: false,
-        team: "B" as const,
+        team: "B",
         classId: "warrior" as EternumClassId,
         element: "dark" as EternumElementId,
         level: 50 + tier * 10,
@@ -252,11 +253,14 @@ function GuildView({
         defDownTurns: 0,
       },
     ];
-    const battle = simulateBattle(playerTeam, boss, 30);
 
-    setBossResult({ log: battle.log, damage: r.damage, hpLeft: r.hp_left });
-    setOkMsg(`+${r.damage} dmg infligés au boss de guilde T${r.tier}`);
-    router.refresh();
+    setBossSession({
+      teamA,
+      teamB,
+      damage: r.damage,
+      hpLeft: r.hp_left,
+      tier,
+    });
   }
 
   return (
@@ -340,29 +344,35 @@ function GuildView({
               ⚔️ Attaquer
             </button>
           </div>
-          {bossResult && (
-            <div className="mt-3 rounded-md border border-rose-400/30 bg-rose-400/[0.03] p-3 text-xs">
-              <div className="text-rose-200">
-                Dégâts infligés :{" "}
-                <strong>{bossResult.damage.toLocaleString("fr-FR")}</strong> · HP
-                restant : {bossResult.hpLeft.toLocaleString("fr-FR")}
-              </div>
-              <details className="mt-2">
-                <summary className="cursor-pointer text-zinc-400">
-                  Journal de combat
-                </summary>
-                <div className="mt-2 max-h-48 overflow-y-auto">
-                  {bossResult.log.map((l, i) => (
-                    <div key={i} className="text-[10px] text-zinc-300">
-                      [T{l.turn}] {l.msg}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </div>
-          )}
         </section>
       )}
+
+      <AtbBattleModal
+        open={bossSession !== null}
+        teamA={bossSession?.teamA ?? []}
+        teamB={bossSession?.teamB ?? []}
+        forcedWinner="B"
+        title={
+          bossSession ? `🐉 Boss de guilde Tier ${bossSession.tier}` : ""
+        }
+        rewards={
+          bossSession
+            ? {
+                custom: `⚔️ ${bossSession.damage.toLocaleString("fr-FR")} dégâts infligés · HP boss restant : ${bossSession.hpLeft.toLocaleString("fr-FR")}`,
+              }
+            : undefined
+        }
+        onComplete={() => {
+          if (bossSession) {
+            setOkMsg(
+              `+${bossSession.damage} dmg infligés au boss de guilde T${bossSession.tier}`,
+            );
+          }
+          setBossSession(null);
+          router.refresh();
+        }}
+        closeLabel="Continuer"
+      />
 
       {/* Liste guildes */}
       {!hasGuild && (
