@@ -32,6 +32,11 @@ const AVATAR_COLORS = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Rake : 3% prélevé sur chaque pot avant distribution. Pas de cap (le user
+// préfère un taux unique au cap dynamique). Le rake est mentionné dans le
+// label de fin de main pour transparence — pas de drop silencieux.
+const POKER_RAKE_RATE = 0.03;
+
 type TimerId = ReturnType<typeof setTimeout>;
 
 type ConnInfo = {
@@ -712,9 +717,11 @@ export default class PokerServer implements Party.Server {
     }
 
     // Award each pot to the contender(s) with the best hand among the
-    // pot's eligible seats.
+    // pot's eligible seats. Rake is taken off the top before distribution.
     const labels: string[] = [];
     for (const pot of this.pots) {
+      const rake = Math.floor(pot.amount * POKER_RAKE_RATE);
+      const netPot = pot.amount - rake;
       const eligible = pot.eligibleSeats
         .map((i) => this.seats[i])
         .filter((s) => s && s.status !== "folded" && s.showdownHand);
@@ -722,7 +729,7 @@ export default class PokerServer implements Party.Server {
         // Fall back: nobody eligible (shouldn't happen) — split among
         // anyone in the eligibleSeats list.
         const anyone = pot.eligibleSeats.map((i) => this.seats[i]);
-        const each = Math.floor(pot.amount / Math.max(1, anyone.length));
+        const each = Math.floor(netPot / Math.max(1, anyone.length));
         for (const s of anyone) s.chips += each;
         continue;
       }
@@ -732,14 +739,15 @@ export default class PokerServer implements Party.Server {
       const winners = eligible.filter(
         (s) => s.showdownHand!.score === bestScore,
       );
-      const share = Math.floor(pot.amount / winners.length);
-      const remainder = pot.amount - share * winners.length;
+      const share = Math.floor(netPot / winners.length);
+      const remainder = netPot - share * winners.length;
       winners.forEach((w, i) => {
         w.chips += share + (i < remainder ? 1 : 0);
       });
       const names = winners.map((w) => w.playerName).join(" + ");
       const tier = winners[0].showdownHand!.rankName;
-      labels.push(`${names} gagne ${pot.amount} (${tier})`);
+      const rakeNote = rake > 0 ? `, rake ${rake}` : "";
+      labels.push(`${names} gagne ${netPot} (${tier}${rakeNote})`);
     }
     this.lastActionLabel = labels.join(" · ");
 
