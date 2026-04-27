@@ -4163,3 +4163,468 @@ begin
 end;
 $$;
 
+-- ══════════════════════════════════════════════════════════════════════
+-- 25. P10 — PHARMA : R&D MOLÉCULES + BREVETS 5 ANS
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Catalogue de molécules (10) avec : coût R&D, durée, prix de vente unique.
+create or replace function public.skyline_pharma_molecule_spec(p_molecule text)
+returns jsonb language sql immutable as $$
+  select case p_molecule
+    when 'analgesique_pro'   then jsonb_build_object('cost', 200000,   'duration_h', 30,  'sell_price', 25,   'name', 'Analgésique pro')
+    when 'antibiotique_a'    then jsonb_build_object('cost', 500000,   'duration_h', 50,  'sell_price', 60,   'name', 'Antibiotique A')
+    when 'antiviral_b'       then jsonb_build_object('cost', 1500000,  'duration_h', 80,  'sell_price', 150,  'name', 'Antiviral B')
+    when 'antidepresseur'    then jsonb_build_object('cost', 2000000,  'duration_h', 100, 'sell_price', 120,  'name', 'Antidépresseur')
+    when 'cardio_drug'       then jsonb_build_object('cost', 5000000,  'duration_h', 150, 'sell_price', 300,  'name', 'Cardiovasculaire')
+    when 'cancer_t1'         then jsonb_build_object('cost', 20000000, 'duration_h', 250, 'sell_price', 1500, 'name', 'Anti-cancer T1')
+    when 'rare_disease'      then jsonb_build_object('cost', 50000000, 'duration_h', 350, 'sell_price', 8000, 'name', 'Maladie rare')
+    when 'gene_therapy'      then jsonb_build_object('cost', 100000000,'duration_h', 500, 'sell_price', 25000,'name', 'Thérapie génique')
+    when 'longevity_drug'    then jsonb_build_object('cost', 200000000,'duration_h', 700, 'sell_price', 40000,'name', 'Longévité')
+    when 'cure_universal'    then jsonb_build_object('cost', 500000000,'duration_h', 1000,'sell_price', 100000,'name', 'Cure universelle')
+    else null
+  end;
+$$;
+
+-- Lance une R&D pharma. La compagnie doit être un lab pharma (factory pharma).
+create or replace function public.skyline_pharma_start_research(
+  p_company_id uuid,
+  p_molecule   text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id    uuid := auth.uid();
+  v_company    public.skyline_companies%rowtype;
+  v_spec       jsonb;
+  v_cost       numeric;
+  v_duration_h int;
+  v_research_id uuid;
+  v_user_cash  numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+
+  -- Doit être un lab pharma (factory pharma) ou clinique privée (service).
+  -- Pour simplifier on autorise quiconque investit (= ouvert à tous).
+
+  v_spec := public.skyline_pharma_molecule_spec(p_molecule);
+  if v_spec is null then raise exception 'Molécule inconnue'; end if;
+
+  v_cost := (v_spec->>'cost')::numeric;
+  v_duration_h := (v_spec->>'duration_h')::int;
+
+  -- Vérifier qu'on n'a pas déjà une R&D en cours sur cette molécule.
+  if exists (
+    select 1 from public.skyline_research
+    where company_id = p_company_id and research_kind = p_molecule and completed_at is null
+  ) then
+    raise exception 'R&D déjà en cours sur %', p_molecule;
+  end if;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_research (
+    company_id, research_kind, progress_pct, cost_total, ends_at
+  )
+  values (
+    p_company_id, p_molecule, 0, v_cost, now() + make_interval(hours => v_duration_h)
+  )
+  returning id into v_research_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', -v_cost,
+    'R&D Pharma : ' || (v_spec->>'name'));
+
+  return v_research_id;
+end;
+$$;
+
+-- Finalise la R&D : crée un brevet 5 ans jeu (= 75h réelles).
+create or replace function public.skyline_pharma_complete_research(p_research_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id  uuid := auth.uid();
+  v_research public.skyline_research%rowtype;
+  v_company  public.skyline_companies%rowtype;
+  v_spec     jsonb;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  select * into v_research from public.skyline_research where id = p_research_id;
+  if not found then raise exception 'R&D non trouvée'; end if;
+
+  select * into v_company from public.skyline_companies where id = v_research.company_id;
+  if v_company.user_id <> v_user_id then raise exception 'Pas autorisé'; end if;
+
+  if v_research.completed_at is not null then return false; end if;
+  if v_research.ends_at is null or v_research.ends_at > now() then return false; end if;
+
+  v_spec := public.skyline_pharma_molecule_spec(v_research.research_kind);
+  if v_spec is null then return false; end if;
+
+  -- Marquer R&D terminée.
+  update public.skyline_research
+    set progress_pct = 100,
+        completed_at = now()
+    where id = p_research_id;
+
+  -- Brevet 5 ans (= 75h réelles).
+  insert into public.skyline_patents (company_id, patent_name, expires_at)
+  values (
+    v_company.id, v_research.research_kind, now() + interval '75 hours'
+  );
+
+  -- News.
+  insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+  values ('npc_announce',
+    '💊 Brevet pharma déposé : ' || (v_spec->>'name'),
+    v_company.name || ' obtient un brevet 5 ans sur ' || (v_spec->>'name') ||
+    ' — monopole sur le marché pendant cette période.',
+    'pharma', 0);
+
+  return true;
+end;
+$$;
+
+-- Vendre une dose / boîte de médicament breveté (à prix premium).
+-- Tant que le brevet est valide, ça vend au prix unique. Après expiration, c'est générique = -70% prix.
+create or replace function public.skyline_pharma_sell(
+  p_company_id uuid,
+  p_molecule   text,
+  p_quantity   int
+)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_spec      jsonb;
+  v_unit_price numeric;
+  v_total     numeric;
+  v_has_patent boolean;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_quantity <= 0 then raise exception 'Quantité invalide'; end if;
+  if not exists (
+    select 1 from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id
+  ) then raise exception 'Entreprise non trouvée'; end if;
+
+  v_spec := public.skyline_pharma_molecule_spec(p_molecule);
+  if v_spec is null then raise exception 'Molécule inconnue'; end if;
+
+  v_has_patent := exists (
+    select 1 from public.skyline_patents
+    where company_id = p_company_id
+      and patent_name = p_molecule
+      and expires_at > now()
+  );
+  if not v_has_patent then
+    -- Sans brevet, on peut quand même produire mais à 30% du prix (générique).
+    v_unit_price := (v_spec->>'sell_price')::numeric * 0.3;
+  else
+    v_unit_price := (v_spec->>'sell_price')::numeric;
+  end if;
+
+  v_total := v_unit_price * p_quantity;
+
+  update public.skyline_profiles
+    set cash = cash + v_total, updated_at = now()
+    where user_id = v_user_id;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'sale', v_total,
+    'Vente pharma : ' || p_quantity || '× ' || (v_spec->>'name') ||
+    case when v_has_patent then ' (brevet)' else ' (générique)' end);
+
+  return v_total;
+end;
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 26. P10 — RESTAURATION : ÉTOILES GUIDE SKYLINE
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Évalue le score Guide Skyline d'un restaurant et lui attribue 0-3 étoiles.
+create or replace function public.skyline_restau_evaluate(p_company_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company   public.skyline_companies%rowtype;
+  v_score     int := 0;
+  v_revenue_score int;
+  v_skill_score int;
+  v_clean_score int;
+  v_skill_avg numeric;
+  v_emp_count int;
+  v_stars     int;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found then return 0; end if;
+  -- Restau gastro ou restaurant : on prend tout commerce dont le secteur contient 'restau'.
+  if v_company.sector not in ('restaurant_gastro', 'pizzeria', 'fast_food', 'cafe_bar') then
+    return 0;
+  end if;
+
+  -- 3 critères :
+  --  - Revenus mensuels (échelle log)
+  v_revenue_score := least(40, floor(ln(greatest(1, v_company.monthly_revenue + 1)) * 4)::int);
+  --  - Compétence cuisine moyenne des employés
+  select coalesce(avg(coalesce((skills->>'cuisine')::int, 30)), 30), count(*)
+    into v_skill_avg, v_emp_count
+    from public.skyline_employees where company_id = p_company_id;
+  v_skill_score := least(40, floor(v_skill_avg * 0.4)::int);
+  --  - Propreté
+  v_clean_score := least(20, floor(v_company.cleanliness * 0.2)::int);
+
+  v_score := v_revenue_score + v_skill_score + v_clean_score;
+  v_stars := case
+    when v_score >= 80 then 3
+    when v_score >= 55 then 2
+    when v_score >= 30 then 1
+    else 0
+  end;
+
+  insert into public.skyline_restaurant_stars (company_id, stars, awarded_at, guide_score)
+  values (p_company_id, v_stars, now(), v_score)
+  on conflict (company_id) do update
+    set stars = excluded.stars,
+        awarded_at = now(),
+        guide_score = excluded.guide_score;
+
+  -- Si nouvelle étoile, news.
+  if v_stars > 0 then
+    insert into public.skyline_news (kind, headline, body, sector, impact_pct)
+    values ('npc_announce',
+      '🍔 Guide Skyline : ' || v_company.name || ' gagne ' || v_stars || ' étoile(s)',
+      v_company.name || ' (' || v_company.sector || ') obtient ' || v_stars ||
+      ' étoile(s) au guide Skyline (score ' || v_score || ').',
+      v_company.sector, 0);
+  end if;
+
+  return v_stars;
+end;
+$$;
+
+-- Multiplicateur prix de vente selon étoiles.
+create or replace function public.skyline_restau_price_multiplier(p_company_id uuid)
+returns numeric
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when stars >= 3 then 30.0
+    when stars >= 2 then 10.0
+    when stars >= 1 then 3.0
+    else 1.0
+  end
+  from public.skyline_restaurant_stars
+  where company_id = p_company_id
+$$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 27. P10 — TECH SAAS : PRODUITS ÉVOLUTIFS + UTILISATEURS RÉCURRENTS
+-- ══════════════════════════════════════════════════════════════════════
+
+create table if not exists public.skyline_saas_products (
+  id              uuid primary key default gen_random_uuid(),
+  company_id      uuid not null references public.skyline_companies(id) on delete cascade,
+  product_name    text not null,
+  version         int not null default 1,
+  users_count     int not null default 0,
+  monthly_price   numeric(10, 2) not null default 9.99,
+  cost_to_dev     numeric(15, 2) not null default 0,
+  launched_at     timestamptz not null default now(),
+  last_growth_at  timestamptz not null default now(),
+  is_active       boolean not null default true,
+  unique (company_id, product_name)
+);
+
+alter table public.skyline_saas_products enable row level security;
+
+drop policy if exists "skyline_saas_read_own" on public.skyline_saas_products;
+create policy "skyline_saas_read_own"
+  on public.skyline_saas_products
+  for select
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    ) OR (select is_admin from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "skyline_saas_write_own" on public.skyline_saas_products;
+create policy "skyline_saas_write_own"
+  on public.skyline_saas_products
+  for all
+  using (
+    exists (
+      select 1 from public.skyline_companies c
+      where c.id = company_id and c.user_id = auth.uid()
+    )
+  );
+
+create index if not exists skyline_saas_company_idx on public.skyline_saas_products(company_id);
+
+-- Lance un nouveau produit SaaS (v1) ou une nouvelle version (v+1).
+-- Coût = 50k$ × version. Plus la version est élevée, plus c'est cher mais mieux ça scale.
+create or replace function public.skyline_saas_launch(
+  p_company_id  uuid,
+  p_product_name text,
+  p_monthly_price numeric default 9.99
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_company   public.skyline_companies%rowtype;
+  v_existing  public.skyline_saas_products%rowtype;
+  v_version   int := 1;
+  v_cost      numeric;
+  v_id        uuid;
+  v_user_cash numeric;
+begin
+  if v_user_id is null then raise exception 'Non authentifié'; end if;
+  if p_monthly_price <= 0 then raise exception 'Prix invalide'; end if;
+
+  select * into v_company from public.skyline_companies
+    where id = p_company_id and user_id = v_user_id;
+  if not found then raise exception 'Entreprise non trouvée'; end if;
+
+  if v_company.sector <> 'tech_digital' then
+    raise exception 'Réservé au secteur Tech / Digital';
+  end if;
+
+  -- Si produit existe déjà, on lance une version supérieure.
+  select * into v_existing from public.skyline_saas_products
+    where company_id = p_company_id and product_name = p_product_name;
+  if found then
+    v_version := v_existing.version + 1;
+  end if;
+
+  v_cost := 50000 * v_version;
+
+  select cash into v_user_cash from public.skyline_profiles where user_id = v_user_id;
+  if v_user_cash < v_cost then
+    raise exception 'Cash insuffisant : il te manque % $', round(v_cost - v_user_cash, 2);
+  end if;
+
+  update public.skyline_profiles
+    set cash = cash - v_cost, updated_at = now()
+    where user_id = v_user_id;
+
+  if found then
+    -- Nouvelle version : booste les utilisateurs existants +50%.
+    update public.skyline_saas_products
+      set version = v_version,
+          monthly_price = p_monthly_price,
+          users_count = floor(users_count * 1.5)::int,
+          cost_to_dev = cost_to_dev + v_cost,
+          last_growth_at = now()
+      where id = v_existing.id
+      returning id into v_id;
+  else
+    -- Nouveau produit.
+    insert into public.skyline_saas_products (
+      company_id, product_name, version, users_count, monthly_price, cost_to_dev
+    )
+    values (
+      p_company_id, p_product_name, 1, 100, p_monthly_price, v_cost
+    )
+    returning id into v_id;
+  end if;
+
+  insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+  values (v_user_id, p_company_id, 'other', -v_cost,
+    'SaaS : ' || p_product_name || ' v' || v_version || ' (dev)');
+
+  return v_id;
+end;
+$$;
+
+-- Tick SaaS : revenus mensuels = nb_users × monthly_price proratisés. Croissance d'utilisateurs selon marketing/version.
+create or replace function public.skyline_saas_tick(p_company_id uuid)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id   uuid := auth.uid();
+  v_company   public.skyline_companies%rowtype;
+  v_now       timestamptz := now();
+  v_elapsed_h numeric;
+  v_total_revenue numeric := 0;
+  v_product   record;
+  v_growth    int;
+  v_revenue   numeric;
+  v_skill_avg numeric;
+begin
+  select * into v_company from public.skyline_companies where id = p_company_id;
+  if not found or v_company.user_id <> v_user_id then return 0; end if;
+  if v_company.sector <> 'tech_digital' then return 0; end if;
+
+  v_elapsed_h := extract(epoch from (v_now - v_company.last_tick_at)) / 3600.0;
+  if v_elapsed_h <= 0 then return 0; end if;
+
+  -- Skill moyen Tech (machine_use des employés).
+  select coalesce(avg(coalesce((skills->>'machine_use')::int, 30)), 30)
+    into v_skill_avg
+    from public.skyline_employees where company_id = p_company_id;
+
+  for v_product in
+    select * from public.skyline_saas_products
+    where company_id = p_company_id and is_active = true
+  loop
+    -- Croissance utilisateurs = base + version × skill / 100 par heure.
+    v_growth := floor(v_product.users_count * 0.005 * v_elapsed_h * v_product.version * (v_skill_avg / 100.0))::int;
+    if v_growth > 0 then
+      update public.skyline_saas_products
+        set users_count = users_count + v_growth,
+            last_growth_at = v_now
+        where id = v_product.id;
+    end if;
+
+    -- Revenus mensuels : nb_users × prix × (heures écoulées / 30 jours = 720h).
+    v_revenue := v_product.users_count * v_product.monthly_price * v_elapsed_h / 720.0;
+    v_total_revenue := v_total_revenue + v_revenue;
+  end loop;
+
+  if v_total_revenue > 0 then
+    update public.skyline_profiles
+      set cash = cash + v_total_revenue, updated_at = v_now
+      where user_id = v_user_id;
+    insert into public.skyline_transactions (user_id, company_id, kind, amount, description)
+    values (v_user_id, p_company_id, 'sale', v_total_revenue,
+      'SaaS revenus récurrents (' || round(v_elapsed_h, 1) || 'h)');
+  end if;
+
+  return v_total_revenue;
+end;
+$$;
+

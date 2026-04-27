@@ -13,6 +13,10 @@ import type {
   SkylineMachineRow,
   SkylineMarketCourseRow,
   SkylineNewsRow,
+  SkylinePharmaPatentRow,
+  SkylinePharmaResearchRow,
+  SkylineSaasProductRow,
+  SkylineRestaurantStarsRow,
 } from "@shared/skyline";
 
 export async function ensureSkylineProfile(): Promise<SkylineProfileRow | null> {
@@ -362,4 +366,67 @@ export async function tickShareCourses(): Promise<void> {
   const supabase = await createClient();
   if (!supabase) return;
   await supabase.rpc("skyline_tick_shares");
+}
+
+// ───── P10 : Pharma R&D ─────
+
+export async function fetchPharmaResearch(
+  companyId: string,
+): Promise<SkylinePharmaResearchRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_research")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as SkylinePharmaResearchRow[];
+}
+
+export async function fetchPharmaPatents(
+  companyId: string,
+): Promise<SkylinePharmaPatentRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("skyline_patents")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("registered_at", { ascending: false });
+  return (data ?? []) as SkylinePharmaPatentRow[];
+}
+
+// ───── P10 : SaaS ─────
+
+export async function fetchSaasProducts(
+  companyId: string,
+): Promise<SkylineSaasProductRow[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  // Tick lazy SaaS avant lecture (revenus + croissance utilisateurs).
+  await supabase.rpc("skyline_saas_tick", { p_company_id: companyId });
+  const { data } = await supabase
+    .from("skyline_saas_products")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .order("launched_at", { ascending: true });
+  return (data ?? []) as SkylineSaasProductRow[];
+}
+
+// ───── P10 : Restau étoiles ─────
+
+export async function fetchRestaurantStars(
+  companyId: string,
+): Promise<SkylineRestaurantStarsRow | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+  // Évalue à chaque visite.
+  await supabase.rpc("skyline_restau_evaluate", { p_company_id: companyId });
+  const { data } = await supabase
+    .from("skyline_restaurant_stars")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return (data as SkylineRestaurantStarsRow | null) ?? null;
 }

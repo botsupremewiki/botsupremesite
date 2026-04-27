@@ -46,14 +46,27 @@ import {
   fireEmployeeAction,
   ipoCompanyAction,
   payDividendAction,
+  pharmaCompleteResearchAction,
+  pharmaSellAction,
+  pharmaStartResearchAction,
   placeFurnitureAction,
   placeMarketOrderAction,
   purchaseRawMaterialAction,
   purchaseStockAction,
   removeFurnitureAction,
+  saasLaunchAction,
   setSellPriceAction,
 } from "../_lib/actions";
-import { SKYLINE_SERVICE_SECTORS, type SkylineServiceSector } from "@shared/skyline";
+import {
+  SKYLINE_PHARMA_MOLECULES,
+  SKYLINE_SERVICE_SECTORS,
+  type SkylinePharmaMolecule,
+  type SkylinePharmaPatentRow,
+  type SkylinePharmaResearchRow,
+  type SkylineRestaurantStarsRow,
+  type SkylineSaasProductRow,
+  type SkylineServiceSector,
+} from "@shared/skyline";
 
 type Tab =
   | "stocks"
@@ -70,7 +83,10 @@ type Tab =
   | "market"
   | "bourse"
   | "service_prod"
-  | "service_eq";
+  | "service_eq"
+  | "pharma"
+  | "saas"
+  | "stars";
 
 type ShareInfo = {
   id: string;
@@ -91,6 +107,10 @@ export function CompanyView({
   permits,
   machines,
   share,
+  pharmaResearch,
+  pharmaPatents,
+  saasProducts,
+  restauStars,
   cash,
 }: {
   company: SkylineCompanyRow;
@@ -101,12 +121,25 @@ export function CompanyView({
   permits: SkylinePermitRow[];
   machines: SkylineMachineRow[];
   share: ShareInfo;
+  pharmaResearch: SkylinePharmaResearchRow[];
+  pharmaPatents: SkylinePharmaPatentRow[];
+  saasProducts: SkylineSaasProductRow[];
+  restauStars: SkylineRestaurantStarsRow | null;
   cash: number;
 }) {
   const isFactory = company.category === "factory";
   const isRaw = company.category === "raw";
   const isCommerce = company.category === "commerce";
   const isService = company.category === "service";
+  const isPharmaSector =
+    company.sector === "pharma" || company.sector === "sante_clinique";
+  const isTechSector = company.sector === "tech_digital";
+  const isRestauSector = [
+    "restaurant_gastro",
+    "pizzeria",
+    "fast_food",
+    "cafe_bar",
+  ].includes(company.sector);
   const [tab, setTab] = useState<Tab>(
     isFactory
       ? "production"
@@ -240,6 +273,21 @@ export function CompanyView({
           <TabButton current={tab} value="permits" onClick={setTab}>
             📜 Permis
           </TabButton>
+          {isPharmaSector ? (
+            <TabButton current={tab} value="pharma" onClick={setTab}>
+              💊 Pharma R&amp;D
+            </TabButton>
+          ) : null}
+          {isTechSector ? (
+            <TabButton current={tab} value="saas" onClick={setTab}>
+              ☁️ SaaS
+            </TabButton>
+          ) : null}
+          {isRestauSector ? (
+            <TabButton current={tab} value="stars" onClick={setTab}>
+              ⭐ Guide Skyline
+            </TabButton>
+          ) : null}
           <TabButton current={tab} value="bourse" onClick={setTab}>
             📈 Bourse
           </TabButton>
@@ -336,6 +384,22 @@ export function CompanyView({
             cash={cash}
           />
         ) : null}
+        {tab === "pharma" ? (
+          <PharmaTab
+            companyId={company.id}
+            research={pharmaResearch}
+            patents={pharmaPatents}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "saas" ? (
+          <SaasTab
+            companyId={company.id}
+            products={saasProducts}
+            cash={cash}
+          />
+        ) : null}
+        {tab === "stars" ? <StarsTab stars={restauStars} /> : null}
         {tab === "furniture" ? (
           <FurnitureTab
             companyId={company.id}
@@ -2719,6 +2783,411 @@ function ServiceEquipCard({
       {error ? (
         <div className="text-[10px] text-rose-300">{error}</div>
       ) : null}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onglets P10 : SECTEURS CREUSÉS
+// ──────────────────────────────────────────────────────────────────
+
+// ── Pharma R&D + brevets ──
+function PharmaTab({
+  companyId,
+  research,
+  patents,
+  cash,
+}: {
+  companyId: string;
+  research: SkylinePharmaResearchRow[];
+  patents: SkylinePharmaPatentRow[];
+  cash: number;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-emerald-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-emerald-200">
+          💊 Catalogue de molécules
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Lance des R&amp;D pharmaceutiques. Chaque molécule découverte donne un
+          brevet 5 ans (75h réelles) — tu vends au prix premium pendant la
+          durée. Ensuite c&apos;est générique (-70%).
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {Object.values(SKYLINE_PHARMA_MOLECULES).map((m) => (
+            <PharmaMoleculeCard
+              key={m.id}
+              companyId={companyId}
+              molecule={m.id}
+              meta={m}
+              research={research.find(
+                (r) =>
+                  r.research_kind === m.id && r.completed_at === null,
+              )}
+              patent={patents.find(
+                (p) => p.patent_name === m.id && new Date(p.expires_at) > new Date(),
+              )}
+              cash={cash}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PharmaMoleculeCard({
+  companyId,
+  molecule,
+  meta,
+  research,
+  patent,
+  cash,
+}: {
+  companyId: string;
+  molecule: SkylinePharmaMolecule;
+  meta: (typeof SKYLINE_PHARMA_MOLECULES)[SkylinePharmaMolecule];
+  research?: SkylinePharmaResearchRow;
+  patent?: SkylinePharmaPatentRow;
+  cash: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const isResearching = Boolean(research && !research.completed_at);
+  const researchEndsAt = research?.ends_at ? new Date(research.ends_at) : null;
+  const researchReady =
+    isResearching && researchEndsAt && researchEndsAt < new Date();
+  const hasActivePatent = Boolean(patent);
+
+  const handleStart = () => {
+    if (pending || cash < meta.cost) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("molecule", molecule);
+    startTransition(async () => {
+      const res = await pharmaStartResearchAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  const handleComplete = () => {
+    if (pending || !research) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("research_id", research.id);
+    fd.set("company_id", companyId);
+    startTransition(async () => {
+      const res = await pharmaCompleteResearchAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  const handleSell = () => {
+    if (pending) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("molecule", molecule);
+    fd.set("quantity", "100");
+    startTransition(async () => {
+      const res = await pharmaSellAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  };
+
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        hasActivePatent
+          ? "border-emerald-400/40 bg-emerald-500/5"
+          : isResearching
+          ? "border-amber-400/40 bg-amber-500/5"
+          : "border-white/10 bg-white/[0.02]"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">
+            {meta.glyph} {meta.name}
+          </div>
+          <div className="text-[10px] text-zinc-500">{meta.description}</div>
+        </div>
+        <div className="text-right text-[10px] tabular-nums text-zinc-400">
+          <div>Coût {skylineFormatCashFR(meta.cost)}</div>
+          <div>Durée {meta.durationH}h</div>
+          <div>Vente {skylineFormatCashFR(meta.sellPrice)}/u</div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {hasActivePatent ? (
+          <>
+            <span className="rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+              ✓ Brevet actif jusqu&apos;au{" "}
+              {patent ? new Date(patent.expires_at).toLocaleDateString("fr-FR") : ""}
+            </span>
+            <button
+              onClick={handleSell}
+              disabled={pending}
+              className="ml-auto rounded-md border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
+            >
+              Vendre 100u (+{skylineFormatCashFR(meta.sellPrice * 100)})
+            </button>
+          </>
+        ) : isResearching ? (
+          researchReady ? (
+            <button
+              onClick={handleComplete}
+              disabled={pending}
+              className="w-full rounded-md border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-40"
+            >
+              {pending ? "..." : "✓ Finaliser R&D + déposer brevet"}
+            </button>
+          ) : (
+            <span className="text-[11px] text-amber-300">
+              ⏳ R&amp;D en cours — fin{" "}
+              {researchEndsAt ? researchEndsAt.toLocaleString("fr-FR") : ""}
+            </span>
+          )
+        ) : (
+          <button
+            onClick={handleStart}
+            disabled={pending || cash < meta.cost}
+            className="w-full rounded-md border border-purple-400/50 bg-purple-500/15 px-3 py-1.5 text-xs font-semibold text-purple-100 transition-colors hover:bg-purple-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {pending
+              ? "..."
+              : cash < meta.cost
+              ? "Cash insuffisant"
+              : `🔬 Lancer R&D · ${skylineFormatCashFR(meta.cost)}`}
+          </button>
+        )}
+      </div>
+      {error ? (
+        <div className="mt-1 text-[10px] text-rose-300">{error}</div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── SaaS Tech ──
+function SaasTab({
+  companyId,
+  products,
+  cash,
+}: {
+  companyId: string;
+  products: SkylineSaasProductRow[];
+  cash: number;
+}) {
+  const [productName, setProductName] = useState("");
+  const [monthlyPrice, setMonthlyPrice] = useState(9.99);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const launchCost = 50000;
+
+  const handleLaunch = () => {
+    if (pending || !productName.trim() || cash < launchCost) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set("company_id", companyId);
+    fd.set("product_name", productName);
+    fd.set("monthly_price", String(monthlyPrice));
+    startTransition(async () => {
+      const res = await saasLaunchAction(fd);
+      if (res.ok) {
+        setProductName("");
+      } else {
+        setError(res.error);
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-blue-400/40 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-blue-200">
+          ☁️ Lancer un produit SaaS
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          Chaque produit acquiert des utilisateurs récurrents → revenus mensuels
+          passifs. Lance une nouvelle version pour booster les utilisateurs
+          existants (+50%) au prix de la nouvelle dev.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <input
+            type="text"
+            value={productName}
+            onChange={(e) => setProductName(e.target.value)}
+            maxLength={50}
+            placeholder="Nom du produit (ex : ZenFlow CRM)"
+            className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/50"
+          />
+          <input
+            type="number"
+            step={0.01}
+            min={0.99}
+            value={monthlyPrice}
+            onChange={(e) =>
+              setMonthlyPrice(Math.max(0.99, Number(e.target.value)))
+            }
+            placeholder="Prix mensuel"
+            className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/50 tabular-nums"
+          />
+        </div>
+        <button
+          onClick={handleLaunch}
+          disabled={pending || !productName.trim() || cash < launchCost}
+          className="mt-3 w-full rounded-md border border-blue-400/50 bg-blue-500/15 px-4 py-2 text-sm font-semibold text-blue-100 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {pending
+            ? "Dev..."
+            : cash < launchCost
+            ? "Cash insuffisant"
+            : `🚀 Lancer (v1 ou +1) · ${skylineFormatCashFR(launchCost)}`}
+        </button>
+        {error ? (
+          <div className="mt-1 text-xs text-rose-300">{error}</div>
+        ) : null}
+      </div>
+
+      {products.length > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Mes produits ({products.length})
+          </h3>
+          <div className="mt-3 space-y-2">
+            {products.map((p) => {
+              const monthlyRevenue =
+                Number(p.users_count) * Number(p.monthly_price);
+              return (
+                <div
+                  key={p.id}
+                  className="rounded-lg border border-white/10 bg-white/[0.02] p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-100">
+                        ☁️ {p.product_name}
+                        <span className="ml-2 rounded-full border border-blue-400/40 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-200">
+                          v{p.version}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-zinc-500 tabular-nums">
+                        {Number(p.users_count).toLocaleString("fr-FR")} utilisateurs ·{" "}
+                        {skylineFormatCashFR(Number(p.monthly_price))}/mois
+                      </div>
+                    </div>
+                    <div className="text-right tabular-nums">
+                      <div className="text-base font-semibold text-emerald-200">
+                        {skylineFormatCashFR(monthlyRevenue)}
+                      </div>
+                      <div className="text-[10px] text-zinc-500">/mois</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Guide Skyline (étoiles restau) ──
+function StarsTab({ stars }: { stars: SkylineRestaurantStarsRow | null }) {
+  const starCount = stars?.stars ?? 0;
+  const score = stars?.guide_score ?? 0;
+  const multiplier =
+    starCount === 3 ? 30 : starCount === 2 ? 10 : starCount === 1 ? 3 : 1;
+
+  return (
+    <div className="rounded-xl border border-amber-400/40 bg-black/40 p-4">
+      <h3 className="text-sm font-semibold text-amber-200">
+        ⭐ Guide Skyline
+      </h3>
+      <p className="mt-1 text-xs text-zinc-400">
+        Le Guide note ton restaurant selon ton chiffre d&apos;affaires, la
+        compétence Cuisine moyenne de ton équipe et la propreté. Chaque étoile
+        multiplie tes prix de vente.
+      </p>
+
+      <div className="mt-4 flex flex-col items-center gap-2">
+        <div className="text-5xl">
+          {Array.from({ length: 3 })
+            .map((_, i) => (i < starCount ? "⭐" : "☆"))
+            .join("")}
+        </div>
+        <div className="text-xs text-zinc-400 tabular-nums">
+          Score Guide :{" "}
+          <span className="text-amber-200">{score}/100</span>
+        </div>
+        <div className="text-xs text-zinc-400 tabular-nums">
+          Multiplicateur prix :{" "}
+          <span
+            className={
+              multiplier > 1 ? "text-emerald-200 font-semibold" : "text-zinc-400"
+            }
+          >
+            ×{multiplier}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 text-xs">
+        <ScoreBar
+          label="0★ : aucun bonus"
+          range="< 30 pts"
+          active={starCount === 0}
+        />
+        <ScoreBar
+          label="1★ : ×3 prix"
+          range="30 - 54 pts"
+          active={starCount === 1}
+        />
+        <ScoreBar
+          label="2★ : ×10 prix"
+          range="55 - 79 pts"
+          active={starCount === 2}
+        />
+        <ScoreBar
+          label="3★ : ×30 prix (gastro légendaire)"
+          range="80+ pts"
+          active={starCount === 3}
+        />
+      </div>
+
+      <div className="mt-4 text-[10px] text-zinc-500">
+        Réévalué automatiquement à chaque visite. Améliore tes revenus, tes
+        chefs (compétence Cuisine), et la propreté.
+      </div>
+    </div>
+  );
+}
+
+function ScoreBar({
+  label,
+  range,
+  active,
+}: {
+  label: string;
+  range: string;
+  active: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between rounded border px-3 py-1.5 ${
+        active
+          ? "border-amber-400/40 bg-amber-500/10 text-amber-200"
+          : "border-white/5 bg-white/[0.02] text-zinc-400"
+      }`}
+    >
+      <span>{label}</span>
+      <span className="tabular-nums">{range}</span>
     </div>
   );
 }

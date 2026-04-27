@@ -874,6 +874,93 @@ export const SKYLINE_SERVICE_SECTORS: Record<
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// 4.6.7. PHARMA — MOLÉCULES R&D (P10)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylinePharmaMolecule =
+  | "analgesique_pro"
+  | "antibiotique_a"
+  | "antiviral_b"
+  | "antidepresseur"
+  | "cardio_drug"
+  | "cancer_t1"
+  | "rare_disease"
+  | "gene_therapy"
+  | "longevity_drug"
+  | "cure_universal";
+
+export const SKYLINE_PHARMA_MOLECULES: Record<
+  SkylinePharmaMolecule,
+  {
+    id: SkylinePharmaMolecule;
+    name: string;
+    glyph: string;
+    cost: number;
+    durationH: number;
+    sellPrice: number;
+    description: string;
+  }
+> = {
+  analgesique_pro: { id: "analgesique_pro", name: "Analgésique pro", glyph: "💊", cost: 200000, durationH: 30, sellPrice: 25, description: "Antidouleur premium." },
+  antibiotique_a: { id: "antibiotique_a", name: "Antibiotique A", glyph: "💊", cost: 500000, durationH: 50, sellPrice: 60, description: "Antibiotique large spectre." },
+  antiviral_b: { id: "antiviral_b", name: "Antiviral B", glyph: "🦠", cost: 1500000, durationH: 80, sellPrice: 150, description: "Antiviral nouvelle génération." },
+  antidepresseur: { id: "antidepresseur", name: "Antidépresseur", glyph: "🧠", cost: 2000000, durationH: 100, sellPrice: 120, description: "Traitement dépression." },
+  cardio_drug: { id: "cardio_drug", name: "Cardiovasculaire", glyph: "❤️", cost: 5000000, durationH: 150, sellPrice: 300, description: "Médicament cardiaque." },
+  cancer_t1: { id: "cancer_t1", name: "Anti-cancer T1", glyph: "🎗️", cost: 20000000, durationH: 250, sellPrice: 1500, description: "Chimiothérapie ciblée." },
+  rare_disease: { id: "rare_disease", name: "Maladie rare", glyph: "🧬", cost: 50000000, durationH: 350, sellPrice: 8000, description: "Traitement orphelin haut prix." },
+  gene_therapy: { id: "gene_therapy", name: "Thérapie génique", glyph: "🧬", cost: 100000000, durationH: 500, sellPrice: 25000, description: "Thérapie d'avant-garde." },
+  longevity_drug: { id: "longevity_drug", name: "Longévité", glyph: "🌟", cost: 200000000, durationH: 700, sellPrice: 40000, description: "Allonge l'espérance de vie." },
+  cure_universal: { id: "cure_universal", name: "Cure universelle", glyph: "✨", cost: 500000000, durationH: 1000, sellPrice: 100000, description: "Le Saint Graal pharmaceutique." },
+};
+
+export type SkylinePharmaPatentRow = {
+  id: string;
+  company_id: string;
+  patent_name: SkylinePharmaMolecule;
+  registered_at: string;
+  expires_at: string;
+};
+
+export type SkylinePharmaResearchRow = {
+  id: string;
+  company_id: string;
+  research_kind: SkylinePharmaMolecule;
+  progress_pct: number;
+  cost_total: number;
+  ends_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4.6.8. SAAS PRODUCTS (P10 Tech)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineSaasProductRow = {
+  id: string;
+  company_id: string;
+  product_name: string;
+  version: number;
+  users_count: number;
+  monthly_price: number;
+  cost_to_dev: number;
+  launched_at: string;
+  last_growth_at: string;
+  is_active: boolean;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4.6.9. RESTAURANT STARS (P10)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type SkylineRestaurantStarsRow = {
+  company_id: string;
+  stars: number;
+  awarded_at: string;
+  guide_score: number;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // 4.7. NIVEAUX DE MACHINES (P5)
 // ──────────────────────────────────────────────────────────────────────────
 

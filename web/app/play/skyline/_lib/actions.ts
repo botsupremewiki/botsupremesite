@@ -521,3 +521,82 @@ export async function finishPlayerTrainingAction(): Promise<Result> {
   revalidatePath("/play/skyline");
   return { ok: true, data };
 }
+
+// ───── P10 : Pharma R&D ─────
+
+export async function pharmaStartResearchAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const molecule = String(formData.get("molecule") ?? "");
+  if (!companyId || !molecule)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_pharma_start_research", {
+    p_company_id: companyId,
+    p_molecule: molecule,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+export async function pharmaCompleteResearchAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const researchId = String(formData.get("research_id") ?? "");
+  const companyId = String(formData.get("company_id") ?? "");
+  if (!researchId) return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc(
+    "skyline_pharma_complete_research",
+    { p_research_id: researchId },
+  );
+  if (error) return { ok: false, error: error.message };
+  if (companyId) revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+export async function pharmaSellAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const molecule = String(formData.get("molecule") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  if (!companyId || !molecule || quantity <= 0)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_pharma_sell", {
+    p_company_id: companyId,
+    p_molecule: molecule,
+    p_quantity: quantity,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}
+
+// ───── P10 : SaaS ─────
+
+export async function saasLaunchAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, error: "Non connecté" };
+  const companyId = String(formData.get("company_id") ?? "");
+  const productName = String(formData.get("product_name") ?? "");
+  const monthlyPrice = Number(formData.get("monthly_price") ?? 9.99);
+  if (!companyId || !productName)
+    return { ok: false, error: "Paramètres invalides" };
+
+  const { data, error } = await supabase.rpc("skyline_saas_launch", {
+    p_company_id: companyId,
+    p_product_name: productName,
+    p_monthly_price: monthlyPrice,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/play/skyline/${companyId}`);
+  return { ok: true, data };
+}

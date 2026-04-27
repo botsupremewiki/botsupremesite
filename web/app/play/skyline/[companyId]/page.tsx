@@ -5,6 +5,10 @@ import {
   fetchEmployeesForCompany,
   fetchMachinesForCompany,
   fetchPermitsForCompany,
+  fetchPharmaPatents,
+  fetchPharmaResearch,
+  fetchRestaurantStars,
+  fetchSaasProducts,
   fetchShareForCompany,
   fetchSkylineCompany,
   fetchSkylineFurniture,
@@ -50,6 +54,21 @@ export default async function CompanyPage({
     fetchShareForCompany(companyId),
   ]);
 
+  // P10 specifics chargés conditionnellement.
+  const isPharma = company.sector === "pharma" || company.sector === "sante_clinique";
+  const isTech = company.sector === "tech_digital";
+  const isRestau = ["restaurant_gastro", "pizzeria", "fast_food", "cafe_bar"].includes(
+    company.sector,
+  );
+
+  const [pharmaResearch, pharmaPatents, saasProducts, restauStars] =
+    await Promise.all([
+      isPharma ? fetchPharmaResearch(companyId) : Promise.resolve([]),
+      isPharma ? fetchPharmaPatents(companyId) : Promise.resolve([]),
+      isTech ? fetchSaasProducts(companyId) : Promise.resolve([]),
+      isRestau ? fetchRestaurantStars(companyId) : Promise.resolve(null),
+    ]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SkylineHeader
@@ -69,6 +88,10 @@ export default async function CompanyPage({
         permits={permits}
         machines={machines}
         share={share}
+        pharmaResearch={pharmaResearch}
+        pharmaPatents={pharmaPatents}
+        saasProducts={saasProducts}
+        restauStars={restauStars}
         cash={Number(skyProfile?.cash ?? 0)}
       />
     </div>
