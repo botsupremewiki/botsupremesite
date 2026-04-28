@@ -252,10 +252,27 @@ export function DecksClient({
     });
   }, []);
 
+  // Compte des Pokémon de Base dans le draft — Pocket exige au moins 1 pour
+  // pouvoir démarrer un combat (sinon mulligan infini au setup).
+  const draftBasicCount = useMemo(() => {
+    let n = 0;
+    for (const [cardId, count] of draftEntries) {
+      const c = POKEMON_BASE_SET_BY_ID.get(cardId);
+      if (c?.kind === "pokemon" && c.stage === "basic") n += count;
+    }
+    return n;
+  }, [draftEntries]);
+
   const saveDeck = useCallback(() => {
     if (totalCount !== DECK_TARGET) {
       setErrorMsg(
         `Le deck doit contenir exactement ${DECK_TARGET} cartes (${totalCount}/${DECK_TARGET}).`,
+      );
+      return;
+    }
+    if (draftBasicCount === 0) {
+      setErrorMsg(
+        "Au moins 1 Pokémon de Base est requis (sinon impossible de démarrer un combat).",
       );
       return;
     }
@@ -272,7 +289,7 @@ export function DecksClient({
       name: draftName.trim().slice(0, DECK_NAME_MAX),
       cards: entries,
     });
-  }, [send, totalCount, draftName, draftEntries, draftId]);
+  }, [send, totalCount, draftBasicCount, draftName, draftEntries, draftId]);
 
   const deleteDeck = useCallback(
     (deckId: string) => {
@@ -394,7 +411,16 @@ export function DecksClient({
                   )}
                   <button
                     onClick={saveDeck}
-                    disabled={!dirty || totalCount !== DECK_TARGET}
+                    disabled={
+                      !dirty ||
+                      totalCount !== DECK_TARGET ||
+                      draftBasicCount === 0
+                    }
+                    title={
+                      draftBasicCount === 0
+                        ? "Au moins 1 Pokémon de Base requis"
+                        : undefined
+                    }
                     className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {draftId ? "Sauvegarder" : "Créer"}
@@ -793,29 +819,73 @@ function DeckSummary({
   onRemove: (cardId: string) => void;
   onAdd: (card: PokemonCardData) => void;
 }) {
-  const grouped = useMemo(() => {
-    const pokemon: { card: PokemonCardData; count: number }[] = [];
+  const { pokemon, breakdown } = useMemo(() => {
+    const list: { card: PokemonCardData; count: number }[] = [];
+    const bd = { basic: 0, stage1: 0, stage2: 0, trainer: 0 };
     for (const [cardId, count] of draftEntries) {
       const card = cardById.get(cardId);
       if (!card) continue;
-      pokemon.push({ card, count });
+      list.push({ card, count });
+      if (card.kind === "trainer") bd.trainer += count;
+      else if (card.stage === "basic") bd.basic += count;
+      else if (card.stage === "stage1") bd.stage1 += count;
+      else if (card.stage === "stage2") bd.stage2 += count;
     }
-    pokemon.sort((a, b) => {
+    list.sort((a, b) => {
       const ar = RARITY_TIER[a.card.rarity] ?? 0;
       const br = RARITY_TIER[b.card.rarity] ?? 0;
       if (ar !== br) return br - ar;
       return a.card.name.localeCompare(b.card.name);
     });
-    return { pokemon };
+    return { pokemon: list, breakdown: bd };
   }, [draftEntries, cardById]);
 
-  const pokemonTotal = grouped.pokemon.reduce((s, e) => s + e.count, 0);
+  const pokemonTotal =
+    breakdown.basic + breakdown.stage1 + breakdown.stage2;
+  const noBasic = pokemonTotal > 0 && breakdown.basic === 0;
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-white/5 bg-black/40">
       <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400">
         <span>Deck</span>
-        <span>🐾 {pokemonTotal}</span>
+        <span>🐾 {pokemonTotal} · 🧙 {breakdown.trainer}</span>
       </div>
+
+      {/* Breakdown : basics + stage1/2 + trainers, avec warning si pas de basic. */}
+      {draftEntries.size > 0 && (
+        <div className="shrink-0 border-b border-white/5 px-3 py-2 text-[10px]">
+          <div className="flex justify-between text-zinc-400">
+            <span>De base</span>
+            <span
+              className={`tabular-nums font-semibold ${
+                breakdown.basic === 0
+                  ? "text-rose-300"
+                  : "text-emerald-200"
+              }`}
+            >
+              {breakdown.basic}
+              {breakdown.basic === 0 ? " ⚠" : ""}
+            </span>
+          </div>
+          <div className="flex justify-between text-zinc-400">
+            <span>Niveau 1</span>
+            <span className="tabular-nums">{breakdown.stage1}</span>
+          </div>
+          <div className="flex justify-between text-zinc-400">
+            <span>Niveau 2</span>
+            <span className="tabular-nums">{breakdown.stage2}</span>
+          </div>
+          <div className="flex justify-between text-zinc-400">
+            <span>Dresseurs</span>
+            <span className="tabular-nums">{breakdown.trainer}</span>
+          </div>
+          {noBasic && (
+            <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 p-1.5 text-[10px] text-rose-200">
+              Au moins 1 Pokémon de Base requis pour démarrer un combat.
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {draftEntries.size === 0 && (
           <div className="rounded-md border border-dashed border-white/10 p-3 text-center text-xs text-zinc-500">
@@ -823,7 +893,7 @@ function DeckSummary({
           </div>
         )}
         <AnimatePresence initial={false}>
-          {grouped.pokemon.map(({ card, count }) => (
+          {pokemon.map(({ card, count }) => (
             <DeckRow
               key={card.id}
               card={card}

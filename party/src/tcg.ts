@@ -306,8 +306,11 @@ export default class TcgServer implements Party.Server {
       );
       return;
     }
-    // Agrège par nom pour vérifier la limite Pocket "max 2 par nom".
+    // Agrège par nom pour vérifier la limite Pocket "max 2 par nom",
+    // et compte les Pokémon de Base (au moins 1 requis sinon mulligan
+    // infini au démarrage du combat).
     const byName = new Map<string, number>();
+    let basicCount = 0;
     for (const entry of cards) {
       const owned = info.collection.get(entry.cardId) ?? 0;
       if (entry.count > owned) {
@@ -320,6 +323,9 @@ export default class TcgServer implements Party.Server {
       const meta = POKEMON_BASE_SET_BY_ID.get(entry.cardId);
       const cardName = meta?.name ?? entry.cardId;
       byName.set(cardName, (byName.get(cardName) ?? 0) + entry.count);
+      if (meta?.kind === "pokemon" && meta.stage === "basic") {
+        basicCount += entry.count;
+      }
     }
     for (const [cardName, count] of byName) {
       if (count > BATTLE_CONFIG.maxCopies) {
@@ -329,6 +335,13 @@ export default class TcgServer implements Party.Server {
         );
         return;
       }
+    }
+    if (basicCount === 0) {
+      this.sendError(
+        conn,
+        "Au moins 1 Pokémon de Base est requis pour pouvoir démarrer un combat.",
+      );
+      return;
     }
     const result = await saveTcgDeck(
       this.room,
