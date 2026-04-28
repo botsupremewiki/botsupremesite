@@ -62,14 +62,20 @@ function getThemedPool(
   return pool.length > 0 ? pool : null;
 }
 
-// Pack rarity slots : 4 slots "regular" + 1 slot "rare" (5 cartes/pack).
-// Distribution calquée sur Pokémon TCG Pocket — slots 1-4 piochent dans les
-// raretés diamond, slot 5 (rare slot) peut taper plus haut (★, 👑).
-const REGULAR_SLOT_WEIGHTS: Record<TcgRarity, number> = {
-  "diamond-1": 75,
-  "diamond-2": 20,
-  "diamond-3": 5,
-  // Slots réguliers ne piochent jamais ces raretés.
+type SlotKind = "regular-low" | "regular-high" | "rare";
+
+// Pack rarity slots : 5 cartes/pack, 3 niveaux de distribution.
+// Inspiré de Pokémon TCG Pocket mais plus généreux (les ★/👑 restent rares
+// mais plus accessibles, et les 2 derniers slots tirent du ◆◆◆ minimum).
+//
+//   • REGULAR_LOW  → slots 1, 2, 3 (90/9/1)
+//   • REGULAR_HIGH → slot 4         (76% ◆◆◆ + 20% ◆◆◆◆ + chance d'étoiles)
+//   • RARE_SLOT    → slot 5         (70% ◆◆◆ + 23.5% ◆◆◆◆ + plus d'étoiles
+//                                    + plus de couronnes)
+const REGULAR_LOW_WEIGHTS: Record<TcgRarity, number> = {
+  "diamond-1": 90,
+  "diamond-2": 9,
+  "diamond-3": 1,
   "diamond-4": 0,
   "star-1": 0,
   "star-2": 0,
@@ -78,16 +84,27 @@ const REGULAR_SLOT_WEIGHTS: Record<TcgRarity, number> = {
   promo: 0,
 };
 
-const RARE_SLOT_WEIGHTS: Record<TcgRarity, number> = {
-  "diamond-3": 60,
-  "diamond-4": 25,
-  "star-1": 10,
-  "star-2": 3,
-  "star-3": 1.5,
-  crown: 0.5,
-  // Rare slot ne pioche jamais en dessous de diamond-3.
+const REGULAR_HIGH_WEIGHTS: Record<TcgRarity, number> = {
   "diamond-1": 0,
   "diamond-2": 0,
+  "diamond-3": 76.66,
+  "diamond-4": 20,
+  "star-1": 2.572,
+  "star-2": 0.5,
+  "star-3": 0.222,
+  crown: 0.04,
+  promo: 0,
+};
+
+const RARE_SLOT_WEIGHTS: Record<TcgRarity, number> = {
+  "diamond-1": 0,
+  "diamond-2": 0,
+  "diamond-3": 70,
+  "diamond-4": 23.5,
+  "star-1": 4,
+  "star-2": 2,
+  "star-3": 1,
+  crown: 0.5,
   promo: 0,
 };
 
@@ -411,22 +428,23 @@ export default class TcgServer implements Party.Server {
       await patchProfileGold(this.room, info.authId, info.gold);
       this.sendTo(conn, { type: "gold-update", gold: info.gold });
     }
-    // Booster composition for Pokémon (5 cartes = 3 thématiques + 2 mixés) :
-    //   slots 0..2  : tirage dans le pool du mascot du pack (Dracaufeu &
-    //                 ses copains thème Feu/Combat/Sol/Vol pour Pack
-    //                 Dracaufeu, etc.). Donne au pack son identité.
-    //   slots 3..4  : tirage dans le pool complet des 151 — n'importe
-    //                 quelle carte de la Gen peut tomber, ce qui garde
-    //                 les 4 packs équitables en valeur espérée.
-    //   slot 4      : reste le "rare slot" (uncommon+ garanti).
-    // Pour les autres jeux (à venir : One Piece / LoL) on retombe sur le
-    // pool unique du jeu.
+    // Booster composition Pocket-style : les 5 cartes viennent toutes du
+    // booster choisi (themed pool). Distribution croissante de rareté :
+    //   slots 0-2 : REGULAR_LOW   (~90% ◆, ~9% ◆◆, ~1% ◆◆◆)
+    //   slot 3    : REGULAR_HIGH  (~76% ◆◆◆, ~20% ◆◆◆◆, étoiles rares)
+    //   slot 4    : RARE_SLOT     (~70% ◆◆◆, ~23.5% ◆◆◆◆, plus d'étoiles)
+    // Le fullPool n'est plus utilisé pour les boosters Pokémon afin de
+    // matcher Pocket : un Pack Mewtwo ne donne que des cartes Mewtwo, etc.
     const cards: PokemonCardData[] = [];
-    const themedSlotCount = this.gameId === "pokemon" ? 3 : game.packSize;
     for (let i = 0; i < game.packSize; i++) {
-      const isRareSlot = i === game.packSize - 1;
-      const pool = i < themedSlotCount ? themedPool : fullPool;
-      cards.push(this.drawCard(pool, isRareSlot));
+      const slotKind: SlotKind =
+        i === game.packSize - 1
+          ? "rare"
+          : i === game.packSize - 2
+            ? "regular-high"
+            : "regular-low";
+      const pool = this.gameId === "pokemon" ? themedPool : fullPool;
+      cards.push(this.drawCard(pool, slotKind));
     }
 
     // Update local + persist.
@@ -473,9 +491,14 @@ export default class TcgServer implements Party.Server {
 
   private drawCard(
     pool: PokemonCardData[],
-    isRareSlot: boolean,
+    slotKind: SlotKind,
   ): PokemonCardData {
-    const weights = isRareSlot ? RARE_SLOT_WEIGHTS : REGULAR_SLOT_WEIGHTS;
+    const weights =
+      slotKind === "rare"
+        ? RARE_SLOT_WEIGHTS
+        : slotKind === "regular-high"
+          ? REGULAR_HIGH_WEIGHTS
+          : REGULAR_LOW_WEIGHTS;
     const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
     let chosen: TcgRarity = "diamond-1";
