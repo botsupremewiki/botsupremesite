@@ -10513,7 +10513,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10531,7 +10532,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10549,7 +10551,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10567,7 +10570,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10585,7 +10589,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10603,7 +10608,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10621,7 +10627,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     },
     {
       "kind": "trainer",
@@ -10639,7 +10646,8 @@
         "mewtwo",
         "charizard",
         "pikachu"
-      ]
+      ],
+      "starter": true
     }
   ]
 }

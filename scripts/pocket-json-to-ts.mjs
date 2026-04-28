@@ -43,6 +43,7 @@ function buildCard(c) {
     if (c.boosters.length > 1) {
       obj.extraPacks = c.boosters.slice(1);
     }
+    if (c.starter) obj.starter = true;
     return obj;
   }
   // Pokémon

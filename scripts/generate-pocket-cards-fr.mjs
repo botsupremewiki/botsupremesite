@@ -214,14 +214,18 @@ async function transformCard(c) {
 
   if (c.category === "Dresseur") {
     let boosters = mapBoosters(c.boosters);
-    // Cartes Dresseur du set P-A (Promo, Wonder Pick dans le vrai Pocket)
-    // : tcgdex ne leur attribue aucun booster jouable. Sur notre site on
-    // les rend droppables dans les 3 boosters principaux pour qu'elles
-    // soient effectivement obtenables (sinon utility trainers inaccessibles).
-    if (boosters.length === 0) {
+    // Cartes Dresseur du set P-A (Promo) : tcgdex ne leur attribue aucun
+    // booster jouable. Sur notre site on les marque "starter" — données
+    // automatiquement en 2 exemplaires au premier login TCG Pokémon, pas
+    // droppables en booster.
+    const isStarter = boosters.length === 0;
+    // Pour rester typés (pack: PokemonPackTypeId), on assigne quand même
+    // les boosters fallback, mais le serveur filtrera sur `starter === true`
+    // pour les exclure du tirage des packs.
+    if (isStarter) {
       boosters = [...PROMO_FALLBACK_BOOSTERS];
     }
-    return {
+    const out = {
       kind: "trainer",
       id: c.id,
       localId: parseInt(c.localId, 10) || 0,
@@ -235,6 +239,8 @@ async function transformCard(c) {
       trainerTypeFr: c.trainerType ?? "Supporter",
       boosters,
     };
+    if (isStarter) out.starter = true;
+    return out;
   }
 
   // Catégorie inconnue (ex Énergie spéciale → tcgdex utilise "Énergie")

@@ -44,7 +44,8 @@ function getFullPool(gameId: TcgGameId): PokemonCardData[] {
 
 // Thematic pool = toutes les cartes du booster (pack principal ou
 // extraPacks) Pocket. "Pack Dracaufeu" tire dans toutes les cartes
-// disponibles dans ce booster.
+// disponibles dans ce booster. Les cartes "starter" (Potion, Poké Ball,
+// Pokédex…) sont exclues — elles sont données au premier login.
 function getThemedPool(
   gameId: TcgGameId,
   packTypeId: string,
@@ -54,13 +55,28 @@ function getThemedPool(
   const target = packTypeId as PokemonPackTypeId;
   const pool: PokemonCardData[] = [];
   for (const card of POKEMON_BASE_SET) {
-    if (card.kind !== "pokemon") continue;
+    if (card.kind === "trainer" && card.starter) continue;
     if (card.pack === target || card.extraPacks?.includes(target)) {
       pool.push(card);
     }
   }
   return pool.length > 0 ? pool : null;
 }
+
+// Liste des cardId starter à donner au premier login : on prend 1 cardId
+// par nom unique (le plus basique = le premier rencontré dans le set).
+const STARTER_CARD_IDS: string[] = (() => {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const c of POKEMON_BASE_SET) {
+    if (c.kind !== "trainer" || !c.starter) continue;
+    if (seen.has(c.name)) continue;
+    seen.add(c.name);
+    ids.push(c.id);
+  }
+  return ids;
+})();
+const STARTER_COPIES = 2;
 
 type SlotKind = "regular-low" | "regular-high" | "rare";
 
@@ -164,6 +180,29 @@ export default class TcgServer implements Party.Server {
         gold = 0;
       }
       for (const r of rows) collection.set(r.card_id, r.count);
+
+      // Starter pack Pokémon : si le joueur n'a aucune des cartes starter
+      // (Potion, Poké Ball, Pokédex, Vitesse +, Scrute Main, Carton Rouge,
+      // Recherches Professorales) en collection, on les lui donne en
+      // STARTER_COPIES exemplaires chacune (= 14 cartes) une seule fois.
+      if (
+        this.gameId === "pokemon" &&
+        STARTER_CARD_IDS.length > 0 &&
+        !STARTER_CARD_IDS.some((id) => (collection.get(id) ?? 0) > 0)
+      ) {
+        const starterCards = STARTER_CARD_IDS.map((card_id) => ({
+          card_id,
+          count: STARTER_COPIES,
+        }));
+        await addTcgCards(this.room, authId, this.gameId, starterCards);
+        for (const { card_id, count } of starterCards) {
+          collection.set(card_id, (collection.get(card_id) ?? 0) + count);
+        }
+        console.log(
+          `[tcg] Starter pack donné à ${authId} (${starterCards.length} cartes × ${STARTER_COPIES})`,
+        );
+      }
+
       decks = deckRows.map((d) => ({
         id: d.id,
         name: d.name,

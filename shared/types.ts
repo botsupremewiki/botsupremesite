@@ -1064,6 +1064,10 @@ export type TrainerCard = {
   trainerType: "supporter" | "item" | "tool" | "stadium";
   pack: PokemonPackTypeId;
   extraPacks?: PokemonPackTypeId[];
+  // Cartes utility "starter" (Potion, Poké Ball, Pokédex…) données
+  // automatiquement à chaque joueur au premier login en 2 exemplaires
+  // chacune. NON droppables en booster (le serveur les filtre du pool).
+  starter?: boolean;
 };
 
 export type PokemonCardData = PokemonCard | TrainerCard;
