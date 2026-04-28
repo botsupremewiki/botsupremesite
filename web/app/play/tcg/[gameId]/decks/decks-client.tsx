@@ -100,6 +100,12 @@ export function DecksClient({
   // Working draft of the deck currently being edited.
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState<string>(EMPTY_DRAFT.name);
+  // Pocket : 1 à 3 types d'énergies que le moteur va auto-générer en combat.
+  // Choisi manuellement par le joueur (peut être différent des types Pokémon
+  // dans le deck — ex un deck full Pokémon Feu peut avoir Eau choisi).
+  const [draftEnergyTypes, setDraftEnergyTypes] = useState<
+    PokemonEnergyType[]
+  >([]);
   const [draftEntries, setDraftEntries] = useState<Map<string, number>>(
     new Map(),
   );
@@ -174,6 +180,7 @@ export function DecksClient({
               setDraftEntries(
                 new Map(refreshed.cards.map((c) => [c.cardId, c.count])),
               );
+              setDraftEnergyTypes(refreshed.energyTypes ?? []);
             }
           }
           setSavedFlash("Deck sauvegardé.");
@@ -205,6 +212,7 @@ export function DecksClient({
     setDraftId(null);
     setDraftName(EMPTY_DRAFT.name);
     setDraftEntries(new Map());
+    setDraftEnergyTypes([]);
     setErrorMsg(null);
   }, []);
 
@@ -212,7 +220,17 @@ export function DecksClient({
     setDraftId(deck.id);
     setDraftName(deck.name);
     setDraftEntries(new Map(deck.cards.map((c) => [c.cardId, c.count])));
+    setDraftEnergyTypes(deck.energyTypes ?? []);
     setErrorMsg(null);
+  }, []);
+
+  // Toggle un type d'énergie dans la sélection (max 3 actifs).
+  const toggleEnergyType = useCallback((t: PokemonEnergyType) => {
+    setDraftEnergyTypes((prev) => {
+      if (prev.includes(t)) return prev.filter((x) => x !== t);
+      if (prev.length >= 3) return prev; // cap Pocket
+      return [...prev, t];
+    });
   }, []);
 
   const addCard = useCallback(
@@ -276,6 +294,12 @@ export function DecksClient({
       );
       return;
     }
+    if (draftEnergyTypes.length < 1 || draftEnergyTypes.length > 3) {
+      setErrorMsg(
+        "Sélectionne entre 1 et 3 types d'énergies pour ton deck.",
+      );
+      return;
+    }
     if (!draftName.trim()) {
       setErrorMsg("Donne un nom à ton deck.");
       return;
@@ -288,8 +312,17 @@ export function DecksClient({
       deckId: draftId,
       name: draftName.trim().slice(0, DECK_NAME_MAX),
       cards: entries,
+      energyTypes: draftEnergyTypes,
     });
-  }, [send, totalCount, draftBasicCount, draftName, draftEntries, draftId]);
+  }, [
+    send,
+    totalCount,
+    draftBasicCount,
+    draftName,
+    draftEntries,
+    draftEnergyTypes,
+    draftId,
+  ]);
 
   const deleteDeck = useCallback(
     (deckId: string) => {
@@ -414,18 +447,49 @@ export function DecksClient({
                     disabled={
                       !dirty ||
                       totalCount !== DECK_TARGET ||
-                      draftBasicCount === 0
+                      draftBasicCount === 0 ||
+                      draftEnergyTypes.length === 0
                     }
                     title={
                       draftBasicCount === 0
                         ? "Au moins 1 Pokémon de Base requis"
-                        : undefined
+                        : draftEnergyTypes.length === 0
+                          ? "Sélectionne 1 à 3 types d'énergies"
+                          : undefined
                     }
                     className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {draftId ? "Sauvegarder" : "Créer"}
                   </button>
                 </div>
+              </div>
+
+              {/* Sélecteur d'énergies du deck (Pocket : 1-3 types max). */}
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 bg-black/20 px-3 py-2">
+                <span className="text-[10px] uppercase tracking-widest text-zinc-400">
+                  ⚡ Énergies du deck ({draftEnergyTypes.length}/3)
+                </span>
+                {PICKER_TYPE_OPTIONS.map((t) => {
+                  const active = draftEnergyTypes.includes(t.id);
+                  const disabled = !active && draftEnergyTypes.length >= 3;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleEnergyType(t.id)}
+                      disabled={disabled}
+                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
+                        active
+                          ? "border-amber-400/70 bg-amber-400/20 text-amber-100"
+                          : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
+                      }`}
+                      title={
+                        disabled ? "Max 3 types — désélectionne un autre" : t.id
+                      }
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
               </div>
 
               {errorMsg && (

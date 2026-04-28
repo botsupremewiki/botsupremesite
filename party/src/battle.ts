@@ -157,6 +157,14 @@ export default class BattleServer implements Party.Server {
       const deck = expandDeck(deckCards);
       shuffle(deck);
       const { hand, mulligans } = dealOpeningHand(deck, OPENING_HAND_SIZE);
+      // Pocket : les types d'énergies générés en combat sont ceux choisis
+      // par le joueur à la création du deck. Si le deck a été créé avant
+      // la migration energy_types, fallback sur déduction depuis les types
+      // des Pokémon présents.
+      const deckEnergyTypes =
+        deckRow.energy_types && deckRow.energy_types.length > 0
+          ? (deckRow.energy_types as PokemonEnergyType[])
+          : deriveEnergyTypes(deckCards);
       this.seats[seatId] = {
         authId,
         username,
@@ -170,7 +178,7 @@ export default class BattleServer implements Party.Server {
         hasSetup: false,
         koCount: 0,
         pendingEnergy: null,
-        energyTypes: deriveEnergyTypes(deckCards),
+        energyTypes: deckEnergyTypes,
         energyAttachedThisTurn: false,
         hasRetreatedThisTurn: false,
         evolvedThisTurn: new Set(),
@@ -190,7 +198,7 @@ export default class BattleServer implements Party.Server {
       // En mode bot, dès que p1 est seated on remplit p2 avec le Bot Suprême
       // (mirror du même deck pour un match équilibré).
       if (this.botMode && seatId === "p1" && !this.seats.p2) {
-        this.fillBotSeat(deckCards);
+        this.fillBotSeat(deckCards, deckEnergyTypes);
       }
     } else {
       // Reconnexion (même authId).
@@ -216,7 +224,10 @@ export default class BattleServer implements Party.Server {
   // ─────────────── bot ───────────────
 
   /** Remplit p2 avec le Bot Suprême en utilisant un mirror du deck p1. */
-  private fillBotSeat(deckCards: { cardId: string; count: number }[]) {
+  private fillBotSeat(
+    deckCards: { cardId: string; count: number }[],
+    energyTypes: PokemonEnergyType[],
+  ) {
     const deck = expandDeck(deckCards);
     shuffle(deck);
     const { hand, mulligans } = dealOpeningHand(deck, OPENING_HAND_SIZE);
@@ -233,7 +244,7 @@ export default class BattleServer implements Party.Server {
       hasSetup: false,
       koCount: 0,
       pendingEnergy: null,
-      energyTypes: deriveEnergyTypes(deckCards),
+      energyTypes,
       energyAttachedThisTurn: false,
       hasRetreatedThisTurn: false,
       evolvedThisTurn: new Set(),

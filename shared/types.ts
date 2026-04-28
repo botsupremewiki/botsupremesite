@@ -1095,6 +1095,10 @@ export type TcgDeck = {
   id: string;
   name: string;
   cards: TcgDeckEntry[];
+  // Pocket : 1 à 3 types d'énergies choisis manuellement à la création
+  // du deck. Le moteur de combat ne génère que ces types (peu importe les
+  // types des Pokémon présents dans le deck).
+  energyTypes: PokemonEnergyType[];
   updatedAt: number;
 };
 
@@ -1105,6 +1109,7 @@ export type TcgClientMessage =
       deckId: string | null; // null = create
       name: string;
       cards: TcgDeckEntry[];
+      energyTypes: PokemonEnergyType[];
     }
   | { type: "tcg-delete-deck"; deckId: string }
   // Force re-fetch + broadcast pour soi-même.

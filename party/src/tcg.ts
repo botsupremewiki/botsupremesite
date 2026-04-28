@@ -1,6 +1,7 @@
 import type * as Party from "partykit/server";
 import type {
   PokemonCardData,
+  PokemonEnergyType,
   PokemonPackTypeId,
   TcgCardOwned,
   TcgClientMessage,
@@ -210,6 +211,7 @@ export default class TcgServer implements Party.Server {
           cardId: c.card_id,
           count: c.count,
         })),
+        energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
         updatedAt: Date.parse(d.updated_at) || Date.now(),
       }));
     } else {
@@ -251,7 +253,14 @@ export default class TcgServer implements Party.Server {
     if (data.type === "tcg-buy-pack") {
       await this.handleBuyPack(sender, info, data.packTypeId);
     } else if (data.type === "tcg-save-deck") {
-      await this.handleSaveDeck(sender, info, data.deckId, data.name, data.cards);
+      await this.handleSaveDeck(
+        sender,
+        info,
+        data.deckId,
+        data.name,
+        data.cards,
+        data.energyTypes,
+      );
     } else if (data.type === "tcg-delete-deck") {
       await this.handleDeleteDeck(sender, info, data.deckId);
     } else if (data.type === "tcg-refresh") {
@@ -288,6 +297,7 @@ export default class TcgServer implements Party.Server {
         cardId: c.card_id,
         count: c.count,
       })),
+      energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
       updatedAt: Date.parse(d.updated_at) || Date.now(),
     }));
     this.sendTo(conn, {
@@ -325,6 +335,7 @@ export default class TcgServer implements Party.Server {
     deckId: string | null,
     name: string,
     cards: { cardId: string; count: number }[],
+    energyTypes: string[],
   ) {
     if (!info.authId) {
       this.sendError(conn, "Connecte-toi pour sauvegarder un deck.");
@@ -382,6 +393,23 @@ export default class TcgServer implements Party.Server {
       );
       return;
     }
+    // Validation des types d'énergies : 1 à 3, parmi les 11 types valides.
+    const VALID_TYPES = new Set([
+      "fire", "water", "grass", "lightning", "psychic", "fighting",
+      "darkness", "metal", "dragon", "fairy", "colorless",
+    ]);
+    if (
+      !Array.isArray(energyTypes) ||
+      energyTypes.length < 1 ||
+      energyTypes.length > 3 ||
+      energyTypes.some((t) => !VALID_TYPES.has(t))
+    ) {
+      this.sendError(
+        conn,
+        "Sélectionne entre 1 et 3 types d'énergie pour ton deck.",
+      );
+      return;
+    }
     const result = await saveTcgDeck(
       this.room,
       info.authId,
@@ -389,6 +417,7 @@ export default class TcgServer implements Party.Server {
       deckId,
       name,
       cards.map((c) => ({ card_id: c.cardId, count: c.count })),
+      energyTypes,
     );
     if (!result.ok) {
       this.sendError(conn, result.error);
@@ -403,6 +432,7 @@ export default class TcgServer implements Party.Server {
         cardId: c.card_id,
         count: c.count,
       })),
+      energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
       updatedAt: Date.parse(d.updated_at) || Date.now(),
     }));
     this.sendTo(conn, { type: "tcg-decks", decks });
@@ -430,6 +460,7 @@ export default class TcgServer implements Party.Server {
         cardId: c.card_id,
         count: c.count,
       })),
+      energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
       updatedAt: Date.parse(d.updated_at) || Date.now(),
     }));
     this.sendTo(conn, { type: "tcg-decks", decks });
