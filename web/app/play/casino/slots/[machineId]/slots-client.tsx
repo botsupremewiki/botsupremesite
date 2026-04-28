@@ -34,6 +34,12 @@ type ConnStatus = "connecting" | "connected" | "disconnected";
 
 const BIG_WIN_MULTIPLIER = 25;
 
+/** Affiche un multiplicateur sans virgule inutile : « 4 » pour les entiers,
+ *  « 0.27 » pour les décimaux (toujours 2 décimales max). */
+function formatMul(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
 export function SlotsClient({
   profile,
   machineId,
@@ -513,7 +519,7 @@ function SlotMachineView({
                 to={resolved.win}
                 durationMs={800}
                 prefix="Gain "
-                suffix=" OS"
+                suffix={` OS (×${formatMul(resolved.multiplier)})`}
               />
             ) : (
               "Pas de gain"
@@ -571,7 +577,7 @@ function BigWinFlash({
         transition={{ duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }}
         className={`absolute inset-0 flex items-center justify-center text-6xl font-black tracking-widest drop-shadow-[0_0_18px_rgba(0,0,0,0.8)] ${accentClass}`}
       >
-        ×{multiplier}
+        ×{formatMul(multiplier)}
       </motion.div>
       {/* Background flash so the win feels like the screen lit up. */}
       <motion.div
@@ -958,7 +964,7 @@ function Paytable({ machine }: { machine: SlotMachineConfig }) {
             <span>2 à gauche</span>
           </span>
           <span className="tabular-nums text-amber-300">
-            ×{machine.cherryTwo}
+            ×{formatMul(machine.cherryTwo)}
           </span>
         </li>
         <li className="flex items-center justify-between text-xs text-zinc-400">
@@ -967,7 +973,7 @@ function Paytable({ machine }: { machine: SlotMachineConfig }) {
             <span>1 à gauche</span>
           </span>
           <span className="tabular-nums text-amber-300">
-            ×{machine.cherryOne}
+            ×{formatMul(machine.cherryOne)}
           </span>
         </li>
       </ul>
