@@ -420,39 +420,50 @@ function BattleBoard({
                 />
               </div>
 
-              {/* Énergie auto Pocket : "ball" draggable + bouton "Attacher". */}
+              {/* Énergie auto Pocket : grosse "ball" draggable + bouton "Attacher". */}
               {state.self.pendingEnergy &&
                 !state.self.energyAttachedThisTurn &&
                 isMyTurn &&
                 !attachEnergyMode &&
-                pendingEvolveIdx === null && (
-                  <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
-                    <span
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData("text/x-tcg-energy", "1");
-                        e.dataTransfer.effectAllowed = "link";
-                        setAttachEnergyMode(true);
-                      }}
-                      onDragEnd={() => {
-                        setAttachEnergyMode(false);
-                      }}
-                      className="cursor-grab select-none rounded-full bg-amber-300 px-2 py-0.5 text-base text-amber-950 shadow active:cursor-grabbing"
-                      title="Glisse cette énergie sur un Pokémon"
-                    >
-                      ⚡ {state.self.pendingEnergy}
-                    </span>
-                    <span className="text-zinc-300">
-                      Glisse-la sur un Pokémon, ou clique « Attacher ».
-                    </span>
-                    <button
-                      onClick={() => setAttachEnergyMode(true)}
-                      className="ml-auto rounded border border-amber-400/40 bg-amber-400/20 px-2 py-0.5 text-amber-100 hover:bg-amber-400/30"
-                    >
-                      Attacher
-                    </button>
-                  </div>
-                )}
+                pendingEvolveIdx === null &&
+                (() => {
+                  const t = state.self.pendingEnergy;
+                  const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
+                  const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
+                  return (
+                    <div className="flex items-center gap-3 rounded-lg border-2 border-amber-400/60 bg-amber-400/10 p-3 shadow-lg shadow-amber-400/20">
+                      <span
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/x-tcg-energy", "1");
+                          e.dataTransfer.effectAllowed = "link";
+                          setAttachEnergyMode(true);
+                        }}
+                        onDragEnd={() => {
+                          setAttachEnergyMode(false);
+                        }}
+                        className={`flex h-12 w-12 cursor-grab select-none items-center justify-center rounded-full text-2xl font-bold shadow-xl ring-2 ring-white/30 active:cursor-grabbing ${bg} ${fg} animate-pulse`}
+                        title="Glisse cette énergie sur un Pokémon"
+                      >
+                        {energyEmoji(t)}
+                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-bold text-amber-100">
+                          ⚡ Énergie {t} prête à attacher
+                        </span>
+                        <span className="text-[11px] text-zinc-300">
+                          Glisse-la sur un Pokémon, ou clique « Attacher ».
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setAttachEnergyMode(true)}
+                        className="ml-auto rounded-md border border-amber-400/50 bg-amber-400/30 px-3 py-1.5 text-xs font-bold text-amber-50 hover:bg-amber-400/40"
+                      >
+                        Attacher
+                      </button>
+                    </div>
+                  );
+                })()}
 
               {(attachEnergyMode || pendingEvolveIdx !== null) && (
                 <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
@@ -549,20 +560,24 @@ function RecapSidebar({
 }) {
   if (hoveredCard) {
     return (
-      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40 p-3">
+      <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3">
         <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
           Aperçu
         </div>
         <div className="aspect-[5/7] w-full max-w-[260px]">
           <CardFace card={hoveredCard} large />
         </div>
-        <div className="mt-2 text-xs font-semibold text-zinc-100">
+        <div className="mt-2 text-sm font-bold text-zinc-100">
           {hoveredCard.name}
         </div>
         {hoveredCard.kind === "pokemon" && (
           <>
-            <div className="mt-1 text-[10px] text-zinc-400">
-              PV {hoveredCard.hp} ·{" "}
+            <div className="mt-1 text-[11px] text-zinc-400">
+              PV{" "}
+              <span className="font-semibold text-emerald-300">
+                {hoveredCard.hp}
+              </span>{" "}
+              ·{" "}
               {hoveredCard.stage === "basic"
                 ? "De base"
                 : hoveredCard.stage === "stage1"
@@ -572,29 +587,75 @@ function RecapSidebar({
                 ? ` · évolue de ${hoveredCard.evolvesFrom}`
                 : ""}
             </div>
-            <div className="mt-2 flex flex-col gap-1 text-[10px] text-zinc-300">
+            {hoveredCard.weakness && (
+              <div className="mt-1 text-[11px] text-rose-300">
+                Faiblesse : {energyEmoji(hoveredCard.weakness)} +20
+              </div>
+            )}
+            <div className="mt-1 text-[11px] text-zinc-400">
+              Retraite : {hoveredCard.retreatCost}{" "}
+              {Array.from({ length: hoveredCard.retreatCost }).map((_, k) => (
+                <span key={k}>⭐</span>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-1.5 text-[11px] text-zinc-300">
               {hoveredCard.attacks.map((a, i) => (
                 <div
                   key={i}
-                  className="rounded border border-white/10 bg-black/30 p-1.5"
+                  className="rounded border border-rose-400/30 bg-rose-500/5 p-2"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-zinc-100">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-0.5">
+                      {a.cost.map((c, j) => {
+                        const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
+                        const fg =
+                          ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
+                        return (
+                          <span
+                            key={j}
+                            className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${bg} ${fg}`}
+                          >
+                            {energyEmoji(c)}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <span className="flex-1 font-bold text-rose-100">
                       {a.name}
                     </span>
                     {a.damage !== undefined && (
-                      <span className="font-bold text-rose-300">
+                      <span className="text-sm font-black tabular-nums text-amber-300">
                         {a.damage}
                         {a.damageSuffix ?? ""}
                       </span>
                     )}
                   </div>
                   {a.text && (
-                    <div className="mt-0.5 text-zinc-400">{a.text}</div>
+                    <div className="mt-1 text-[10px] italic text-rose-200/70">
+                      {a.text}
+                    </div>
                   )}
                 </div>
               ))}
             </div>
+          </>
+        )}
+        {hoveredCard.kind === "trainer" && (
+          <>
+            <div className="mt-1 text-[11px] uppercase tracking-widest text-zinc-400">
+              {hoveredCard.trainerType === "supporter"
+                ? "🧙 Supporter"
+                : hoveredCard.trainerType === "item"
+                  ? "🎒 Objet"
+                  : hoveredCard.trainerType === "tool"
+                    ? "🔧 Outil"
+                    : "🏟 Stade"}
+            </div>
+            {hoveredCard.effect && (
+              <div className="mt-2 rounded border border-amber-400/30 bg-amber-400/10 p-2 text-[11px] leading-snug text-amber-100">
+                {hoveredCard.effect}
+              </div>
+            )}
           </>
         )}
       </aside>
@@ -603,18 +664,22 @@ function RecapSidebar({
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
       <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
-        Récapitulatif du match
+        📜 Journal du combat
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-        <div className="flex flex-col-reverse gap-1 text-xs text-zinc-300">
+        <div className="flex flex-col-reverse gap-1 text-xs">
           <AnimatePresence initial={false}>
-            {[...log].reverse().map((line, i) => (
+            {decorateLog(log).map((entry, i) => (
               <motion.div
-                key={`${i}-${line.slice(0, 20)}`}
+                key={`${i}-${entry.text.slice(0, 20)}`}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
+                className={`flex items-start gap-1.5 ${entry.color}`}
               >
-                · {line}
+                <span className="shrink-0 text-sm leading-tight">
+                  {entry.emoji}
+                </span>
+                <span className="leading-tight">{entry.text}</span>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -622,6 +687,91 @@ function RecapSidebar({
       </div>
     </aside>
   );
+}
+
+/** Décore les lignes de log avec un emoji + couleur selon le contenu, et
+ *  filtre les messages trop verbeux. Renverse l'ordre pour que les plus
+ *  récents soient en haut (la flex-col-reverse fait le reste). */
+function decorateLog(
+  log: string[],
+): { emoji: string; text: string; color: string }[] {
+  return log
+    .map((line) => {
+      // Filtres : on retire les annonces redondantes / trop bavardes.
+      if (/se prépare au combat/i.test(line)) return null;
+      if (/Choisissez votre Pokémon Actif/i.test(line)) return null;
+
+      // Tour : minimal, juste un séparateur visuel.
+      const turnMatch = line.match(/^Tour (\d+) — (.*)$/);
+      if (turnMatch) {
+        return {
+          emoji: "⏱️",
+          text: `Tour ${turnMatch[1]} · ${turnMatch[2]}`,
+          color: "text-zinc-500",
+        };
+      }
+      // KO marqué.
+      if (line.includes("est mis K.O.") || line.includes("KO")) {
+        if (/marque \d+ KO/.test(line)) {
+          return { emoji: "🎯", text: line, color: "text-amber-300" };
+        }
+        return { emoji: "💥", text: line, color: "text-rose-300" };
+      }
+      // Énergie attachée.
+      if (line.includes("attache ⚡") || /Énergie/i.test(line)) {
+        return { emoji: "⚡", text: line, color: "text-yellow-200" };
+      }
+      // Attaque (mention "attaque avec").
+      if (/attaque avec/i.test(line)) {
+        return { emoji: "⚔️", text: line, color: "text-rose-200" };
+      }
+      // Retraite.
+      if (/bat en retraite/i.test(line)) {
+        return { emoji: "🔄", text: line, color: "text-sky-200" };
+      }
+      // Promotion / setup placement.
+      if (/promeut|placé son Actif/i.test(line)) {
+        return { emoji: "✨", text: line, color: "text-emerald-200" };
+      }
+      // Évolution.
+      if (/évolue/i.test(line)) {
+        return { emoji: "🌱", text: line, color: "text-emerald-200" };
+      }
+      // Pile/face.
+      if (/Pile|Face/.test(line)) {
+        return { emoji: "🪙", text: line, color: "text-zinc-300" };
+      }
+      // Statuts.
+      if (/Empoisonné/i.test(line)) {
+        return { emoji: "☠️", text: line, color: "text-violet-200" };
+      }
+      if (/Endormi/i.test(line)) {
+        return { emoji: "💤", text: line, color: "text-indigo-200" };
+      }
+      if (/Brûlé/i.test(line)) {
+        return { emoji: "🔥", text: line, color: "text-orange-200" };
+      }
+      if (/Paralysé/i.test(line)) {
+        return { emoji: "⚡", text: line, color: "text-yellow-200" };
+      }
+      // Fin de partie.
+      if (/gagne|abandonne|deck-out/i.test(line)) {
+        return { emoji: "🏆", text: line, color: "text-amber-200 font-bold" };
+      }
+      // Pile/Face : qui commence.
+      if (/commence/i.test(line)) {
+        return { emoji: "🚦", text: line, color: "text-zinc-200" };
+      }
+      // Mulligan.
+      if (/mulligan/i.test(line)) {
+        return { emoji: "🔁", text: line, color: "text-zinc-500" };
+      }
+      // Default.
+      return { emoji: "·", text: line, color: "text-zinc-300" };
+    })
+    .filter(
+      (e): e is { emoji: string; text: string; color: string } => e !== null,
+    );
 }
 
 function PlayerInfo({
@@ -805,7 +955,7 @@ function BoardArea({
             );
           })()
         : (
-          <div className="flex h-44 w-32 items-center justify-center rounded border border-dashed border-white/10 text-xs text-zinc-500">
+          <div className="flex h-56 w-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-xs text-zinc-500">
             Actif
           </div>
         )}
@@ -817,7 +967,7 @@ function BoardArea({
             return (
               <div
                 key={i}
-                className="flex h-28 w-20 items-center justify-center rounded border border-dashed border-white/10 text-[10px] text-zinc-500"
+                className="flex h-36 w-24 items-center justify-center rounded-lg border border-dashed border-white/10 text-[10px] text-zinc-500"
               >
                 Banc
               </div>
@@ -857,6 +1007,34 @@ function BoardArea({
   );
 }
 
+// Couleurs Tailwind par type d'énergie pour les badges sous les Pokémon.
+const ENERGY_BADGE_BG: Record<PokemonEnergyType, string> = {
+  fire: "bg-orange-500",
+  water: "bg-blue-400",
+  grass: "bg-emerald-500",
+  lightning: "bg-yellow-400",
+  psychic: "bg-fuchsia-500",
+  fighting: "bg-amber-700",
+  darkness: "bg-zinc-700",
+  metal: "bg-slate-400",
+  dragon: "bg-amber-400",
+  fairy: "bg-pink-400",
+  colorless: "bg-zinc-300",
+};
+const ENERGY_BADGE_TEXT: Record<PokemonEnergyType, string> = {
+  fire: "text-white",
+  water: "text-white",
+  grass: "text-white",
+  lightning: "text-yellow-950",
+  psychic: "text-white",
+  fighting: "text-white",
+  darkness: "text-white",
+  metal: "text-slate-900",
+  dragon: "text-amber-950",
+  fairy: "text-pink-950",
+  colorless: "text-zinc-700",
+};
+
 function BoardCard({
   card,
   cardById,
@@ -868,40 +1046,86 @@ function BoardCard({
 }) {
   const data = cardById.get(card.cardId);
   if (!data || data.kind !== "pokemon") return null;
-  // Format Pocket : carte officielle FR (image tcgdex) en ratio 5:7 +
-  // overlays HP courant, énergies attachées, statuses.
-  const w = large ? 110 : 72;
-  const h = large ? 154 : 100;
+  // Pocket : carte officielle FR (tcgdex) en ratio 5:7. Overlays :
+  //   • HP courant en bas (gros, rouge si dégâts)
+  //   • Énergies attachées sous la carte (pastilles colorées par type)
+  //   • Statuses en haut à droite (badges emoji)
+  const w = large ? 160 : 100;
+  const h = large ? 224 : 140;
   const remainingHp = Math.max(0, data.hp - card.damage);
   const damaged = card.damage > 0;
+  const hpPct = Math.max(0, Math.min(1, remainingHp / data.hp));
   return (
-    <div
-      className="relative overflow-hidden rounded-md border border-white/10 bg-black/40"
-      style={{ width: w, height: h }}
-      title={data.name}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={data.image}
-        alt={data.name}
-        className="h-full w-full object-contain"
-        loading="lazy"
-      />
+    <div className="flex flex-col items-center gap-1.5">
+      <div
+        className="relative overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-xl"
+        style={{ width: w, height: h }}
+        title={data.name}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={data.image}
+          alt={data.name}
+          className="h-full w-full object-contain"
+          loading="lazy"
+        />
 
-      {/* Overlay HP courant en bas (toujours visible) */}
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/85 to-transparent px-1 py-0.5 text-[10px] tabular-nums">
-        <span className={damaged ? "font-bold text-rose-300" : "text-zinc-200"}>
-          {remainingHp}/{data.hp}
-        </span>
-        {card.attachedEnergies.length > 0 && (
-          <span className="text-amber-200">⚡{card.attachedEnergies.length}</span>
+        {/* Barre HP en bas (jauge verte → rouge selon ratio) */}
+        <div className="absolute inset-x-0 bottom-0 flex flex-col bg-gradient-to-t from-black/90 via-black/50 to-transparent px-1.5 py-1">
+          <div className="flex items-center justify-between text-xs tabular-nums">
+            <span
+              className={`font-bold ${
+                damaged ? "text-rose-300" : "text-emerald-200"
+              }`}
+            >
+              {remainingHp}
+              <span className="text-zinc-400">/{data.hp}</span>
+            </span>
+            <span className="text-[10px] uppercase tracking-widest text-zinc-400">
+              PV
+            </span>
+          </div>
+          <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-black/50">
+            <div
+              className={`h-full transition-all ${
+                hpPct > 0.5
+                  ? "bg-emerald-400"
+                  : hpPct > 0.25
+                    ? "bg-amber-400"
+                    : "bg-rose-500"
+              }`}
+              style={{ width: `${hpPct * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Statuses en haut à droite */}
+        {card.statuses.length > 0 && (
+          <div className="absolute right-1 top-1 flex gap-0.5 rounded bg-black/80 px-1 py-0.5 text-sm">
+            {card.statuses.map((s, i) => (
+              <span key={i}>{statusEmoji(s)}</span>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Statuses en haut à droite */}
-      {card.statuses.length > 0 && (
-        <div className="absolute right-0 top-0 rounded-bl bg-black/70 px-1 py-0.5 text-[10px]">
-          {card.statuses.map((s) => statusEmoji(s)).join("")}
+      {/* Pastilles d'énergies attachées (sous la carte). */}
+      {card.attachedEnergies.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-0.5 px-0.5">
+          {card.attachedEnergies.map((e, i) => {
+            const t = e as PokemonEnergyType;
+            const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
+            const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
+            return (
+              <span
+                key={i}
+                className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold shadow ring-1 ring-black/30 ${bg} ${fg}`}
+                title={e}
+              >
+                {energyEmoji(t)}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
@@ -972,7 +1196,15 @@ function SelfControls({
     (active?.playedThisTurn ?? false);
 
   return (
-    <div className="flex max-w-xs flex-col items-stretch gap-1.5">
+    <div className="flex w-56 flex-col items-stretch gap-2">
+      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+        ⚔️ Attaques
+      </div>
+      {attacks.length === 0 && (
+        <div className="rounded-md border border-dashed border-white/10 p-2 text-center text-[11px] text-zinc-500">
+          Aucune attaque
+        </div>
+      )}
       {attacks.map((a, i) => {
         const canPay = active
           ? canPayCost(active.attachedEnergies, a.cost, cardById)
@@ -983,27 +1215,39 @@ function SelfControls({
             key={i}
             disabled={disabled}
             onClick={() => onAttack(i)}
-            className="flex flex-col items-stretch rounded-md border border-rose-400/40 bg-rose-500/10 px-2 py-1 text-left text-xs text-rose-100 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+              disabled
+                ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
+                : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
+            }`}
             title={a.text ?? ""}
           >
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                {a.cost.map((c, j) => (
-                  <span key={j} className="text-[10px]">
-                    {energyEmoji(c)}
-                  </span>
-                ))}
-                <span className="ml-1 font-semibold">{a.name}</span>
-              </span>
+            <div className="flex items-center justify-between gap-2">
+              {/* Coût en pastilles colorées par type */}
+              <div className="flex items-center gap-0.5">
+                {a.cost.map((c, j) => {
+                  const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
+                  const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
+                  return (
+                    <span
+                      key={j}
+                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
+                    >
+                      {energyEmoji(c)}
+                    </span>
+                  );
+                })}
+              </div>
+              <span className="flex-1 font-bold">{a.name}</span>
               {a.damage !== undefined && (
-                <span className="font-bold tabular-nums">
+                <span className="text-base font-black tabular-nums text-amber-300">
                   {a.damage}
                   {a.damageSuffix ?? ""}
                 </span>
               )}
             </div>
             {a.text && (
-              <span className="mt-0.5 text-[9px] leading-tight text-rose-200/80">
+              <span className="mt-1 text-[10px] italic leading-tight text-rose-200/70">
                 {a.text}
               </span>
             )}
@@ -1013,9 +1257,9 @@ function SelfControls({
       <button
         onClick={onEndTurn}
         disabled={!isMyTurn || !!state.self?.mustPromoteActive}
-        className="mt-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Fin du tour
+        ⏭ Fin du tour
       </button>
     </div>
   );
@@ -1196,12 +1440,12 @@ function HandCard({
       onClick={() => action?.handler()}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
-      className={`relative shrink-0 overflow-hidden rounded border transition-all ${
+      className={`relative shrink-0 overflow-hidden rounded-lg border transition-all ${
         playable
-          ? "cursor-pointer border-emerald-400/50 ring-1 ring-emerald-400/30 hover:scale-[1.04] hover:ring-2 hover:ring-emerald-300"
-          : "cursor-default border-white/10 opacity-90 hover:ring-1 hover:ring-white/20"
+          ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
+          : "cursor-default border-white/10 opacity-90 hover:ring-2 hover:ring-white/30"
       }`}
-      style={{ width: 100, height: 140 }}
+      style={{ width: 130, height: 182 }}
       title={action ? `${data.name} — clic : ${action.label.replace("→ ", "")}` : data.name}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
