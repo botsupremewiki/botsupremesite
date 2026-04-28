@@ -83,9 +83,10 @@ async function main() {
   const raw = await fs.readFile(INPUT, "utf8");
   const data = JSON.parse(raw);
 
-  console.log(
-    `Loaded ${data.cards.length} cartes (set ${data.setId} : ${data.setName})`,
-  );
+  const setLabel = (data.sets ?? [{ id: data.setId, name: data.setName }])
+    .map((s) => `${s.id} (${s.name})`)
+    .join(" + ");
+  console.log(`Loaded ${data.cards.length} cartes depuis : ${setLabel}`);
 
   const cards = data.cards.filter((c) => c.boosters.length > 0);
   const skippedNoBooster = data.cards.length - cards.length;
@@ -103,7 +104,7 @@ async function main() {
   });
 
   const lines = [];
-  lines.push(`// Pokémon TCG Pocket — set ${data.setId} "${data.setName}".`);
+  lines.push(`// Pokémon TCG Pocket — sets : ${setLabel}.`);
   lines.push(`// Cartes en français depuis tcgdex.net (${cards.length} Pokémon).`);
   lines.push(`// Généré par scripts/pocket-json-to-ts.mjs — ne pas éditer à la main.`);
   lines.push("");

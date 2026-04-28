@@ -17,7 +17,11 @@ const ROOT = path.resolve(__dirname, "..");
 
 const args = process.argv.slice(2);
 const setArg = args.find((a) => a.startsWith("--set="));
-const SET_ID = setArg ? setArg.slice("--set=".length) : "A1";
+// Sets chargés par défaut : A1 (booster principal) + P-A (Promo, contient
+// les utility trainers Potion / Poké Ball / Pokédex / etc.). Les cartes
+// P-A sans booster Pocket sont assignées aux 3 boosters principaux pour
+// rester droppables sur notre site.
+const SETS_TO_LOAD = setArg ? [setArg.slice("--set=".length)] : ["A1", "P-A"];
 
 // FR → notre PokemonEnergyType.
 const TYPE_MAP = {
@@ -72,6 +76,10 @@ const BOOSTER_ID_MAP = {
   "boo_A2-dialga": "dialga",
   "boo_A2-palkia": "palkia",
 };
+
+// Cartes du set P-A (Promo) sans booster Pocket assigné. Sur notre site
+// on les rend droppables dans les 3 boosters principaux (multi-pack).
+const PROMO_FALLBACK_BOOSTERS = ["mewtwo", "charizard", "pikachu"];
 
 async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -205,6 +213,14 @@ async function transformCard(c) {
   }
 
   if (c.category === "Dresseur") {
+    let boosters = mapBoosters(c.boosters);
+    // Cartes Dresseur du set P-A (Promo, Wonder Pick dans le vrai Pocket)
+    // : tcgdex ne leur attribue aucun booster jouable. Sur notre site on
+    // les rend droppables dans les 3 boosters principaux pour qu'elles
+    // soient effectivement obtenables (sinon utility trainers inaccessibles).
+    if (boosters.length === 0) {
+      boosters = [...PROMO_FALLBACK_BOOSTERS];
+    }
     return {
       kind: "trainer",
       id: c.id,
@@ -217,7 +233,7 @@ async function transformCard(c) {
       effect: c.effect ?? null,
       trainerType: TRAINER_TYPE_MAP[c.trainerType] ?? "supporter",
       trainerTypeFr: c.trainerType ?? "Supporter",
-      boosters: mapBoosters(c.boosters),
+      boosters,
     };
   }
 
@@ -228,33 +244,46 @@ async function transformCard(c) {
 
 async function main() {
   const start = Date.now();
-  console.log(`Mode : set ${SET_ID}`);
+  console.log(`Mode : sets [${SETS_TO_LOAD.join(", ")}]`);
 
-  const set = await fetchJson(
-    `https://api.tcgdex.net/v2/fr/sets/${SET_ID}`,
-  );
-  console.log(`Set : ${set.name} (${set.cards?.length ?? 0} cartes)`);
-
+  const setMeta = [];
   const results = [];
   let skipped = 0;
-  for (const ref of set.cards ?? []) {
-    try {
-      const card = await fetchJson(
-        `https://api.tcgdex.net/v2/fr/cards/${ref.id}`,
-      );
-      const transformed = await transformCard(card);
-      if (!transformed) {
+
+  for (const setId of SETS_TO_LOAD) {
+    const set = await fetchJson(
+      `https://api.tcgdex.net/v2/fr/sets/${setId}`,
+    );
+    console.log(`\nSet ${setId} : ${set.name} (${set.cards?.length ?? 0} cartes)`);
+    setMeta.push({ id: set.id, name: set.name });
+
+    for (const ref of set.cards ?? []) {
+      try {
+        const card = await fetchJson(
+          `https://api.tcgdex.net/v2/fr/cards/${ref.id}`,
+        );
+        // Skip les Pokémon promo P-A (sinon trop de doublons par nom avec A1
+        // — les cartes P-A pour les Pokémon sont des promos d'event/login
+        // qu'on n'a pas besoin sur notre site). On garde uniquement les
+        // Dresseurs P-A (Potion, Poké Ball, etc.).
+        if (setId === "P-A" && card.category === "Pokémon") {
+          skipped++;
+          continue;
+        }
+        const transformed = await transformCard(card);
+        if (!transformed) {
+          skipped++;
+          continue;
+        }
+        results.push(transformed);
+        if (results.length % 25 === 0) {
+          console.log(`  ✓ ${results.length} cartes traitées…`);
+        }
+        await sleep(50); // courtoisie
+      } catch (err) {
+        console.error(`  ✗ ${ref.id} échec : ${err.message}`);
         skipped++;
-        continue;
       }
-      results.push(transformed);
-      if (results.length % 20 === 0) {
-        console.log(`  ✓ ${results.length} cartes traitées…`);
-      }
-      await sleep(50); // courtoisie
-    } catch (err) {
-      console.error(`  ✗ ${ref.id} échec : ${err.message}`);
-      skipped++;
     }
   }
 
@@ -299,12 +328,13 @@ async function main() {
     out,
     JSON.stringify(
       {
-        setId: set.id,
-        setName: set.name,
-        boosters: (set.boosters ?? []).map((b) => ({
-          id: BOOSTER_ID_MAP[b.id] ?? b.id,
-          name: b.name,
-        })),
+        sets: setMeta,
+        // Boosters principaux Pocket A1.
+        boosters: [
+          { id: "mewtwo", name: "Mewtwo" },
+          { id: "charizard", name: "Dracaufeu" },
+          { id: "pikachu", name: "Pikachu" },
+        ],
         cards: results,
       },
       null,

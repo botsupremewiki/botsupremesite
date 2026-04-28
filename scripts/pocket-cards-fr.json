@@ -1,6 +1,14 @@
 {
-  "setId": "A1",
-  "setName": "Puissance Génétique",
+  "sets": [
+    {
+      "id": "A1",
+      "name": "Puissance Génétique"
+    },
+    {
+      "id": "P-A",
+      "name": "Promo-A"
+    }
+  ],
   "boosters": [
     {
       "id": "mewtwo",
@@ -10488,6 +10496,150 @@
       ],
       "isEx": true,
       "evolveFromName": null
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-001",
+      "localId": 1,
+      "name": "Potion",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/001/high.webp",
+      "illustrator": "5ban Graphics",
+      "effect": "Soignez 20 dégâts d'un de vos Pokémon.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-002",
+      "localId": 2,
+      "name": "Vitesse +",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/002/high.webp",
+      "illustrator": "Toyste Beach",
+      "effect": "Pendant ce tour, le Coût de Retraite de votre Pokémon Actif est diminué d'une Énergie.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-003",
+      "localId": 3,
+      "name": "Scrute Main",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/003/high.webp",
+      "illustrator": "Toyste Beach",
+      "effect": "Votre adversaire dévoile sa main.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-004",
+      "localId": 4,
+      "name": "Pokédex",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/004/high.webp",
+      "illustrator": "Ryo Ueda",
+      "effect": "Regardez la première carte du dessus de votre deck.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-005",
+      "localId": 5,
+      "name": "Poké Ball",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/005/high.webp",
+      "illustrator": "Ryo Ueda",
+      "effect": "Ajoutez au hasard un Pokémon de base de votre deck à votre main.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-006",
+      "localId": 6,
+      "name": "Carton Rouge",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/006/high.webp",
+      "illustrator": "5ban Graphics",
+      "effect": "Votre adversaire mélange sa main dans son deck et pioche 3 cartes.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-007",
+      "localId": 7,
+      "name": "Recherches Professorales",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/007/high.webp",
+      "illustrator": "Naoki Saito",
+      "effect": "Piochez 2 cartes.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
+    },
+    {
+      "kind": "trainer",
+      "id": "P-A-008",
+      "localId": 8,
+      "name": "Pokédex",
+      "rarity": "promo",
+      "rarityFr": "Sans Rareté",
+      "image": "https://assets.tcgdex.net/fr/tcgp/P-A/008/high.webp",
+      "illustrator": "Yuu Nishida",
+      "effect": "Regardez la première carte du dessus de votre deck.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ]
     }
   ]
 }
