@@ -103,13 +103,13 @@ const REGULAR_LOW_WEIGHTS: Record<TcgRarity, number> = {
 
 const REGULAR_HIGH_WEIGHTS: Record<TcgRarity, number> = {
   "diamond-1": 0,
-  "diamond-2": 0,
-  "diamond-3": 76.66,
-  "diamond-4": 20,
-  "star-1": 2.572,
+  "diamond-2": 60,
+  "diamond-3": 24,
+  "diamond-4": 12.5,
+  "star-1": 2.7,
   "star-2": 0.5,
-  "star-3": 0.222,
-  crown: 0.04,
+  "star-3": 0.25,
+  crown: 0.05,
   promo: 0,
 };
 

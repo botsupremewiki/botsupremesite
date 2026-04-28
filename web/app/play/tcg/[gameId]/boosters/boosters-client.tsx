@@ -158,9 +158,9 @@ export function BoostersClient({
             <div>
               <h1 className="text-2xl font-bold text-zinc-100">🎴 Boosters</h1>
               <p className="mt-1 text-sm text-zinc-400">
-                5 cartes par paquet · slots 1-3 communes · slot 4 garanti ◆◆◆+
-                (avec ~3% chance d&apos;étoile) · slot 5 ◆◆◆+ avec ~7,5% étoile
-                et ~0,5% couronne 👑.
+                5 cartes par paquet · slots 1-3 majoritairement ◆ ·
+                slot 4 ◆◆ dominant (12,5% ex, 3,5% étoile+) ·
+                slot 5 ◆◆◆ garanti (4% ★, 0,5% 👑).
               </p>
             </div>
             <div className="flex items-center gap-4">
