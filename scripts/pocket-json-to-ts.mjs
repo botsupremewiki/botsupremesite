@@ -27,6 +27,25 @@ function tsValue(v) {
 }
 
 function buildCard(c) {
+  if (c.kind === "trainer") {
+    const obj = {
+      kind: "trainer",
+      id: c.id,
+      number: c.localId,
+      name: c.name,
+      rarity: c.rarity,
+      image: c.image,
+      trainerType: c.trainerType,
+    };
+    if (c.illustrator) obj.illustrator = c.illustrator;
+    if (c.effect) obj.effect = c.effect;
+    obj.pack = c.boosters[0] ?? "mewtwo";
+    if (c.boosters.length > 1) {
+      obj.extraPacks = c.boosters.slice(1);
+    }
+    return obj;
+  }
+  // Pokémon
   const obj = {
     kind: "pokemon",
     id: c.id,

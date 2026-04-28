@@ -57,7 +57,8 @@ export function CollectionGrid({
       if (ownedFilter === "missing" && count > 0) return false;
       if (ownedFilter === "dupes" && count < 2) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
-      if (typeFilter && c.type !== typeFilter) return false;
+      if (typeFilter && (c.kind !== "pokemon" || c.type !== typeFilter))
+        return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });

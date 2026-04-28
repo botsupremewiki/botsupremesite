@@ -486,7 +486,8 @@ function CollectionPicker({
       if (ownedFilter === "owned" && owned <= 0) return false;
       if (ownedFilter === "missing" && owned > 0) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
-      if (typeFilter && c.type !== typeFilter) return false;
+      if (typeFilter && (c.kind !== "pokemon" || c.type !== typeFilter))
+        return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });

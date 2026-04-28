@@ -1024,7 +1024,7 @@ export type PokemonAttack = {
 // Pocket. Le moteur exécute juste le damage. Les effets descriptifs vivent
 // dans `attack.text` pour info au joueur. Réintroduire si besoin plus tard.
 
-export type PokemonCardData = {
+export type PokemonCard = {
   kind: "pokemon";
   id: string; // ex "A1-035"
   number: number; // localId dans le set (pour tri d'affichage)
@@ -1048,6 +1048,25 @@ export type PokemonCardData = {
   // Boosters supplémentaires si carte multi-pack (sinon array vide).
   extraPacks?: PokemonPackTypeId[];
 };
+
+// Cartes Dresseur (Supporter / Objet / Outil / Stade dans Pocket).
+// Collectionnables et présentes dans les boosters comme des Pokémon.
+// Le moteur de combat MVP les ignore (pas jouables — restent en main).
+export type TrainerCard = {
+  kind: "trainer";
+  id: string;
+  number: number;
+  name: string;
+  rarity: TcgRarity;
+  image: string;
+  illustrator?: string | null;
+  effect?: string | null; // texte FR de l'effet
+  trainerType: "supporter" | "item" | "tool" | "stadium";
+  pack: PokemonPackTypeId;
+  extraPacks?: PokemonPackTypeId[];
+};
+
+export type PokemonCardData = PokemonCard | TrainerCard;
 
 // What the server emits in pack openings / welcomes — keeps this small
 // so we can reuse for non-Pokemon games later by widening the shape.

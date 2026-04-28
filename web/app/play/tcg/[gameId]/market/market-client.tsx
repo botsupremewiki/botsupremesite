@@ -124,7 +124,8 @@ export function MarketClient({
       const card = cardById.get(r.card_id);
       if (!card) return false;
       if (rarityFilter && card.rarity !== rarityFilter) return false;
-      if (typeFilter && card.type !== typeFilter) return false;
+      if (typeFilter && (card.kind !== "pokemon" || card.type !== typeFilter))
+        return false;
       if (ownedFilter !== "all") {
         const owned = (ownedMap.get(r.card_id) ?? 0) > 0;
         if (ownedFilter === "owned" && !owned) return false;

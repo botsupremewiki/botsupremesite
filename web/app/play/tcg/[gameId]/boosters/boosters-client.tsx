@@ -353,11 +353,11 @@ function BoosterDetailModal({
     grouped[c.rarity]!.push(c);
   }
   for (const r of RARITY_ORDER) {
-    grouped[r]?.sort(
-      (a, b) =>
-        (a.pokedexId ?? 999) - (b.pokedexId ?? 999) ||
-        a.name.localeCompare(b.name),
-    );
+    grouped[r]?.sort((a, b) => {
+      const aDex = a.kind === "pokemon" ? (a.pokedexId ?? 999) : 9999;
+      const bDex = b.kind === "pokemon" ? (b.pokedexId ?? 999) : 9999;
+      return aDex - bDex || a.name.localeCompare(b.name);
+    });
   }
 
   return (

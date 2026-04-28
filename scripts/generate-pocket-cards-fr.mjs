@@ -166,36 +166,64 @@ async function getPreEvolutionDexId(dexId) {
   }
 }
 
-async function transformCard(c) {
-  // Filtre : on ne garde que les Pokémon (pas les cartes Dresseur pour le
-  // MVP — le moteur de combat ne les supporte pas encore).
-  if (c.category !== "Pokémon") return null;
+// FR → en pour les types de Dresseurs.
+const TRAINER_TYPE_MAP = {
+  Supporter: "supporter",
+  Objet: "item",
+  "Outil Pokémon": "tool",
+  Stade: "stadium",
+};
 
-  return {
-    id: c.id, // "A1-006"
-    localId: parseInt(c.localId, 10) || 0,
-    name: c.name, // "Chrysacier" (FR)
-    pokedexId: Array.isArray(c.dexId) ? c.dexId[0] : null,
-    type: mapType((c.types ?? [])[0]),
-    typeFr: (c.types ?? [])[0] ?? "Incolore",
-    stage: mapStage(c.stage),
-    stageFr: c.stage ?? "De base",
-    hp: c.hp ?? 50,
-    weakness: c.weaknesses?.[0]
-      ? mapType(c.weaknesses[0].type)
-      : null,
-    weaknessFr: c.weaknesses?.[0]?.type ?? null,
-    weaknessValue: c.weaknesses?.[0]?.value ?? null,
-    retreatCost: c.retreat ?? 0,
-    attacks: (c.attacks ?? []).map(mapAttack),
-    rarity: mapRarity(c.rarity),
-    rarityFr: c.rarity ?? "Sans Rareté",
-    image: `${c.image}/high.webp`,
-    illustrator: c.illustrator ?? null,
-    description: c.description ?? null,
-    boosters: mapBoosters(c.boosters),
-    isEx: c.name.endsWith("-ex") || c.name.endsWith("-EX"),
-  };
+async function transformCard(c) {
+  if (c.category === "Pokémon") {
+    return {
+      kind: "pokemon",
+      id: c.id, // "A1-006"
+      localId: parseInt(c.localId, 10) || 0,
+      name: c.name, // "Chrysacier" (FR)
+      pokedexId: Array.isArray(c.dexId) ? c.dexId[0] : null,
+      type: mapType((c.types ?? [])[0]),
+      typeFr: (c.types ?? [])[0] ?? "Incolore",
+      stage: mapStage(c.stage),
+      stageFr: c.stage ?? "De base",
+      hp: c.hp ?? 50,
+      weakness: c.weaknesses?.[0]
+        ? mapType(c.weaknesses[0].type)
+        : null,
+      weaknessFr: c.weaknesses?.[0]?.type ?? null,
+      weaknessValue: c.weaknesses?.[0]?.value ?? null,
+      retreatCost: c.retreat ?? 0,
+      attacks: (c.attacks ?? []).map(mapAttack),
+      rarity: mapRarity(c.rarity),
+      rarityFr: c.rarity ?? "Sans Rareté",
+      image: `${c.image}/high.webp`,
+      illustrator: c.illustrator ?? null,
+      description: c.description ?? null,
+      boosters: mapBoosters(c.boosters),
+      isEx: c.name.endsWith("-ex") || c.name.endsWith("-EX"),
+    };
+  }
+
+  if (c.category === "Dresseur") {
+    return {
+      kind: "trainer",
+      id: c.id,
+      localId: parseInt(c.localId, 10) || 0,
+      name: c.name,
+      rarity: mapRarity(c.rarity),
+      rarityFr: c.rarity ?? "Sans Rareté",
+      image: `${c.image}/high.webp`,
+      illustrator: c.illustrator ?? null,
+      effect: c.effect ?? null,
+      trainerType: TRAINER_TYPE_MAP[c.trainerType] ?? "supporter",
+      trainerTypeFr: c.trainerType ?? "Supporter",
+      boosters: mapBoosters(c.boosters),
+    };
+  }
+
+  // Catégorie inconnue (ex Énergie spéciale → tcgdex utilise "Énergie")
+  // → on skip pour le MVP.
+  return null;
 }
 
 async function main() {
@@ -233,19 +261,18 @@ async function main() {
   console.log(`\n${results.length} Pokémon récupérés. Calcul des évolutions…`);
 
   // Post-traitement : injecter evolveFromName (FR) pour les stage1/stage2.
-  // On lookup via PokéAPI le pokedexId du préevolveur, puis on cherche dans
-  // notre dataset un Pokémon avec ce dexId pour récupérer son nom FR.
+  // Skip les trainers (pas d'évolution).
+  const pokemonOnly = results.filter((c) => c.kind === "pokemon");
   const byDex = new Map();
-  for (const c of results) {
+  for (const c of pokemonOnly) {
     if (c.pokedexId == null || c.isEx) continue;
     const existing = byDex.get(c.pokedexId);
-    // Préférer la version "diamond-1" (carte basique, nom canonique).
     if (!existing || c.rarity === "diamond-1") {
       byDex.set(c.pokedexId, c);
     }
   }
 
-  for (const c of results) {
+  for (const c of pokemonOnly) {
     if (c.stage === "basic" || c.pokedexId == null) {
       c.evolveFromName = null;
       continue;
@@ -257,12 +284,13 @@ async function main() {
   }
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-  const evosResolved = results.filter(
+  const trainers = results.filter((c) => c.kind === "trainer").length;
+  const evosResolved = pokemonOnly.filter(
     (c) => c.stage !== "basic" && c.evolveFromName,
   ).length;
-  const evosTotal = results.filter((c) => c.stage !== "basic").length;
+  const evosTotal = pokemonOnly.filter((c) => c.stage !== "basic").length;
   console.log(
-    `Terminé en ${elapsed}s — ${results.length} Pokémon (${skipped} skippés), ${evosResolved}/${evosTotal} évolutions résolues.`,
+    `Terminé en ${elapsed}s — ${results.length} cartes (${pokemonOnly.length} Pokémon, ${trainers} Dresseurs, ${skipped} skippés), ${evosResolved}/${evosTotal} évolutions résolues.`,
   );
 
   // Export JSON brut.
