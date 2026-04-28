@@ -23,6 +23,7 @@ import type {
 import { BLACKJACK_CONFIG } from "@shared/types";
 import type { GameScene, SeatLandmark } from "@/lib/game/scene";
 import type { Profile } from "@/lib/auth";
+import { hasRole } from "@/lib/discord-roles";
 import { UserPill } from "@/components/user-pill";
 import { BLACKJACK_SCENE } from "@/lib/game/configs";
 import { ChatPanel } from "@/app/play/chat-panel";
@@ -460,7 +461,11 @@ export function BlackjackClient({
           hint="Entrée ouvre le chat · clique un siège pour t'asseoir"
           currentUser={
             profile
-              ? { username: profile.username, isAdmin: profile.is_admin }
+              ? {
+                  username: profile.username,
+                  isAdmin: profile.is_admin,
+                  isBooster: hasRole(profile, "BOOSTER"),
+                }
               : undefined
           }
           renderDm={
@@ -470,6 +475,7 @@ export function BlackjackClient({
                     hub={dmHub}
                     selfAuthId={profile.id}
                     selfIsAdmin={profile.is_admin}
+                    selfIsBooster={hasRole(profile, "BOOSTER")}
                     selfUsername={profile.username}
                   />
                 )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { signInWithDiscord } from "@/app/actions/auth";
 
 export function SignInButton({
@@ -11,17 +11,18 @@ export function SignInButton({
   className?: string;
 }) {
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
   return (
     <form
       action={() =>
         startTransition(async () => {
-          setError(null);
+          // Volontairement pas d'affichage d'erreur ici : si l'OAuth foire,
+          // Supabase nous renvoie sur /?error=auth qui est géré ailleurs.
+          // Un petit texte rouge sous le bouton est moche pour rien.
           try {
             await signInWithDiscord();
           } catch (e) {
-            setError((e as Error).message);
+            console.error("[sign-in] discord oauth failed:", e);
           }
         })
       }
@@ -39,9 +40,6 @@ export function SignInButton({
         <DiscordIcon className="h-4 w-4" />
         {pending ? "Redirection..." : "Se connecter avec Discord"}
       </button>
-      {error && (
-        <p className="mt-2 max-w-xs text-xs text-rose-400">{error}</p>
-      )}
     </form>
   );
 }

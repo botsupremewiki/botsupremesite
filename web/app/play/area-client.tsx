@@ -19,6 +19,7 @@ import type {
 } from "@shared/types";
 import type { GameScene, SceneConfig } from "@/lib/game/scene";
 import type { Profile } from "@/lib/auth";
+import { hasRole } from "@/lib/discord-roles";
 import { UserPill } from "@/components/user-pill";
 import { ChatPanel } from "./chat-panel";
 import type { ChatChannel } from "./chat-panel";
@@ -460,7 +461,11 @@ export function AreaClient({
           hint="Entrée ouvre le chat · clique pour te déplacer"
           currentUser={
             profile
-              ? { username: profile.username, isAdmin: profile.is_admin }
+              ? {
+                  username: profile.username,
+                  isAdmin: profile.is_admin,
+                  isBooster: hasRole(profile, "BOOSTER"),
+                }
               : undefined
           }
           renderDm={
@@ -470,6 +475,7 @@ export function AreaClient({
                     hub={dmHub}
                     selfAuthId={profile.id}
                     selfIsAdmin={profile.is_admin}
+                    selfIsBooster={hasRole(profile, "BOOSTER")}
                     selfUsername={profile.username}
                   />
                 )

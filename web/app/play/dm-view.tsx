@@ -14,11 +14,13 @@ export function DmView({
   hub,
   selfAuthId,
   selfIsAdmin = false,
+  selfIsBooster = false,
   selfUsername,
 }: {
   hub: DmHub;
   selfAuthId: string;
   selfIsAdmin?: boolean;
+  selfIsBooster?: boolean;
   selfUsername?: string;
 }) {
   const [activePartner, setActivePartner] = useState<{
@@ -128,6 +130,8 @@ export function DmView({
               {activeMessages.map((m) => {
                 const mine = m.senderId === selfAuthId;
                 const showAdmin = mine && selfIsAdmin;
+                // ADMIN > BOOSTER : un seul badge à la fois.
+                const showBooster = mine && !selfIsAdmin && selfIsBooster;
                 return (
                   <motion.div
                     key={m.id}
@@ -138,6 +142,11 @@ export function DmView({
                     {showAdmin && (
                       <span className="mb-0.5 text-[9px] font-bold text-rose-500">
                         [ADMIN] {selfUsername ?? ""}
+                      </span>
+                    )}
+                    {showBooster && (
+                      <span className="mb-0.5 text-[9px] font-bold text-fuchsia-400">
+                        [BOOSTER] {selfUsername ?? ""}
                       </span>
                     )}
                     <div

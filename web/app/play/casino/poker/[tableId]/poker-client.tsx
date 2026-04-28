@@ -22,6 +22,7 @@ import type {
 } from "@shared/types";
 import { POKER_TABLES } from "@shared/types";
 import type { Profile } from "@/lib/auth";
+import { hasRole } from "@/lib/discord-roles";
 import { UserPill } from "@/components/user-pill";
 import { ChatPanel } from "@/app/play/chat-panel";
 import { buildChannels } from "@/app/play/area-client";
@@ -258,7 +259,11 @@ export function PokerClient({
           hint="Entrée ouvre le chat"
           currentUser={
             profile
-              ? { username: profile.username, isAdmin: profile.is_admin }
+              ? {
+                  username: profile.username,
+                  isAdmin: profile.is_admin,
+                  isBooster: hasRole(profile, "BOOSTER"),
+                }
               : undefined
           }
           renderDm={
@@ -268,6 +273,7 @@ export function PokerClient({
                     hub={dmHub}
                     selfAuthId={profile.id}
                     selfIsAdmin={profile.is_admin}
+                    selfIsBooster={hasRole(profile, "BOOSTER")}
                     selfUsername={profile.username}
                   />
                 )

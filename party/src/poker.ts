@@ -13,6 +13,7 @@ import type {
   PokerTableId,
 } from "../../shared/types";
 import { PLAZA_CONFIG, POKER_TABLES } from "../../shared/types";
+import { deriveRoleFlags } from "../../shared/discord-roles";
 import { fetchProfile, patchProfileGold } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
 import { bestOf7, makeShuffledDeck } from "./lib/poker-eval";
@@ -45,6 +46,7 @@ type ConnInfo = {
   color: string;
   gold: number;
   isAdmin: boolean;
+  isBooster: boolean;
   // Index of the seat this conn is sitting in, or null.
   seatIndex: number | null;
 };
@@ -90,11 +92,15 @@ export default class PokerServer implements Party.Server {
 
     let gold: number;
     let isAdmin = false;
+    let isBooster = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
+        const flags = deriveRoleFlags(profile.discord_roles);
+        isAdmin = isAdmin || flags.isAdmin;
+        isBooster = flags.isBooster;
       } else if (queryGold !== null) {
         gold = queryGold;
       } else {
@@ -110,6 +116,7 @@ export default class PokerServer implements Party.Server {
       color: AVATAR_COLORS[this.colorCursor++ % AVATAR_COLORS.length],
       gold,
       isAdmin,
+      isBooster,
       seatIndex: null,
     });
 
@@ -144,6 +151,7 @@ export default class PokerServer implements Party.Server {
           text,
           timestamp: Date.now(),
           isAdmin: info.isAdmin || undefined,
+          isBooster: info.isBooster || undefined,
         };
         await this.chat.add(message);
         this.broadcastChat(message);

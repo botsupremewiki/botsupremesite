@@ -12,6 +12,7 @@ import type {
   ServerMessage,
 } from "../../shared/types";
 import { BLACKJACK_CONFIG, PLAZA_CONFIG } from "../../shared/types";
+import { deriveRoleFlags } from "../../shared/discord-roles";
 import { fetchProfile } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
 
@@ -54,6 +55,7 @@ export default class BlackjackServer implements Party.Server {
   private connIdToSeatIndex = new Map<string, number>();
   private connIdToGold = new Map<string, number>();
   private connIdToIsAdmin = new Map<string, boolean>();
+  private connIdToIsBooster = new Map<string, boolean>();
 
   constructor(readonly room: Party.Room) {
     this.chat = new PersistentChatHistory(room, PLAZA_CONFIG.chatHistorySize);
@@ -83,11 +85,15 @@ export default class BlackjackServer implements Party.Server {
 
     let initialGold: number;
     let isAdmin = false;
+    let isBooster = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile && Number.isFinite(profile.gold)) {
         initialGold = profile.gold;
         isAdmin = !!profile.is_admin;
+        const flags = deriveRoleFlags(profile.discord_roles);
+        isAdmin = isAdmin || flags.isAdmin;
+        isBooster = flags.isBooster;
       } else if (queryGold !== null) {
         initialGold = queryGold;
       } else {
@@ -98,6 +104,7 @@ export default class BlackjackServer implements Party.Server {
     }
     this.connIdToGold.set(conn.id, initialGold);
     this.connIdToIsAdmin.set(conn.id, isAdmin);
+    this.connIdToIsBooster.set(conn.id, isBooster);
 
     const player: Player = {
       id: conn.id,
@@ -190,6 +197,7 @@ export default class BlackjackServer implements Party.Server {
           text,
           timestamp: Date.now(),
           isAdmin: this.connIdToIsAdmin.get(sender.id) || undefined,
+          isBooster: this.connIdToIsBooster.get(sender.id) || undefined,
         };
         await this.chat.add(message);
         this.broadcast({ type: "chat", message });
@@ -239,6 +247,7 @@ export default class BlackjackServer implements Party.Server {
 
   onClose(conn: Party.Connection) {
     this.connIdToIsAdmin.delete(conn.id);
+    this.connIdToIsBooster.delete(conn.id);
     if (!this.players.delete(conn.id)) return;
     this.connIdToGold.delete(conn.id);
 

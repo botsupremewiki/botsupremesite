@@ -10,8 +10,11 @@ export async function GET() {
 
   const supabase = await createClient();
 
-  // If Supabase isn't configured, just drop the user straight into the plaza
-  // in anonymous mode.
+  // Dev-only fallback : si Supabase n'est pas configuré (.env.local absent),
+  // on laisse passer pour ne pas bloquer le développement local.
+  // En production le layout /play garantit qu'on n'arrive ici que connecté
+  // ou en train de se connecter, donc ce fallback ne devrait jamais être
+  // emprunté par un visiteur réel.
   if (!supabase) {
     return NextResponse.redirect(new URL("/play", origin));
   }
@@ -29,7 +32,9 @@ export async function GET() {
     provider: "discord",
     options: {
       redirectTo: `${origin}/auth/callback?next=/play`,
-      scopes: "identify email",
+      // `guilds.members.read` permet de lire le pseudo + rôles du joueur
+      // pour le serveur Discord configuré dans DISCORD_GUILD_ID.
+      scopes: "identify email guilds.members.read",
     },
   });
 

@@ -7,6 +7,7 @@ import type {
   ServerMessage,
 } from "../../shared/types";
 import { PLAZA_CONFIG } from "../../shared/types";
+import { deriveRoleFlags } from "../../shared/discord-roles";
 import { fetchProfile } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
 
@@ -30,6 +31,7 @@ export default class PlazaServer implements Party.Server {
   private chat: PersistentChatHistory;
   private colorCursor = 0;
   private connIdToIsAdmin = new Map<string, boolean>();
+  private connIdToIsBooster = new Map<string, boolean>();
 
   constructor(readonly room: Party.Room) {
     this.chat = new PersistentChatHistory(room, PLAZA_CONFIG.chatHistorySize);
@@ -48,17 +50,27 @@ export default class PlazaServer implements Party.Server {
     const avatarUrl = sanitizeUrl(url.searchParams.get("avatarUrl"));
 
     let isAdmin = false;
+    let isBooster = false;
     let gold: number | null = null;
     let appearance: Appearance | undefined;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile?.is_admin) isAdmin = true;
+      if (profile?.discord_roles) {
+        const flags = deriveRoleFlags(profile.discord_roles);
+        // is_admin column reste autorité, mais on garde le check pour
+        // que la sync devienne automatique en ajoutant un nouveau rôle
+        // dans `shared/discord-roles.ts`.
+        isAdmin = isAdmin || flags.isAdmin;
+        isBooster = flags.isBooster;
+      }
       if (profile && Number.isFinite(profile.gold)) gold = profile.gold;
       if (profile?.appearance) {
         appearance = sanitizeAppearance(profile.appearance);
       }
     }
     this.connIdToIsAdmin.set(conn.id, isAdmin);
+    this.connIdToIsBooster.set(conn.id, isBooster);
 
     // Spawn at the centre of the scene — every plaza/casino layout is
     // built around the centre point (the back portal sits there too).
@@ -154,6 +166,7 @@ export default class PlazaServer implements Party.Server {
           text,
           timestamp: Date.now(),
           isAdmin: this.connIdToIsAdmin.get(sender.id) || undefined,
+          isBooster: this.connIdToIsBooster.get(sender.id) || undefined,
         };
         await this.chat.add(message);
         this.broadcast({ type: "chat", message });
@@ -164,6 +177,7 @@ export default class PlazaServer implements Party.Server {
 
   onClose(conn: Party.Connection) {
     this.connIdToIsAdmin.delete(conn.id);
+    this.connIdToIsBooster.delete(conn.id);
     if (!this.players.delete(conn.id)) return;
     this.broadcast({ type: "player-left", playerId: conn.id });
   }

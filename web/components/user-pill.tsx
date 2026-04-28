@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
+import { resyncMyDiscordProfile } from "@/app/actions/discord-resync";
 import type { Profile } from "@/lib/auth";
 import { NotifBell } from "./notif-bell";
 import { useMetaBadges } from "./use-meta-badges";
@@ -16,7 +18,37 @@ export function UserPill({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const badges = useMetaBadges(true);
+  // Resync Discord (pseudo serveur + rôles) à la demande, sans logout.
+  const [resyncing, startResync] = useTransition();
+  const [resyncStatus, setResyncStatus] = useState<
+    "idle" | "ok" | "error"
+  >("idle");
+  const [resyncMessage, setResyncMessage] = useState<string | null>(null);
+  const onResync = () => {
+    startResync(async () => {
+      try {
+        const r = await resyncMyDiscordProfile();
+        if (r.ok) {
+          setResyncStatus("ok");
+          setResyncMessage(`Pseudo : ${r.username ?? "—"}`);
+          router.refresh();
+        } else {
+          setResyncStatus("error");
+          setResyncMessage(r.reason ?? "Erreur inconnue");
+        }
+      } catch (e) {
+        // Next.js utilise des "erreurs" spéciales (NEXT_REDIRECT,
+        // NEXT_NOT_FOUND) pour piloter la navigation depuis un Server
+        // Action. On les laisse passer pour que la nav se fasse, sinon
+        // on les afficherait à tort en rouge sous le bouton.
+        if (isFrameworkSignal(e)) throw e;
+        setResyncStatus("error");
+        setResyncMessage((e as Error).message);
+      }
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -87,7 +119,43 @@ export function UserPill({
                 badge={badges.friendPending}
               />
 
+              {profile.is_admin && (
+                <MenuItem
+                  href="/admin/sync-roles"
+                  onClick={() => setOpen(false)}
+                  icon="🛠️"
+                  label="Admin"
+                  hint="Resync Discord, outils admin"
+                />
+              )}
+
               <div className="my-1 h-px bg-white/5" />
+
+              <button
+                type="button"
+                onClick={onResync}
+                disabled={resyncing}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-zinc-300 transition-colors hover:bg-white/5 disabled:opacity-60"
+                title="Resynchroniser mon pseudo et mes rôles depuis Discord"
+              >
+                <span className="text-base">{resyncing ? "⏳" : "🔄"}</span>
+                <span className="flex flex-col">
+                  <span className="font-medium leading-tight">
+                    {resyncing ? "Synchronisation..." : "Resynchroniser Discord"}
+                  </span>
+                  {resyncMessage && (
+                    <span
+                      className={`text-[10px] leading-tight ${
+                        resyncStatus === "ok"
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {resyncMessage}
+                    </span>
+                  )}
+                </span>
+              </button>
 
               <form action={signOut}>
                 <button
@@ -104,6 +172,23 @@ export function UserPill({
       </div>
     </div>
   );
+}
+
+/** Vrai pour les "erreurs" internes Next.js (redirect, notFound) qu'il
+ *  faut re-throw pour que le framework finisse la nav. Ne pas afficher
+ *  comme un vrai bug. */
+function isFrameworkSignal(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const digest = (e as { digest?: unknown }).digest;
+  if (typeof digest === "string") {
+    return (
+      digest.startsWith("NEXT_REDIRECT") ||
+      digest.startsWith("NEXT_NOT_FOUND") ||
+      digest.startsWith("DYNAMIC_SERVER_USAGE")
+    );
+  }
+  const message = (e as { message?: unknown }).message;
+  return typeof message === "string" && message === "NEXT_REDIRECT";
 }
 
 function MenuItem({

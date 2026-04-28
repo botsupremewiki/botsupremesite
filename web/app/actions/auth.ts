@@ -21,7 +21,9 @@ export async function signInWithDiscord() {
     provider: "discord",
     options: {
       redirectTo: `${origin}/auth/callback?next=/play`,
-      scopes: "identify email",
+      // `guilds.members.read` permet de lire le pseudo + rôles du joueur
+      // pour le serveur Discord configuré dans DISCORD_GUILD_ID.
+      scopes: "identify email guilds.members.read",
     },
   });
 

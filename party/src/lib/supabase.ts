@@ -8,6 +8,10 @@ export type ProfileRow = {
   avatar_url: string | null;
   tcg_free_packs?: Record<string, number> | null;
   appearance?: Appearance | null;
+  // Liste brute des IDs de rôles Discord, synchronisée à chaque login web.
+  // Sert à dériver les flags (admin, booster, …) côté serveur PartyKit
+  // pour ne pas avoir à faire confiance à un flag client.
+  discord_roles?: string[] | null;
 };
 
 export function getSupabaseEnv(room: Party.Room) {
@@ -28,7 +32,7 @@ export async function fetchProfile(
   if (!env) return null;
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=gold,is_admin,username,avatar_url,tcg_free_packs,appearance`,
+      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=gold,is_admin,username,avatar_url,tcg_free_packs,appearance,discord_roles`,
       {
         headers: {
           apikey: env.key,

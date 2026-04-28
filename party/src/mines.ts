@@ -7,6 +7,7 @@ import type {
   MinesTile,
 } from "../../shared/types";
 import { MINES_CONFIG, PLAZA_CONFIG } from "../../shared/types";
+import { deriveRoleFlags } from "../../shared/discord-roles";
 import { fetchProfile, patchProfileGold } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
 import {
@@ -23,6 +24,7 @@ type ConnInfo = {
   name: string;
   gold: number;
   isAdmin: boolean;
+  isBooster: boolean;
 };
 
 const GUEST_SANDBOX_GOLD = 1000;
@@ -62,11 +64,15 @@ export default class MinesServer implements Party.Server {
 
     let gold: number;
     let isAdmin = false;
+    let isBooster = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile && Number.isFinite(profile.gold)) {
         gold = profile.gold;
         isAdmin = !!profile.is_admin;
+        const flags = deriveRoleFlags(profile.discord_roles);
+        isAdmin = isAdmin || flags.isAdmin;
+        isBooster = flags.isBooster;
       } else if (queryGold !== null) {
         gold = queryGold;
       } else {
@@ -76,7 +82,7 @@ export default class MinesServer implements Party.Server {
       gold = queryGold ?? GUEST_SANDBOX_GOLD;
     }
 
-    this.connInfo.set(conn.id, { authId, name, gold, isAdmin });
+    this.connInfo.set(conn.id, { authId, name, gold, isAdmin, isBooster });
 
     const chat = await this.chat.list();
     this.sendTo(conn, {
@@ -110,6 +116,7 @@ export default class MinesServer implements Party.Server {
           text,
           timestamp: Date.now(),
           isAdmin: info.isAdmin || undefined,
+          isBooster: info.isBooster || undefined,
         };
         await this.chat.add(message);
         this.broadcast({ type: "chat", message });

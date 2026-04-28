@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { Profile } from "@/lib/auth";
+import { hasRole } from "@/lib/discord-roles";
 import { ChatPanel, type ChatChannel } from "./chat-panel";
 import { useAuxChat } from "./use-aux-chat";
 import { useDmHub } from "./use-dm-hub";
@@ -115,7 +116,11 @@ export function GlobalChatSidebar({
       connected={globalChat.status === "connected"}
       currentUser={
         profile
-          ? { username: profile.username, isAdmin: !!profile.is_admin }
+          ? {
+              username: profile.username,
+              isAdmin: !!profile.is_admin,
+              isBooster: hasRole(profile, "BOOSTER"),
+            }
           : undefined
       }
       renderDm={
@@ -126,6 +131,7 @@ export function GlobalChatSidebar({
                 selfAuthId={profile.id}
                 selfUsername={profile.username}
                 selfIsAdmin={!!profile.is_admin}
+                selfIsBooster={hasRole(profile, "BOOSTER")}
               />
             )
           : undefined

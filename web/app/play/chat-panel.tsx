@@ -37,7 +37,7 @@ export function ChatPanel({
   hint?: string;
   connected: boolean;
   renderDm?: () => React.ReactNode;
-  currentUser?: { username: string; isAdmin: boolean };
+  currentUser?: { username: string; isAdmin: boolean; isBooster?: boolean };
 }) {
   const byId = new Map(channels.map((c) => [c.id, c]));
   const [active, setActive] = useState<ChatTabId>(() => {
@@ -239,10 +239,20 @@ export function ChatPanel({
                   ) : (
                     <AnimatePresence initial={false}>
                       {activeChannel?.messages.map((m) => {
+                        const isOwnMsg =
+                          currentUser?.username === m.playerName;
+                        // Fallback côté client : si c'est notre propre
+                        // message et que le serveur n'a pas (encore) tagué
+                        // le flag, on l'inverse depuis nos propres infos.
                         const showAdmin =
                           m.isAdmin ||
-                          (currentUser?.isAdmin &&
-                            m.playerName === currentUser.username);
+                          (isOwnMsg && currentUser?.isAdmin);
+                        // ADMIN > BOOSTER : on ne montre qu'un seul badge
+                        // pour pas surcharger la ligne de chat.
+                        const showBooster =
+                          !showAdmin &&
+                          (m.isBooster ||
+                            (isOwnMsg && currentUser?.isBooster));
                         return (
                           <motion.div
                             key={m.id}
@@ -258,11 +268,14 @@ export function ChatPanel({
                                 [ADMIN]
                               </span>
                             )}
+                            {showBooster && (
+                              <span className="mr-1 font-bold text-fuchsia-400">
+                                [BOOSTER]
+                              </span>
+                            )}
                             <UserMention
                               name={m.playerName}
-                              isSelf={
-                                currentUser?.username === m.playerName
-                              }
+                              isSelf={isOwnMsg}
                               isAdmin={!!showAdmin}
                             />
                             <span className="text-zinc-500"> : </span>

@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
 import type { ChatMessage, ServerMessage } from "../../shared/types";
+import { deriveRoleFlags } from "../../shared/discord-roles";
 import { fetchProfile } from "./lib/supabase";
 import { PersistentChatHistory } from "./lib/chat-storage";
 
@@ -9,7 +10,7 @@ const MAX_HISTORY = 200;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type ConnName = { name: string; isAdmin: boolean };
+type ConnName = { name: string; isAdmin: boolean; isBooster: boolean };
 
 export default class GlobalChatServer implements Party.Server {
   private chat: PersistentChatHistory;
@@ -30,11 +31,20 @@ export default class GlobalChatServer implements Party.Server {
       sanitizeName(url.searchParams.get("name")) ?? `Invité-${conn.id.slice(0, 4)}`;
 
     let isAdmin = false;
+    let isBooster = false;
     if (authId) {
       const profile = await fetchProfile(this.room, authId);
       if (profile?.is_admin) isAdmin = true;
+      if (profile?.discord_roles) {
+        const flags = deriveRoleFlags(profile.discord_roles);
+        // is_admin column reste autorité, mais on garde le check pour
+        // que l'ajout d'un nouveau rôle dans `shared/discord-roles.ts`
+        // soit suffisant sans toucher au schéma.
+        isAdmin = isAdmin || flags.isAdmin;
+        isBooster = flags.isBooster;
+      }
     }
-    this.connInfo.set(conn.id, { name, isAdmin });
+    this.connInfo.set(conn.id, { name, isAdmin, isBooster });
 
     const history = await this.chat.list();
     this.sendTo(conn, {
@@ -65,6 +75,7 @@ export default class GlobalChatServer implements Party.Server {
       text,
       timestamp: Date.now(),
       isAdmin: who?.isAdmin || undefined,
+      isBooster: who?.isBooster || undefined,
     };
     await this.chat.add(msg);
     this.broadcast({ type: "chat", message: msg });
