@@ -329,12 +329,14 @@ function BoosterDetailModal({
   onZoomCard: (card: PokemonCardData) => void;
 }) {
   const pack = POKEMON_PACK_TYPES[packId];
-  // Filtre identique à getThemedPool côté serveur : pack principal OU extraPacks.
-  const cards = POKEMON_BASE_SET.filter(
-    (c) =>
-      c.kind === "pokemon" &&
-      (c.pack === packId || c.extraPacks?.includes(packId)),
-  );
+  // Filtre identique à getThemedPool côté serveur :
+  //   • pack principal OU extraPacks
+  //   • EXCLU : les Dresseurs starter (Potion, Poké Ball, Pokédex…) qui
+  //     sont donnés au premier login et non droppables en booster
+  const cards = POKEMON_BASE_SET.filter((c) => {
+    if (c.kind === "trainer" && c.starter) return false;
+    return c.pack === packId || c.extraPacks?.includes(packId);
+  });
   // Groupement par rareté, du plus commun au plus rare.
   const RARITY_ORDER: TcgRarity[] = [
     "diamond-1",
