@@ -11,7 +11,6 @@ import { CardSlot, CardZoomModal, RARITY_TIER } from "./card-visuals";
 type CollectionFilter = "all" | "owned" | "missing" | "dupes";
 type CollectionSort = "number" | "name" | "rarity" | "count";
 type CategoryFilter =
-  | "all"
   | "pokemon"
   | "trainer"
   | "supporter"
@@ -19,6 +18,14 @@ type CategoryFilter =
   | "basic"
   | "stage1"
   | "stage2";
+
+// Un seul filtre "facette" actif à la fois (catégorie OU type OU rareté).
+// La possession (owned/missing/dupes) est gérée séparément.
+type ActiveFilter =
+  | { kind: "category"; value: CategoryFilter }
+  | { kind: "type"; value: PokemonEnergyType }
+  | { kind: "rarity"; value: TcgRarity }
+  | null;
 
 const TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "fire", label: "🔥 Feu" },
@@ -62,12 +69,27 @@ export function CollectionGrid({
   collection: Map<string, number>;
 }) {
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
-  const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
-  const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>(null);
   const [ownedFilter, setOwnedFilter] = useState<CollectionFilter>("all");
   const [sortMode, setSortMode] = useState<CollectionSort>("number");
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
+
+  // Toggle un filtre facette : si on clique sur le même, on désactive ;
+  // sinon on remplace le filtre actif (mutuellement exclusif).
+  function toggleFilter(next: ActiveFilter) {
+    if (
+      activeFilter &&
+      next &&
+      activeFilter.kind === next.kind &&
+      activeFilter.value === next.value
+    ) {
+      setActiveFilter(null);
+    } else {
+      setActiveFilter(next);
+    }
+  }
+  const isActive = (kind: "category" | "type" | "rarity", value: string) =>
+    activeFilter?.kind === kind && activeFilter.value === value;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -76,26 +98,39 @@ export function CollectionGrid({
       if (ownedFilter === "owned" && count === 0) return false;
       if (ownedFilter === "missing" && count > 0) return false;
       if (ownedFilter === "dupes" && count < 2) return false;
-      if (rarityFilter && c.rarity !== rarityFilter) return false;
-      // Catégorie : pokemon en gros / stages spécifiques / trainer / sous-types
-      if (categoryFilter === "pokemon" && c.kind !== "pokemon") return false;
-      if (categoryFilter === "trainer" && c.kind !== "trainer") return false;
-      if (categoryFilter === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
-        return false;
-      if (categoryFilter === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
-        return false;
-      if (categoryFilter === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
-        return false;
-      if (categoryFilter === "supporter" && (c.kind !== "trainer" || c.trainerType !== "supporter"))
-        return false;
-      if (categoryFilter === "item" && (c.kind !== "trainer" || c.trainerType !== "item"))
-        return false;
-      if (typeFilter && (c.kind !== "pokemon" || c.type !== typeFilter))
-        return false;
+      // Filtre facette unique (catégorie / type / rareté).
+      if (activeFilter) {
+        if (activeFilter.kind === "rarity") {
+          if (c.rarity !== activeFilter.value) return false;
+        } else if (activeFilter.kind === "type") {
+          if (c.kind !== "pokemon" || c.type !== activeFilter.value)
+            return false;
+        } else if (activeFilter.kind === "category") {
+          const v = activeFilter.value;
+          if (v === "pokemon" && c.kind !== "pokemon") return false;
+          if (v === "trainer" && c.kind !== "trainer") return false;
+          if (v === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
+            return false;
+          if (v === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
+            return false;
+          if (v === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
+            return false;
+          if (
+            v === "supporter" &&
+            (c.kind !== "trainer" || c.trainerType !== "supporter")
+          )
+            return false;
+          if (
+            v === "item" &&
+            (c.kind !== "trainer" || c.trainerType !== "item")
+          )
+            return false;
+        }
+      }
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [pool, collection, search, categoryFilter, typeFilter, rarityFilter, ownedFilter]);
+  }, [pool, collection, search, activeFilter, ownedFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -123,11 +158,7 @@ export function CollectionGrid({
   }, [filtered, sortMode, collection]);
 
   const filtersActive =
-    !!search ||
-    categoryFilter !== "all" ||
-    typeFilter !== null ||
-    rarityFilter !== null ||
-    ownedFilter !== "all";
+    !!search || activeFilter !== null || ownedFilter !== "all";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -154,9 +185,7 @@ export function CollectionGrid({
             <button
               onClick={() => {
                 setSearch("");
-                setCategoryFilter("all");
-                setTypeFilter(null);
-                setRarityFilter(null);
+                setActiveFilter(null);
                 setOwnedFilter("all");
               }}
               className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 hover:bg-white/10"
@@ -165,7 +194,7 @@ export function CollectionGrid({
             </button>
           )}
         </div>
-        {/* Ligne 1 : possession */}
+        {/* Ligne 1 : possession (indépendante, toujours UN actif) */}
         <div className="flex flex-wrap gap-1.5">
           <FilterChip
             active={ownedFilter === "all"}
@@ -188,33 +217,24 @@ export function CollectionGrid({
             label="Doublons"
           />
         </div>
-        {/* Ligne 2 : catégorie (Pokémon × stages / Dresseurs × sous-types) */}
+        {/* Ligne 2 : catégorie (1 seul actif parmi catégorie/type/rareté) */}
         <div className="flex flex-wrap gap-1.5">
-          <FilterChip
-            active={categoryFilter === "all"}
-            onClick={() => setCategoryFilter("all")}
-            label="Toutes catégories"
-          />
           {CATEGORY_OPTIONS.map((c) => (
             <FilterChip
               key={c.id}
-              active={categoryFilter === c.id}
-              onClick={() =>
-                setCategoryFilter(categoryFilter === c.id ? "all" : c.id)
-              }
+              active={isActive("category", c.id)}
+              onClick={() => toggleFilter({ kind: "category", value: c.id })}
               label={c.label}
             />
           ))}
         </div>
-        {/* Ligne 3 : type énergétique (Pokémon uniquement) */}
+        {/* Ligne 3 : type énergétique */}
         <div className="flex flex-wrap gap-1.5">
           {TYPE_OPTIONS.map((t) => (
             <FilterChip
               key={t.id}
-              active={typeFilter === t.id}
-              onClick={() =>
-                setTypeFilter(typeFilter === t.id ? null : t.id)
-              }
+              active={isActive("type", t.id)}
+              onClick={() => toggleFilter({ kind: "type", value: t.id })}
               label={t.label}
             />
           ))}
@@ -224,10 +244,8 @@ export function CollectionGrid({
           {RARITY_OPTIONS.map((r) => (
             <FilterChip
               key={r.id}
-              active={rarityFilter === r.id}
-              onClick={() =>
-                setRarityFilter(rarityFilter === r.id ? null : r.id)
-              }
+              active={isActive("rarity", r.id)}
+              onClick={() => toggleFilter({ kind: "rarity", value: r.id })}
               label={r.label}
             />
           ))}

@@ -536,7 +536,6 @@ export function DecksClient({
 type PickerOwned = "all" | "owned" | "missing";
 type PickerSort = "number" | "name" | "rarity" | "count";
 type PickerCategory =
-  | "all"
   | "pokemon"
   | "trainer"
   | "supporter"
@@ -544,6 +543,13 @@ type PickerCategory =
   | "basic"
   | "stage1"
   | "stage2";
+
+// Un seul filtre "facette" actif à la fois (catégorie OU type OU rareté).
+type PickerActiveFilter =
+  | { kind: "category"; value: PickerCategory }
+  | { kind: "type"; value: PokemonEnergyType }
+  | { kind: "rarity"; value: TcgRarity }
+  | null;
 
 const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "fire", label: "🔥 Feu" },
@@ -593,13 +599,26 @@ function CollectionPicker({
   onAdd: (card: PokemonCardData) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<PickerCategory>("all");
-  const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
-  const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
+  const [activeFilter, setActiveFilter] = useState<PickerActiveFilter>(null);
   const [ownedFilter, setOwnedFilter] = useState<PickerOwned>("owned");
   const [sortMode, setSortMode] = useState<PickerSort>("number");
   // Carte sélectionnée pour preview (modal zoom avec bouton "Ajouter au deck").
   const [previewCard, setPreviewCard] = useState<PokemonCardData | null>(null);
+
+  function toggleFilter(next: PickerActiveFilter) {
+    if (
+      activeFilter &&
+      next &&
+      activeFilter.kind === next.kind &&
+      activeFilter.value === next.value
+    ) {
+      setActiveFilter(null);
+    } else {
+      setActiveFilter(next);
+    }
+  }
+  const isActive = (kind: "category" | "type" | "rarity", value: string) =>
+    activeFilter?.kind === kind && activeFilter.value === value;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -607,27 +626,39 @@ function CollectionPicker({
       const owned = collection.get(c.id) ?? 0;
       if (ownedFilter === "owned" && owned <= 0) return false;
       if (ownedFilter === "missing" && owned > 0) return false;
-      if (rarityFilter && c.rarity !== rarityFilter) return false;
-      // Catégorie : pokemon en gros, ou stages spécifiques, ou trainer en gros,
-      // ou sous-types trainer (supporter / item).
-      if (categoryFilter === "pokemon" && c.kind !== "pokemon") return false;
-      if (categoryFilter === "trainer" && c.kind !== "trainer") return false;
-      if (categoryFilter === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
-        return false;
-      if (categoryFilter === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
-        return false;
-      if (categoryFilter === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
-        return false;
-      if (categoryFilter === "supporter" && (c.kind !== "trainer" || c.trainerType !== "supporter"))
-        return false;
-      if (categoryFilter === "item" && (c.kind !== "trainer" || c.trainerType !== "item"))
-        return false;
-      if (typeFilter && (c.kind !== "pokemon" || c.type !== typeFilter))
-        return false;
+      // Filtre facette unique (catégorie / type / rareté).
+      if (activeFilter) {
+        if (activeFilter.kind === "rarity") {
+          if (c.rarity !== activeFilter.value) return false;
+        } else if (activeFilter.kind === "type") {
+          if (c.kind !== "pokemon" || c.type !== activeFilter.value)
+            return false;
+        } else if (activeFilter.kind === "category") {
+          const v = activeFilter.value;
+          if (v === "pokemon" && c.kind !== "pokemon") return false;
+          if (v === "trainer" && c.kind !== "trainer") return false;
+          if (v === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
+            return false;
+          if (v === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
+            return false;
+          if (v === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
+            return false;
+          if (
+            v === "supporter" &&
+            (c.kind !== "trainer" || c.trainerType !== "supporter")
+          )
+            return false;
+          if (
+            v === "item" &&
+            (c.kind !== "trainer" || c.trainerType !== "item")
+          )
+            return false;
+        }
+      }
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [pool, collection, search, categoryFilter, typeFilter, rarityFilter, ownedFilter]);
+  }, [pool, collection, search, activeFilter, ownedFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -655,11 +686,7 @@ function CollectionPicker({
   }, [filtered, sortMode, collection]);
 
   const filtersChanged =
-    !!search ||
-    categoryFilter !== "all" ||
-    typeFilter !== null ||
-    rarityFilter !== null ||
-    ownedFilter !== "owned"; // "owned" est le défaut
+    !!search || activeFilter !== null || ownedFilter !== "owned";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -686,9 +713,7 @@ function CollectionPicker({
             <button
               onClick={() => {
                 setSearch("");
-                setCategoryFilter("all");
-                setTypeFilter(null);
-                setRarityFilter(null);
+                setActiveFilter(null);
                 setOwnedFilter("owned");
               }}
               className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 hover:bg-white/10"
@@ -697,7 +722,7 @@ function CollectionPicker({
             </button>
           )}
         </div>
-        {/* Ligne 1 : possession */}
+        {/* Ligne 1 : possession (indépendante) */}
         <div className="flex flex-wrap gap-1.5">
           <PickerChip
             active={ownedFilter === "owned"}
@@ -715,33 +740,24 @@ function CollectionPicker({
             label="Toutes"
           />
         </div>
-        {/* Ligne 2 : catégorie (Pokémon vs Dresseur, sous-types) */}
+        {/* Ligne 2 : catégorie (1 seul actif parmi catégorie/type/rareté) */}
         <div className="flex flex-wrap gap-1.5">
-          <PickerChip
-            active={categoryFilter === "all"}
-            onClick={() => setCategoryFilter("all")}
-            label="Toutes catégories"
-          />
           {PICKER_CATEGORY_OPTIONS.map((c) => (
             <PickerChip
               key={c.id}
-              active={categoryFilter === c.id}
-              onClick={() =>
-                setCategoryFilter(categoryFilter === c.id ? "all" : c.id)
-              }
+              active={isActive("category", c.id)}
+              onClick={() => toggleFilter({ kind: "category", value: c.id })}
               label={c.label}
             />
           ))}
         </div>
-        {/* Ligne 3 : type énergétique (Pokémon uniquement) */}
+        {/* Ligne 3 : type énergétique */}
         <div className="flex flex-wrap gap-1.5">
           {PICKER_TYPE_OPTIONS.map((t) => (
             <PickerChip
               key={t.id}
-              active={typeFilter === t.id}
-              onClick={() =>
-                setTypeFilter(typeFilter === t.id ? null : t.id)
-              }
+              active={isActive("type", t.id)}
+              onClick={() => toggleFilter({ kind: "type", value: t.id })}
               label={t.label}
             />
           ))}
@@ -751,10 +767,8 @@ function CollectionPicker({
           {PICKER_RARITY_OPTIONS.map((r) => (
             <PickerChip
               key={r.id}
-              active={rarityFilter === r.id}
-              onClick={() =>
-                setRarityFilter(rarityFilter === r.id ? null : r.id)
-              }
+              active={isActive("rarity", r.id)}
+              onClick={() => toggleFilter({ kind: "rarity", value: r.id })}
               label={r.label}
             />
           ))}
