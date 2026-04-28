@@ -11,7 +11,7 @@ import type {
   TcgServerMessage,
 } from "../../shared/types";
 import { BATTLE_CONFIG, POKEMON_PACK_TYPES, TCG_GAMES } from "../../shared/types";
-import { POKEMON_BASE_SET } from "../../shared/tcg-pokemon-base";
+import { POKEMON_BASE_SET, POKEMON_BASE_SET_BY_ID } from "../../shared/tcg-pokemon-base";
 import {
   addTcgCards,
   consumeTcgFreePack,
@@ -295,8 +295,9 @@ export default class TcgServer implements Party.Server {
       this.sendError(conn, "Deck vide.");
       return;
     }
-    // Pocket : deck = 20 cartes exactement, max 2 copies par carte, pas de
-    // cartes énergie (énergies générées auto en combat).
+    // Pocket : deck = 20 cartes exactement, max 2 copies par NOM de carte
+    // (toutes raretés confondues — Pikachu-ex ◆◆◆◆ et Pikachu-ex ★ comptent
+    // ensemble), pas de cartes énergie (énergies générées auto en combat).
     const total = cards.reduce((s, c) => s + c.count, 0);
     if (total !== BATTLE_CONFIG.deckSize) {
       this.sendError(
@@ -305,19 +306,26 @@ export default class TcgServer implements Party.Server {
       );
       return;
     }
+    // Agrège par nom pour vérifier la limite Pocket "max 2 par nom".
+    const byName = new Map<string, number>();
     for (const entry of cards) {
-      if (entry.count > BATTLE_CONFIG.maxCopies) {
-        this.sendError(
-          conn,
-          `Max ${BATTLE_CONFIG.maxCopies} copies par carte (${entry.cardId} = ${entry.count}).`,
-        );
-        return;
-      }
       const owned = info.collection.get(entry.cardId) ?? 0;
       if (entry.count > owned) {
         this.sendError(
           conn,
           `Tu n'as que ${owned} ${entry.cardId} en collection.`,
+        );
+        return;
+      }
+      const meta = POKEMON_BASE_SET_BY_ID.get(entry.cardId);
+      const cardName = meta?.name ?? entry.cardId;
+      byName.set(cardName, (byName.get(cardName) ?? 0) + entry.count);
+    }
+    for (const [cardName, count] of byName) {
+      if (count > BATTLE_CONFIG.maxCopies) {
+        this.sendError(
+          conn,
+          `Max ${BATTLE_CONFIG.maxCopies} cartes "${cardName}" (toutes raretés confondues), tu en as ${count}.`,
         );
         return;
       }

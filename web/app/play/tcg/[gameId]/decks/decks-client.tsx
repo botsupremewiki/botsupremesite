@@ -220,11 +220,19 @@ export function DecksClient({
       setErrorMsg(null);
       setDraftEntries((prev) => {
         const next = new Map(prev);
+        // Pocket : max MAX_COPIES (2) par NOM de carte (toutes raretés
+        // confondues). Pikachu-ex ◆◆◆◆ + Pikachu-ex ★ = max 2 combinés.
+        let totalForName = 0;
+        for (const [cId, count] of next) {
+          const c = POKEMON_BASE_SET_BY_ID.get(cId);
+          if (c?.name === card.name) totalForName += count;
+        }
+        if (totalForName >= MAX_COPIES) return prev;
+        // On doit aussi posséder une copie supplémentaire de cette carte
+        // précise (rareté + numéro).
         const current = next.get(card.id) ?? 0;
         const owned = collection.get(card.id) ?? 0;
-        // Pocket : max MAX_COPIES (2) par carte, capé par les copies possédées.
-        const cap = Math.min(owned, MAX_COPIES);
-        if (current >= cap) return prev;
+        if (current >= owned) return prev;
         const total = Array.from(next.values()).reduce((s, n) => s + n, 0);
         if (total >= DECK_TARGET) return prev;
         next.set(card.id, current + 1);
@@ -651,7 +659,17 @@ function CollectionPicker({
         <PreviewWithAddModal
           card={previewCard}
           owned={collection.get(previewCard.id) ?? 0}
-          inDeck={draftEntries.get(previewCard.id) ?? 0}
+          inDeckThisCard={draftEntries.get(previewCard.id) ?? 0}
+          inDeckSameName={(() => {
+            // Compte le total dans le deck partageant le même nom (Pocket :
+            // limite par nom, toutes raretés confondues).
+            let n = 0;
+            for (const [cId, count] of draftEntries) {
+              const c = POKEMON_BASE_SET_BY_ID.get(cId);
+              if (c?.name === previewCard.name) n += count;
+            }
+            return n;
+          })()}
           maxCopies={MAX_COPIES}
           onAdd={() => {
             onAdd(previewCard);
@@ -669,20 +687,25 @@ function CollectionPicker({
 function PreviewWithAddModal({
   card,
   owned,
-  inDeck,
+  inDeckThisCard,
+  inDeckSameName,
   maxCopies,
   onAdd,
   onClose,
 }: {
   card: PokemonCardData;
   owned: number;
-  inDeck: number;
+  inDeckThisCard: number;
+  inDeckSameName: number;
   maxCopies: number;
   onAdd: () => void;
   onClose: () => void;
 }) {
-  const cap = Math.min(owned, maxCopies);
-  const canAdd = inDeck < cap;
+  // Pocket : la limite est par NOM de carte, pas par cardId. Tu peux mettre
+  // 1 Pikachu-ex ◆◆◆◆ + 1 Pikachu-ex ★ (= 2 par nom), pas 2+2=4.
+  const reachedNameCap = inDeckSameName >= maxCopies;
+  const noMoreOwned = inDeckThisCard >= owned;
+  const canAdd = !reachedNameCap && !noMoreOwned;
   return (
     <div
       onClick={onClose}
@@ -711,18 +734,22 @@ function PreviewWithAddModal({
           <span className="font-semibold text-zinc-100">{card.name}</span>
           <span className="text-xs text-zinc-500">
             · {owned} possédée{owned > 1 ? "s" : ""}
-            {inDeck > 0 ? ` · ${inDeck} dans le deck` : ""}
+            {inDeckSameName > 0
+              ? ` · ${inDeckSameName} "${card.name}" dans le deck`
+              : ""}
           </span>
           <button
             onClick={onAdd}
             disabled={!canAdd}
             className="rounded-md bg-emerald-500 px-3 py-1 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {!canAdd
-              ? owned === 0
-                ? "Pas en collection"
-                : `Max ${maxCopies} copies`
-              : `+ Ajouter au deck (${inDeck}/${cap})`}
+            {owned === 0
+              ? "Pas en collection"
+              : reachedNameCap
+                ? `Max ${maxCopies} "${card.name}" atteint`
+                : noMoreOwned
+                  ? "Plus de copies de cette version"
+                  : `+ Ajouter au deck (${inDeckSameName}/${maxCopies})`}
           </button>
         </div>
       </div>
