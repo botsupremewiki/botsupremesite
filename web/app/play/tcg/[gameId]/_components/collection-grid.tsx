@@ -10,6 +10,15 @@ import { CardSlot, CardZoomModal, RARITY_TIER } from "./card-visuals";
 
 type CollectionFilter = "all" | "owned" | "missing" | "dupes";
 type CollectionSort = "number" | "name" | "rarity" | "count";
+type CategoryFilter =
+  | "all"
+  | "pokemon"
+  | "trainer"
+  | "supporter"
+  | "item"
+  | "basic"
+  | "stage1"
+  | "stage2";
 
 const TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "fire", label: "🔥 Feu" },
@@ -22,6 +31,16 @@ const TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "metal", label: "⚙️ Métal" },
   { id: "dragon", label: "🐉 Dragon" },
   { id: "colorless", label: "⭐ Incolore" },
+];
+
+const CATEGORY_OPTIONS: { id: CategoryFilter; label: string }[] = [
+  { id: "pokemon", label: "🐾 Pokémon" },
+  { id: "basic", label: "↳ De base" },
+  { id: "stage1", label: "↳ Niveau 1" },
+  { id: "stage2", label: "↳ Niveau 2" },
+  { id: "trainer", label: "🧙 Dresseurs" },
+  { id: "supporter", label: "↳ Supporter" },
+  { id: "item", label: "↳ Objet" },
 ];
 
 const RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
@@ -43,6 +62,7 @@ export function CollectionGrid({
   collection: Map<string, number>;
 }) {
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
   const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
   const [ownedFilter, setOwnedFilter] = useState<CollectionFilter>("all");
@@ -57,12 +77,25 @@ export function CollectionGrid({
       if (ownedFilter === "missing" && count > 0) return false;
       if (ownedFilter === "dupes" && count < 2) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
+      // Catégorie : pokemon en gros / stages spécifiques / trainer / sous-types
+      if (categoryFilter === "pokemon" && c.kind !== "pokemon") return false;
+      if (categoryFilter === "trainer" && c.kind !== "trainer") return false;
+      if (categoryFilter === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
+        return false;
+      if (categoryFilter === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
+        return false;
+      if (categoryFilter === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
+        return false;
+      if (categoryFilter === "supporter" && (c.kind !== "trainer" || c.trainerType !== "supporter"))
+        return false;
+      if (categoryFilter === "item" && (c.kind !== "trainer" || c.trainerType !== "item"))
+        return false;
       if (typeFilter && (c.kind !== "pokemon" || c.type !== typeFilter))
         return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [pool, collection, search, typeFilter, rarityFilter, ownedFilter]);
+  }, [pool, collection, search, categoryFilter, typeFilter, rarityFilter, ownedFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -91,6 +124,7 @@ export function CollectionGrid({
 
   const filtersActive =
     !!search ||
+    categoryFilter !== "all" ||
     typeFilter !== null ||
     rarityFilter !== null ||
     ownedFilter !== "all";
@@ -120,6 +154,7 @@ export function CollectionGrid({
             <button
               onClick={() => {
                 setSearch("");
+                setCategoryFilter("all");
                 setTypeFilter(null);
                 setRarityFilter(null);
                 setOwnedFilter("all");
@@ -130,6 +165,7 @@ export function CollectionGrid({
             </button>
           )}
         </div>
+        {/* Ligne 1 : possession */}
         <div className="flex flex-wrap gap-1.5">
           <FilterChip
             active={ownedFilter === "all"}
@@ -151,7 +187,27 @@ export function CollectionGrid({
             onClick={() => setOwnedFilter("dupes")}
             label="Doublons"
           />
-          <span className="mx-1 w-px self-stretch bg-white/10" />
+        </div>
+        {/* Ligne 2 : catégorie (Pokémon × stages / Dresseurs × sous-types) */}
+        <div className="flex flex-wrap gap-1.5">
+          <FilterChip
+            active={categoryFilter === "all"}
+            onClick={() => setCategoryFilter("all")}
+            label="Toutes catégories"
+          />
+          {CATEGORY_OPTIONS.map((c) => (
+            <FilterChip
+              key={c.id}
+              active={categoryFilter === c.id}
+              onClick={() =>
+                setCategoryFilter(categoryFilter === c.id ? "all" : c.id)
+              }
+              label={c.label}
+            />
+          ))}
+        </div>
+        {/* Ligne 3 : type énergétique (Pokémon uniquement) */}
+        <div className="flex flex-wrap gap-1.5">
           {TYPE_OPTIONS.map((t) => (
             <FilterChip
               key={t.id}
@@ -162,7 +218,9 @@ export function CollectionGrid({
               label={t.label}
             />
           ))}
-          <span className="mx-1 w-px self-stretch bg-white/10" />
+        </div>
+        {/* Ligne 4 : rareté */}
+        <div className="flex flex-wrap gap-1.5">
           {RARITY_OPTIONS.map((r) => (
             <FilterChip
               key={r.id}
