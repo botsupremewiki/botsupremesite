@@ -1311,6 +1311,26 @@ export type BattleServerMessage =
   | { type: "battle-state"; state: BattleState }
   | { type: "battle-error"; message: string }
   | { type: "battle-quest-reward"; botWins: number; granted: boolean }
+  // Animation pile/face. Le serveur l'émet AVANT le `battle-state` qui
+  // contient le résultat — le client anime puis applique l'état dans la
+  // foulée. `index/total` permet d'enchaîner plusieurs lancers (ex Ondine).
+  | {
+      type: "battle-coin-flip";
+      id: string;
+      label: string;
+      result: "heads" | "tails";
+      index?: number;
+      total?: number;
+      followUp?: string;
+    }
+  // Reveal de cartes au joueur qui en est à l'origine (Pokédex = 1 carte
+  // top deck, Scrute Main = main de l'adversaire). Privé : envoyé seulement
+  // au siège qui a joué la carte.
+  | {
+      type: "battle-trainer-reveal";
+      trainerName: string;
+      cardIds: string[];
+    }
   | { type: "chat"; message: ChatMessage };
 
 // ─── Battle lobby (matchmaking) ────────────────────────────────────────────

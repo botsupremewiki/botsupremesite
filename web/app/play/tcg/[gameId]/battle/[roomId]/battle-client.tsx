@@ -25,6 +25,15 @@ import { CardFace, CardZoomModal } from "../../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
+type CoinFlipEvent = {
+  id: string;
+  label: string;
+  result: "heads" | "tails";
+  index?: number;
+  total?: number;
+  followUp?: string;
+};
+
 const TYPE_BG: Record<PokemonEnergyType, string> = {
   fire: "from-orange-500/30 to-red-700/40",
   water: "from-blue-400/30 to-blue-700/40",
@@ -64,6 +73,15 @@ export function BattleClient({
   // Chat propre à la table de combat — éphémère (la room PartyKit
   // hiberne quand vide). Exposé en "proximity" via le sidebar global.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // File d'attente d'animations pile/face. Le serveur les émet AVANT le
+  // battle-state qui contient le résultat — on les anime à la suite, le
+  // state suit naturellement.
+  const [coinQueue, setCoinQueue] = useState<CoinFlipEvent[]>([]);
+  // Modal de révélation Dresseur (Pokédex, Scrute Main).
+  const [trainerReveal, setTrainerReveal] = useState<{
+    trainerName: string;
+    cardIds: string[];
+  } | null>(null);
 
   useEffect(() => {
     if (!profile) {
@@ -110,6 +128,25 @@ export function BattleClient({
           break;
         case "battle-quest-reward":
           setQuestToast({ botWins: msg.botWins, granted: msg.granted });
+          break;
+        case "battle-coin-flip":
+          setCoinQueue((prev) => [
+            ...prev,
+            {
+              id: msg.id,
+              label: msg.label,
+              result: msg.result,
+              index: msg.index,
+              total: msg.total,
+              followUp: msg.followUp,
+            },
+          ]);
+          break;
+        case "battle-trainer-reveal":
+          setTrainerReveal({
+            trainerName: msg.trainerName,
+            cardIds: msg.cardIds,
+          });
           break;
         case "chat":
           setChatMessages((prev) => [...prev.slice(-49), msg.message]);
@@ -279,6 +316,24 @@ export function BattleClient({
                 ✕
               </button>
             </div>
+          )}
+
+          {/* Animation pile/face : on consomme la queue un par un. */}
+          <CoinFlipQueue
+            queue={coinQueue}
+            onConsume={(id) =>
+              setCoinQueue((prev) => prev.filter((e) => e.id !== id))
+            }
+          />
+
+          {/* Modal de révélation (Pokédex, Scrute Main). */}
+          {trainerReveal && (
+            <TrainerRevealModal
+              trainerName={trainerReveal.trainerName}
+              cardIds={trainerReveal.cardIds}
+              cardById={cardById}
+              onClose={() => setTrainerReveal(null)}
+            />
           )}
         </main>
       )}
@@ -670,85 +725,38 @@ function RecapSidebar({
   );
 }
 
-/** Décore les lignes de log avec un emoji + couleur selon le contenu, et
- *  filtre les messages trop verbeux. Renverse l'ordre pour que les plus
- *  récents soient en haut (la flex-col-reverse fait le reste). */
+/** Décore les lignes de log : le serveur ne push plus que 3 types de lignes
+ *  (attaques, utilisation de cartes Dresseur, fin de partie). On garde
+ *  quand même quelques filtres défensifs pour les logs résiduels en
+ *  mémoire venant d'une session pré-déploiement. */
 function decorateLog(
   log: string[],
 ): { emoji: string; text: string; color: string }[] {
   return log
     .map((line) => {
-      // Filtres : on retire les annonces redondantes / trop bavardes.
-      if (/se prépare au combat/i.test(line)) return null;
-      if (/Choisissez votre Pokémon Actif/i.test(line)) return null;
-
-      // Tour : minimal, juste un séparateur visuel.
-      const turnMatch = line.match(/^Tour (\d+) — (.*)$/);
-      if (turnMatch) {
-        return {
-          emoji: "⏱️",
-          text: `Tour ${turnMatch[1]} · ${turnMatch[2]}`,
-          color: "text-zinc-500",
-        };
-      }
-      // KO marqué.
-      if (line.includes("est mis K.O.") || line.includes("KO")) {
-        if (/marque \d+ KO/.test(line)) {
-          return { emoji: "🎯", text: line, color: "text-amber-300" };
-        }
-        return { emoji: "💥", text: line, color: "text-rose-300" };
-      }
-      // Énergie attachée.
-      if (line.includes("attache ⚡") || /Énergie/i.test(line)) {
-        return { emoji: "⚡", text: line, color: "text-yellow-200" };
-      }
-      // Attaque (mention "attaque avec").
-      if (/attaque avec/i.test(line)) {
-        return { emoji: "⚔️", text: line, color: "text-rose-200" };
-      }
-      // Retraite.
-      if (/bat en retraite/i.test(line)) {
-        return { emoji: "🔄", text: line, color: "text-sky-200" };
-      }
-      // Promotion / setup placement.
-      if (/promeut|placé son Actif/i.test(line)) {
-        return { emoji: "✨", text: line, color: "text-emerald-200" };
-      }
-      // Évolution.
-      if (/évolue/i.test(line)) {
-        return { emoji: "🌱", text: line, color: "text-emerald-200" };
-      }
-      // Pile/face.
-      if (/Pile|Face/.test(line)) {
-        return { emoji: "🪙", text: line, color: "text-zinc-300" };
-      }
-      // Statuts.
-      if (/Empoisonné/i.test(line)) {
-        return { emoji: "☠️", text: line, color: "text-violet-200" };
-      }
-      if (/Endormi/i.test(line)) {
-        return { emoji: "💤", text: line, color: "text-indigo-200" };
-      }
-      if (/Brûlé/i.test(line)) {
-        return { emoji: "🔥", text: line, color: "text-orange-200" };
-      }
-      if (/Paralysé/i.test(line)) {
-        return { emoji: "⚡", text: line, color: "text-yellow-200" };
-      }
-      // Fin de partie.
+      // Fin de partie (préfixée 🏆 côté serveur).
       if (/gagne|abandonne|deck-out/i.test(line)) {
         return { emoji: "🏆", text: line, color: "text-amber-200 font-bold" };
       }
-      // Pile/Face : qui commence.
-      if (/commence/i.test(line)) {
-        return { emoji: "🚦", text: line, color: "text-zinc-200" };
+      // Attaque : « Pikachu utilise Éclair → 40 dégâts à Electhor (super
+      // efficace !) → K.O. ! ». Détecté par la présence de « → … dégâts ».
+      if (/→\s*\d+\s*dégâts/i.test(line)) {
+        const isKo = /K\.O\./.test(line);
+        const isWeakness = /super efficace/i.test(line);
+        return {
+          emoji: isKo ? "💥" : "⚔️",
+          text: line,
+          color: isWeakness
+            ? "text-amber-200 font-semibold"
+            : "text-rose-200",
+        };
       }
-      // Mulligan.
-      if (/mulligan/i.test(line)) {
-        return { emoji: "🔁", text: line, color: "text-zinc-500" };
+      // Carte Dresseur : « rimkidinki utilise Potion. »
+      if (/\butilise\b/i.test(line)) {
+        return { emoji: "🃏", text: line, color: "text-sky-200" };
       }
-      // Default.
-      return { emoji: "·", text: line, color: "text-zinc-300" };
+      // Logs résiduels / non reconnus : visibles mais discrets.
+      return { emoji: "·", text: line, color: "text-zinc-500" };
     })
     .filter(
       (e): e is { emoji: string; text: string; color: string } => e !== null,
@@ -1361,13 +1369,19 @@ type HandAction =
   | { kind: "playable"; label: string; handler: () => void }
   | { kind: "blocked"; reason: string };
 
-// Cartes Dresseur supportées par le moteur (subset starter). Les autres
-// trainers tombent en "blocked: pas encore implémenté".
-const TRAINER_NEEDS_TARGET = new Set<string>(["Potion"]);
+// Cartes Dresseur supportées par le moteur. La résolution exacte des effets
+// vit côté serveur (handlePlayTrainer dans party/src/battle.ts) — ces sets
+// servent juste au client pour décider du flow d'UI (target picker ou pas).
+const TRAINER_NEEDS_TARGET = new Set<string>(["Potion", "Erika", "Pierre"]);
 const TRAINER_NO_TARGET = new Set<string>([
   "Poké Ball",
   "Recherches Professorales",
   "Vitesse +",
+  "Pokédex",
+  "Scrute Main",
+  "Carton Rouge",
+  "Giovanni",
+  "Auguste",
 ]);
 
 function SelfHand({
@@ -1648,6 +1662,205 @@ function HandCard({
         </div>
       )}
     </motion.div>
+  );
+}
+
+/** Consomme une file d'évènements pile/face, en jouant l'animation un par
+ *  un. Tant que la queue n'est pas vide, on rend l'overlay pour le 1er
+ *  évènement. Quand l'animation finit, le parent retire l'évènement. */
+function CoinFlipQueue({
+  queue,
+  onConsume,
+}: {
+  queue: CoinFlipEvent[];
+  onConsume: (id: string) => void;
+}) {
+  const head = queue[0];
+  if (!head) return null;
+  return (
+    <CoinFlipOverlay
+      key={head.id}
+      event={head}
+      onComplete={() => onConsume(head.id)}
+    />
+  );
+}
+
+/** Affiche une pièce qui se retourne en 3D et atterrit sur PILE ou FACE,
+ *  puis annonce le résultat (« FACE ! » + followUp en gros). Auto-dismiss
+ *  après ~1.8s. */
+function CoinFlipOverlay({
+  event,
+  onComplete,
+}: {
+  event: CoinFlipEvent;
+  onComplete: () => void;
+}) {
+  // Phase 0 → 0.9s : la pièce tourne. Le `result` détermine où elle s'arrête
+  // (heads = 720° = face visible, tails = 540° = pile visible).
+  const targetRotation = event.result === "heads" ? 720 : 540;
+  // Total ~1.8s : 0.9s spin + 0.9s annonce.
+  const TOTAL_MS = 1800;
+
+  useEffect(() => {
+    const t = window.setTimeout(onComplete, TOTAL_MS);
+    return () => window.clearTimeout(t);
+  }, [event.id, onComplete]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-6 bg-black/60 backdrop-blur-sm"
+    >
+      {/* Label en haut (« Qui commence ? », « Bulbizarre est Confus », …) */}
+      <div className="text-xs uppercase tracking-[0.3em] text-zinc-300">
+        {event.label}
+        {event.total && event.total > 1 && (
+          <span className="ml-2 text-zinc-500">
+            (lancer {event.index ?? 1}/{event.total})
+          </span>
+        )}
+      </div>
+
+      {/* Pièce en 3D — perspective + rotateY animé */}
+      <div style={{ perspective: "800px" }}>
+        <motion.div
+          initial={{ rotateY: 0 }}
+          animate={{ rotateY: targetRotation }}
+          transition={{ duration: 0.9, ease: [0.4, 0, 0.2, 1] }}
+          style={{
+            transformStyle: "preserve-3d",
+            position: "relative",
+            width: 120,
+            height: 120,
+          }}
+        >
+          {/* Face « FACE » (heads) — visible à rotateY 0/720 */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backfaceVisibility: "hidden",
+            }}
+            className="flex items-center justify-center rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 text-3xl font-black text-amber-950 shadow-2xl ring-4 ring-amber-200/40"
+          >
+            FACE
+          </div>
+          {/* Face « PILE » (tails) — visible à rotateY 180/540 */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backfaceVisibility: "hidden",
+              transform: "rotateY(180deg)",
+            }}
+            className="flex items-center justify-center rounded-full bg-gradient-to-br from-zinc-300 via-zinc-400 to-zinc-600 text-3xl font-black text-zinc-900 shadow-2xl ring-4 ring-zinc-200/40"
+          >
+            PILE
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Annonce du résultat (PILE ! / FACE !) après le spin */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.9, duration: 0.3 }}
+        className={`text-5xl font-black tracking-wider drop-shadow-lg ${
+          event.result === "heads" ? "text-amber-300" : "text-zinc-200"
+        }`}
+      >
+        {event.result === "heads" ? "FACE !" : "PILE !"}
+      </motion.div>
+
+      {/* followUp — l'action qui en découle (« rimkidinki commence ! ») */}
+      {event.followUp && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.15, duration: 0.3 }}
+          className="text-lg font-semibold text-zinc-100"
+        >
+          {event.followUp}
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+/** Modal de révélation Dresseur. Pokédex = 1 carte (top deck), Scrute Main =
+ *  N cartes (main de l'adversaire). Click outside / croix = ferme. */
+function TrainerRevealModal({
+  trainerName,
+  cardIds,
+  cardById,
+  onClose,
+}: {
+  trainerName: string;
+  cardIds: string[];
+  cardById: Map<string, PokemonCardData>;
+  onClose: () => void;
+}) {
+  const subtitle =
+    trainerName === "Pokédex"
+      ? "Première carte du dessus de ton deck :"
+      : trainerName === "Scrute Main"
+        ? "Main de l'adversaire :"
+        : "Carte révélée :";
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex max-h-[88vh] flex-col items-center gap-3 rounded-xl border border-amber-400/40 bg-zinc-950/95 p-5 shadow-2xl"
+      >
+        <div className="text-xs uppercase tracking-widest text-amber-300">
+          🃏 {trainerName}
+        </div>
+        <div className="text-sm text-zinc-300">{subtitle}</div>
+        <div className="flex max-w-[80vw] flex-wrap items-center justify-center gap-3 overflow-y-auto pt-1">
+          {cardIds.length === 0 ? (
+            <div className="rounded-md border border-dashed border-white/10 px-6 py-4 text-sm text-zinc-500">
+              (aucune carte)
+            </div>
+          ) : (
+            cardIds.map((cId, i) => {
+              const data = cardById.get(cId);
+              if (!data) return null;
+              return (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  key={`${i}-${cId}`}
+                  src={data.image}
+                  alt={data.name}
+                  title={data.name}
+                  className="h-56 w-auto rounded-lg object-contain shadow-lg ring-1 ring-white/10"
+                />
+              );
+            })
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-2 rounded-md bg-amber-500 px-4 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-400"
+        >
+          OK
+        </button>
+        <button
+          onClick={onClose}
+          aria-label="Fermer"
+          className="absolute -right-3 -top-3 rounded-full bg-zinc-900 p-2 text-zinc-200 shadow-lg ring-1 ring-white/20 hover:bg-zinc-800"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
   );
 }
 

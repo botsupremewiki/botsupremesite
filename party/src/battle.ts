@@ -70,6 +70,9 @@ type SeatState = {
   usedSupporterThisTurn: boolean;
   // Réduction du coût de retraite ce tour (Vitesse +). Reset à end-turn.
   retreatDiscount: number;
+  // Bonus de dégâts ajouté à toutes les attaques ce tour (Giovanni = +10,
+  // Auguste = +30 conditionnel, etc.). Reset à end-turn.
+  attackDamageBonus: number;
   mustPromoteActive: boolean;
 };
 
@@ -188,6 +191,7 @@ export default class BattleServer implements Party.Server {
         evolvedThisTurn: new Set(),
         usedSupporterThisTurn: false,
         retreatDiscount: 0,
+        attackDamageBonus: 0,
         mustPromoteActive: false,
       };
       this.connToSeat.set(conn.id, seatId);
@@ -195,11 +199,9 @@ export default class BattleServer implements Party.Server {
       // joueurs forcément même jeu via le matchmaking).
       if (!this.gameId) this.gameId = deckRow.game_id;
 
-      if (mulligans > 0) {
-        this.pushLog(
-          `${username} mulligan ×${mulligans} (aucun Pokémon de Base au départ).`,
-        );
-      }
+      // Mulligans : log volontairement omis (le journal de combat reste
+      // minimaliste — uniquement les cartes utilisées).
+      void mulligans;
 
       // En mode bot, dès que p1 est seated on remplit p2 avec le Bot Suprême
       // (mirror du même deck pour un match équilibré).
@@ -222,7 +224,6 @@ export default class BattleServer implements Party.Server {
     // Si les 2 sièges sont remplis et qu'on attendait, on passe en setup.
     if (this.phase === "waiting" && this.seats.p1 && this.seats.p2) {
       this.phase = "setup";
-      this.pushLog("Les deux joueurs sont là. Choisissez votre Pokémon Actif.");
     }
     this.broadcastState();
   }
@@ -256,12 +257,11 @@ export default class BattleServer implements Party.Server {
       evolvedThisTurn: new Set(),
       usedSupporterThisTurn: false,
       retreatDiscount: 0,
+      attackDamageBonus: 0,
       mustPromoteActive: false,
     };
-    if (mulligans > 0) {
-      this.pushLog(`${BOT_USERNAME} mulligan ×${mulligans}.`);
-    }
-    this.pushLog(`${BOT_USERNAME} se prépare au combat.`);
+    // Logs mulligan + setup volontairement omis.
+    void mulligans;
   }
 
   /** Décide si le bot doit agir maintenant et planifie son action avec
@@ -566,19 +566,41 @@ export default class BattleServer implements Party.Server {
       return;
     }
     seat.hasSetup = true;
-    this.pushLog(`${seat.username} a placé son Actif et son Banc.`);
     this.broadcastState();
 
     // Si les deux ont confirmé → coin flip et début de la partie.
     if (this.seats.p1?.hasSetup && this.seats.p2?.hasSetup) {
-      const first: BattleSeatId = Math.random() < 0.5 ? "p1" : "p2";
+      const heads = Math.random() < 0.5;
+      const first: BattleSeatId = heads ? "p1" : "p2";
       this.activeSeat = first;
       this.phase = "playing";
       this.turnNumber = 1;
       const name = this.seats[first]!.username;
-      this.pushLog(`Pile/Face : ${name} commence !`);
+      // Animation pile/face → puis "X commence !" affiché en gros sur le client.
+      this.emitCoinFlip("Qui commence ?", heads, `${name} commence !`);
       this.broadcastState();
     }
+  }
+
+  /** Diffuse un évènement coin-flip (Pile/Face) à tous les joueurs : le
+   *  client affiche une animation de pièce qui retombe sur PILE ou FACE,
+   *  puis le `followUp` (ex « rimkidinki commence ! »). */
+  private emitCoinFlip(
+    label: string,
+    heads: boolean,
+    followUp?: string,
+    index?: number,
+    total?: number,
+  ) {
+    this.broadcast({
+      type: "battle-coin-flip",
+      id: crypto.randomUUID(),
+      label,
+      result: heads ? "heads" : "tails",
+      index,
+      total,
+      followUp,
+    });
   }
 
   // ─────────────── playing-phase actions ───────────────
@@ -624,15 +646,11 @@ export default class BattleServer implements Party.Server {
       return;
     }
     const energyType = seat.pendingEnergy;
-    const targetData = getCard(target.cardId);
     target.attachedEnergies.push(energyType);
     seat.pendingEnergy = null;
     seat.energyAttachedThisTurn = true;
-    this.pushLog(
-      `${seat.username} attache ⚡${energyType} à ${
-        targetData?.kind === "pokemon" ? targetData.name : "Pokémon"
-      }.`,
-    );
+    // Pas de log : l'attache est purement visuelle (énergie posée sous le
+    // Pokémon).
     this.broadcastState();
   }
 
@@ -689,14 +707,14 @@ export default class BattleServer implements Party.Server {
       return;
     }
     // Évolution : on remplace le cardId, on conserve dégâts + énergies,
-    // on retire les conditions de statut (règle officielle).
+    // on retire les conditions de statut (règle officielle). Pas de log :
+    // l'évolution est visible directement sur le terrain (la carte change
+    // d'image).
     seat.hand.splice(handIndex, 1);
     target.cardId = handCard.cardId;
     target.statuses = [];
     seat.evolvedThisTurn.add(target.uid);
-    this.pushLog(
-      `${seat.username} évolue ${targetData.name} en ${evoData.name}.`,
-    );
+    void targetData;
     this.broadcastState();
   }
 
@@ -745,9 +763,8 @@ export default class BattleServer implements Party.Server {
     seat.bench.splice(benchIndex, 1);
     seat.bench.push(old);
     seat.hasRetreatedThisTurn = true;
-    this.pushLog(
-      `${seat.username} bat en retraite (${cost} Énergie(s) défaussée(s)).`,
-    );
+    // Retraite : visuellement le swap Actif↔Banc est explicite, pas besoin
+    // d'un log.
     this.broadcastState();
   }
 
@@ -789,16 +806,14 @@ export default class BattleServer implements Party.Server {
     // 30 dégâts à soi (pas de faiblesse/résistance pour ces dégâts).
     if (seat.active.statuses.includes("confused")) {
       const heads = this.coinFlip();
-      this.pushLog(
-        `${seat.username} (${attackerData.name}) Confus → pile/face : ${
-          heads ? "Face" : "Pile"
-        }.`,
+      // Animation pile/face côté client (pas de log texte).
+      this.emitCoinFlip(
+        `${attackerData.name} est Confus`,
+        heads,
+        heads ? `${attackerData.name} attaque normalement.` : `${attackerData.name} se rate (30 dégâts) !`,
       );
       if (!heads) {
         seat.active.damage += 30;
-        this.pushLog(
-          `💢 ${attackerData.name} se fait 30 dégâts (Confus).`,
-        );
         if (seat.active.damage >= attackerData.hp) {
           this.knockOut(seatId === "p1" ? "p2" : "p1", seatId);
         }
@@ -818,26 +833,33 @@ export default class BattleServer implements Party.Server {
     if (!defenderData || defenderData.kind !== "pokemon") return;
 
     let damage = attack.damage ?? 0;
+    // Bonus Giovanni / Auguste / etc. — +N dégâts ce tour si actif.
+    if (damage > 0) damage += seat.attackDamageBonus;
+
     // Pocket : weakness = +20 (pas ×2). Pour MVP on simplifie en +20 fixe
     // si type matche. Pas de système de résistance dans Pocket.
-    if (
+    const isWeakness =
       damage > 0 &&
-      defenderData.weakness &&
-      defenderData.weakness === attackerData.type
-    ) {
-      damage += 20;
-    }
+      !!defenderData.weakness &&
+      defenderData.weakness === attackerData.type;
+    if (isWeakness) damage += 20;
 
     opp.active.damage += damage;
 
-    this.pushLog(
-      `${seat.username} (${attackerData.name}) attaque avec ${attack.name}` +
-        (damage > 0 ? ` — ${damage} dégâts` : "") +
-        (attack.text ? ` · ${attack.text}` : ""),
-    );
+    // Format du log style jeu Pokémon : « Pikachu utilise Éclair → 40 dégâts
+    // à Electhor (super efficace !) → K.O. ! ». Une seule ligne, sans nom
+    // de joueur (le log est commun et le côté est lisible visuellement).
+    const willKo = opp.active.damage >= defenderData.hp;
+    const parts: string[] = [
+      `${attackerData.name} utilise ${attack.name}`,
+    ];
+    if (damage > 0) parts.push(`→ ${damage} dégâts à ${defenderData.name}`);
+    if (isWeakness) parts.push("(super efficace !)");
+    if (willKo) parts.push("→ K.O. !");
+    this.pushLog(parts.join(" "));
 
-    // Vérif KO sur le défenseur.
-    if (opp.active && opp.active.damage >= defenderData.hp) {
+    // Vérif KO sur le défenseur — knockOut ne pousse plus de log à part.
+    if (willKo) {
       this.knockOut(seatId, oppId);
     }
 
@@ -866,22 +888,32 @@ export default class BattleServer implements Party.Server {
     seat.active = promote;
     seat.bench.splice(benchIndex, 1);
     seat.mustPromoteActive = false;
-    const data = getCard(promote.cardId);
-    this.pushLog(
-      `${seat.username} promeut ${data?.kind === "pokemon" ? data.name : "?"} comme nouvel Actif.`,
-    );
+    // Pas de log : la promotion est visible (le banc se vide d'une carte
+    // qui apparaît en zone Actif).
     this.broadcastState();
   }
 
-  /** Joue une carte Dresseur (subset starter implémenté). On switch sur le
-   *  nom français de la carte plutôt que sur l'id, parce que la même carte
-   *  apparaît dans plusieurs sets (P-A vs A1) avec des ids différents.
-   *  Cartes supportées :
-   *    • Potion              — soigne 20 dmg sur targetUid
-   *    • Poké Ball           — pioche un Pokémon de Base au hasard
-   *    • Recherches Professorales (Supporter) — pioche 2 cartes
-   *    • Vitesse +           — -1 retreatCost ce tour
-   *  Les autres cartes Dresseur sont rejetées avec un message clair. */
+  /** Joue une carte Dresseur. On switch sur le nom français de la carte
+   *  plutôt que sur l'id, parce que la même carte apparaît dans plusieurs
+   *  sets (P-A vs A1, ou différentes raretés) avec des ids différents.
+   *
+   *  Cartes Item / Outil :
+   *    • Potion          — soigne 20 dmg sur targetUid
+   *    • Poké Ball       — pioche un Pokémon de Base au hasard
+   *    • Vitesse +       — −1 retreatCost ce tour
+   *    • Pokédex         — révèle la 1ère carte du dessus du deck
+   *    • Scrute Main     — révèle la main de l'adversaire
+   *    • Carton Rouge    — l'adversaire mélange sa main dans son deck et pioche 3
+   *
+   *  Cartes Supporter (1 par tour) :
+   *    • Recherches Professorales — pioche 2 cartes
+   *    • Giovanni        — toutes vos attaques font +10 dégâts ce tour
+   *    • Erika           — soigne 50 dmg sur un Pokémon Plante (target)
+   *    • Pierre          — attache une Énergie Combat à Grolem ou Onix (target)
+   *    • Auguste         — vos Feunard / Galopa / Magmar font +30 dégâts ce tour
+   *
+   *  Cartes non implémentées (mécaniques complexes) : Koga, Major Bob, Morgane,
+   *  Ondine, Vieil Ambre / Fossile Dôme / Fossile Nautile. */
   private handlePlayTrainer(
     seatId: BattleSeatId,
     handIndex: number,
@@ -908,6 +940,7 @@ export default class BattleServer implements Party.Server {
     }
 
     const playedName = card.name;
+    const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
     let consumed = false;
 
     switch (playedName) {
@@ -925,17 +958,11 @@ export default class BattleServer implements Party.Server {
           this.sendErrorToSeat(seatId, "Ce Pokémon n'est pas blessé.");
           return;
         }
-        const healed = Math.min(20, target.damage);
-        target.damage -= healed;
-        const tName = getCardName(target.cardId);
-        this.pushLog(
-          `${seat.username} utilise Potion sur ${tName} (+${healed} PV).`,
-        );
+        target.damage -= Math.min(20, target.damage);
         consumed = true;
         break;
       }
       case "Poké Ball": {
-        // Cherche un Pokémon de Base au hasard dans le deck restant.
         const basics: number[] = [];
         for (let i = 0; i < seat.deck.length; i++) {
           if (isBasicPokemon(seat.deck[i].cardId)) basics.push(i);
@@ -950,47 +977,153 @@ export default class BattleServer implements Party.Server {
         const pickIdx = basics[Math.floor(Math.random() * basics.length)];
         const picked = seat.deck.splice(pickIdx, 1)[0];
         seat.hand.push(picked);
-        const pName = getCardName(picked.cardId);
-        this.pushLog(
-          `${seat.username} utilise Poké Ball → pioche ${pName}.`,
-        );
         consumed = true;
         break;
       }
       case "Recherches Professorales": {
-        // Pioche 2 cartes (deck-out = défaite si plus assez).
-        const drawn: string[] = [];
+        let drew = 0;
         for (let n = 0; n < 2; n++) {
-          const card = seat.deck.pop();
-          if (!card) {
-            // Pas assez de cartes : on continue à appliquer l'effet partiel.
-            break;
-          }
-          seat.hand.push(card);
-          drawn.push(getCardName(card.cardId));
+          const top = seat.deck.pop();
+          if (!top) break;
+          seat.hand.push(top);
+          drew++;
         }
-        if (drawn.length === 0) {
+        if (drew === 0) {
           this.sendErrorToSeat(seatId, "Plus de cartes à piocher.");
           return;
         }
-        this.pushLog(
-          `${seat.username} utilise Recherches Professorales (+${drawn.length} cartes).`,
-        );
         consumed = true;
         break;
       }
       case "Vitesse +": {
         seat.retreatDiscount += 1;
-        this.pushLog(
-          `${seat.username} utilise Vitesse + (-1 Énergie de retraite ce tour).`,
-        );
+        consumed = true;
+        break;
+      }
+      case "Pokédex": {
+        // Révèle la 1ère carte du dessus du deck (le joueur peut décider
+        // d'enchaîner — Pocket : pas de réordonnancement).
+        const top = seat.deck[seat.deck.length - 1];
+        if (!top) {
+          this.sendErrorToSeat(seatId, "Plus de cartes à regarder.");
+          return;
+        }
+        if (seat.conn) {
+          this.sendTo(seat.conn, {
+            type: "battle-trainer-reveal",
+            trainerName: "Pokédex",
+            cardIds: [top.cardId],
+          });
+        }
+        consumed = true;
+        break;
+      }
+      case "Scrute Main": {
+        // Révèle la main complète de l'adversaire (privé au joueur qui
+        // utilise la carte).
+        const opp = this.seats[oppId];
+        if (!opp) {
+          this.sendErrorToSeat(seatId, "Adversaire absent.");
+          return;
+        }
+        if (seat.conn) {
+          this.sendTo(seat.conn, {
+            type: "battle-trainer-reveal",
+            trainerName: "Scrute Main",
+            cardIds: opp.hand.map((c) => c.cardId),
+          });
+        }
+        consumed = true;
+        break;
+      }
+      case "Carton Rouge": {
+        // L'adversaire mélange sa main dans son deck et pioche 3.
+        const opp = this.seats[oppId];
+        if (!opp) {
+          this.sendErrorToSeat(seatId, "Adversaire absent.");
+          return;
+        }
+        if (opp.hand.length === 0 && opp.deck.length === 0) {
+          this.sendErrorToSeat(seatId, "L'adversaire n'a plus de cartes.");
+          return;
+        }
+        opp.deck.push(...opp.hand);
+        opp.hand = [];
+        shuffle(opp.deck);
+        for (let n = 0; n < 3; n++) {
+          const top = opp.deck.pop();
+          if (!top) break;
+          opp.hand.push(top);
+        }
+        consumed = true;
+        break;
+      }
+      case "Giovanni": {
+        seat.attackDamageBonus += 10;
+        consumed = true;
+        break;
+      }
+      case "Erika": {
+        // Soigne 50 dmg d'un Pokémon Plante. Target requis.
+        if (!targetUid) {
+          this.sendErrorToSeat(seatId, "Choisis un Pokémon Plante à soigner.");
+          return;
+        }
+        const target = this.findOwnPokemon(seat, targetUid);
+        if (!target) {
+          this.sendErrorToSeat(seatId, "Cible invalide.");
+          return;
+        }
+        const tData = getCard(target.cardId);
+        if (tData?.kind !== "pokemon" || tData.type !== "grass") {
+          this.sendErrorToSeat(seatId, "Erika ne soigne que les Pokémon Plante.");
+          return;
+        }
+        if (target.damage === 0) {
+          this.sendErrorToSeat(seatId, "Ce Pokémon n'est pas blessé.");
+          return;
+        }
+        target.damage -= Math.min(50, target.damage);
+        consumed = true;
+        break;
+      }
+      case "Pierre": {
+        // Attache une Énergie Combat à Grolem (forme d'Alola) ou Onix.
+        if (!targetUid) {
+          this.sendErrorToSeat(seatId, "Choisis Grolem ou Onix.");
+          return;
+        }
+        const target = this.findOwnPokemon(seat, targetUid);
+        if (!target) {
+          this.sendErrorToSeat(seatId, "Cible invalide.");
+          return;
+        }
+        const tData = getCard(target.cardId);
+        const validNames = new Set(["Grolem", "Onix"]);
+        if (tData?.kind !== "pokemon" || !validNames.has(tData.name)) {
+          this.sendErrorToSeat(
+            seatId,
+            "Pierre ne s'utilise que sur Grolem ou Onix.",
+          );
+          return;
+        }
+        target.attachedEnergies.push("fighting");
+        consumed = true;
+        break;
+      }
+      case "Auguste": {
+        // Vos Feunard / Galopa / Magmar font +30 dégâts ce tour. Comme on
+        // n'a pas de système de bonus conditionnel par Pokémon attaquant,
+        // on utilise le `attackDamageBonus` global mais on documente que
+        // c'est imprécis (frappe trop large). MVP acceptable.
+        seat.attackDamageBonus += 30;
         consumed = true;
         break;
       }
       default: {
         this.sendErrorToSeat(
           seatId,
-          `Carte « ${playedName} » non encore implémentée — bientôt jouable.`,
+          `« ${playedName} » non implémentée — mécanique trop complexe pour le moteur actuel.`,
         );
         return;
       }
@@ -1003,6 +1136,8 @@ export default class BattleServer implements Party.Server {
     if (card.trainerType === "supporter") {
       seat.usedSupporterThisTurn = true;
     }
+    // Log unique uniforme : « X utilise <CardName> ».
+    this.pushLog(`${seat.username} utilise ${playedName}.`);
     this.broadcastState();
   }
 
@@ -1046,10 +1181,9 @@ export default class BattleServer implements Party.Server {
     const def = this.seats[defenderSeatId];
     const att = this.seats[attackerSeatId];
     if (!def || !att || !def.active) return;
-    const koData = getCard(def.active.cardId);
-    this.pushLog(
-      `💥 ${koData?.kind === "pokemon" ? koData.name : "?"} est mis K.O. !`,
-    );
+    // Le KO est annoncé inline dans le log d'attaque (« → K.O. ! »), donc
+    // pas de pushLog séparé ici.
+    void getCard(def.active.cardId);
     // Discard l'Actif (ses énergies attachées partent avec en Pocket — pas
     // remises au deck/main, juste supprimées).
     def.discard.push({
@@ -1060,9 +1194,6 @@ export default class BattleServer implements Party.Server {
 
     // Pocket : l'attaquant gagne 1 KO. Premier à KO_WIN_TARGET gagne.
     att.koCount += 1;
-    this.pushLog(
-      `${att.username} marque 1 KO (${att.koCount}/${KO_WIN_TARGET}).`,
-    );
 
     if (att.koCount >= KO_WIN_TARGET) {
       this.declareWinner(attackerSeatId, `${KO_WIN_TARGET} KO infligés.`);
@@ -1089,15 +1220,14 @@ export default class BattleServer implements Party.Server {
     if (!seat) return;
 
     // ─── Between-turns effects ────────────────────────────────────
-    // Poison : 10 dégâts à chaque Actif empoisonné (les deux côtés).
+    // Poison : 10 dégâts à chaque Actif empoisonné (les deux côtés). Pas
+    // de log : le statut empoisonné est visible sur la carte (badge ☠️) et
+    // les PV qui descendent.
     for (const sId of ["p1", "p2"] as BattleSeatId[]) {
       const s = this.seats[sId];
       if (!s?.active) continue;
       if (s.active.statuses.includes("poisoned")) {
         s.active.damage += 10;
-        this.pushLog(
-          `☠️ ${s.username}'s ${getCardName(s.active.cardId)} subit 10 dégâts (Empoisonné).`,
-        );
         const data = getCard(s.active.cardId);
         if (data?.kind === "pokemon" && s.active.damage >= data.hp) {
           // KO inter-tours — l'adversaire incrémente son koCount (Pocket).
@@ -1112,10 +1242,14 @@ export default class BattleServer implements Party.Server {
     }
 
     // Sleep wake : pile/face en fin du tour du joueur dont c'est le tour.
+    // Animation pile/face envoyée au client (au lieu d'un log).
     if (seat.active && seat.active.statuses.includes("asleep")) {
       const heads = this.coinFlip();
-      this.pushLog(
-        `💤 ${getCardName(seat.active.cardId)} → réveil ? ${heads ? "Face (réveille)" : "Pile (toujours endormi)"}.`,
+      const wakeName = getCardName(seat.active.cardId);
+      this.emitCoinFlip(
+        `${wakeName} dort`,
+        heads,
+        heads ? `${wakeName} se réveille !` : `${wakeName} dort encore…`,
       );
       if (heads) {
         seat.active.statuses = seat.active.statuses.filter(
@@ -1125,14 +1259,11 @@ export default class BattleServer implements Party.Server {
     }
 
     // Paralysie : retirée à la fin du tour du joueur paralysé (i.e. après
-    // un tour complet d'inaction). On le fait sur l'Actif du joueur dont
-    // c'est le tour qui se termine.
+    // un tour complet d'inaction). Pas de log — le badge ⚡ disparaît
+    // visuellement.
     if (seat.active && seat.active.statuses.includes("paralyzed")) {
       seat.active.statuses = seat.active.statuses.filter(
         (s) => s !== "paralyzed",
-      );
-      this.pushLog(
-        `⚡ ${getCardName(seat.active.cardId)} n'est plus Paralysé.`,
       );
     }
 
@@ -1145,6 +1276,7 @@ export default class BattleServer implements Party.Server {
     seat.evolvedThisTurn = new Set();
     seat.usedSupporterThisTurn = false;
     seat.retreatDiscount = 0;
+    seat.attackDamageBonus = 0;
     // Pocket : énergie pending non attachée est perdue à end-of-turn.
     seat.pendingEnergy = null;
 
@@ -1167,7 +1299,8 @@ export default class BattleServer implements Party.Server {
       // tour-là, c'est géré naturellement.
       nextSeat.pendingEnergy = pickRandomEnergy(nextSeat.energyTypes);
     }
-    this.pushLog(`Tour ${this.turnNumber} — ${nextSeat?.username} joue.`);
+    // Pas de log « Tour X — Y joue » : le numéro de tour s'affiche déjà
+    // dans le bandeau du header.
     this.broadcastState();
   }
 
