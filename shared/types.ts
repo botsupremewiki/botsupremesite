@@ -1233,6 +1233,11 @@ export type BattlePlayerPublicState = {
   // Limites par tour — exposées pour que l'UI grise les actions épuisées.
   energyAttachedThisTurn: boolean;
   hasRetreatedThisTurn: boolean;
+  // Pocket : 1 carte Supporter max par tour. Permet au client de griser les
+  // Supporters quand déjà joué.
+  usedSupporterThisTurn: boolean;
+  // Réduction de coût de retraite ce tour (cumulable, ex Vitesse +). 0 par défaut.
+  retreatDiscount: number;
   // Pocket : énergie générée automatiquement chaque tour, prête à être
   // attachée à un Pokémon (1 attache max/tour). null si pas d'énergie en
   // attente (consommée, ou tour 1 du first player qui n'en génère pas).
@@ -1273,6 +1278,14 @@ export type BattleClientMessage =
   | { type: "battle-retreat"; benchIndex: number }
   | { type: "battle-attack"; attackIndex: number }
   | { type: "battle-promote-active"; benchIndex: number }
+  // Cartes Dresseur (subset starter implémenté côté serveur — voir handlePlayTrainer
+  // dans party/src/battle.ts). targetUid optionnel selon la carte (ex Potion =
+  // requis, Poké Ball = inutile).
+  | {
+      type: "battle-play-trainer";
+      handIndex: number;
+      targetUid?: string | null;
+    }
   // Always available
   | { type: "battle-end-turn" }
   | { type: "battle-concede" }

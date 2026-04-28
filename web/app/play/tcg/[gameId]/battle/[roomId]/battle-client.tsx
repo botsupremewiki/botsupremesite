@@ -148,6 +148,8 @@ export function BattleClient({
     send({ type: "battle-attack", attackIndex });
   const promoteActive = (benchIndex: number) =>
     send({ type: "battle-promote-active", benchIndex });
+  const playTrainer = (handIndex: number, targetUid?: string | null) =>
+    send({ type: "battle-play-trainer", handIndex, targetUid });
   const endTurn = () => send({ type: "battle-end-turn" });
   const sendChat = useCallback(
     (text: string) => send({ type: "chat", text }),
@@ -247,6 +249,7 @@ export function BattleClient({
               onRetreat={retreat}
               onAttack={attack}
               onPromoteActive={promoteActive}
+              onPlayTrainer={playTrainer}
             />
           )}
 
@@ -321,6 +324,7 @@ function BattleBoard({
   onRetreat,
   onAttack,
   onPromoteActive,
+  onPlayTrainer,
 }: {
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
@@ -338,6 +342,7 @@ function BattleBoard({
   onRetreat: (benchIndex: number) => void;
   onAttack: (attackIndex: number) => void;
   onPromoteActive: (benchIndex: number) => void;
+  onPlayTrainer: (handIndex: number, targetUid?: string | null) => void;
 }) {
   // Mode "attach energy" : Pocket génère 1 énergie automatique par tour. Si
   // pendingEnergy est définie côté serveur et qu'aucune attache n'a encore eu
@@ -345,12 +350,18 @@ function BattleBoard({
   // (Actif ou Banc) afin d'y attacher l'énergie.
   const [attachEnergyMode, setAttachEnergyMode] = useState(false);
   const [pendingEvolveIdx, setPendingEvolveIdx] = useState<number | null>(null);
+  // Mode "Potion target picker" — quand le joueur clique sur Potion dans sa
+  // main, on attend qu'il choisisse un Pokémon de son côté à soigner.
+  const [pendingTrainerIdx, setPendingTrainerIdx] = useState<number | null>(
+    null,
+  );
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
   // Carte sous le curseur (main ou board) → preview en grand dans la sidebar.
   const [hoveredCard, setHoveredCard] = useState<PokemonCardData | null>(null);
   const cancelPending = () => {
     setAttachEnergyMode(false);
     setPendingEvolveIdx(null);
+    setPendingTrainerIdx(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
   const attachModeHandler = attachEnergyMode
@@ -363,7 +374,12 @@ function BattleBoard({
           onEvolve(pendingEvolveIdx, uid);
           setPendingEvolveIdx(null);
         }
-      : null;
+      : pendingTrainerIdx !== null
+        ? (uid: string) => {
+            onPlayTrainer(pendingTrainerIdx, uid);
+            setPendingTrainerIdx(null);
+          }
+        : null;
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -380,96 +396,56 @@ function BattleBoard({
         )}
 
         <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto p-4">
-          {/* ── Colonne joueur (gauche) ── */}
+          {/* ── Colonne joueur (gauche) — vertical : info → KO → board → contrôles ── */}
           {state.self && (
-            <div className="flex min-w-0 flex-1 flex-col items-center gap-3">
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
               <PlayerInfo player={state.self} isOpponent={false} />
-              <div className="flex items-start gap-3">
-                <BackRow
-                  side="self"
-                  koCount={state.self.koCount}
-                  deckSize={state.self.deckSize}
-                  discardCount={state.self.discardCount}
-                />
-                <BoardArea
-                  active={state.self.active}
-                  bench={state.self.bench}
-                  cardById={cardById}
-                  isOpponent={false}
-                  onZoomCard={setZoomedCard}
-                  onHoverCard={setHoveredCard}
-                  attachMode={attachModeHandler}
-                  promoteMode={promptPromote ?? false}
-                  onPromote={onPromoteActive}
-                  onRetreat={
-                    state.phase === "playing" &&
-                    isMyTurn &&
-                    !state.self.hasRetreatedThisTurn &&
-                    !state.self.mustPromoteActive
-                      ? onRetreat
-                      : null
-                  }
-                />
-                <SelfControls
-                  state={state}
-                  isMyTurn={isMyTurn}
-                  cardById={cardById}
-                  onConfirmSetup={onConfirmSetup}
-                  onEndTurn={onEndTurn}
-                  onAttack={onAttack}
-                />
-              </div>
-
-              {/* Énergie auto Pocket : grosse "ball" draggable + bouton "Attacher". */}
-              {state.self.pendingEnergy &&
-                !state.self.energyAttachedThisTurn &&
-                isMyTurn &&
-                !attachEnergyMode &&
-                pendingEvolveIdx === null &&
-                (() => {
-                  const t = state.self.pendingEnergy;
-                  const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
-                  const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
-                  return (
-                    <div className="flex items-center gap-3 rounded-lg border-2 border-amber-400/60 bg-amber-400/10 p-3 shadow-lg shadow-amber-400/20">
-                      <span
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("text/x-tcg-energy", "1");
-                          e.dataTransfer.effectAllowed = "link";
-                          setAttachEnergyMode(true);
-                        }}
-                        onDragEnd={() => {
-                          setAttachEnergyMode(false);
-                        }}
-                        className={`flex h-12 w-12 cursor-grab select-none items-center justify-center rounded-full text-2xl font-bold shadow-xl ring-2 ring-white/30 active:cursor-grabbing ${bg} ${fg} animate-pulse`}
-                        title="Glisse cette énergie sur un Pokémon"
-                      >
-                        {energyEmoji(t)}
-                      </span>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-bold text-amber-100">
-                          ⚡ Énergie {t} prête à attacher
-                        </span>
-                        <span className="text-[11px] text-zinc-300">
-                          Glisse-la sur un Pokémon, ou clique « Attacher ».
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setAttachEnergyMode(true)}
-                        className="ml-auto rounded-md border border-amber-400/50 bg-amber-400/30 px-3 py-1.5 text-xs font-bold text-amber-50 hover:bg-amber-400/40"
-                      >
-                        Attacher
-                      </button>
-                    </div>
-                  );
-                })()}
-
-              {(attachEnergyMode || pendingEvolveIdx !== null) && (
-                <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs text-amber-200">
+              <BackRow
+                koCount={state.self.koCount}
+                deckSize={state.self.deckSize}
+                discardCount={state.self.discardCount}
+                handCount={state.self.handCount}
+              />
+              <BoardArea
+                active={state.self.active}
+                bench={state.self.bench}
+                cardById={cardById}
+                isOpponent={false}
+                onZoomCard={setZoomedCard}
+                onHoverCard={setHoveredCard}
+                attachMode={attachModeHandler}
+                promoteMode={promptPromote ?? false}
+                onPromote={onPromoteActive}
+                onRetreat={
+                  state.phase === "playing" &&
+                  isMyTurn &&
+                  !state.self.hasRetreatedThisTurn &&
+                  !state.self.mustPromoteActive
+                    ? onRetreat
+                    : null
+                }
+              />
+              <SelfControls
+                state={state}
+                isMyTurn={isMyTurn}
+                cardById={cardById}
+                onConfirmSetup={onConfirmSetup}
+                onEndTurn={onEndTurn}
+                onAttack={onAttack}
+                attachEnergyMode={attachEnergyMode}
+                pendingEvolveIdx={pendingEvolveIdx}
+                pendingTrainerIdx={pendingTrainerIdx}
+                onActivateAttachMode={() => setAttachEnergyMode(true)}
+              />
+              {(attachEnergyMode ||
+                pendingEvolveIdx !== null ||
+                pendingTrainerIdx !== null) && (
+                <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-xs text-amber-200">
                   {attachEnergyMode
                     ? "Choisis un Pokémon à qui attacher l'Énergie."
-                    : "Choisis le Pokémon à faire évoluer."}
+                    : pendingEvolveIdx !== null
+                      ? "Choisis le Pokémon à faire évoluer."
+                      : "Choisis le Pokémon à soigner avec la Potion."}
                   <button
                     onClick={cancelPending}
                     className="ml-auto rounded border border-white/10 bg-white/5 px-2 py-0.5 text-zinc-200 hover:bg-white/10"
@@ -484,27 +460,25 @@ function BattleBoard({
           {/* Séparateur vertical */}
           <div className="w-px shrink-0 self-stretch bg-white/10" />
 
-          {/* ── Colonne adversaire (droite) ── */}
+          {/* ── Colonne adversaire (droite) — vertical : info → KO → board → main cachée ── */}
           {state.opponent && (
-            <div className="flex min-w-0 flex-1 flex-col items-center gap-3">
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
               <PlayerInfo player={state.opponent} isOpponent />
-              <div className="flex items-start gap-3">
-                <BackRow
-                  side="opp"
-                  koCount={state.opponent.koCount}
-                  deckSize={state.opponent.deckSize}
-                  discardCount={state.opponent.discardCount}
-                />
-                <BoardArea
-                  active={state.opponent.active}
-                  bench={state.opponent.bench}
-                  cardById={cardById}
-                  isOpponent
-                  onZoomCard={setZoomedCard}
-                  onHoverCard={setHoveredCard}
-                />
-                <HandHidden count={state.opponent.handCount} />
-              </div>
+              <BackRow
+                koCount={state.opponent.koCount}
+                deckSize={state.opponent.deckSize}
+                discardCount={state.opponent.discardCount}
+                handCount={state.opponent.handCount}
+              />
+              <BoardArea
+                active={state.opponent.active}
+                bench={state.opponent.bench}
+                cardById={cardById}
+                isOpponent
+                onZoomCard={setZoomedCard}
+                onHoverCard={setHoveredCard}
+              />
+              <HandHidden count={state.opponent.handCount} />
             </div>
           )}
         </div>
@@ -523,7 +497,14 @@ function BattleBoard({
               onHoverCard={setHoveredCard}
               onSelectEvolve={(i) => {
                 setAttachEnergyMode(false);
+                setPendingTrainerIdx(null);
                 setPendingEvolveIdx(i);
+              }}
+              onPlayTrainerNoTarget={(i) => onPlayTrainer(i, null)}
+              onSelectTrainerTarget={(i) => {
+                setAttachEnergyMode(false);
+                setPendingEvolveIdx(null);
+                setPendingTrainerIdx(i);
               }}
             />
           </div>
@@ -781,45 +762,43 @@ function PlayerInfo({
   player: BattlePlayerPublicState | BattleSelfState;
   isOpponent: boolean;
 }) {
+  // Compteurs (Main, Deck, KO) sont déjà affichés dans BackRow juste en dessous,
+  // donc ici on reste sur le minimum : juste le nom + l'indicateur de couleur.
   return (
-    <div className="flex items-center justify-between text-xs">
+    <div className="text-xs">
       <span className="font-semibold text-zinc-200">
         {isOpponent ? "🔴 " : "🟢 "}
         {player.username}
-      </span>
-      <span className="text-zinc-400">
-        Main {player.handCount} · Deck {player.deckSize} · KO{" "}
-        <span className="font-bold text-amber-300">
-          {player.koCount}/{BATTLE_CONFIG.koWinTarget}
-        </span>
       </span>
     </div>
   );
 }
 
+/** Ligne au-dessus du board : compteur de KO + deck/discard/main, sur une
+ *  même ligne horizontale pour libérer la largeur sur les côtés. */
 function BackRow({
-  side,
   koCount,
   deckSize,
   discardCount,
+  handCount,
 }: {
-  side: "self" | "opp";
   koCount: number;
   deckSize: number;
   discardCount: number;
+  handCount?: number;
 }) {
-  void side;
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="flex flex-col items-center">
-        <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+    <div className="flex items-center gap-3 text-[10px] text-zinc-400">
+      {/* KO progress en cases */}
+      <div className="flex items-center gap-1.5">
+        <span className="uppercase tracking-widest text-zinc-500">
           KO {koCount}/{BATTLE_CONFIG.koWinTarget}
-        </div>
+        </span>
         <div className="flex gap-0.5">
           {Array.from({ length: BATTLE_CONFIG.koWinTarget }, (_, i) => (
             <div
               key={i}
-              className={`h-5 w-5 rounded-sm border ${
+              className={`h-4 w-4 rounded-sm border ${
                 i < koCount
                   ? "border-amber-300/60 bg-amber-700/40"
                   : "border-white/5 bg-white/[0.02]"
@@ -828,23 +807,27 @@ function BackRow({
           ))}
         </div>
       </div>
-      <div className="flex gap-1.5 text-[9px] text-zinc-400">
-        <span>📚 {deckSize}</span>
-        <span>🗑 {discardCount}</span>
-      </div>
+      <span className="h-3 w-px bg-white/10" />
+      <span title="Cartes restantes dans le deck">📚 {deckSize}</span>
+      <span title="Carte(s) en main">✋ {handCount ?? 0}</span>
+      <span title="Défausse">🗑 {discardCount}</span>
     </div>
   );
 }
 
+/** Main cachée de l'adversaire — affichée en bas de sa colonne, en mini
+ *  cartes empilées horizontalement (effet "fan" léger). */
 function HandHidden({ count }: { count: number }) {
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="text-[9px] uppercase tracking-widest text-zinc-500">Main</div>
+    <div className="flex items-center gap-1.5">
+      <span className="text-[9px] uppercase tracking-widest text-zinc-500">
+        Main ({count})
+      </span>
       <div className="flex">
         {Array.from({ length: Math.min(count, 7) }, (_, i) => (
           <div
             key={i}
-            className="-ml-3 h-10 w-7 rounded border border-indigo-300/40 bg-gradient-to-br from-indigo-600 to-indigo-900 first:ml-0"
+            className="-ml-3 h-9 w-6 rounded border border-indigo-300/40 bg-gradient-to-br from-indigo-600 to-indigo-900 first:ml-0"
           />
         ))}
         {count > 7 && (
@@ -1149,6 +1132,11 @@ function statusEmoji(s: string): string {
   }
 }
 
+/** Bloc "contrôles" en dessous du board joueur. Selon la phase :
+ *   - setup  : juste le bouton "Confirmer mon équipe" (centré).
+ *   - playing : ligne [Énergie pending | Liste des attaques] + bouton "Fin du
+ *               tour" en dessous, le tout dans une largeur fixe alignée sur
+ *               le board. */
 function SelfControls({
   state,
   isMyTurn,
@@ -1156,6 +1144,10 @@ function SelfControls({
   onConfirmSetup,
   onEndTurn,
   onAttack,
+  attachEnergyMode,
+  pendingEvolveIdx,
+  pendingTrainerIdx,
+  onActivateAttachMode,
 }: {
   state: BattleState;
   isMyTurn: boolean;
@@ -1163,21 +1155,25 @@ function SelfControls({
   onConfirmSetup: () => void;
   onEndTurn: () => void;
   onAttack: (attackIndex: number) => void;
+  attachEnergyMode: boolean;
+  pendingEvolveIdx: number | null;
+  pendingTrainerIdx: number | null;
+  onActivateAttachMode: () => void;
 }) {
   if (state.phase === "setup") {
     const ready = state.self?.hasSetup;
     const canConfirm = !!state.self?.active;
     return (
-      <div className="flex flex-col items-center gap-1">
+      <div className="mt-2 flex flex-col items-center gap-1">
         {ready ? (
-          <span className="rounded-md bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">
+          <span className="rounded-md bg-emerald-500/20 px-4 py-2 text-sm text-emerald-300">
             ✓ Prêt — en attente de l&apos;adversaire
           </span>
         ) : (
           <button
             onClick={onConfirmSetup}
             disabled={!canConfirm}
-            className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md bg-emerald-500 px-5 py-2 text-sm font-bold text-emerald-950 shadow-lg hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Confirmer mon équipe
           </button>
@@ -1186,78 +1182,119 @@ function SelfControls({
     );
   }
   if (state.phase !== "playing") return null;
-  const active = state.self?.active;
+  const self = state.self;
+  const active = self?.active;
   const data = active ? cardById.get(active.cardId) : null;
-  const attacks =
-    data?.kind === "pokemon" ? data.attacks : [];
+  const attacks = data?.kind === "pokemon" ? data.attacks : [];
   const blocked =
     !isMyTurn ||
-    !!state.self?.mustPromoteActive ||
+    !!self?.mustPromoteActive ||
     (active?.playedThisTurn ?? false);
 
+  // L'énergie "pending" est affichée en logo brillant à gauche des attaques :
+  // cliquable (active le mode Attacher) + draggable (drop sur un Pokémon).
+  const showEnergy =
+    !!self?.pendingEnergy &&
+    !self.energyAttachedThisTurn &&
+    isMyTurn &&
+    !attachEnergyMode &&
+    pendingEvolveIdx === null &&
+    pendingTrainerIdx === null;
+  const energyType = self?.pendingEnergy ?? null;
+
   return (
-    <div className="flex w-56 flex-col items-stretch gap-2">
-      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-        ⚔️ Attaques
-      </div>
-      {attacks.length === 0 && (
-        <div className="rounded-md border border-dashed border-white/10 p-2 text-center text-[11px] text-zinc-500">
-          Aucune attaque
+    <div className="mt-2 flex w-full max-w-[360px] flex-col items-stretch gap-2">
+      {/* Ligne : [énergie | attaques] */}
+      <div className="flex items-stretch gap-2">
+        {/* Logo énergie à gauche (pulse + draggable). Slot toujours
+            réservé pour stabilité visuelle, vide si pas d'énergie pending. */}
+        <div className="flex w-12 shrink-0 items-start justify-center">
+          {showEnergy && energyType ? (
+            <span
+              draggable
+              onClick={onActivateAttachMode}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/x-tcg-energy", "1");
+                e.dataTransfer.effectAllowed = "link";
+                onActivateAttachMode();
+              }}
+              className={`flex h-12 w-12 cursor-grab select-none items-center justify-center rounded-full text-2xl font-bold shadow-xl ring-2 ring-amber-300/60 active:cursor-grabbing animate-pulse ${
+                ENERGY_BADGE_BG[energyType]
+              } ${ENERGY_BADGE_TEXT[energyType]}`}
+              title="Glisse cette énergie sur un Pokémon (ou clique pour activer le mode Attacher)"
+            >
+              {energyEmoji(energyType)}
+            </span>
+          ) : null}
         </div>
-      )}
-      {attacks.map((a, i) => {
-        const canPay = active
-          ? canPayCost(active.attachedEnergies, a.cost, cardById)
-          : false;
-        const disabled = blocked || !canPay;
-        return (
-          <button
-            key={i}
-            disabled={disabled}
-            onClick={() => onAttack(i)}
-            className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
-              disabled
-                ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
-                : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
-            }`}
-            title={a.text ?? ""}
-          >
-            <div className="flex items-center justify-between gap-2">
-              {/* Coût en pastilles colorées par type */}
-              <div className="flex items-center gap-0.5">
-                {a.cost.map((c, j) => {
-                  const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
-                  const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
-                  return (
-                    <span
-                      key={j}
-                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
-                    >
-                      {energyEmoji(c)}
-                    </span>
-                  );
-                })}
-              </div>
-              <span className="flex-1 font-bold">{a.name}</span>
-              {a.damage !== undefined && (
-                <span className="text-base font-black tabular-nums text-amber-300">
-                  {a.damage}
-                  {a.damageSuffix ?? ""}
-                </span>
-              )}
+
+        {/* Liste des attaques */}
+        <div className="flex flex-1 flex-col gap-1">
+          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+            ⚔️ Attaques
+          </div>
+          {attacks.length === 0 && (
+            <div className="rounded-md border border-dashed border-white/10 p-2 text-center text-[11px] text-zinc-500">
+              Aucune attaque
             </div>
-            {a.text && (
-              <span className="mt-1 text-[10px] italic leading-tight text-rose-200/70">
-                {a.text}
-              </span>
-            )}
-          </button>
-        );
-      })}
+          )}
+          {attacks.map((a, i) => {
+            const canPay = active
+              ? canPayCost(active.attachedEnergies, a.cost, cardById)
+              : false;
+            const disabled = blocked || !canPay;
+            return (
+              <button
+                key={i}
+                disabled={disabled}
+                onClick={() => onAttack(i)}
+                className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                  disabled
+                    ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
+                    : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
+                }`}
+                title={a.text ?? ""}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  {/* Coût en pastilles colorées par type */}
+                  <div className="flex items-center gap-0.5">
+                    {a.cost.map((c, j) => {
+                      const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
+                      const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
+                      return (
+                        <span
+                          key={j}
+                          className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
+                        >
+                          {energyEmoji(c)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span className="flex-1 font-bold">{a.name}</span>
+                  {a.damage !== undefined && (
+                    <span className="text-base font-black tabular-nums text-amber-300">
+                      {a.damage}
+                      {a.damageSuffix ?? ""}
+                    </span>
+                  )}
+                </div>
+                {a.text && (
+                  <span className="mt-1 text-[10px] italic leading-tight text-rose-200/70">
+                    {a.text}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bouton "Fin du tour" en bas, pleine largeur */}
       <button
         onClick={onEndTurn}
-        disabled={!isMyTurn || !!state.self?.mustPromoteActive}
-        className="mt-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={!isMyTurn || !!self?.mustPromoteActive}
+        className="rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
         ⏭ Fin du tour
       </button>
@@ -1317,6 +1354,22 @@ function canPayCost(
   return remaining >= colorlessNeeded;
 }
 
+/** Action calculée pour une carte de la main au tour courant.
+ *   - "playable" : clic exécute handler (carte highlight verte).
+ *   - "blocked"  : non jouable, on grise + tooltip avec la raison. */
+type HandAction =
+  | { kind: "playable"; label: string; handler: () => void }
+  | { kind: "blocked"; reason: string };
+
+// Cartes Dresseur supportées par le moteur (subset starter). Les autres
+// trainers tombent en "blocked: pas encore implémenté".
+const TRAINER_NEEDS_TARGET = new Set<string>(["Potion"]);
+const TRAINER_NO_TARGET = new Set<string>([
+  "Poké Ball",
+  "Recherches Professorales",
+  "Vitesse +",
+]);
+
 function SelfHand({
   state,
   cardById,
@@ -1326,6 +1379,8 @@ function SelfHand({
   onRemoveBench,
   onPlayBasic,
   onSelectEvolve,
+  onPlayTrainerNoTarget,
+  onSelectTrainerTarget,
   onHoverCard,
 }: {
   state: BattleState;
@@ -1336,6 +1391,8 @@ function SelfHand({
   onRemoveBench: (benchIndex: number) => void;
   onPlayBasic: (handIndex: number) => void;
   onSelectEvolve: (handIndex: number) => void;
+  onPlayTrainerNoTarget: (handIndex: number) => void;
+  onSelectTrainerTarget: (handIndex: number) => void;
   onHoverCard?: (card: PokemonCardData | null) => void;
 }) {
   const self = state.self;
@@ -1347,32 +1404,148 @@ function SelfHand({
   // Capture pour les closures (TS perd le narrowing de state.self).
   const hasActive = !!self.active;
   const benchLen = self.bench.length;
+  // Liste des Pokémon en jeu (Actif + Banc) pour vérifier les pré-requis
+  // d'évolution.
+  const inPlay: BattleCard[] = [];
+  if (self.active) inPlay.push(self.active);
+  inPlay.push(...self.bench);
+  const usedSupporter = self.usedSupporterThisTurn ?? false;
+  // Capture pour les closures (TS perd le narrowing de `self`).
+  const mustPromoteActive = !!self.mustPromoteActive;
 
-  // Pour chaque carte de la main, choisit la SEULE action principale qui
-  // s'applique au click (priorité claire).
-  function getAction(card: PokemonCardData, i: number): {
-    label: string;
-    handler: () => void;
-  } | null {
-    if (card.kind !== "pokemon") return null;
-    const isBasic = card.stage === "basic";
-    const isEvolution = card.stage !== "basic" && !!card.evolvesFrom;
-    if (inSetup && isBasic && !hasActive) {
-      return { label: "→ Mettre Actif", handler: () => onSetActive(i) };
+  /** Calcule l'action d'une carte au tour courant, ou la raison du blocage.
+   *  Renvoie null pour un cas où ni jouable ni intéressant à signaler. */
+  function getAction(card: PokemonCardData, i: number): HandAction | null {
+    // ── Pokémon ──────────────────────────────────────────────────────
+    if (card.kind === "pokemon") {
+      const isBasic = card.stage === "basic";
+      const isEvolution = card.stage !== "basic" && !!card.evolvesFrom;
+
+      if (inSetup) {
+        if (isEvolution) {
+          return {
+            kind: "blocked",
+            reason: "Au setup tu poses uniquement des Pokémon de Base.",
+          };
+        }
+        if (!hasActive) {
+          return {
+            kind: "playable",
+            label: "→ Mettre Actif",
+            handler: () => onSetActive(i),
+          };
+        }
+        if (benchLen < benchCap) {
+          return {
+            kind: "playable",
+            label: "→ Ajouter au Banc",
+            handler: () => onAddBench(i),
+          };
+        }
+        return { kind: "blocked", reason: "Banc plein." };
+      }
+
+      if (!inMain) {
+        return {
+          kind: "blocked",
+          reason: mustPromoteActive
+            ? "Tu dois d'abord promouvoir un Pokémon de Banc."
+            : !isMyTurn
+              ? "Pas encore ton tour."
+              : "Tu ne peux pas jouer cette carte maintenant.",
+        };
+      }
+
+      if (isBasic) {
+        if (benchLen >= benchCap) {
+          return { kind: "blocked", reason: `Banc plein (${benchCap}/${benchCap}).` };
+        }
+        return {
+          kind: "playable",
+          label: "→ Poser au Banc",
+          handler: () => onPlayBasic(i),
+        };
+      }
+
+      if (isEvolution) {
+        // Doit y avoir au moins une cible valide en jeu : le `evolvesFrom`
+        // doit être posé ET pas joué ce tour.
+        const evolvesFrom = card.evolvesFrom ?? "";
+        const candidates = inPlay.filter((c) => {
+          const d = cardById.get(c.cardId);
+          return d?.kind === "pokemon" && d.name === evolvesFrom;
+        });
+        if (candidates.length === 0) {
+          return {
+            kind: "blocked",
+            reason: `${evolvesFrom} doit être en jeu pour évoluer en ${card.name}.`,
+          };
+        }
+        const allJustPlayed = candidates.every((c) => c.playedThisTurn);
+        if (allJustPlayed) {
+          return {
+            kind: "blocked",
+            reason: `${evolvesFrom} vient d'être posé — attends le tour suivant pour évoluer.`,
+          };
+        }
+        return {
+          kind: "playable",
+          label: "→ Choisir cible évolution",
+          handler: () => onSelectEvolve(i),
+        };
+      }
+
+      return null;
     }
-    if (inSetup && isBasic && hasActive && benchLen < benchCap) {
-      return { label: "→ Ajouter au Banc", handler: () => onAddBench(i) };
-    }
-    if (inMain && isBasic && benchLen < benchCap) {
-      return { label: "→ Poser au Banc", handler: () => onPlayBasic(i) };
-    }
-    if (inMain && isEvolution) {
+
+    // ── Trainer ──────────────────────────────────────────────────────
+    if (inSetup) {
       return {
-        label: "→ Choisir cible évolution",
-        handler: () => onSelectEvolve(i),
+        kind: "blocked",
+        reason: "Les cartes Dresseur se jouent en phase de combat.",
       };
     }
-    return null;
+    if (!inMain) {
+      return {
+        kind: "blocked",
+        reason: !isMyTurn ? "Pas encore ton tour." : "Indisponible.",
+      };
+    }
+    if (card.trainerType === "supporter" && usedSupporter) {
+      return {
+        kind: "blocked",
+        reason: "1 seule carte Supporter peut être jouée par tour.",
+      };
+    }
+    if (TRAINER_NEEDS_TARGET.has(card.name)) {
+      // Potion : nécessite au moins un Pokémon blessé en jeu.
+      if (card.name === "Potion") {
+        const someoneHurt = inPlay.some((c) => c.damage > 0);
+        if (!someoneHurt) {
+          return {
+            kind: "blocked",
+            reason: "Aucun Pokémon n'est blessé.",
+          };
+        }
+      }
+      return {
+        kind: "playable",
+        label: "→ Choisir cible",
+        handler: () => onSelectTrainerTarget(i),
+      };
+    }
+    if (TRAINER_NO_TARGET.has(card.name)) {
+      return {
+        kind: "playable",
+        label: "→ Jouer la carte",
+        handler: () => onPlayTrainerNoTarget(i),
+      };
+    }
+    // Trainer non implémenté : on l'indique clairement.
+    return {
+      kind: "blocked",
+      reason: `« ${card.name} » — pas encore implémentée.`,
+    };
   }
 
   return (
@@ -1382,7 +1555,7 @@ function SelfHand({
           Ta main ({self.hand.length})
         </span>
         <span className="text-[10px] text-zinc-600">
-          · clic = jouer · survole = aperçu
+          · clic = jouer · survole = aperçu · cartes grisées = injouables
         </span>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -1427,26 +1600,34 @@ function HandCard({
   onHover,
 }: {
   data: PokemonCardData;
-  // L'action principale au click (ou null si la carte n'est pas jouable
-  // dans la phase courante).
-  action: { label: string; handler: () => void } | null;
+  action: HandAction | null;
   onHover?: (card: PokemonCardData | null) => void;
 }) {
-  const playable = !!action;
+  const playable = action?.kind === "playable";
+  const blocked = action?.kind === "blocked";
+  const tooltip = playable
+    ? `${data.name} — ${action.label.replace("→ ", "")}`
+    : blocked
+      ? `${data.name} — ${action.reason}`
+      : data.name;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      onClick={() => action?.handler()}
+      onClick={() => {
+        if (action?.kind === "playable") action.handler();
+      }}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
       className={`relative shrink-0 overflow-hidden rounded-lg border transition-all ${
         playable
           ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
-          : "cursor-default border-white/10 opacity-90 hover:ring-2 hover:ring-white/30"
+          : blocked
+            ? "cursor-not-allowed border-white/5 opacity-50 grayscale"
+            : "cursor-default border-white/10 opacity-90 hover:ring-2 hover:ring-white/30"
       }`}
       style={{ width: 130, height: 182 }}
-      title={action ? `${data.name} — clic : ${action.label.replace("→ ", "")}` : data.name}
+      title={tooltip}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -1456,9 +1637,14 @@ function HandCard({
         loading="lazy"
         draggable={false}
       />
-      {action && (
+      {playable && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-900/90 via-emerald-900/60 to-transparent p-1 text-center text-[10px] font-bold text-emerald-100">
           {action.label}
+        </div>
+      )}
+      {blocked && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-900/95 via-zinc-900/70 to-transparent p-1 text-center text-[9px] leading-tight text-zinc-300">
+          {action.reason}
         </div>
       )}
     </motion.div>

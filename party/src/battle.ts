@@ -66,6 +66,10 @@ type SeatState = {
   energyAttachedThisTurn: boolean;
   hasRetreatedThisTurn: boolean;
   evolvedThisTurn: Set<string>; // uids
+  // Pocket : 1 carte Supporter max par tour. Reset à end-turn.
+  usedSupporterThisTurn: boolean;
+  // Réduction du coût de retraite ce tour (Vitesse +). Reset à end-turn.
+  retreatDiscount: number;
   mustPromoteActive: boolean;
 };
 
@@ -182,6 +186,8 @@ export default class BattleServer implements Party.Server {
         energyAttachedThisTurn: false,
         hasRetreatedThisTurn: false,
         evolvedThisTurn: new Set(),
+        usedSupporterThisTurn: false,
+        retreatDiscount: 0,
         mustPromoteActive: false,
       };
       this.connToSeat.set(conn.id, seatId);
@@ -248,6 +254,8 @@ export default class BattleServer implements Party.Server {
       energyAttachedThisTurn: false,
       hasRetreatedThisTurn: false,
       evolvedThisTurn: new Set(),
+      usedSupporterThisTurn: false,
+      retreatDiscount: 0,
       mustPromoteActive: false,
     };
     if (mulligans > 0) {
@@ -477,6 +485,9 @@ export default class BattleServer implements Party.Server {
         break;
       case "battle-promote-active":
         this.handlePromoteActive(seatId, data.benchIndex);
+        break;
+      case "battle-play-trainer":
+        this.handlePlayTrainer(seatId, data.handIndex, data.targetUid ?? null);
         break;
       case "battle-end-turn":
         this.handleEndTurn(seatId);
@@ -717,7 +728,7 @@ export default class BattleServer implements Party.Server {
     }
     const data = getCard(seat.active.cardId);
     if (!data || data.kind !== "pokemon") return;
-    const cost = data.retreatCost;
+    const cost = Math.max(0, data.retreatCost - seat.retreatDiscount);
     if (seat.active.attachedEnergies.length < cost) {
       this.sendErrorToSeat(
         seatId,
@@ -862,6 +873,139 @@ export default class BattleServer implements Party.Server {
     this.broadcastState();
   }
 
+  /** Joue une carte Dresseur (subset starter implémenté). On switch sur le
+   *  nom français de la carte plutôt que sur l'id, parce que la même carte
+   *  apparaît dans plusieurs sets (P-A vs A1) avec des ids différents.
+   *  Cartes supportées :
+   *    • Potion              — soigne 20 dmg sur targetUid
+   *    • Poké Ball           — pioche un Pokémon de Base au hasard
+   *    • Recherches Professorales (Supporter) — pioche 2 cartes
+   *    • Vitesse +           — -1 retreatCost ce tour
+   *  Les autres cartes Dresseur sont rejetées avec un message clair. */
+  private handlePlayTrainer(
+    seatId: BattleSeatId,
+    handIndex: number,
+    targetUid: string | null,
+  ) {
+    if (this.phase !== "playing") return;
+    if (this.activeSeat !== seatId) return;
+    const seat = this.seats[seatId];
+    if (!seat || seat.mustPromoteActive) return;
+    const handCard = seat.hand[handIndex];
+    if (!handCard) return;
+    const card = getCard(handCard.cardId);
+    if (!card || card.kind !== "trainer") {
+      this.sendErrorToSeat(seatId, "Cette carte n'est pas un Dresseur.");
+      return;
+    }
+    // Pocket : 1 Supporter max par tour.
+    if (card.trainerType === "supporter" && seat.usedSupporterThisTurn) {
+      this.sendErrorToSeat(
+        seatId,
+        "Tu as déjà joué une carte Supporter ce tour.",
+      );
+      return;
+    }
+
+    const playedName = card.name;
+    let consumed = false;
+
+    switch (playedName) {
+      case "Potion": {
+        if (!targetUid) {
+          this.sendErrorToSeat(seatId, "Choisis un Pokémon à soigner.");
+          return;
+        }
+        const target = this.findOwnPokemon(seat, targetUid);
+        if (!target) {
+          this.sendErrorToSeat(seatId, "Cible invalide.");
+          return;
+        }
+        if (target.damage === 0) {
+          this.sendErrorToSeat(seatId, "Ce Pokémon n'est pas blessé.");
+          return;
+        }
+        const healed = Math.min(20, target.damage);
+        target.damage -= healed;
+        const tName = getCardName(target.cardId);
+        this.pushLog(
+          `${seat.username} utilise Potion sur ${tName} (+${healed} PV).`,
+        );
+        consumed = true;
+        break;
+      }
+      case "Poké Ball": {
+        // Cherche un Pokémon de Base au hasard dans le deck restant.
+        const basics: number[] = [];
+        for (let i = 0; i < seat.deck.length; i++) {
+          if (isBasicPokemon(seat.deck[i].cardId)) basics.push(i);
+        }
+        if (basics.length === 0) {
+          this.sendErrorToSeat(
+            seatId,
+            "Aucun Pokémon de Base restant dans ton deck.",
+          );
+          return;
+        }
+        const pickIdx = basics[Math.floor(Math.random() * basics.length)];
+        const picked = seat.deck.splice(pickIdx, 1)[0];
+        seat.hand.push(picked);
+        const pName = getCardName(picked.cardId);
+        this.pushLog(
+          `${seat.username} utilise Poké Ball → pioche ${pName}.`,
+        );
+        consumed = true;
+        break;
+      }
+      case "Recherches Professorales": {
+        // Pioche 2 cartes (deck-out = défaite si plus assez).
+        const drawn: string[] = [];
+        for (let n = 0; n < 2; n++) {
+          const card = seat.deck.pop();
+          if (!card) {
+            // Pas assez de cartes : on continue à appliquer l'effet partiel.
+            break;
+          }
+          seat.hand.push(card);
+          drawn.push(getCardName(card.cardId));
+        }
+        if (drawn.length === 0) {
+          this.sendErrorToSeat(seatId, "Plus de cartes à piocher.");
+          return;
+        }
+        this.pushLog(
+          `${seat.username} utilise Recherches Professorales (+${drawn.length} cartes).`,
+        );
+        consumed = true;
+        break;
+      }
+      case "Vitesse +": {
+        seat.retreatDiscount += 1;
+        this.pushLog(
+          `${seat.username} utilise Vitesse + (-1 Énergie de retraite ce tour).`,
+        );
+        consumed = true;
+        break;
+      }
+      default: {
+        this.sendErrorToSeat(
+          seatId,
+          `Carte « ${playedName} » non encore implémentée — bientôt jouable.`,
+        );
+        return;
+      }
+    }
+
+    if (!consumed) return;
+    // Défausse la carte jouée.
+    seat.hand.splice(handIndex, 1);
+    seat.discard.push(handCard);
+    if (card.trainerType === "supporter") {
+      seat.usedSupporterThisTurn = true;
+    }
+    this.broadcastState();
+  }
+
   // ─────────────── combat helpers ───────────────
 
   /** Trouve un BattleCard du joueur (Actif ou Banc) par uid. */
@@ -999,6 +1143,8 @@ export default class BattleServer implements Party.Server {
     seat.energyAttachedThisTurn = false;
     seat.hasRetreatedThisTurn = false;
     seat.evolvedThisTurn = new Set();
+    seat.usedSupporterThisTurn = false;
+    seat.retreatDiscount = 0;
     // Pocket : énergie pending non attachée est perdue à end-of-turn.
     seat.pendingEnergy = null;
 
@@ -1153,6 +1299,8 @@ export default class BattleServer implements Party.Server {
       mustPromoteActive: seat.mustPromoteActive,
       energyAttachedThisTurn: seat.energyAttachedThisTurn,
       hasRetreatedThisTurn: seat.hasRetreatedThisTurn,
+      usedSupporterThisTurn: seat.usedSupporterThisTurn,
+      retreatDiscount: seat.retreatDiscount,
       pendingEnergy: seat.pendingEnergy,
     };
   }
