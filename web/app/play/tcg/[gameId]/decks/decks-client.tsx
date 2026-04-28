@@ -467,6 +467,15 @@ export function DecksClient({
 
 type PickerOwned = "all" | "owned" | "missing";
 type PickerSort = "number" | "name" | "rarity" | "count";
+type PickerCategory =
+  | "all"
+  | "pokemon"
+  | "trainer"
+  | "supporter"
+  | "item"
+  | "basic"
+  | "stage1"
+  | "stage2";
 
 const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "fire", label: "🔥 Feu" },
@@ -479,6 +488,18 @@ const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
   { id: "metal", label: "⚙️ Métal" },
   { id: "dragon", label: "🐉 Dragon" },
   { id: "colorless", label: "⭐ Incolore" },
+];
+
+// Filtres "Catégorie" : Pokémon (avec sous-filtres par stage) vs Dresseurs
+// (avec sous-filtres par sous-type Supporter / Objet).
+const PICKER_CATEGORY_OPTIONS: { id: PickerCategory; label: string; group: "pokemon" | "trainer" }[] = [
+  { id: "pokemon", label: "🐾 Pokémon", group: "pokemon" },
+  { id: "basic", label: "↳ De base", group: "pokemon" },
+  { id: "stage1", label: "↳ Niveau 1", group: "pokemon" },
+  { id: "stage2", label: "↳ Niveau 2", group: "pokemon" },
+  { id: "trainer", label: "🧙 Dresseurs", group: "trainer" },
+  { id: "supporter", label: "↳ Supporter", group: "trainer" },
+  { id: "item", label: "↳ Objet", group: "trainer" },
 ];
 
 const PICKER_RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
@@ -504,10 +525,9 @@ function CollectionPicker({
   onAdd: (card: PokemonCardData) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<PickerCategory>("all");
   const [typeFilter, setTypeFilter] = useState<PokemonEnergyType | null>(null);
   const [rarityFilter, setRarityFilter] = useState<TcgRarity | null>(null);
-  // Par défaut on n'affiche que les cartes possédées (sens pour la création
-  // de deck). Les énergies de base sont toujours considérées comme acquises.
   const [ownedFilter, setOwnedFilter] = useState<PickerOwned>("owned");
   const [sortMode, setSortMode] = useState<PickerSort>("number");
   // Carte sélectionnée pour preview (modal zoom avec bouton "Ajouter au deck").
@@ -520,12 +540,26 @@ function CollectionPicker({
       if (ownedFilter === "owned" && owned <= 0) return false;
       if (ownedFilter === "missing" && owned > 0) return false;
       if (rarityFilter && c.rarity !== rarityFilter) return false;
+      // Catégorie : pokemon en gros, ou stages spécifiques, ou trainer en gros,
+      // ou sous-types trainer (supporter / item).
+      if (categoryFilter === "pokemon" && c.kind !== "pokemon") return false;
+      if (categoryFilter === "trainer" && c.kind !== "trainer") return false;
+      if (categoryFilter === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
+        return false;
+      if (categoryFilter === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
+        return false;
+      if (categoryFilter === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
+        return false;
+      if (categoryFilter === "supporter" && (c.kind !== "trainer" || c.trainerType !== "supporter"))
+        return false;
+      if (categoryFilter === "item" && (c.kind !== "trainer" || c.trainerType !== "item"))
+        return false;
       if (typeFilter && (c.kind !== "pokemon" || c.type !== typeFilter))
         return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [pool, collection, search, typeFilter, rarityFilter, ownedFilter]);
+  }, [pool, collection, search, categoryFilter, typeFilter, rarityFilter, ownedFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -554,6 +588,7 @@ function CollectionPicker({
 
   const filtersChanged =
     !!search ||
+    categoryFilter !== "all" ||
     typeFilter !== null ||
     rarityFilter !== null ||
     ownedFilter !== "owned"; // "owned" est le défaut
@@ -583,6 +618,7 @@ function CollectionPicker({
             <button
               onClick={() => {
                 setSearch("");
+                setCategoryFilter("all");
                 setTypeFilter(null);
                 setRarityFilter(null);
                 setOwnedFilter("owned");
@@ -593,6 +629,7 @@ function CollectionPicker({
             </button>
           )}
         </div>
+        {/* Ligne 1 : possession */}
         <div className="flex flex-wrap gap-1.5">
           <PickerChip
             active={ownedFilter === "owned"}
@@ -609,7 +646,27 @@ function CollectionPicker({
             onClick={() => setOwnedFilter("all")}
             label="Toutes"
           />
-          <span className="mx-1 w-px self-stretch bg-white/10" />
+        </div>
+        {/* Ligne 2 : catégorie (Pokémon vs Dresseur, sous-types) */}
+        <div className="flex flex-wrap gap-1.5">
+          <PickerChip
+            active={categoryFilter === "all"}
+            onClick={() => setCategoryFilter("all")}
+            label="Toutes catégories"
+          />
+          {PICKER_CATEGORY_OPTIONS.map((c) => (
+            <PickerChip
+              key={c.id}
+              active={categoryFilter === c.id}
+              onClick={() =>
+                setCategoryFilter(categoryFilter === c.id ? "all" : c.id)
+              }
+              label={c.label}
+            />
+          ))}
+        </div>
+        {/* Ligne 3 : type énergétique (Pokémon uniquement) */}
+        <div className="flex flex-wrap gap-1.5">
           {PICKER_TYPE_OPTIONS.map((t) => (
             <PickerChip
               key={t.id}
@@ -620,7 +677,9 @@ function CollectionPicker({
               label={t.label}
             />
           ))}
-          <span className="mx-1 w-px self-stretch bg-white/10" />
+        </div>
+        {/* Ligne 4 : rareté */}
+        <div className="flex flex-wrap gap-1.5">
           {PICKER_RARITY_OPTIONS.map((r) => (
             <PickerChip
               key={r.id}
