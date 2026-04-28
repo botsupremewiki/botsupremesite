@@ -464,34 +464,6 @@ export function DecksClient({
                 </div>
               </div>
 
-              {/* Sélecteur d'énergies du deck (Pocket : 1-3 types max). */}
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 bg-black/20 px-3 py-2">
-                <span className="text-[10px] uppercase tracking-widest text-zinc-400">
-                  ⚡ Énergies du deck ({draftEnergyTypes.length}/3)
-                </span>
-                {PICKER_TYPE_OPTIONS.map((t) => {
-                  const active = draftEnergyTypes.includes(t.id);
-                  const disabled = !active && draftEnergyTypes.length >= 3;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => toggleEnergyType(t.id)}
-                      disabled={disabled}
-                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
-                        active
-                          ? "border-amber-400/70 bg-amber-400/20 text-amber-100"
-                          : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
-                      }`}
-                      title={
-                        disabled ? "Max 3 types — désélectionne un autre" : t.id
-                      }
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
-              </div>
-
               {errorMsg && (
                 <div className="border-b border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-300">
                   {errorMsg}
@@ -506,6 +478,8 @@ export function DecksClient({
                   draftEntries={draftEntries}
                   cardById={cardById}
                   onRemove={removeCard}
+                  energyTypes={draftEnergyTypes}
+                  onToggleEnergy={toggleEnergyType}
                 />
 
                 {/* Séparateur visuel net */}
@@ -535,14 +509,7 @@ export function DecksClient({
 
 type PickerOwned = "all" | "owned" | "missing";
 type PickerSort = "number" | "name" | "rarity" | "count";
-type PickerCategory =
-  | "pokemon"
-  | "trainer"
-  | "supporter"
-  | "item"
-  | "basic"
-  | "stage1"
-  | "stage2";
+type PickerCategory = "pokemon" | "trainer";
 
 // Un seul filtre "facette" actif à la fois (catégorie OU type OU rareté).
 type PickerActiveFilter =
@@ -551,40 +518,36 @@ type PickerActiveFilter =
   | { kind: "rarity"; value: TcgRarity }
   | null;
 
-const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
-  { id: "fire", label: "🔥 Feu" },
-  { id: "water", label: "💧 Eau" },
-  { id: "grass", label: "🍃 Plante" },
-  { id: "lightning", label: "⚡ Élec" },
-  { id: "psychic", label: "🌀 Psy" },
-  { id: "fighting", label: "👊 Combat" },
-  { id: "darkness", label: "🌑 Obscurité" },
-  { id: "metal", label: "⚙️ Métal" },
-  { id: "dragon", label: "🐉 Dragon" },
-  { id: "colorless", label: "⭐ Incolore" },
+// Filtres compacts : labels courts (emoji seul pour types/raretés, mot seul
+// pour catégories) — tout tient sur une ligne. Le titre complet est en
+// `title=` HTML (tooltip au hover).
+const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string; title: string }[] = [
+  { id: "fire", label: "🔥", title: "Feu" },
+  { id: "water", label: "💧", title: "Eau" },
+  { id: "grass", label: "🍃", title: "Plante" },
+  { id: "lightning", label: "⚡", title: "Électrique" },
+  { id: "psychic", label: "🌀", title: "Psy" },
+  { id: "fighting", label: "👊", title: "Combat" },
+  { id: "darkness", label: "🌑", title: "Obscurité" },
+  { id: "metal", label: "⚙️", title: "Métal" },
+  { id: "dragon", label: "🐉", title: "Dragon" },
+  { id: "colorless", label: "⭐", title: "Incolore" },
 ];
 
-// Filtres "Catégorie" : Pokémon (avec sous-filtres par stage) vs Dresseurs
-// (avec sous-filtres par sous-type Supporter / Objet).
-const PICKER_CATEGORY_OPTIONS: { id: PickerCategory; label: string; group: "pokemon" | "trainer" }[] = [
-  { id: "pokemon", label: "🐾 Pokémon", group: "pokemon" },
-  { id: "basic", label: "↳ De base", group: "pokemon" },
-  { id: "stage1", label: "↳ Niveau 1", group: "pokemon" },
-  { id: "stage2", label: "↳ Niveau 2", group: "pokemon" },
-  { id: "trainer", label: "🧙 Dresseurs", group: "trainer" },
-  { id: "supporter", label: "↳ Supporter", group: "trainer" },
-  { id: "item", label: "↳ Objet", group: "trainer" },
+const PICKER_CATEGORY_OPTIONS: { id: PickerCategory; label: string; title: string }[] = [
+  { id: "pokemon", label: "Pokémon", title: "Pokémon (toutes catégories)" },
+  { id: "trainer", label: "Dresseurs", title: "Dresseurs (Supporter + Objet)" },
 ];
 
-const PICKER_RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
-  { id: "crown", label: "👑 Couronne" },
-  { id: "star-3", label: "★★★" },
-  { id: "star-2", label: "★★" },
-  { id: "star-1", label: "★" },
-  { id: "diamond-4", label: "◆◆◆◆ ex" },
-  { id: "diamond-3", label: "◆◆◆" },
-  { id: "diamond-2", label: "◆◆" },
-  { id: "diamond-1", label: "◆" },
+const PICKER_RARITY_OPTIONS: { id: TcgRarity; label: string; title: string }[] = [
+  { id: "crown", label: "👑", title: "Couronne brillante" },
+  { id: "star-3", label: "★★★", title: "Immersive" },
+  { id: "star-2", label: "★★", title: "Full Art alt" },
+  { id: "star-1", label: "★", title: "Full Art" },
+  { id: "diamond-4", label: "◆◆◆◆", title: "Rare ex" },
+  { id: "diamond-3", label: "◆◆◆", title: "Rare" },
+  { id: "diamond-2", label: "◆◆", title: "Peu commune" },
+  { id: "diamond-1", label: "◆", title: "Commune" },
 ];
 
 function CollectionPicker({
@@ -637,22 +600,6 @@ function CollectionPicker({
           const v = activeFilter.value;
           if (v === "pokemon" && c.kind !== "pokemon") return false;
           if (v === "trainer" && c.kind !== "trainer") return false;
-          if (v === "basic" && (c.kind !== "pokemon" || c.stage !== "basic"))
-            return false;
-          if (v === "stage1" && (c.kind !== "pokemon" || c.stage !== "stage1"))
-            return false;
-          if (v === "stage2" && (c.kind !== "pokemon" || c.stage !== "stage2"))
-            return false;
-          if (
-            v === "supporter" &&
-            (c.kind !== "trainer" || c.trainerType !== "supporter")
-          )
-            return false;
-          if (
-            v === "item" &&
-            (c.kind !== "trainer" || c.trainerType !== "item")
-          )
-            return false;
         }
       }
       if (q && !c.name.toLowerCase().includes(q)) return false;
@@ -722,8 +669,8 @@ function CollectionPicker({
             </button>
           )}
         </div>
-        {/* Ligne 1 : possession (indépendante) */}
-        <div className="flex flex-wrap gap-1.5">
+        {/* Une seule ligne : possession | catégorie | type | rareté */}
+        <div className="flex flex-wrap items-center gap-1.5">
           <PickerChip
             active={ownedFilter === "owned"}
             onClick={() => setOwnedFilter("owned")}
@@ -739,37 +686,34 @@ function CollectionPicker({
             onClick={() => setOwnedFilter("all")}
             label="Toutes"
           />
-        </div>
-        {/* Ligne 2 : catégorie (1 seul actif parmi catégorie/type/rareté) */}
-        <div className="flex flex-wrap gap-1.5">
+          <PickerSeparator />
           {PICKER_CATEGORY_OPTIONS.map((c) => (
             <PickerChip
               key={c.id}
               active={isActive("category", c.id)}
               onClick={() => toggleFilter({ kind: "category", value: c.id })}
               label={c.label}
+              title={c.title}
             />
           ))}
-        </div>
-        {/* Ligne 3 : type énergétique */}
-        <div className="flex flex-wrap gap-1.5">
+          <PickerSeparator />
           {PICKER_TYPE_OPTIONS.map((t) => (
             <PickerChip
               key={t.id}
               active={isActive("type", t.id)}
               onClick={() => toggleFilter({ kind: "type", value: t.id })}
               label={t.label}
+              title={t.title}
             />
           ))}
-        </div>
-        {/* Ligne 4 : rareté */}
-        <div className="flex flex-wrap gap-1.5">
+          <PickerSeparator />
           {PICKER_RARITY_OPTIONS.map((r) => (
             <PickerChip
               key={r.id}
               active={isActive("rarity", r.id)}
               onClick={() => toggleFilter({ kind: "rarity", value: r.id })}
               label={r.label}
+              title={r.title}
             />
           ))}
         </div>
@@ -928,14 +872,17 @@ function PickerChip({
   active,
   onClick,
   label,
+  title,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
         active
           ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
@@ -947,33 +894,36 @@ function PickerChip({
   );
 }
 
+function PickerSeparator() {
+  return <span className="mx-1 h-5 w-px self-center bg-white/10" />;
+}
+
 // ─── Deck header (en haut du builder) ────────────────────────────────────
 
-/** En-tête du deck builder qui affiche les cartes ACTUELLEMENT dans le deck
- *  sous forme de mini-cartes visuelles (avec image), avec compteur, breakdown
- *  et warning. Click sur une mini-carte = retire 1 ex. */
+/** En-tête du deck builder : titre + compteur + sélecteur d'énergies, puis
+ *  une grille de mini-cartes visuelles (image) plus grandes pour profiter de
+ *  l'espace libéré (plus de breakdown stage). Click = retire 1 ex. */
 function DeckHeader({
   draftEntries,
   cardById,
   onRemove,
+  energyTypes,
+  onToggleEnergy,
 }: {
   draftEntries: Map<string, number>;
   cardById: Map<string, PokemonCardData>;
   onRemove: (cardId: string) => void;
+  energyTypes: PokemonEnergyType[];
+  onToggleEnergy: (t: PokemonEnergyType) => void;
 }) {
-  const { cards, breakdown, totalCount } = useMemo(() => {
+  const { cards, totalCount } = useMemo(() => {
     const list: { card: PokemonCardData; count: number }[] = [];
-    const bd = { basic: 0, stage1: 0, stage2: 0, trainer: 0 };
     let total = 0;
     for (const [cardId, count] of draftEntries) {
       const card = cardById.get(cardId);
       if (!card) continue;
       list.push({ card, count });
       total += count;
-      if (card.kind === "trainer") bd.trainer += count;
-      else if (card.stage === "basic") bd.basic += count;
-      else if (card.stage === "stage1") bd.stage1 += count;
-      else if (card.stage === "stage2") bd.stage2 += count;
     }
     // Tri : Pokémon de base d'abord (par nom), puis stage1, stage2, dresseurs.
     list.sort((a, b) => {
@@ -990,17 +940,13 @@ function DeckHeader({
       if (oa !== ob) return oa - ob;
       return a.card.name.localeCompare(b.card.name);
     });
-    return { cards: list, breakdown: bd, totalCount: total };
+    return { cards: list, totalCount: total };
   }, [draftEntries, cardById]);
-
-  const pokemonTotal =
-    breakdown.basic + breakdown.stage1 + breakdown.stage2;
-  const noBasic = totalCount > 0 && breakdown.basic === 0;
 
   return (
     <div className="shrink-0 border-b border-white/5 bg-gradient-to-b from-emerald-900/15 to-transparent">
-      {/* Header : titre + compteurs + breakdown inline */}
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2 text-xs">
+      {/* Header : titre + compteur + sélecteur d'énergies sur la même ligne */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
         <span className="font-bold uppercase tracking-widest text-emerald-200">
           🛠️ Mon deck
         </span>
@@ -1013,38 +959,43 @@ function DeckHeader({
         >
           {totalCount}/20
         </span>
-        <span className="text-zinc-400">
-          🐾 {pokemonTotal} · 🧙 {breakdown.trainer}
+        <span className="mx-1 h-5 w-px self-center bg-white/10" />
+        <span className="text-[10px] uppercase tracking-widest text-zinc-400">
+          ⚡ Énergies ({energyTypes.length}/3)
         </span>
-        <span className="text-zinc-500">
-          De base{" "}
-          <span
-            className={`font-semibold ${
-              breakdown.basic === 0 && totalCount > 0
-                ? "text-rose-300"
-                : "text-emerald-200"
-            }`}
-          >
-            {breakdown.basic}
-            {noBasic ? " ⚠" : ""}
-          </span>{" "}
-          · N1 {breakdown.stage1} · N2 {breakdown.stage2}
-        </span>
-        {noBasic && (
-          <span className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-200">
-            ⚠ Au moins 1 Pokémon de Base requis
-          </span>
-        )}
+        {PICKER_TYPE_OPTIONS.map((t) => {
+          const active = energyTypes.includes(t.id);
+          const disabled = !active && energyTypes.length >= 3;
+          return (
+            <button
+              key={t.id}
+              onClick={() => onToggleEnergy(t.id)}
+              disabled={disabled}
+              className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
+                active
+                  ? "border-amber-400/70 bg-amber-400/20 text-amber-100"
+                  : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
+              }`}
+              title={
+                disabled
+                  ? "Max 3 types — désélectionne un autre"
+                  : t.title
+              }
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Grille des cartes du deck (mini-images cliquables pour retirer) */}
-      <div className="max-h-[180px] overflow-y-auto px-4 pb-3">
+      <div className="max-h-[260px] overflow-y-auto px-4 pb-3">
         {totalCount === 0 ? (
           <div className="rounded-md border border-dashed border-white/10 p-3 text-center text-xs text-zinc-500">
             Deck vide — clique sur une carte ci-dessous pour l&apos;ajouter
           </div>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             <AnimatePresence initial={false}>
               {cards.map(({ card, count }) => (
                 <motion.button
@@ -1054,7 +1005,7 @@ function DeckHeader({
                   exit={{ opacity: 0, scale: 0.85 }}
                   onClick={() => onRemove(card.id)}
                   className="group relative shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/30 transition-all hover:border-rose-400/60 hover:ring-2 hover:ring-rose-400/40"
-                  style={{ width: 60, height: 84 }}
+                  style={{ width: 90, height: 126 }}
                   title={`${card.name} — clic pour retirer 1 copie`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1065,11 +1016,11 @@ function DeckHeader({
                     loading="lazy"
                   />
                   {/* Badge count en haut à droite */}
-                  <span className="absolute right-0.5 top-0.5 rounded-full bg-amber-400 px-1 py-px text-[9px] font-bold text-amber-950 shadow">
+                  <span className="absolute right-0.5 top-0.5 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950 shadow">
                     ×{count}
                   </span>
                   {/* Overlay "retirer" au hover */}
-                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-rose-900/60 text-base opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-rose-900/60 text-lg opacity-0 transition-opacity group-hover:opacity-100">
                     ✕
                   </span>
                 </motion.button>

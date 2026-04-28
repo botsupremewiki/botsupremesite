@@ -27,38 +27,36 @@ type ActiveFilter =
   | { kind: "rarity"; value: TcgRarity }
   | null;
 
-const TYPE_OPTIONS: { id: PokemonEnergyType; label: string }[] = [
-  { id: "fire", label: "🔥 Feu" },
-  { id: "water", label: "💧 Eau" },
-  { id: "grass", label: "🍃 Plante" },
-  { id: "lightning", label: "⚡ Élec" },
-  { id: "psychic", label: "🌀 Psy" },
-  { id: "fighting", label: "👊 Combat" },
-  { id: "darkness", label: "🌑 Obscurité" },
-  { id: "metal", label: "⚙️ Métal" },
-  { id: "dragon", label: "🐉 Dragon" },
-  { id: "colorless", label: "⭐ Incolore" },
+// Filtres compacts : labels courts (emoji seul pour types/raretés, mot seul
+// pour catégories) — tout tient sur une ligne. Le titre complet est en
+// `title=` HTML (tooltip au hover).
+const TYPE_OPTIONS: { id: PokemonEnergyType; label: string; title: string }[] = [
+  { id: "fire", label: "🔥", title: "Feu" },
+  { id: "water", label: "💧", title: "Eau" },
+  { id: "grass", label: "🍃", title: "Plante" },
+  { id: "lightning", label: "⚡", title: "Électrique" },
+  { id: "psychic", label: "🌀", title: "Psy" },
+  { id: "fighting", label: "👊", title: "Combat" },
+  { id: "darkness", label: "🌑", title: "Obscurité" },
+  { id: "metal", label: "⚙️", title: "Métal" },
+  { id: "dragon", label: "🐉", title: "Dragon" },
+  { id: "colorless", label: "⭐", title: "Incolore" },
 ];
 
-const CATEGORY_OPTIONS: { id: CategoryFilter; label: string }[] = [
-  { id: "pokemon", label: "🐾 Pokémon" },
-  { id: "basic", label: "↳ De base" },
-  { id: "stage1", label: "↳ Niveau 1" },
-  { id: "stage2", label: "↳ Niveau 2" },
-  { id: "trainer", label: "🧙 Dresseurs" },
-  { id: "supporter", label: "↳ Supporter" },
-  { id: "item", label: "↳ Objet" },
+const CATEGORY_OPTIONS: { id: CategoryFilter; label: string; title: string }[] = [
+  { id: "pokemon", label: "Pokémon", title: "Pokémon (toutes catégories)" },
+  { id: "trainer", label: "Dresseurs", title: "Dresseurs (Supporter + Objet)" },
 ];
 
-const RARITY_OPTIONS: { id: TcgRarity; label: string }[] = [
-  { id: "crown", label: "👑 Couronne" },
-  { id: "star-3", label: "★★★ Immersive" },
-  { id: "star-2", label: "★★ Full Art" },
-  { id: "star-1", label: "★ Full Art" },
-  { id: "diamond-4", label: "◆◆◆◆ ex" },
-  { id: "diamond-3", label: "◆◆◆ Rare" },
-  { id: "diamond-2", label: "◆◆ Peu c." },
-  { id: "diamond-1", label: "◆ Commune" },
+const RARITY_OPTIONS: { id: TcgRarity; label: string; title: string }[] = [
+  { id: "crown", label: "👑", title: "Couronne brillante" },
+  { id: "star-3", label: "★★★", title: "Immersive" },
+  { id: "star-2", label: "★★", title: "Full Art alt" },
+  { id: "star-1", label: "★", title: "Full Art" },
+  { id: "diamond-4", label: "◆◆◆◆", title: "Rare ex" },
+  { id: "diamond-3", label: "◆◆◆", title: "Rare" },
+  { id: "diamond-2", label: "◆◆", title: "Peu commune" },
+  { id: "diamond-1", label: "◆", title: "Commune" },
 ];
 
 export function CollectionGrid({
@@ -194,13 +192,8 @@ export function CollectionGrid({
             </button>
           )}
         </div>
-        {/* Ligne 1 : possession (indépendante, toujours UN actif) */}
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip
-            active={ownedFilter === "all"}
-            onClick={() => setOwnedFilter("all")}
-            label="Toutes"
-          />
+        {/* Une seule ligne : possession | catégorie | type | rareté */}
+        <div className="flex flex-wrap items-center gap-1.5">
           <FilterChip
             active={ownedFilter === "owned"}
             onClick={() => setOwnedFilter("owned")}
@@ -212,41 +205,43 @@ export function CollectionGrid({
             label="Manquantes"
           />
           <FilterChip
+            active={ownedFilter === "all"}
+            onClick={() => setOwnedFilter("all")}
+            label="Toutes"
+          />
+          <FilterChip
             active={ownedFilter === "dupes"}
             onClick={() => setOwnedFilter("dupes")}
             label="Doublons"
           />
-        </div>
-        {/* Ligne 2 : catégorie (1 seul actif parmi catégorie/type/rareté) */}
-        <div className="flex flex-wrap gap-1.5">
+          <FilterSeparator />
           {CATEGORY_OPTIONS.map((c) => (
             <FilterChip
               key={c.id}
               active={isActive("category", c.id)}
               onClick={() => toggleFilter({ kind: "category", value: c.id })}
               label={c.label}
+              title={c.title}
             />
           ))}
-        </div>
-        {/* Ligne 3 : type énergétique */}
-        <div className="flex flex-wrap gap-1.5">
+          <FilterSeparator />
           {TYPE_OPTIONS.map((t) => (
             <FilterChip
               key={t.id}
               active={isActive("type", t.id)}
               onClick={() => toggleFilter({ kind: "type", value: t.id })}
               label={t.label}
+              title={t.title}
             />
           ))}
-        </div>
-        {/* Ligne 4 : rareté */}
-        <div className="flex flex-wrap gap-1.5">
+          <FilterSeparator />
           {RARITY_OPTIONS.map((r) => (
             <FilterChip
               key={r.id}
               active={isActive("rarity", r.id)}
               onClick={() => toggleFilter({ kind: "rarity", value: r.id })}
               label={r.label}
+              title={r.title}
             />
           ))}
         </div>
@@ -288,14 +283,17 @@ function FilterChip({
   active,
   onClick,
   label,
+  title,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
         active
           ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
@@ -305,4 +303,8 @@ function FilterChip({
       {label}
     </button>
   );
+}
+
+function FilterSeparator() {
+  return <span className="mx-1 h-5 w-px self-center bg-white/10" />;
 }
