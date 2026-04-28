@@ -498,12 +498,23 @@ export function DecksClient({
                 </div>
               )}
 
-              <div className="flex flex-1 overflow-hidden">
-                {/* Collection (cliquer pour add) */}
+              {/* Layout vertical : en haut = deck en cours (mini cartes
+                  visuelles), séparateur, en bas = collection à ajouter. */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {/* Header : cartes actuellement dans le deck */}
+                <DeckHeader
+                  draftEntries={draftEntries}
+                  cardById={cardById}
+                  onRemove={removeCard}
+                />
+
+                {/* Séparateur visuel net */}
+                <div className="shrink-0 border-t-2 border-amber-400/30 bg-gradient-to-b from-amber-400/10 to-transparent px-4 py-1.5 text-[10px] uppercase tracking-widest text-amber-200/80">
+                  ↓ Ta collection · clique pour ajouter une carte
+                </div>
+
+                {/* Collection (clic = ouvre modal preview avec bouton ajouter) */}
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
-                  <div className="mb-2 shrink-0 text-[10px] uppercase tracking-widest text-zinc-400">
-                    Ta collection · clique pour ajouter
-                  </div>
                   <CollectionPicker
                     pool={pool}
                     collection={collection}
@@ -511,13 +522,6 @@ export function DecksClient({
                     onAdd={addCard}
                   />
                 </div>
-                {/* Deck contents */}
-                <DeckSummary
-                  draftEntries={draftEntries}
-                  cardById={cardById}
-                  onRemove={removeCard}
-                  onAdd={addCard}
-                />
               </div>
             </>
           )}
@@ -929,105 +933,138 @@ function PickerChip({
   );
 }
 
-// ─── Deck summary (right column) ─────────────────────────────────────────
+// ─── Deck header (en haut du builder) ────────────────────────────────────
 
-function DeckSummary({
+/** En-tête du deck builder qui affiche les cartes ACTUELLEMENT dans le deck
+ *  sous forme de mini-cartes visuelles (avec image), avec compteur, breakdown
+ *  et warning. Click sur une mini-carte = retire 1 ex. */
+function DeckHeader({
   draftEntries,
   cardById,
   onRemove,
-  onAdd,
 }: {
   draftEntries: Map<string, number>;
   cardById: Map<string, PokemonCardData>;
   onRemove: (cardId: string) => void;
-  onAdd: (card: PokemonCardData) => void;
 }) {
-  const { pokemon, breakdown } = useMemo(() => {
+  const { cards, breakdown, totalCount } = useMemo(() => {
     const list: { card: PokemonCardData; count: number }[] = [];
     const bd = { basic: 0, stage1: 0, stage2: 0, trainer: 0 };
+    let total = 0;
     for (const [cardId, count] of draftEntries) {
       const card = cardById.get(cardId);
       if (!card) continue;
       list.push({ card, count });
+      total += count;
       if (card.kind === "trainer") bd.trainer += count;
       else if (card.stage === "basic") bd.basic += count;
       else if (card.stage === "stage1") bd.stage1 += count;
       else if (card.stage === "stage2") bd.stage2 += count;
     }
+    // Tri : Pokémon de base d'abord (par nom), puis stage1, stage2, dresseurs.
     list.sort((a, b) => {
-      const ar = RARITY_TIER[a.card.rarity] ?? 0;
-      const br = RARITY_TIER[b.card.rarity] ?? 0;
-      if (ar !== br) return br - ar;
+      const order = (c: PokemonCardData) =>
+        c.kind === "trainer"
+          ? 4
+          : c.stage === "basic"
+            ? 1
+            : c.stage === "stage1"
+              ? 2
+              : 3;
+      const oa = order(a.card);
+      const ob = order(b.card);
+      if (oa !== ob) return oa - ob;
       return a.card.name.localeCompare(b.card.name);
     });
-    return { pokemon: list, breakdown: bd };
+    return { cards: list, breakdown: bd, totalCount: total };
   }, [draftEntries, cardById]);
 
   const pokemonTotal =
     breakdown.basic + breakdown.stage1 + breakdown.stage2;
-  const noBasic = pokemonTotal > 0 && breakdown.basic === 0;
+  const noBasic = totalCount > 0 && breakdown.basic === 0;
+
   return (
-    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-white/5 bg-black/40">
-      <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-400">
-        <span>Deck</span>
-        <span>🐾 {pokemonTotal} · 🧙 {breakdown.trainer}</span>
+    <div className="shrink-0 border-b border-white/5 bg-gradient-to-b from-emerald-900/15 to-transparent">
+      {/* Header : titre + compteurs + breakdown inline */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 text-xs">
+        <span className="font-bold uppercase tracking-widest text-emerald-200">
+          🛠️ Mon deck
+        </span>
+        <span
+          className={`rounded-md border px-2 py-0.5 font-semibold tabular-nums ${
+            totalCount === 20
+              ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
+              : "border-amber-400/40 bg-amber-400/10 text-amber-200"
+          }`}
+        >
+          {totalCount}/20
+        </span>
+        <span className="text-zinc-400">
+          🐾 {pokemonTotal} · 🧙 {breakdown.trainer}
+        </span>
+        <span className="text-zinc-500">
+          De base{" "}
+          <span
+            className={`font-semibold ${
+              breakdown.basic === 0 && totalCount > 0
+                ? "text-rose-300"
+                : "text-emerald-200"
+            }`}
+          >
+            {breakdown.basic}
+            {noBasic ? " ⚠" : ""}
+          </span>{" "}
+          · N1 {breakdown.stage1} · N2 {breakdown.stage2}
+        </span>
+        {noBasic && (
+          <span className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-200">
+            ⚠ Au moins 1 Pokémon de Base requis
+          </span>
+        )}
       </div>
 
-      {/* Breakdown : basics + stage1/2 + trainers, avec warning si pas de basic. */}
-      {draftEntries.size > 0 && (
-        <div className="shrink-0 border-b border-white/5 px-3 py-2 text-[10px]">
-          <div className="flex justify-between text-zinc-400">
-            <span>De base</span>
-            <span
-              className={`tabular-nums font-semibold ${
-                breakdown.basic === 0
-                  ? "text-rose-300"
-                  : "text-emerald-200"
-              }`}
-            >
-              {breakdown.basic}
-              {breakdown.basic === 0 ? " ⚠" : ""}
-            </span>
-          </div>
-          <div className="flex justify-between text-zinc-400">
-            <span>Niveau 1</span>
-            <span className="tabular-nums">{breakdown.stage1}</span>
-          </div>
-          <div className="flex justify-between text-zinc-400">
-            <span>Niveau 2</span>
-            <span className="tabular-nums">{breakdown.stage2}</span>
-          </div>
-          <div className="flex justify-between text-zinc-400">
-            <span>Dresseurs</span>
-            <span className="tabular-nums">{breakdown.trainer}</span>
-          </div>
-          {noBasic && (
-            <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 p-1.5 text-[10px] text-rose-200">
-              Au moins 1 Pokémon de Base requis pour démarrer un combat.
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {draftEntries.size === 0 && (
+      {/* Grille des cartes du deck (mini-images cliquables pour retirer) */}
+      <div className="max-h-[180px] overflow-y-auto px-4 pb-3">
+        {totalCount === 0 ? (
           <div className="rounded-md border border-dashed border-white/10 p-3 text-center text-xs text-zinc-500">
-            Vide. Clique sur les cartes à gauche pour les ajouter.
+            Deck vide — clique sur une carte ci-dessous pour l&apos;ajouter
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            <AnimatePresence initial={false}>
+              {cards.map(({ card, count }) => (
+                <motion.button
+                  key={card.id}
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  onClick={() => onRemove(card.id)}
+                  className="group relative shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/30 transition-all hover:border-rose-400/60 hover:ring-2 hover:ring-rose-400/40"
+                  style={{ width: 60, height: 84 }}
+                  title={`${card.name} — clic pour retirer 1 copie`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={card.image}
+                    alt={card.name}
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                  {/* Badge count en haut à droite */}
+                  <span className="absolute right-0.5 top-0.5 rounded-full bg-amber-400 px-1 py-px text-[9px] font-bold text-amber-950 shadow">
+                    ×{count}
+                  </span>
+                  {/* Overlay "retirer" au hover */}
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-rose-900/60 text-base opacity-0 transition-opacity group-hover:opacity-100">
+                    ✕
+                  </span>
+                </motion.button>
+              ))}
+            </AnimatePresence>
           </div>
         )}
-        <AnimatePresence initial={false}>
-          {pokemon.map(({ card, count }) => (
-            <DeckRow
-              key={card.id}
-              card={card}
-              count={count}
-              onRemove={() => onRemove(card.id)}
-              onAdd={() => onAdd(card)}
-            />
-          ))}
-        </AnimatePresence>
       </div>
-    </aside>
+    </div>
   );
 }
 
