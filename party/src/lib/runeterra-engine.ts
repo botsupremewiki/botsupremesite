@@ -31,9 +31,18 @@ export type InternalState = {
   activeSeatIdx: 0 | 1; // qui a la priorité ce round
   attackTokenSeatIdx: 0 | 1; // qui a le jeton d'attaque ce round
   round: number;
+  // Compteur de passes consécutives : 2 passes d'affilée = round termine.
+  // Reset à 0 dès qu'une action non-pass est jouée (unit, spell, attaque).
+  consecutivePasses: number;
   winnerSeatIdx: 0 | 1 | null;
   log: string[];
 };
+
+/** Discriminé : réducteurs d'action retournent ok=false + raison si l'action
+ *  est invalide (mana insuffisant, pas ton tour, hand index invalide, etc.). */
+export type EngineResult =
+  | { ok: true; state: InternalState }
+  | { ok: false; error: string };
 
 export type InternalPlayer = {
   authId: string;
@@ -163,6 +172,7 @@ export function createInitialState(
     activeSeatIdx: startingAttacker,
     attackTokenSeatIdx: startingAttacker,
     round: 0,
+    consecutivePasses: 0,
     winnerSeatIdx: null,
     log: [`Partie démarrée. ${startingAttacker === 0 ? p1.username : p2.username} attaque en premier.`],
   };
@@ -279,6 +289,7 @@ export function startRound(state: InternalState): InternalState {
     activeSeatIdx: newAttackTokenSeat,
     attackTokenSeatIdx: newAttackTokenSeat,
     round: newRound,
+    consecutivePasses: 0,
     log,
   };
 }
@@ -400,4 +411,238 @@ export function drawCards(
 /** Mappe seat-id (0/1) → "p1"/"p2" pour l'envoi client. */
 export function seatToId(seatIdx: 0 | 1): "p1" | "p2" {
   return seatIdx === 0 ? "p1" : "p2";
+}
+
+function otherSeat(seat: 0 | 1): 0 | 1 {
+  return (1 - seat) as 0 | 1;
+}
+
+// ────────────────────── Phase 3.2 : actions de base ──────────────────────
+
+/** Joue une unité depuis la main vers le banc.
+ *   • Vérifie phase=round, c'est ton tour, hand index valide, carte est Unit
+ *   • Vérifie mana >= cost et bench < maxBench
+ *   • Déduit le mana, retire de la main, ajoute au banc avec
+ *     playedThisRound=true (l'unité ne pourra pas attaquer ce round)
+ *   • Reset consecutivePasses, switch priorité à l'adversaire
+ */
+export function playUnit(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  handIndex: number,
+): EngineResult {
+  if (state.phase !== "round") {
+    return { ok: false, error: "La partie n'est pas en round." };
+  }
+  if (state.activeSeatIdx !== seatIdx) {
+    return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+  const player = state.players[seatIdx];
+  if (handIndex < 0 || handIndex >= player.hand.length) {
+    return { ok: false, error: "Carte introuvable dans la main." };
+  }
+  const handCard = player.hand[handIndex];
+  const card = getCard(handCard.cardCode);
+  if (!card) {
+    return { ok: false, error: `Carte inconnue : ${handCard.cardCode}.` };
+  }
+  if (card.type !== "Unit") {
+    return { ok: false, error: `${card.name} n'est pas une unité.` };
+  }
+  if (player.mana < card.cost) {
+    return {
+      ok: false,
+      error: `Mana insuffisante (${player.mana}/${card.cost}).`,
+    };
+  }
+  if (player.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench) {
+    return { ok: false, error: "Banc plein (6 max)." };
+  }
+
+  // Construit la nouvelle main + banc + mana.
+  const newHand = [
+    ...player.hand.slice(0, handIndex),
+    ...player.hand.slice(handIndex + 1),
+  ];
+  const newUnit = createUnit(handCard.uid, handCard.cardCode);
+  const newBench = [...player.bench, newUnit];
+  const updatedPlayer: InternalPlayer = {
+    ...player,
+    hand: newHand,
+    bench: newBench,
+    mana: player.mana - card.cost,
+  };
+
+  const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
+    InternalPlayer,
+    InternalPlayer,
+  ];
+  newPlayers[seatIdx] = updatedPlayer;
+
+  return {
+    ok: true,
+    state: {
+      ...state,
+      players: newPlayers,
+      activeSeatIdx: otherSeat(seatIdx),
+      consecutivePasses: 0,
+      log: [
+        ...state.log,
+        `${player.username} joue ${card.name} (coût ${card.cost}).`,
+      ],
+    },
+  };
+}
+
+/** Joue un sort depuis la main.
+ *   • Vérifie phase=round, c'est ton tour, hand index valide, carte est Spell
+ *   • Vérifie mana + spellMana >= cost (mana utilisée d'abord, puis spellMana)
+ *   • Déduit le coût, retire de la main
+ *   • Reset consecutivePasses, switch priorité à l'adversaire
+ *
+ *  NOTE Phase 3.2 : pas de spell stack ni de résolution d'effets. Le sort
+ *  est juste retiré de la main + mana déduite. La résolution effective des
+ *  effets viendra en Phase 3.4 avec les keywords.
+ */
+export function playSpell(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  handIndex: number,
+): EngineResult {
+  if (state.phase !== "round") {
+    return { ok: false, error: "La partie n'est pas en round." };
+  }
+  if (state.activeSeatIdx !== seatIdx) {
+    return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+  const player = state.players[seatIdx];
+  if (handIndex < 0 || handIndex >= player.hand.length) {
+    return { ok: false, error: "Carte introuvable dans la main." };
+  }
+  const handCard = player.hand[handIndex];
+  const card = getCard(handCard.cardCode);
+  if (!card) {
+    return { ok: false, error: `Carte inconnue : ${handCard.cardCode}.` };
+  }
+  if (card.type !== "Spell") {
+    return { ok: false, error: `${card.name} n'est pas un sort.` };
+  }
+  const totalAvailable = player.mana + player.spellMana;
+  if (totalAvailable < card.cost) {
+    return {
+      ok: false,
+      error: `Mana insuffisante (${totalAvailable}/${card.cost}, dont spell mana ${player.spellMana}).`,
+    };
+  }
+
+  // Mana standard d'abord, spellMana en complément.
+  const fromMana = Math.min(card.cost, player.mana);
+  const fromSpellMana = card.cost - fromMana;
+  const newHand = [
+    ...player.hand.slice(0, handIndex),
+    ...player.hand.slice(handIndex + 1),
+  ];
+  const updatedPlayer: InternalPlayer = {
+    ...player,
+    hand: newHand,
+    mana: player.mana - fromMana,
+    spellMana: player.spellMana - fromSpellMana,
+  };
+
+  const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
+    InternalPlayer,
+    InternalPlayer,
+  ];
+  newPlayers[seatIdx] = updatedPlayer;
+
+  return {
+    ok: true,
+    state: {
+      ...state,
+      players: newPlayers,
+      activeSeatIdx: otherSeat(seatIdx),
+      consecutivePasses: 0,
+      log: [
+        ...state.log,
+        `${player.username} lance ${card.name} (coût ${card.cost}).`,
+      ],
+    },
+  };
+}
+
+/** Le joueur actif passe la priorité à l'adversaire. Si les 2 joueurs ont
+ *  passé d'affilée (consecutivePasses atteint 2), le round se termine et
+ *  on transitionne au round suivant via `endRound`.
+ */
+export function passPriority(
+  state: InternalState,
+  seatIdx: 0 | 1,
+): EngineResult {
+  if (state.phase !== "round") {
+    return { ok: false, error: "La partie n'est pas en round." };
+  }
+  if (state.activeSeatIdx !== seatIdx) {
+    return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+
+  const newPasses = state.consecutivePasses + 1;
+  const player = state.players[seatIdx];
+  const log = [...state.log, `${player.username} passe.`];
+
+  // 2e pass d'affilée → round termine (avec swap attack token + bank spell mana).
+  if (newPasses >= 2) {
+    return {
+      ok: true,
+      state: endRound({
+        ...state,
+        consecutivePasses: 0,
+        log,
+      }),
+    };
+  }
+
+  return {
+    ok: true,
+    state: {
+      ...state,
+      activeSeatIdx: otherSeat(seatIdx),
+      consecutivePasses: newPasses,
+      log,
+    },
+  };
+}
+
+// ────────────────────── Prédicats client (UI) ─────────────────────────────
+
+/** Vérifie si une carte de la main peut être jouée maintenant. Utilisé
+ *  côté client pour griser les cartes injouables sans envoyer un message
+ *  serveur qui sera rejeté. */
+export function canPlayCard(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  handIndex: number,
+): { ok: boolean; reason?: string } {
+  if (state.phase !== "round") return { ok: false, reason: "Hors round" };
+  if (state.activeSeatIdx !== seatIdx)
+    return { ok: false, reason: "Pas ton tour" };
+  const player = state.players[seatIdx];
+  if (handIndex < 0 || handIndex >= player.hand.length)
+    return { ok: false, reason: "Index invalide" };
+  const card = getCard(player.hand[handIndex].cardCode);
+  if (!card) return { ok: false, reason: "Carte inconnue" };
+  if (card.type === "Unit") {
+    if (player.mana < card.cost)
+      return { ok: false, reason: `Mana insuffisante (${player.mana}/${card.cost})` };
+    if (player.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench)
+      return { ok: false, reason: "Banc plein" };
+    return { ok: true };
+  }
+  if (card.type === "Spell") {
+    const total = player.mana + player.spellMana;
+    if (total < card.cost)
+      return { ok: false, reason: `Mana insuffisante (${total}/${card.cost})` };
+    return { ok: true };
+  }
+  // Phase 3.2 : Landmark/Equipment/Trap pas encore implémentés.
+  return { ok: false, reason: `Type ${card.type} pas encore implémenté` };
 }
