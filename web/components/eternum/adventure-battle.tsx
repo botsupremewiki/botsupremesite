@@ -20,11 +20,14 @@ import {
   type EternumHero,
 } from "@shared/types";
 import {
+  actionInfo,
+  aliveEnemies,
   applyAction,
   autoChooseAction,
   initAtbState,
   predictNextActors,
   tickAtb,
+  type AtbActionKind,
   type AtbState,
   type AtbUnit,
 } from "@shared/eternum-combat-atb";
@@ -87,6 +90,7 @@ export function AdventureBattle({
   const [autoOn, setAutoOn] = useState(true); // sorts auto par défaut
   const [serverResult, setServerResult] = useState<ServerResult | null>(null);
   const [atbState, setAtbState] = useState<AtbState | null>(null);
+  const [picking, setPicking] = useState<AtbActionKind | null>(null);
   const lockRef = useRef(false);
 
   // Ref stable pour onStageChange (sinon les re-renders du parent
@@ -235,6 +239,11 @@ export function AdventureBattle({
     setPhase("interlude");
   }, [phase, atbState]);
 
+  // Reset le picking si on change de phase ou d'acteur attendu
+  useEffect(() => {
+    setPicking(null);
+  }, [phase, atbState?.awaitingAction]);
+
   // Phase interlude : compte 2 sec puis avance/retry.
   // ⚠️ onStageChange est volontairement EXCLU des deps (passé via ref)
   // sinon les re-renders du parent reset le setTimeout en boucle.
@@ -255,6 +264,50 @@ export function AdventureBattle({
     }, INTERLUDE_MS);
     return () => clearTimeout(t);
   }, [phase, serverResult]);
+
+  // ─── Player actions (en mode auto OFF) ──────────────────────────────
+
+  const awaitingActor = useMemo<AtbUnit | null>(() => {
+    if (!atbState || atbState.awaitingAction === null) return null;
+    return atbState.units.find((u) => u.id === atbState.awaitingAction) ?? null;
+  }, [atbState]);
+
+  // Le panneau d'actions s'affiche quand : auto OFF + une unité team A attend.
+  const showActionPanel =
+    phase === "fighting" &&
+    !autoOn &&
+    awaitingActor !== null &&
+    awaitingActor.team === "A";
+
+  function chooseAction(kind: AtbActionKind) {
+    if (!awaitingActor || !atbState) return;
+    const info = actionInfo(awaitingActor, kind);
+    if (!info.available) return;
+    const enemies = aliveEnemies(atbState, awaitingActor);
+    if (enemies.length === 0) return;
+    if (enemies.length === 1) {
+      // Une seule cible → tape direct
+      setAtbState((s) =>
+        s ? applyAction(s, { kind, targetId: enemies[0].id }) : s,
+      );
+      setPicking(null);
+      return;
+    }
+    // Plusieurs cibles → mode picking
+    setPicking(kind);
+  }
+
+  function pickTarget(targetId: string) {
+    if (!picking) return;
+    setAtbState((s) =>
+      s ? applyAction(s, { kind: picking, targetId }) : s,
+    );
+    setPicking(null);
+  }
+
+  function cancelPicking() {
+    setPicking(null);
+  }
 
   // ─── Render ───────────────────────────────────────────────────────
 
@@ -338,6 +391,8 @@ export function AdventureBattle({
             activeId={atbState?.awaitingAction ?? null}
             isEnemy={true}
             unitGlyphs={undefined}
+            targetable={picking !== null}
+            onPickTarget={pickTarget}
           />
         </div>
 
@@ -345,7 +400,7 @@ export function AdventureBattle({
         <div className="my-2 flex items-center gap-2">
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-rose-400/40 to-transparent" />
           <span className="text-[10px] uppercase tracking-widest text-zinc-500">
-            VS
+            {picking ? "🎯 CHOISIS UNE CIBLE" : "VS"}
           </span>
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
         </div>
@@ -357,9 +412,21 @@ export function AdventureBattle({
             activeId={atbState?.awaitingAction ?? null}
             isEnemy={false}
             unitGlyphs={unitGlyphs}
+            targetable={false}
+            onPickTarget={() => {}}
           />
         </div>
       </div>
+
+      {/* Panneau d'actions manuelles (auto OFF + unité allié attend) */}
+      {showActionPanel && awaitingActor && (
+        <ActionPanel
+          actor={awaitingActor}
+          picking={picking}
+          onChooseAction={chooseAction}
+          onCancel={cancelPicking}
+        />
+      )}
 
       {/* Interlude overlay */}
       {phase === "interlude" && serverResult && (
@@ -385,11 +452,15 @@ function UnitRow({
   activeId,
   isEnemy,
   unitGlyphs,
+  targetable,
+  onPickTarget,
 }: {
   units: AtbUnit[];
   activeId: string | null;
   isEnemy: boolean;
   unitGlyphs?: Record<string, string>;
+  targetable: boolean;
+  onPickTarget: (id: string) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 px-2">
@@ -400,6 +471,8 @@ function UnitRow({
           isActive={u.id === activeId}
           isEnemy={isEnemy}
           customGlyph={unitGlyphs?.[u.id]}
+          targetable={targetable && u.alive}
+          onPickTarget={onPickTarget}
         />
       ))}
     </div>
@@ -411,11 +484,15 @@ function UnitSprite({
   isActive,
   isEnemy,
   customGlyph,
+  targetable,
+  onPickTarget,
 }: {
   unit: AtbUnit;
   isActive: boolean;
   isEnemy: boolean;
   customGlyph?: string;
+  targetable: boolean;
+  onPickTarget: (id: string) => void;
 }) {
   const cls = ETERNUM_CLASSES[unit.classId];
   const elt = ETERNUM_ELEMENTS[unit.element];
@@ -436,7 +513,12 @@ function UnitSprite({
     <div
       className={`relative flex w-16 flex-col items-center transition-transform ${
         isActive ? "scale-110" : ""
+      } ${
+        targetable
+          ? "cursor-pointer rounded-md ring-2 ring-amber-400/70 ring-offset-2 ring-offset-zinc-950 hover:ring-amber-300 hover:scale-105"
+          : ""
       }`}
+      onClick={() => targetable && onPickTarget(unit.id)}
     >
       {/* Sprite */}
       <div className="relative flex h-12 items-center justify-center">
@@ -451,6 +533,9 @@ function UnitSprite({
         </span>
         {isActive && (
           <div className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-amber-400/20 blur-md animate-pulse" />
+        )}
+        {targetable && (
+          <div className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-amber-400/30 blur-lg animate-pulse" />
         )}
       </div>
 
@@ -529,6 +614,153 @@ function InterludeOverlay({ result }: { result: ServerResult }) {
         <div className="text-xs text-zinc-400">{subtitle}</div>
       </div>
     </div>
+  );
+}
+
+// ─── Panneau d'actions manuelles (auto OFF) ────────────────────────
+
+const CLASS_BTN_ACCENT: Record<EternumClassId, { primary: string; border: string; text: string; glyph: string }> = {
+  warrior: {
+    primary: "from-rose-600/40 to-rose-800/40",
+    border: "border-rose-400/60",
+    text: "text-rose-200",
+    glyph: "⚔️",
+  },
+  paladin: {
+    primary: "from-amber-500/40 to-yellow-700/40",
+    border: "border-amber-400/60",
+    text: "text-amber-200",
+    glyph: "🛡️",
+  },
+  assassin: {
+    primary: "from-violet-700/40 to-purple-900/40",
+    border: "border-violet-400/60",
+    text: "text-violet-200",
+    glyph: "🗡️",
+  },
+  mage: {
+    primary: "from-sky-600/40 to-indigo-800/40",
+    border: "border-sky-400/60",
+    text: "text-sky-200",
+    glyph: "🔮",
+  },
+  priest: {
+    primary: "from-yellow-200/40 to-amber-300/40",
+    border: "border-yellow-200/60",
+    text: "text-yellow-100",
+    glyph: "✝️",
+  },
+  vampire: {
+    primary: "from-red-700/40 to-zinc-900/40",
+    border: "border-red-400/60",
+    text: "text-red-200",
+    glyph: "🩸",
+  },
+};
+
+function ActionPanel({
+  actor,
+  picking,
+  onChooseAction,
+  onCancel,
+}: {
+  actor: AtbUnit;
+  picking: AtbActionKind | null;
+  onChooseAction: (kind: AtbActionKind) => void;
+  onCancel: () => void;
+}) {
+  const cls = ETERNUM_CLASSES[actor.classId];
+  const accent = CLASS_BTN_ACCENT[actor.classId];
+  return (
+    <div
+      className={`shrink-0 border-t-2 ${accent.border} bg-gradient-to-b from-black/60 to-black/85 p-3 backdrop-blur-sm`}
+    >
+      <div className="mb-2 flex items-baseline gap-2">
+        <span className="text-base">{cls.glyph}</span>
+        <div className={`text-sm font-bold ${accent.text}`}>
+          Tour de {actor.name}
+        </div>
+        <span className={`text-[10px] uppercase tracking-widest ${accent.text} opacity-70`}>
+          · {accent.glyph} {cls.name}
+        </span>
+        {picking && (
+          <button
+            onClick={onCancel}
+            className="ml-auto rounded bg-amber-400/20 px-2 py-0.5 text-[10px] uppercase tracking-widest text-amber-300 hover:bg-amber-400/30"
+          >
+            ← Annuler
+          </button>
+        )}
+      </div>
+      {!picking && (
+        <div className="grid grid-cols-3 gap-2">
+          <ActionBtn actor={actor} kind="skill1" onClick={onChooseAction} />
+          <ActionBtn actor={actor} kind="skill2" onClick={onChooseAction} />
+          <ActionBtn actor={actor} kind="ultimate" onClick={onChooseAction} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionBtn({
+  actor,
+  kind,
+  onClick,
+}: {
+  actor: AtbUnit;
+  kind: AtbActionKind;
+  onClick: (kind: AtbActionKind) => void;
+}) {
+  const info = actionInfo(actor, kind);
+  const accent = CLASS_BTN_ACCENT[actor.classId];
+
+  const labels: Record<AtbActionKind, string> = {
+    skill1: "Skill 1",
+    skill2: "Skill 2",
+    ultimate: "ULTIME",
+  };
+
+  let btnClass = "";
+  let glyph = "";
+  if (kind === "skill1") {
+    btnClass = "border-zinc-600 bg-zinc-900/80 text-zinc-100 hover:bg-zinc-800";
+    glyph = "•";
+  } else if (kind === "skill2") {
+    btnClass = `${accent.border} bg-gradient-to-b ${accent.primary} ${accent.text} hover:brightness-125`;
+    glyph = accent.glyph;
+  } else {
+    btnClass = info.available
+      ? `${accent.border} bg-gradient-to-b ${accent.primary} ${accent.text} hover:brightness-125`
+      : `border-zinc-700 bg-zinc-900/80 text-zinc-500`;
+    glyph = "⚡";
+  }
+
+  return (
+    <button
+      onClick={() => info.available && onClick(kind)}
+      disabled={!info.available}
+      className={`relative flex flex-col items-start gap-0.5 rounded-md border p-2 text-left transition-all disabled:opacity-30 disabled:cursor-not-allowed ${btnClass}`}
+    >
+      <div className="flex w-full items-center justify-between text-[9px] uppercase tracking-widest opacity-90">
+        <span className="flex items-center gap-1">
+          <span className="text-sm leading-none">{glyph}</span>
+          <span>{labels[kind]}</span>
+        </span>
+        {info.cdMax > 0 &&
+          (info.cdLeft > 0 ? (
+            <span className="rounded bg-rose-500/30 px-1 text-rose-200">
+              CD {info.cdLeft}
+            </span>
+          ) : (
+            <span className="rounded bg-emerald-500/30 px-1 text-emerald-200">
+              prêt
+            </span>
+          ))}
+      </div>
+      <div className="text-xs font-semibold leading-tight">{info.name}</div>
+      <div className="text-[9px] opacity-70">×{info.multiplier} dmg</div>
+    </button>
   );
 }
 
