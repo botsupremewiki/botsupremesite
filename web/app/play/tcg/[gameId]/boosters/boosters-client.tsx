@@ -15,6 +15,7 @@ import type {
 } from "@shared/types";
 import { POKEMON_PACK_TYPES, TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET, POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
+import { formatPackRate, pokemonPackRate } from "@shared/tcg-pack-odds";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import {
@@ -412,7 +413,10 @@ function BoosterDetailModal({
                     {RARITY_LABEL[rarity]}
                   </span>
                   <span className="text-xs text-zinc-500">
-                    · {list.length} cartes
+                    · {list.length} cartes ·{" "}
+                    <span className="text-zinc-400">
+                      {formatPackRate(pokemonPackRate(rarity))} par pack
+                    </span>
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
