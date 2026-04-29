@@ -102,9 +102,14 @@ export function BattleClient({
   // hiberne quand vide). Exposé en "proximity" via le sidebar global.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   // File d'attente d'animations pile/face. Le serveur les émet AVANT le
-  // battle-state qui contient le résultat — on les anime à la suite, le
-  // state suit naturellement.
+  // battle-state qui contient le résultat. Le state est DIFFÉRÉ tant
+  // que la queue n'est pas vide pour que les conséquences (dégâts,
+  // statuts, énergies) n'apparaissent qu'APRÈS l'animation.
   const [coinQueue, setCoinQueue] = useState<CoinFlipEvent[]>([]);
+  // Refs en miroir pour pouvoir prendre des décisions synchrones dans
+  // le handler WebSocket (les setState sont async/batched).
+  const coinQueueRef = useRef<CoinFlipEvent[]>([]);
+  const pendingStateRef = useRef<BattleState | null>(null);
   // Modal de révélation Dresseur (Pokédex, Scrute Main).
   const [trainerReveal, setTrainerReveal] = useState<{
     trainerName: string;
@@ -120,6 +125,48 @@ export function BattleClient({
   // File des animations "fly" : un projectile qui part d'un point A vers
   // un point B (énergie qui vole du logo vers une carte, etc).
   const [flyAnims, setFlyAnims] = useState<FlyAnim[]>([]);
+
+  /** Applique un state reçu côté serveur et déclenche le bandeau de
+   *  changement de tour quand l'`activeSeat` change. Centralisé ici
+   *  parce que l'application est différée tant qu'une animation
+   *  pile/face est en cours. */
+  const applyStateNow = useCallback((newState: BattleState) => {
+    setState((prev) => {
+      const prevActive = prev?.activeSeat;
+      const nextActive = newState.activeSeat;
+      const phaseStartedNow =
+        prev?.phase !== "playing" && newState.phase === "playing";
+      if (
+        newState.phase === "playing" &&
+        ((prevActive && nextActive && prevActive !== nextActive) ||
+          phaseStartedNow)
+      ) {
+        const isMine = nextActive === newState.selfSeat;
+        setTurnBanner({
+          text: isMine ? "À toi !" : "Tour adverse",
+          accent: isMine ? "self" : "opp",
+          key: Date.now(),
+        });
+      }
+      return newState;
+    });
+  }, []);
+
+  /** Consomme le 1er coin flip de la queue (appelé quand son anim finit).
+   *  Si la queue se vide ET qu'un state est en attente, on l'applique
+   *  maintenant — ce qui rend visibles les conséquences du flip. */
+  const consumeCoin = useCallback(
+    (id: string) => {
+      coinQueueRef.current = coinQueueRef.current.filter((e) => e.id !== id);
+      setCoinQueue(coinQueueRef.current);
+      if (coinQueueRef.current.length === 0 && pendingStateRef.current) {
+        const s = pendingStateRef.current;
+        pendingStateRef.current = null;
+        applyStateNow(s);
+      }
+    },
+    [applyStateNow],
+  );
 
   useEffect(() => {
     if (!profile) {
@@ -158,28 +205,18 @@ export function BattleClient({
           setErrorMsg(null);
           break;
         case "battle-state": {
-          // Détection du changement de tour pour le bandeau plein écran.
-          // On ne déclenche QUE si on est passé d'un activeSeat valide à un
-          // autre activeSeat valide (pas au démarrage / fin de partie).
-          setState((prev) => {
-            const prevActive = prev?.activeSeat;
-            const nextActive = msg.state.activeSeat;
-            const phaseStartedNow =
-              prev?.phase !== "playing" && msg.state.phase === "playing";
-            if (
-              msg.state.phase === "playing" &&
-              ((prevActive && nextActive && prevActive !== nextActive) ||
-                phaseStartedNow)
-            ) {
-              const isMine = nextActive === msg.state.selfSeat;
-              setTurnBanner({
-                text: isMine ? "À toi !" : "Tour adverse",
-                accent: isMine ? "self" : "opp",
-                key: Date.now(),
-              });
-            }
-            return msg.state;
-          });
+          // Si une animation pile/face est en cours (ou en attente dans
+          // la queue), on DIFFÈRE l'application du state pour que les
+          // conséquences (dégâts, statuts, énergies) n'apparaissent
+          // qu'APRÈS l'animation. Le state est appliqué quand la queue
+          // se vide (cf. consumeCoin plus bas). Si plusieurs states
+          // arrivent pendant l'attente, seul le dernier prévaut (state
+          // est complet, pas une diff).
+          if (coinQueueRef.current.length > 0) {
+            pendingStateRef.current = msg.state;
+          } else {
+            applyStateNow(msg.state);
+          }
           setErrorMsg(null);
           break;
         }
@@ -189,19 +226,19 @@ export function BattleClient({
         case "battle-quest-reward":
           setQuestToast({ botWins: msg.botWins, granted: msg.granted });
           break;
-        case "battle-coin-flip":
-          setCoinQueue((prev) => [
-            ...prev,
-            {
-              id: msg.id,
-              label: msg.label,
-              result: msg.result,
-              index: msg.index,
-              total: msg.total,
-              followUp: msg.followUp,
-            },
-          ]);
+        case "battle-coin-flip": {
+          const ev: CoinFlipEvent = {
+            id: msg.id,
+            label: msg.label,
+            result: msg.result,
+            index: msg.index,
+            total: msg.total,
+            followUp: msg.followUp,
+          };
+          coinQueueRef.current = [...coinQueueRef.current, ev];
+          setCoinQueue(coinQueueRef.current);
           break;
+        }
         case "battle-trainer-reveal":
           setTrainerReveal({
             trainerName: msg.trainerName,
@@ -454,12 +491,7 @@ export function BattleClient({
           )}
 
           {/* Animation pile/face : on consomme la queue un par un. */}
-          <CoinFlipQueue
-            queue={coinQueue}
-            onConsume={(id) =>
-              setCoinQueue((prev) => prev.filter((e) => e.id !== id))
-            }
-          />
+          <CoinFlipQueue queue={coinQueue} onConsume={consumeCoin} />
 
           {/* Bandeau « À toi ! » / « Tour adverse » à chaque changement de tour. */}
           {turnBanner && (
