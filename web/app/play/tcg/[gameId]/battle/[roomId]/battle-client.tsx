@@ -2049,6 +2049,7 @@ function SelfHand({
   if (self.active) inPlay.push(self.active);
   inPlay.push(...self.bench);
   const usedSupporter = self.usedSupporterThisTurn ?? false;
+  const noSupporterThisTurn = self.noSupporterThisTurn ?? false;
   // Capture pour les closures (TS perd le narrowing de `self`).
   const mustPromoteActive = !!self.mustPromoteActive;
   const selfActive = self.active;
@@ -2201,6 +2202,35 @@ function SelfHand({
         kind: "blocked",
         reason: "1 seule carte Supporter peut être jouée par tour.",
       };
+    }
+    // Flag « no Supporter ce tour » posé par l'adversaire au tour précédent
+    // (ex Mr. Brillos / Hypnomade Cri Strident) ou par Maléfice des Ombres
+    // d'Ectoplasma-ex Actif chez l'adversaire.
+    if (
+      card.trainerType === "supporter" &&
+      noSupporterThisTurn
+    ) {
+      return {
+        kind: "blocked",
+        reason:
+          "Tu ne peux pas jouer de Supporter ce tour (effet du tour précédent).",
+      };
+    }
+    // Maléfice des Ombres : vérifier si l'opp Active est Ectoplasma-ex.
+    if (card.trainerType === "supporter" && state.opponent?.active) {
+      const oppActiveData = getCardForBattle(
+        state.opponent.active.cardId,
+        cardById,
+      );
+      if (
+        oppActiveData?.ability?.kind === "passive" &&
+        oppActiveData.ability.name === "Maléfice des Ombres"
+      ) {
+        return {
+          kind: "blocked",
+          reason: "Maléfice des Ombres : impossible avec Ectoplasma-ex Actif.",
+        };
+      }
     }
     if (TRAINER_NEEDS_TARGET.has(card.name)) {
       // Potion : nécessite au moins un Pokémon blessé en jeu.

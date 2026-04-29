@@ -135,6 +135,44 @@ export type AttackEffect =
   | { kind: "search-typed-to-hand"; type: PokemonEnergyType }
   /** Cherche un Pokémon d'un nom précis dans le deck et le pose au Banc. */
   | { kind: "search-named-to-bench"; name: string }
+  // ─── Effets sur la main / le tour adverse ────────────────────────────
+  /** Défausse 1 carte au hasard de la main de l'adversaire (avec/sans coin flip). */
+  | { kind: "discard-opp-hand-random"; conditional?: "coin-flip" }
+  /** L'adversaire ne peut pas jouer de carte Supporter à son prochain tour. */
+  | { kind: "no-supporter-opp-next-turn" }
+  // ─── Bonus conditionnel par énergies "de plus" que le coût ──────────
+  /** +bonus si l'attaquant a au moins N énergies du type donné AU-DELÀ
+   *  de ce que coûte l'attaque (« 2 Énergies {W} de plus »). */
+  | {
+      kind: "bonus-by-extra-energies";
+      energyType: PokemonEnergyType;
+      minExtra: number;
+      bonus: number;
+    }
+  // ─── Multi-coin attach to bench (Salamèche-ex Pluri-Tonnerre, …) ─────
+  /** Lance N pièces, attache 1 énergie par face aux Pokémon du Banc d'un
+   *  type donné (au choix — MVP : random). */
+  | {
+      kind: "multi-coin-attach-bench";
+      coins: number;
+      energyType: PokemonEnergyType;
+      benchType: PokemonEnergyType;
+    }
+  // ─── Flags "prochain tour" sur le défenseur (Pokémon adverse) ────────
+  /** Le Pokémon Défenseur ne peut pas battre en retraite au prochain tour. */
+  | { kind: "defender-no-retreat-next-turn" }
+  /** Le Pokémon Défenseur ne peut pas attaquer au prochain tour. */
+  | { kind: "defender-no-attack-next-turn"; conditional?: "coin-flip" }
+  /** Les attaques utilisées par le Pokémon Défenseur infligent -N dégâts. */
+  | { kind: "defender-attack-penalty-next-turn"; amount: number }
+  // ─── Flags "prochain tour" sur soi-même (l'attaquant) ────────────────
+  /** Ce Pokémon subit -N dégâts venant des attaques au prochain tour adverse. */
+  | { kind: "self-damage-reduction-next-turn"; amount: number }
+  /** Évitez tous les dégâts/effets reçus pendant le prochain tour adverse. */
+  | { kind: "self-invulnerable-next-turn"; conditional?: "coin-flip" }
+  // ─── Mélange Actif au deck ───────────────────────────────────────────
+  /** L'adversaire mélange son Pokémon Actif dans son deck (avec coin flip). */
+  | { kind: "shuffle-opp-active-to-deck"; conditional?: "coin-flip" }
   // ─── Effets non implémentés (parsés pour debug, pas exécutés) ────────
   | { kind: "unimplemented"; pattern: string };
 
@@ -455,6 +493,118 @@ export function parseAttackEffects(
     /Placez une carte (\S+?) au hasard de votre deck sur votre Banc\./i,
     (m) => {
       effects.push({ kind: "search-named-to-bench", name: m[1] });
+    },
+  );
+
+  // ── Hand discard (avec ou sans coin flip) ──
+  consume(
+    /Lancez une pièce\.\s*Si c'est face, défaussez au hasard une carte de la main de votre adversaire\./i,
+    () => {
+      effects.push({
+        kind: "discard-opp-hand-random",
+        conditional: "coin-flip",
+      });
+    },
+  );
+
+  // ── No-supporter pour l'adversaire au prochain tour ──
+  consume(
+    /Votre adversaire ne peut pas jouer de carte Supporter de sa main lors son prochain tour\./i,
+    () => {
+      effects.push({ kind: "no-supporter-opp-next-turn" });
+    },
+  );
+
+  // ── Bonus si X énergies « de plus » que le coût ──
+  // « Si ce Pokémon a au moins 3 Énergies {W} de plus, +70 dégâts »
+  consume(
+    /Si ce Pokémon a au moins (\d+) Énergies? \{(\w)\} de plus, cette attaque inflige (\d+) dégâts? supplémentaires?\./i,
+    (m) => {
+      effects.push({
+        kind: "bonus-by-extra-energies",
+        energyType: parseEnergyTypeCode(m[2]),
+        minExtra: parseInt(m[1], 10),
+        bonus: parseInt(m[3], 10),
+      });
+    },
+  );
+
+  // ── Multi-coin attach to bench ──
+  // « Lancez 3 pièces. Prenez le même nombre d'Énergie {R} de votre zone
+  //   Énergie que le nombre de côté face obtenu et attachez-les à vos
+  //   Pokémon {R} de Banc comme il vous plaît. »
+  consume(
+    /Lancez (\d+|une|deux|trois|quatre) pièces?\.\s*Prenez le même nombre d'Énergies? \{(\w)\}[^.]*?et attachez-les? à vos Pokémon \{(\w)\} de Banc[^.]*?\./i,
+    (m) => {
+      effects.push({
+        kind: "multi-coin-attach-bench",
+        coins: parseCount(m[1]),
+        energyType: parseEnergyTypeCode(m[2]),
+        benchType: parseEnergyTypeCode(m[3]),
+      });
+    },
+  );
+
+  // ── Flags "prochain tour" sur le défenseur ──
+  consume(
+    /Pendant le prochain tour de votre adversaire, le Pokémon Défenseur ne peut pas battre en retraite\./i,
+    () => {
+      effects.push({ kind: "defender-no-retreat-next-turn" });
+    },
+  );
+  consume(
+    /Lancez une pièce\.\s*Si c'est face, le Pokémon Défenseur ne peut pas attaquer pendant le prochain tour de votre adversaire\./i,
+    () => {
+      effects.push({
+        kind: "defender-no-attack-next-turn",
+        conditional: "coin-flip",
+      });
+    },
+  );
+  consume(
+    /Pendant le prochain tour de votre adversaire, le Pokémon Défenseur ne peut pas attaquer\./i,
+    () => {
+      effects.push({ kind: "defender-no-attack-next-turn" });
+    },
+  );
+  consume(
+    /Pendant le prochain tour de votre adversaire, les attaques utilisées par le Pokémon Défenseur infligent (?:−|-) ?(\d+) dégâts?\./i,
+    (m) => {
+      effects.push({
+        kind: "defender-attack-penalty-next-turn",
+        amount: parseInt(m[1], 10),
+      });
+    },
+  );
+
+  // ── Flags "prochain tour" sur soi-même ──
+  consume(
+    /Pendant le prochain tour de votre adversaire, ce Pokémon subit (?:−|-) ?(\d+) dégâts? provenant des attaques\./i,
+    (m) => {
+      effects.push({
+        kind: "self-damage-reduction-next-turn",
+        amount: parseInt(m[1], 10),
+      });
+    },
+  );
+  consume(
+    /Lancez une pièce\.\s*Si c'est face, pendant le prochain tour de votre adversaire, évitez tous les dégâts et les effets d'attaques infligés à ce Pokémon\./i,
+    () => {
+      effects.push({
+        kind: "self-invulnerable-next-turn",
+        conditional: "coin-flip",
+      });
+    },
+  );
+
+  // ── Mélange Actif adverse au deck (avec coin flip) ──
+  consume(
+    /Lancez une pièce\.\s*Si c'est face, votre adversaire mélange son Pokémon Actif (?:avec|dans) son deck\./i,
+    () => {
+      effects.push({
+        kind: "shuffle-opp-active-to-deck",
+        conditional: "coin-flip",
+      });
     },
   );
 

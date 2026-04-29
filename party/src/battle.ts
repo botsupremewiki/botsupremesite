@@ -79,6 +79,15 @@ type SeatState = {
   attackDamageBonus: number;
   /** UIDs des Pokémon ayant déjà utilisé leur talent activable ce tour. */
   abilitiesUsedThisTurn: Set<string>;
+  /** Posé par effet adverse (Mr. Brillos / Hypnomade Cri Strident, …) :
+   *  ce joueur ne peut pas jouer de Supporter à son prochain tour. Lu et
+   *  consommé à end-turn. */
+  noSupporterThisTurn: boolean;
+  /** Tampon pour le flag ci-dessus : pendant que je pose le flag sur
+   *  l'adversaire, il ne doit pas s'appliquer à MON tour courant. On
+   *  copie `nextTurnNoSupporter` → `noSupporterThisTurn` à advanceTurn
+   *  quand l'adversaire entame son tour. */
+  nextTurnNoSupporter: boolean;
   mustPromoteActive: boolean;
 };
 
@@ -199,6 +208,8 @@ export default class BattleServer implements Party.Server {
         retreatDiscount: 0,
         attackDamageBonus: 0,
         abilitiesUsedThisTurn: new Set(),
+        noSupporterThisTurn: false,
+        nextTurnNoSupporter: false,
         mustPromoteActive: false,
       };
       this.connToSeat.set(conn.id, seatId);
@@ -266,6 +277,8 @@ export default class BattleServer implements Party.Server {
       retreatDiscount: 0,
       attackDamageBonus: 0,
       abilitiesUsedThisTurn: new Set(),
+      noSupporterThisTurn: false,
+      nextTurnNoSupporter: false,
       mustPromoteActive: false,
     };
     // Logs mulligan + setup volontairement omis.
@@ -778,6 +791,13 @@ export default class BattleServer implements Party.Server {
       );
       return;
     }
+    if (seat.active.noRetreatNextTurn) {
+      this.sendErrorToSeat(
+        seatId,
+        "Ce Pokémon ne peut pas battre en retraite ce tour (effet du tour précédent).",
+      );
+      return;
+    }
     const newActive = seat.bench[benchIndex];
     if (!newActive) {
       this.sendErrorToSeat(seatId, "Pas de Pokémon de Banc à promouvoir.");
@@ -830,6 +850,16 @@ export default class BattleServer implements Party.Server {
       this.sendErrorToSeat(
         seatId,
         "Pokémon Paralysé — il ne peut pas attaquer.",
+      );
+      return;
+    }
+    // Flag « ne peut pas attaquer ce tour » posé par une attaque adverse au
+    // tour précédent (ex « Le Défenseur ne peut pas attaquer pendant le
+    // prochain tour »).
+    if (seat.active.noAttackNextTurn) {
+      this.sendErrorToSeat(
+        seatId,
+        "Ce Pokémon ne peut pas attaquer ce tour (effet du tour précédent).",
       );
       return;
     }
@@ -1086,6 +1116,21 @@ export default class BattleServer implements Party.Server {
       ) {
         damage += e.bonus;
       }
+      // Bonus si N énergies du type donné en plus du coût de l'attaque.
+      // Ex « Si ce Pokémon a au moins 3 Énergies {W} de plus, +70 dmg ».
+      if (e.kind === "bonus-by-extra-energies" && seat.active) {
+        const attached = seat.active.attachedEnergies.filter(
+          (en) => en === e.energyType,
+        ).length;
+        // On approxime « de plus que le coût » par : énergies du type
+        // attachées >= minExtra (le coût étant déjà payé pour pouvoir
+        // attaquer, ce qui dépasse le coût correspond bien aux extras).
+        // Pour être strict, on prendrait le coût de l'attaque en cours
+        // mais le contexte de l'effet ne l'a pas. Approximation acceptable.
+        if (attached >= e.minExtra) {
+          damage += e.bonus;
+        }
+      }
     }
 
     // ── Scaling (par énergies, par banc, par type, par nom) ──
@@ -1115,6 +1160,16 @@ export default class BattleServer implements Party.Server {
     // ── Bonus global (Giovanni / Auguste) ──
     if (damage > 0) damage += seat.attackDamageBonus;
 
+    // ── Pénalité « attaque du Défenseur infligent -N » posée au tour
+    //    précédent (sur l'attaquant, qui était défenseur quand le flag a
+    //    été posé). ──
+    if (damage > 0 && seat.active?.attackDamagePenaltyNextTurn) {
+      damage = Math.max(
+        0,
+        damage - seat.active.attackDamagePenaltyNextTurn,
+      );
+    }
+
     // ── Faiblesse (+20) ──
     let weaknessApplied = false;
     if (
@@ -1134,6 +1189,20 @@ export default class BattleServer implements Party.Server {
         if (defAbility.name === "Coque Armure") damage = Math.max(0, damage - 10);
         else if (defAbility.name === "Strate Dure") damage = Math.max(0, damage - 20);
       }
+    }
+
+    // ── Flag « damageReductionNextTurn » sur le défenseur (M. Mime,
+    //    Attaque d'Obstacle au tour précédent) ──
+    if (damage > 0 && opp.active?.damageReductionNextTurn) {
+      damage = Math.max(0, damage - opp.active.damageReductionNextTurn);
+    }
+
+    // ── Flag « invulnerableNextTurn » sur le défenseur ──
+    // Si actif, l'attaque inflige 0 dégât et tous les effets secondaires
+    // sont annulés (signalé via `cancelled: true` qui short-circuite le
+    // reste de handleAttack).
+    if (opp.active?.invulnerableNextTurn) {
+      return { finalDamage: 0, weaknessApplied: false, cancelled: true };
     }
 
     return { finalDamage: damage, weaknessApplied, cancelled: false };
@@ -1321,6 +1390,164 @@ export default class BattleServer implements Party.Server {
           seat.active = newActive;
         }
       }
+      // ── Hand discard random (avec ou sans coin flip) ──
+      else if (e.kind === "discard-opp-hand-random") {
+        if (e.conditional === "coin-flip") {
+          const heads = this.coinFlip();
+          this.emitCoinFlip(
+            `${attackerName} — défausse main`,
+            heads,
+            heads
+              ? "1 carte défaussée de la main adverse !"
+              : "Pas de défausse.",
+          );
+          if (!heads) continue;
+        }
+        if (opp.hand.length > 0) {
+          const i = Math.floor(Math.random() * opp.hand.length);
+          const removed = opp.hand.splice(i, 1)[0];
+          opp.discard.push(removed);
+        }
+      }
+      // ── No-supporter pour l'adversaire au prochain tour ──
+      else if (e.kind === "no-supporter-opp-next-turn") {
+        opp.nextTurnNoSupporter = true;
+      }
+      // ── Multi-coin attach to bench ──
+      // Lance N pièces, attache 1 énergie par face aux Pokémon du Banc
+      // d'un type donné. MVP : attache au hasard parmi les Banc qui
+      // matchent (Pocket : « comme il vous plaît »).
+      else if (e.kind === "multi-coin-attach-bench") {
+        const candidates = seat.bench.filter((c) => {
+          const d = getCardForBattle(c.cardId);
+          return d?.type === e.benchType;
+        });
+        let heads = 0;
+        for (let i = 0; i < e.coins; i++) {
+          const isHead = this.coinFlip();
+          this.emitCoinFlip(
+            `${attackerName} — lancer`,
+            isHead,
+            undefined,
+            i + 1,
+            e.coins,
+          );
+          if (isHead) heads++;
+        }
+        for (let i = 0; i < heads && candidates.length > 0; i++) {
+          const t =
+            candidates[Math.floor(Math.random() * candidates.length)];
+          t.attachedEnergies.push(e.energyType);
+        }
+      }
+      // ── Flags "next turn" sur le DÉFENSEUR (l'Actif adverse) ─────────
+      // On les pose avec un nextTurnFlagsTurn = ce tour + 1 (= le
+      // prochain tour adverse). Les flags s'expirent à advanceTurn une
+      // fois ce tour terminé (cf. clearExpiredNextTurnFlags).
+      else if (e.kind === "defender-no-retreat-next-turn") {
+        if (opp.active) {
+          opp.active.noRetreatNextTurn = true;
+          opp.active.nextTurnFlagsTurn = this.turnNumber + 1;
+        }
+      } else if (e.kind === "defender-no-attack-next-turn") {
+        if (opp.active) {
+          if (e.conditional === "coin-flip") {
+            const heads = this.coinFlip();
+            this.emitCoinFlip(
+              `${attackerName} — paralyse`,
+              heads,
+              heads
+                ? "Le Défenseur ne peut pas attaquer au prochain tour !"
+                : "Pas d'effet.",
+            );
+            if (!heads) continue;
+          }
+          opp.active.noAttackNextTurn = true;
+          opp.active.nextTurnFlagsTurn = this.turnNumber + 1;
+        }
+      } else if (e.kind === "defender-attack-penalty-next-turn") {
+        if (opp.active) {
+          opp.active.attackDamagePenaltyNextTurn = e.amount;
+          opp.active.nextTurnFlagsTurn = this.turnNumber + 1;
+        }
+      }
+      // ── Flags "next turn" sur SOI-MÊME (l'attaquant) ──
+      else if (e.kind === "self-damage-reduction-next-turn") {
+        if (seat.active) {
+          seat.active.damageReductionNextTurn = e.amount;
+          seat.active.nextTurnFlagsTurn = this.turnNumber + 1;
+        }
+      } else if (e.kind === "self-invulnerable-next-turn") {
+        if (seat.active) {
+          if (e.conditional === "coin-flip") {
+            const heads = this.coinFlip();
+            this.emitCoinFlip(
+              `${attackerName} — invincibilité`,
+              heads,
+              heads
+                ? `${attackerName} évite tous les dégâts au prochain tour !`
+                : "Pas d'effet.",
+            );
+            if (!heads) continue;
+          }
+          seat.active.invulnerableNextTurn = true;
+          seat.active.nextTurnFlagsTurn = this.turnNumber + 1;
+        }
+      }
+      // ── Mélange Actif adverse au deck (avec coin flip) ─────────────
+      else if (e.kind === "shuffle-opp-active-to-deck") {
+        if (e.conditional === "coin-flip") {
+          const heads = this.coinFlip();
+          this.emitCoinFlip(
+            `${attackerName}`,
+            heads,
+            heads
+              ? "L'Actif adverse retourne dans son deck !"
+              : "Pas d'effet.",
+          );
+          if (!heads) continue;
+        }
+        if (opp.active && opp.bench.length > 0) {
+          // L'Actif (et toutes ses énergies) retourne dans le deck shuffled.
+          // L'adversaire doit promouvoir un Banc → mustPromoteActive.
+          opp.deck.push({ uid: opp.active.uid, cardId: opp.active.cardId });
+          shuffle(opp.deck);
+          opp.active = null;
+          opp.mustPromoteActive = true;
+        } else if (opp.active && opp.bench.length === 0) {
+          // Pas de Banc → l'adversaire perd (plus de Pokémon en jeu).
+          opp.deck.push({ uid: opp.active.uid, cardId: opp.active.cardId });
+          shuffle(opp.deck);
+          opp.active = null;
+          this.declareWinner(seatId, "Adversaire n'a plus de Pokémon en jeu.");
+        }
+      }
+    }
+  }
+
+  /** Clear les flags "prochain tour" qui ont expiré. Appelé à advanceTurn
+   *  APRÈS l'incrément de turnNumber : un flag avec nextTurnFlagsTurn=T est
+   *  actif pendant T, expiré à T+1. */
+  private clearExpiredNextTurnFlags() {
+    for (const sId of ["p1", "p2"] as BattleSeatId[]) {
+      const s = this.seats[sId];
+      if (!s) continue;
+      const cards: BattleCard[] = [];
+      if (s.active) cards.push(s.active);
+      cards.push(...s.bench);
+      for (const c of cards) {
+        if (
+          c.nextTurnFlagsTurn != null &&
+          this.turnNumber > c.nextTurnFlagsTurn
+        ) {
+          delete c.noRetreatNextTurn;
+          delete c.noAttackNextTurn;
+          delete c.damageReductionNextTurn;
+          delete c.attackDamagePenaltyNextTurn;
+          delete c.invulnerableNextTurn;
+          c.nextTurnFlagsTurn = null;
+        }
+      }
     }
   }
 
@@ -1399,6 +1626,15 @@ export default class BattleServer implements Party.Server {
       this.sendErrorToSeat(
         seatId,
         "Tu as déjà joué une carte Supporter ce tour.",
+      );
+      return;
+    }
+    // Flag « no-supporter ce tour » posé au tour précédent par une attaque
+    // adverse.
+    if (card.trainerType === "supporter" && seat.noSupporterThisTurn) {
+      this.sendErrorToSeat(
+        seatId,
+        "Tu ne peux pas jouer de Supporter ce tour (effet du tour précédent).",
       );
       return;
     }
@@ -2147,12 +2383,26 @@ export default class BattleServer implements Party.Server {
     seat.retreatDiscount = 0;
     seat.attackDamageBonus = 0;
     seat.abilitiesUsedThisTurn = new Set();
+    // Le flag "no Supporter ce tour" était actif PENDANT ce tour qui se
+    // termine — on le clear maintenant. Si l'adversaire en a posé un pour
+    // CE tour-ci (déjà transféré), on est OK.
+    seat.noSupporterThisTurn = false;
     // Pocket : énergie pending non attachée est perdue à end-of-turn.
     seat.pendingEnergy = null;
 
     const next: BattleSeatId = seatId === "p1" ? "p2" : "p1";
     this.activeSeat = next;
     this.turnNumber++;
+    // Clear les flags "prochain tour" qui ont expiré (turnNumber > flagTurn).
+    this.clearExpiredNextTurnFlags();
+    // Bascule le flag « no Supporter au prochain tour » (posé par l'attaque
+    // adverse au tour précédent) sur le joueur entrant : il s'applique
+    // maintenant à son tour qui démarre.
+    const nextSeatRef = this.seats[next];
+    if (nextSeatRef && nextSeatRef.nextTurnNoSupporter) {
+      nextSeatRef.noSupporterThisTurn = true;
+      nextSeatRef.nextTurnNoSupporter = false;
+    }
     const nextSeat = this.seats[next];
     if (nextSeat) {
       const drawn = nextSeat.deck.pop();
@@ -2306,6 +2556,7 @@ export default class BattleServer implements Party.Server {
       usedSupporterThisTurn: seat.usedSupporterThisTurn,
       retreatDiscount: seat.retreatDiscount,
       abilitiesUsedThisTurn: [...seat.abilitiesUsedThisTurn],
+      noSupporterThisTurn: seat.noSupporterThisTurn,
       pendingEnergy: seat.pendingEnergy,
     };
   }
