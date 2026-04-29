@@ -719,6 +719,26 @@ function BattleBoard({
                       />
                     )}
                 </div>
+                {/* En phase combat : attaques + Fin du tour à DROITE du
+                    board. En phase setup : on rend SelfControls plus bas
+                    (centré sous le board) pour le bouton « Confirmer ». */}
+                {state.phase === "playing" && (
+                  <SelfControls
+                    state={state}
+                    isMyTurn={isMyTurn}
+                    cardById={cardById}
+                    onConfirmSetup={onConfirmSetup}
+                    onEndTurn={onEndTurn}
+                    onAttack={onAttack}
+                    onSelectCopyAttack={(idx) => {
+                      cancelPending();
+                      setPendingCopyFor(idx);
+                    }}
+                    oppPromoting={oppPromoting}
+                  />
+                )}
+              </div>
+              {state.phase === "setup" && (
                 <SelfControls
                   state={state}
                   isMyTurn={isMyTurn}
@@ -732,7 +752,7 @@ function BattleBoard({
                   }}
                   oppPromoting={oppPromoting}
                 />
-              </div>
+              )}
               {(attachEnergyMode ||
                 pendingEvolveIdx !== null ||
                 pendingTrainerIdx !== null ||
