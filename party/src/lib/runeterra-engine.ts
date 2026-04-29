@@ -162,6 +162,21 @@ export function hasKeyword(unit: RuneterraBattleUnit, kw: string): boolean {
   return unit.keywords.includes(kw);
 }
 
+/** Phase 3.8b : modèle de timing combat à 2 phases.
+ *   • Phase 1 = "Quick Strike timing" (avant l'autre)
+ *   • Phase 2 = "simultané" (au même moment)
+ *  - QuickStrike seul : 1 frappe en phase 1
+ *  - DoubleStrike : 2 frappes — phase 1 + phase 2
+ *  - Sans keyword : 1 frappe en phase 2
+ *  Retourne la liste des phases où l'unité va frapper.
+ */
+function strikePhases(unit: RuneterraBattleUnit, ds: boolean): (1 | 2)[] {
+  const qs = hasKeyword(unit, "QuickStrike");
+  if (ds) return [1, 2];
+  if (qs) return [1];
+  return [2];
+}
+
 // ────────────────────── État initial / mulligan ──────────────────────────
 
 /** Construit l'état initial d'une partie : decks shuffled, mains piochées
@@ -1061,11 +1076,12 @@ export function assignBlockers(
     const blockerName = getCard(unit.cardCode)?.name ?? unit.cardCode;
     if (
       hasKeyword(attackerUnit, "Elusive") &&
-      !hasKeyword(unit, "Elusive")
+      !hasKeyword(unit, "Elusive") &&
+      !hasKeyword(unit, "Sharpsight")
     ) {
       return {
         ok: false,
-        error: `${attackerName} est Insaisissable — seul un bloqueur Insaisissable peut le bloquer (${blockerName} ne l'est pas).`,
+        error: `${attackerName} est Insaisissable — seul un bloqueur Insaisissable ou avec Précision peut le bloquer (${blockerName} n'a aucun des deux).`,
       };
     }
     if (hasKeyword(attackerUnit, "Fearsome") && unit.power < 3) {
@@ -1153,34 +1169,41 @@ function resolveCombat(state: InternalState): InternalState {
         continue;
       }
       const blockerName = getCard(blocker.cardCode)?.name ?? blocker.cardCode;
-      const aQS = hasKeyword(attacker, "QuickStrike");
-      const bQS = hasKeyword(blocker, "QuickStrike");
-
-      // Quick Strike asymétrique = celui qui l'a frappe en premier.
-      // Si les 2 ou aucun, simultané. La cible peut mourir avant de rendre
-      // les dégâts.
-      let blockerHealthBefore = blocker.health - blocker.damage;
+      // Modèle de timing à 2 phases (QS = phase 1 only, DS = phase 1 + 2,
+      // sinon = phase 2 only). Frappes phase 1 simultanées entre elles ;
+      // unités mortes à la fin de phase 1 ne frappent pas en phase 2.
+      const aDS = hasKeyword(attacker, "DoubleStrike");
+      const bDS = hasKeyword(blocker, "DoubleStrike");
+      const aPhases = strikePhases(attacker, aDS);
+      const bPhases = strikePhases(blocker, bDS);
+      const blockerHealthBefore = blocker.health - blocker.damage;
       let dealtToBlocker = 0;
       let dealtToAttacker = 0;
 
-      if (aQS && !bQS) {
-        // Attaquant frappe en premier
-        dealtToBlocker = applyDamageToUnit(blocker, attacker.power);
-        const blockerDead = blocker.damage >= blocker.health;
-        if (!blockerDead) {
-          dealtToAttacker = applyDamageToUnit(attacker, blocker.power);
+      // Phase 1 : simultanée
+      const aPhase1 = aPhases.filter((p) => p === 1).length;
+      const bPhase1 = bPhases.filter((p) => p === 1).length;
+      for (let s = 0; s < aPhase1; s++) {
+        dealtToBlocker += applyDamageToUnit(blocker, attacker.power);
+      }
+      for (let s = 0; s < bPhase1; s++) {
+        dealtToAttacker += applyDamageToUnit(attacker, blocker.power);
+      }
+      const blockerDeadAfterP1 = blocker.damage >= blocker.health;
+      const attackerDeadAfterP1 = attacker.damage >= attacker.health;
+
+      // Phase 2 : simultanée, mais seules les unités vivantes frappent
+      const aPhase2 = aPhases.filter((p) => p === 2).length;
+      const bPhase2 = bPhases.filter((p) => p === 2).length;
+      if (!attackerDeadAfterP1) {
+        for (let s = 0; s < aPhase2; s++) {
+          dealtToBlocker += applyDamageToUnit(blocker, attacker.power);
         }
-      } else if (bQS && !aQS) {
-        // Bloqueur frappe en premier
-        dealtToAttacker = applyDamageToUnit(attacker, blocker.power);
-        const attackerDead = attacker.damage >= attacker.health;
-        if (!attackerDead) {
-          dealtToBlocker = applyDamageToUnit(blocker, attacker.power);
+      }
+      if (!blockerDeadAfterP1) {
+        for (let s = 0; s < bPhase2; s++) {
+          dealtToAttacker += applyDamageToUnit(attacker, blocker.power);
         }
-      } else {
-        // Simultané (les 2 QS ou aucun)
-        dealtToBlocker = applyDamageToUnit(blocker, attacker.power);
-        dealtToAttacker = applyDamageToUnit(attacker, blocker.power);
       }
 
       // Overwhelm : si bloqueur tué et attaquant a Overwhelm, l'excès
@@ -1199,21 +1222,36 @@ function resolveCombat(state: InternalState): InternalState {
         }
       }
 
-      // Lifesteal : l'attaquant heal son nexus pour les dégâts effectivement
-      // infligés au bloqueur (et au nexus en cas d'Overwhelm).
-      if (hasKeyword(attacker, "Lifesteal")) {
+      // Lifesteal / Drain : l'attaquant heal son nexus pour les dégâts
+      // effectivement infligés au bloqueur (et au nexus en cas d'Overwhelm).
+      // Drain est un alias de Lifesteal pour les dégâts de combat.
+      if (
+        hasKeyword(attacker, "Lifesteal") ||
+        hasKeyword(attacker, "Drain")
+      ) {
         attackerNexusHeal += dealtToBlocker;
       }
 
+      const dsTag = aDS ? " DS" : "";
+      const aTag = (aPhase1 > 0 && aPhase2 === 0 ? " QS" : "") + dsTag;
+      const bTag =
+        (bPhase1 > 0 && bPhase2 === 0 ? " QS" : "") + (bDS ? " DS" : "");
       events.push(
-        `${attackerName} (${attacker.power}|${attacker.health - attacker.damage})${aQS ? " QS" : ""} ↔ ${blockerName} (${blocker.power}|${blocker.health - blocker.damage})${bQS ? " QS" : ""}.`,
+        `${attackerName} (${attacker.power}|${attacker.health - attacker.damage})${aTag} ↔ ${blockerName} (${blocker.power}|${blocker.health - blocker.damage})${bTag}.`,
       );
       // dealtToAttacker conservé pour debug futur (Lifesteal sur bloqueurs).
       void dealtToAttacker;
     } else {
       // Aucun bloqueur : nexus.
       nexusDamageTotal += attacker.power;
-      if (hasKeyword(attacker, "Lifesteal")) {
+      // Double Strike contre le nexus : 2 frappes (lecture stricte des règles).
+      if (hasKeyword(attacker, "DoubleStrike")) {
+        nexusDamageTotal += attacker.power;
+      }
+      if (
+        hasKeyword(attacker, "Lifesteal") ||
+        hasKeyword(attacker, "Drain")
+      ) {
         attackerNexusHeal += attacker.power;
       }
       events.push(`${attackerName} frappe le nexus pour ${attacker.power}.`);
@@ -1221,14 +1259,33 @@ function resolveCombat(state: InternalState): InternalState {
   }
 
   // Phase 3.5 : crédit kills aux attaquants/bloqueurs qui ont tué un ennemi.
-  // Un attaquant tue son bloqueur si blocker.damage >= blocker.health après combat.
+  // Phase 3.8b : Fury — si killer a Fury, +1|+1 permanent (avant retrait
+  // des morts ; si killer meurt aussi en mutual, le buff disparaît avec lui).
   for (const lane of state.attackInProgress.lanes) {
     if (lane.blockerUid === null) continue;
     const attacker = attackerBench.find((u) => u.uid === lane.attackerUid);
     const blocker = defenderBench.find((u) => u.uid === lane.blockerUid);
     if (!attacker || !blocker) continue;
-    if (blocker.damage >= blocker.health) attacker.kills++;
-    if (attacker.damage >= attacker.health) blocker.kills++;
+    if (blocker.damage >= blocker.health) {
+      attacker.kills++;
+      if (hasKeyword(attacker, "Fury")) {
+        attacker.power += 1;
+        attacker.health += 1;
+        events.push(
+          `${getCard(attacker.cardCode)?.name ?? attacker.cardCode} (Fureur) gagne +1|+1.`,
+        );
+      }
+    }
+    if (attacker.damage >= attacker.health) {
+      blocker.kills++;
+      if (hasKeyword(blocker, "Fury")) {
+        blocker.power += 1;
+        blocker.health += 1;
+        events.push(
+          `${getCard(blocker.cardCode)?.name ?? blocker.cardCode} (Fureur) gagne +1|+1.`,
+        );
+      }
+    }
   }
 
   // Retire les unités mortes (damage >= health) et incrémente alliesDied
