@@ -642,7 +642,10 @@ function BattleBoard({
         <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto p-4">
           {/* ── Colonne joueur (gauche) — vertical : info → KO → board → contrôles ── */}
           {state.self && (
-            <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
+            <div
+              className="flex min-w-0 flex-1 flex-col items-center gap-2"
+              data-self-side
+            >
               <PlayerInfo player={state.self} isOpponent={false} />
               <BackRow
                 koCount={state.self.koCount}
@@ -650,79 +653,86 @@ function BattleBoard({
                 discardCount={state.self.discardCount}
                 handCount={state.self.handCount}
               />
-              <BoardArea
-                active={state.self.active}
-                bench={state.self.bench}
-                cardById={cardById}
-                isOpponent={false}
-                onZoomCard={setZoomedCard}
-                onHoverCard={setHoveredCard}
-                attachMode={attachModeHandler}
-                promoteMode={promptPromote ?? false}
-                onPromote={onPromoteActive}
-                onRetreat={
-                  state.phase === "playing" &&
-                  isMyTurn &&
-                  !state.self.hasRetreatedThisTurn &&
-                  !state.self.mustPromoteActive &&
-                  !oppPromoting
-                    ? onRetreat
-                    : null
-                }
-                /* Bouton Talent ⭐ visible sur les cartes alliées avec
-                   un talent activable, c'est notre tour, et le talent
-                   n'a pas encore été utilisé ce tour. Pour les talents
-                   qui demandent une cible, on bascule en mode picker. */
-                onUseAbility={
-                  state.phase === "playing" &&
-                  isMyTurn &&
-                  !state.self.mustPromoteActive &&
-                  !oppPromoting
-                    ? (uid) => {
-                        // Trouve la carte pour savoir si son talent
-                        // demande une cible.
-                        const c =
-                          state.self?.active?.uid === uid
-                            ? state.self?.active
-                            : state.self?.bench.find((b) => b.uid === uid);
-                        if (!c) return;
-                        const data = cardById.get(c.cardId);
-                        if (data?.kind !== "pokemon" || !data.ability) return;
-                        if (ABILITY_NEEDS_TARGET.has(data.ability.name)) {
-                          // Mode picker : on attend que l'utilisateur clique
-                          // sur une cible (alliée ou adverse selon le talent).
-                          setAttachEnergyMode(false);
-                          setPendingEvolveIdx(null);
-                          setPendingTrainerIdx(null);
-                          setPendingAbilityUid(uid);
-                        } else {
-                          // Pas de cible : exécute directement.
-                          onUseAbility(uid, null);
-                        }
-                      }
-                    : null
-                }
-                abilitiesUsedThisTurn={
-                  new Set(state.self.abilitiesUsedThisTurn)
-                }
-              />
-              <SelfControls
-                state={state}
-                isMyTurn={isMyTurn}
-                cardById={cardById}
-                onConfirmSetup={onConfirmSetup}
-                onEndTurn={onEndTurn}
-                onAttack={onAttack}
-                onSelectCopyAttack={(idx) => {
-                  cancelPending();
-                  setPendingCopyFor(idx);
-                }}
-                attachEnergyMode={attachEnergyMode}
-                pendingEvolveIdx={pendingEvolveIdx}
-                pendingTrainerIdx={pendingTrainerIdx}
-                oppPromoting={oppPromoting}
-                onActivateAttachMode={() => setAttachEnergyMode(true)}
-              />
+              {/* Layout principal : Pokémons + énergie à GAUCHE,
+                  attaques + Fin du tour à DROITE. */}
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center gap-3">
+                  <BoardArea
+                    active={state.self.active}
+                    bench={state.self.bench}
+                    cardById={cardById}
+                    isOpponent={false}
+                    onZoomCard={setZoomedCard}
+                    onHoverCard={setHoveredCard}
+                    attachMode={attachModeHandler}
+                    promoteMode={promptPromote ?? false}
+                    onPromote={onPromoteActive}
+                    onRetreat={
+                      state.phase === "playing" &&
+                      isMyTurn &&
+                      !state.self.hasRetreatedThisTurn &&
+                      !state.self.mustPromoteActive &&
+                      !oppPromoting
+                        ? onRetreat
+                        : null
+                    }
+                    onUseAbility={
+                      state.phase === "playing" &&
+                      isMyTurn &&
+                      !state.self.mustPromoteActive &&
+                      !oppPromoting
+                        ? (uid) => {
+                            const c =
+                              state.self?.active?.uid === uid
+                                ? state.self?.active
+                                : state.self?.bench.find((b) => b.uid === uid);
+                            if (!c) return;
+                            const data = cardById.get(c.cardId);
+                            if (data?.kind !== "pokemon" || !data.ability) return;
+                            if (ABILITY_NEEDS_TARGET.has(data.ability.name)) {
+                              setAttachEnergyMode(false);
+                              setPendingEvolveIdx(null);
+                              setPendingTrainerIdx(null);
+                              setPendingAbilityUid(uid);
+                            } else {
+                              onUseAbility(uid, null);
+                            }
+                          }
+                        : null
+                    }
+                    abilitiesUsedThisTurn={
+                      new Set(state.self.abilitiesUsedThisTurn)
+                    }
+                  />
+                  {/* Énergie à attacher : visible juste sous le board. Le
+                      drag est géré directement par EnergyAttach (pointer
+                      events natifs). Click "fallback" reste dispo aussi. */}
+                  {state.phase === "playing" &&
+                    state.self.pendingEnergy &&
+                    !state.self.energyAttachedThisTurn &&
+                    isMyTurn &&
+                    !oppPromoting && (
+                      <EnergyAttach
+                        energyType={state.self.pendingEnergy}
+                        onDropOnUid={(uid) => onAttachEnergy(uid)}
+                        onClickFallback={() => setAttachEnergyMode(true)}
+                      />
+                    )}
+                </div>
+                <SelfControls
+                  state={state}
+                  isMyTurn={isMyTurn}
+                  cardById={cardById}
+                  onConfirmSetup={onConfirmSetup}
+                  onEndTurn={onEndTurn}
+                  onAttack={onAttack}
+                  onSelectCopyAttack={(idx) => {
+                    cancelPending();
+                    setPendingCopyFor(idx);
+                  }}
+                  oppPromoting={oppPromoting}
+                />
+              </div>
               {(attachEnergyMode ||
                 pendingEvolveIdx !== null ||
                 pendingTrainerIdx !== null ||
@@ -1731,11 +1741,7 @@ function SelfControls({
   onEndTurn,
   onAttack,
   onSelectCopyAttack,
-  attachEnergyMode,
-  pendingEvolveIdx,
-  pendingTrainerIdx,
   oppPromoting,
-  onActivateAttachMode,
 }: {
   state: BattleState;
   isMyTurn: boolean;
@@ -1750,11 +1756,7 @@ function SelfControls({
   /** Le joueur a cliqué sur une attaque "copy" (Mémoire Ancestrale). Le
    *  parent affiche alors un picker des attaques adverses à copier. */
   onSelectCopyAttack: (attackIndex: number) => void;
-  attachEnergyMode: boolean;
-  pendingEvolveIdx: number | null;
-  pendingTrainerIdx: number | null;
   oppPromoting: boolean;
-  onActivateAttachMode: () => void;
 }) {
   if (state.phase === "setup") {
     const ready = state.self?.hasSetup;
@@ -1790,114 +1792,74 @@ function SelfControls({
     oppPromoting ||
     (active?.playedThisTurn ?? false);
 
-  // L'énergie "pending" est affichée en logo brillant à gauche des attaques :
-  // cliquable (active le mode Attacher) + draggable (drop sur un Pokémon).
-  const showEnergy =
-    !!self?.pendingEnergy &&
-    !self.energyAttachedThisTurn &&
-    isMyTurn &&
-    !attachEnergyMode &&
-    pendingEvolveIdx === null &&
-    pendingTrainerIdx === null &&
-    !oppPromoting;
-  const energyType = self?.pendingEnergy ?? null;
-
   return (
-    <div className="mt-2 flex w-full max-w-[360px] flex-col items-stretch gap-2">
-      {/* Ligne : [énergie | attaques] */}
-      <div className="flex items-stretch gap-2">
-        {/* Logo énergie à gauche (pulse + draggable). Slot toujours
-            réservé pour stabilité visuelle, vide si pas d'énergie pending. */}
-        <div className="flex w-12 shrink-0 items-start justify-center">
-          {showEnergy && energyType ? (
-            <span
-              draggable
-              data-energy-logo="self"
-              onClick={onActivateAttachMode}
-              onDragStart={(e) => {
-                e.dataTransfer.setData("text/x-tcg-energy", "1");
-                e.dataTransfer.effectAllowed = "link";
-                onActivateAttachMode();
-              }}
-              className={`flex h-12 w-12 cursor-grab select-none items-center justify-center rounded-full text-2xl font-bold shadow-xl ring-2 ring-amber-300/60 active:cursor-grabbing animate-pulse ${
-                ENERGY_BADGE_BG[energyType]
-              } ${ENERGY_BADGE_TEXT[energyType]}`}
-              title="Glisse cette énergie sur un Pokémon (ou clique pour activer le mode Attacher)"
-            >
-              {energyEmoji(energyType)}
-            </span>
-          ) : null}
-        </div>
-
-        {/* Liste des attaques */}
-        <div className="flex flex-1 flex-col gap-1">
-          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-            ⚔️ Attaques
-          </div>
-          {attacks.length === 0 && (
-            <div className="rounded-md border border-dashed border-white/10 p-2 text-center text-[11px] text-zinc-500">
-              Aucune attaque
-            </div>
-          )}
-          {attacks.map((a, i) => {
-            const canPay = active
-              ? canPayCost(active.attachedEnergies, a.cost, cardById)
-              : false;
-            const disabled = blocked || !canPay;
-            // Si l'attaque est de type "copy" (Mémoire Ancestrale), on
-            // bascule en mode picker au lieu d'envoyer directement.
-            const isCopy = isCopyOppAttack(a.text);
-            return (
-              <button
-                key={i}
-                disabled={disabled}
-                onClick={() => {
-                  if (isCopy) onSelectCopyAttack(i);
-                  else onAttack(i);
-                }}
-                className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
-                  disabled
-                    ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
-                    : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
-                }`}
-                title={a.text ?? ""}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  {/* Coût en pastilles colorées par type */}
-                  <div className="flex items-center gap-0.5">
-                    {a.cost.map((c, j) => {
-                      const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
-                      const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
-                      return (
-                        <span
-                          key={j}
-                          className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
-                        >
-                          {energyEmoji(c)}
-                        </span>
-                      );
-                    })}
-                  </div>
-                  <span className="flex-1 font-bold">{a.name}</span>
-                  {a.damage !== undefined && (
-                    <span className="text-base font-black tabular-nums text-amber-300">
-                      {a.damage}
-                      {a.damageSuffix ?? ""}
-                    </span>
-                  )}
-                </div>
-                {a.text && (
-                  <span className="mt-1 text-[10px] italic leading-tight text-rose-200/70">
-                    {a.text}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+    <div className="flex w-[280px] shrink-0 flex-col items-stretch gap-2">
+      {/* Liste des attaques (à droite du board joueur) */}
+      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+        ⚔️ Attaques
       </div>
+      {attacks.length === 0 && (
+        <div className="rounded-md border border-dashed border-white/10 p-2 text-center text-[11px] text-zinc-500">
+          Aucune attaque
+        </div>
+      )}
+      {attacks.map((a, i) => {
+        const canPay = active
+          ? canPayCost(active.attachedEnergies, a.cost, cardById)
+          : false;
+        const disabled = blocked || !canPay;
+        // Si l'attaque est de type "copy" (Mémoire Ancestrale), on
+        // bascule en mode picker au lieu d'envoyer directement.
+        const isCopy = isCopyOppAttack(a.text);
+        return (
+          <button
+            key={i}
+            disabled={disabled}
+            onClick={() => {
+              if (isCopy) onSelectCopyAttack(i);
+              else onAttack(i);
+            }}
+            className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+              disabled
+                ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
+                : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
+            }`}
+            title={a.text ?? ""}
+          >
+            <div className="flex items-center justify-between gap-2">
+              {/* Coût en pastilles colorées par type */}
+              <div className="flex items-center gap-0.5">
+                {a.cost.map((c, j) => {
+                  const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
+                  const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
+                  return (
+                    <span
+                      key={j}
+                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
+                    >
+                      {energyEmoji(c)}
+                    </span>
+                  );
+                })}
+              </div>
+              <span className="flex-1 font-bold">{a.name}</span>
+              {a.damage !== undefined && (
+                <span className="text-base font-black tabular-nums text-amber-300">
+                  {a.damage}
+                  {a.damageSuffix ?? ""}
+                </span>
+              )}
+            </div>
+            {a.text && (
+              <span className="mt-1 text-[10px] italic leading-tight text-rose-200/70">
+                {a.text}
+              </span>
+            )}
+          </button>
+        );
+      })}
 
-      {/* Bouton "Fin du tour" en bas, pleine largeur */}
+      {/* Bouton "Fin du tour" en bas */}
       <button
         onClick={onEndTurn}
         disabled={!isMyTurn || !!self?.mustPromoteActive || oppPromoting}
@@ -1906,11 +1868,119 @@ function SelfControls({
             ? "Attends que l'adversaire choisisse son nouveau Actif"
             : undefined
         }
-        className="rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
         ⏭ Fin du tour
       </button>
     </div>
+  );
+}
+
+/** Énergie « pending » à attacher à un Pokémon allié. Drag & drop natif via
+ *  pointer events :
+ *  - pointerdown sur le badge → on commence le drag, capture le pointeur,
+ *    affiche un fantôme de l'énergie qui suit la souris
+ *  - pointerup sur n'importe quel élément → on cherche le data-attribute
+ *    `data-battle-card-uid` dans la chaîne de parents ; s'il appartient à
+ *    notre côté (data-self-side parent), on attache. Sinon, on annule.
+ *  Le clic court (pointerdown + pointerup au même endroit) déclenche le
+ *  fallback "mode attach" classique pour les utilisateurs qui préfèrent
+ *  cliquer-cliquer. */
+function EnergyAttach({
+  energyType,
+  onDropOnUid,
+  onClickFallback,
+}: {
+  energyType: PokemonEnergyType;
+  onDropOnUid: (uid: string) => void;
+  onClickFallback: () => void;
+}) {
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const startRef = useRef<{ x: number; y: number; moved: boolean } | null>(
+    null,
+  );
+
+  function onPointerDown(e: React.PointerEvent<HTMLSpanElement>) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    startRef.current = { x: startX, y: startY, moved: false };
+    setDrag({ x: startX, y: startY });
+
+    const onMove = (ev: PointerEvent) => {
+      if (startRef.current) {
+        const dx = ev.clientX - startRef.current.x;
+        const dy = ev.clientY - startRef.current.y;
+        // Seuil : 4px de mouvement pour considérer un drag.
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+          startRef.current.moved = true;
+        }
+      }
+      setDrag({ x: ev.clientX, y: ev.clientY });
+    };
+    const onUp = (ev: PointerEvent) => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      const movedFlag = startRef.current?.moved ?? false;
+      startRef.current = null;
+      setDrag(null);
+
+      // Si on n'a quasi pas bougé → fallback click (active le mode Attacher).
+      if (!movedFlag) {
+        onClickFallback();
+        return;
+      }
+
+      // Drag terminé : on cherche l'élément sous la souris.
+      const target = document.elementFromPoint(ev.clientX, ev.clientY);
+      if (!target) return;
+      const cardEl = target.closest(
+        "[data-battle-card-uid]",
+      ) as HTMLElement | null;
+      if (!cardEl) return;
+      const uid = cardEl.getAttribute("data-battle-card-uid");
+      if (!uid) return;
+      // On vérifie que la carte appartient bien à NOTRE côté (data-self-side
+      // est posé en haut de la colonne du joueur).
+      const ownerSide = cardEl.closest("[data-self-side]");
+      if (!ownerSide) return;
+      onDropOnUid(uid);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+
+  return (
+    <>
+      <span
+        onPointerDown={onPointerDown}
+        data-energy-logo="self"
+        className={`flex h-12 w-12 cursor-grab select-none items-center justify-center rounded-full text-2xl font-bold shadow-xl ring-2 ring-amber-300/60 active:cursor-grabbing animate-pulse ${
+          ENERGY_BADGE_BG[energyType]
+        } ${ENERGY_BADGE_TEXT[energyType]}`}
+        title="Glisse cette énergie sur un Pokémon allié pour l'attacher"
+      >
+        {energyEmoji(energyType)}
+      </span>
+      {/* Fantôme qui suit le pointeur pendant le drag */}
+      {drag && (
+        <div
+          style={{
+            position: "fixed",
+            left: drag.x - 24,
+            top: drag.y - 24,
+            pointerEvents: "none",
+            zIndex: 100,
+          }}
+          className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold shadow-2xl ring-4 ring-white/40 ${
+            ENERGY_BADGE_BG[energyType]
+          } ${ENERGY_BADGE_TEXT[energyType]}`}
+        >
+          {energyEmoji(energyType)}
+        </div>
+      )}
+    </>
   );
 }
 
