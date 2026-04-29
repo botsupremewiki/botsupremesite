@@ -2096,11 +2096,41 @@ export type EternumHero = {
   xp: number;
   evolutionStage: number;
   prestigeCount: number;
+  /** Bitmask 10 bits : bit i = pierre du palier (i+1)×100 acquise. */
+  prestigeStones: number;
   energy: number;
   energyUpdatedAt: number; // ms epoch
   idleStage: number;
   idleUpdatedAt: number; // ms epoch
 };
+
+/** Bonus % XP par pierre, croissants pour récompenser pousser plus haut. */
+export const ETERNUM_PRESTIGE_BONUSES = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14] as const;
+
+/** Liste des paliers en niveau (pour l'UI). */
+export const ETERNUM_PRESTIGE_PALIERS = [
+  100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
+] as const;
+
+/** Renvoie l'array des paliers (1..10) actuellement possédés à partir du bitmask. */
+export function eternumPrestigeStonesOwned(bitmask: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < 10; i++) {
+    if ((bitmask >> i) & 1) out.push(ETERNUM_PRESTIGE_PALIERS[i]);
+  }
+  return out;
+}
+
+/** Multiplicateur XP total selon les pierres possédées (1.0 base, jusqu'à 1.95). */
+export function eternumXpMultiplier(bitmask: number): number {
+  let mult = 1.0;
+  for (let i = 0; i < 10; i++) {
+    if ((bitmask >> i) & 1) {
+      mult += ETERNUM_PRESTIGE_BONUSES[i] * 0.01;
+    }
+  }
+  return mult;
+}
 
 export type EternumIdleCollection = {
   osGained: number;

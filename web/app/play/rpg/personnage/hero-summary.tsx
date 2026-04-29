@@ -7,10 +7,13 @@ import {
   ETERNUM_CLASSES,
   ETERNUM_ELEMENTS,
   ETERNUM_JOBS,
+  ETERNUM_LEVEL_MAX,
   type EternumElementId,
   type EternumHero,
   eternumHeroStats,
+  eternumPrestigeStonesOwned,
   eternumXpForNextLevel,
+  eternumXpMultiplier,
 } from "@shared/types";
 import { createClient } from "@/lib/supabase/client";
 
@@ -40,7 +43,9 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
               </div>
               <div className="text-xs text-zinc-400">{cls.role}</div>
               <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] uppercase tracking-widest text-zinc-500">
-                <span>Niveau {hero.level}</span>
+                <span>
+                  Niveau {hero.level} / {ETERNUM_LEVEL_MAX}
+                </span>
                 {hero.prestigeCount > 0 && (
                   <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-amber-300">
                     Prestige {hero.prestigeCount}
@@ -49,6 +54,13 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
                 {hero.evolutionStage > 0 && (
                   <span className="rounded bg-violet-400/20 px-1.5 py-0.5 text-violet-300">
                     Évolution {hero.evolutionStage}
+                  </span>
+                )}
+                {eternumPrestigeStonesOwned(hero.prestigeStones).length >
+                  0 && (
+                  <span className="rounded bg-fuchsia-400/20 px-1.5 py-0.5 text-fuchsia-300 shadow-[0_0_8px_rgba(232,121,249,0.3)]">
+                    💎 {eternumPrestigeStonesOwned(hero.prestigeStones).length}/10
+                    pierres · ×{eternumXpMultiplier(hero.prestigeStones).toFixed(2)} XP
                   </span>
                 )}
               </div>
@@ -178,7 +190,7 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
         <Link
           href="/play/rpg/personnage/prestige"
           className={`flex items-center justify-between rounded-md border p-3 ${
-            hero.level >= 100 && hero.evolutionStage >= 4
+            hero.level >= 100
               ? "border-fuchsia-400/40 bg-fuchsia-400/10 ring-1 ring-fuchsia-400/30 hover:bg-fuchsia-400/20"
               : "border-white/10 bg-black/40 hover:bg-white/[0.04]"
           }`}
@@ -187,8 +199,10 @@ export function HeroSummary({ hero }: { hero: EternumHero }) {
             <span className="text-xl">✨</span>
             <span className="text-sm text-fuchsia-200">Prestige</span>
           </span>
-          {hero.prestigeCount > 0 && (
-            <span className="text-xs text-fuchsia-300">×{hero.prestigeCount}</span>
+          {eternumPrestigeStonesOwned(hero.prestigeStones).length > 0 && (
+            <span className="text-xs text-fuchsia-300">
+              💎 {eternumPrestigeStonesOwned(hero.prestigeStones).length}/10
+            </span>
           )}
         </Link>
       </section>

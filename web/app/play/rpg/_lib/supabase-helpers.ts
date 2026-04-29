@@ -11,6 +11,7 @@ export type EternumHeroRow = {
   xp: number | string;
   evolution_stage: number;
   prestige_count: number;
+  prestige_stones: number;
   energy: number;
   energy_updated_at: string;
   idle_stage: number;
@@ -31,7 +32,7 @@ export async function fetchEternumHero(
   const { data } = await supabase
     .from("eternum_heroes")
     .select(
-      "user_id,class_id,element_id,job_id,level,xp,evolution_stage,prestige_count,energy,energy_updated_at,idle_stage,idle_updated_at",
+      "user_id,class_id,element_id,job_id,level,xp,evolution_stage,prestige_count,prestige_stones,energy,energy_updated_at,idle_stage,idle_updated_at",
     )
     .eq("user_id", authId)
     .maybeSingle();
@@ -48,6 +49,7 @@ function rowToHero(row: EternumHeroRow): EternumHero {
     xp: typeof row.xp === "string" ? Number(row.xp) : row.xp,
     evolutionStage: row.evolution_stage,
     prestigeCount: row.prestige_count,
+    prestigeStones: row.prestige_stones ?? 0,
     energy: row.energy,
     energyUpdatedAt: Date.parse(row.energy_updated_at) || Date.now(),
     idleStage: row.idle_stage,
