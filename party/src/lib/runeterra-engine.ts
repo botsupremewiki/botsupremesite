@@ -494,6 +494,13 @@ export function projectStateForSeat(
     selfSeat: seatToId(viewerSeatIdx),
     activeSeat: seatToId(state.activeSeatIdx),
     attackTokenSeat: seatToId(state.attackTokenSeatIdx),
+    attackInProgress:
+      state.attackInProgress === null
+        ? null
+        : {
+            attackerSeat: seatToId(state.attackInProgress.attackerSeatIdx),
+            lanes: state.attackInProgress.lanes,
+          },
     round: state.round,
     winner:
       state.winnerSeatIdx === null ? null : seatToId(state.winnerSeatIdx),
