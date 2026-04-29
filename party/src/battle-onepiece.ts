@@ -1715,6 +1715,43 @@ export default class OnePieceBattleServer implements Party.Server {
         );
       },
       log: (line) => this.pushLog(line),
+      takeLifeToHand: (seatId) => {
+        const s = this.seats[seatId];
+        if (!s || s.life.length === 0) return null;
+        const card = s.life.shift()!;
+        s.hand.push(card);
+        return card.cardId;
+      },
+      searchDeckTopForType: (seatId, count, typeFilter, restGoesTo, excludeName) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        const top = s.deck.splice(0, Math.min(count, s.deck.length));
+        const needle = typeFilter.toLowerCase();
+        let foundIdx = -1;
+        for (let i = 0; i < top.length; i++) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(top[i].cardId);
+          if (!meta) continue;
+          if (excludeName && meta.name === excludeName) continue;
+          const matches =
+            meta.types.some((t) => t.toLowerCase().includes(needle)) ||
+            meta.name.toLowerCase() === needle;
+          if (matches) {
+            foundIdx = i;
+            break;
+          }
+        }
+        let foundId: string | null = null;
+        if (foundIdx >= 0) {
+          const found = top.splice(foundIdx, 1)[0];
+          s.hand.push(found);
+          foundId = found.cardId;
+        }
+        // Place le reste selon le mode demandé.
+        if (restGoesTo === "top") s.deck.unshift(...top);
+        else if (restGoesTo === "bottom") s.deck.push(...top);
+        else if (restGoesTo === "discard") s.discard.push(...top);
+        return foundId;
+      },
       getSeat: (seatId) => {
         const s = this.seats[seatId];
         if (!s) return null;

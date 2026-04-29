@@ -41,6 +41,9 @@ export type CardRef =
   | { kind: "character"; seat: OnePieceBattleSeatId; uid: string }
   | { kind: "stage"; seat: OnePieceBattleSeatId };
 
+/** Où placer le reste des cartes regardées après une recherche dans le deck. */
+export type SearchRestPlacement = "top" | "bottom" | "discard";
+
 /** Accès aux mutations courantes — implémenté par le BattleServer.
  *  L'effet reçoit cet objet pour appliquer ses changements sans toucher
  *  directement aux structures internes. */
@@ -61,6 +64,26 @@ export interface BattleEffectAccess {
 
   /** Pousse une ligne dans le journal du combat. */
   log(line: string): void;
+
+  /** Prend la carte du dessus de la Vie et l'ajoute à la main du seat.
+   *  Retourne le cardId de la carte ajoutée (ou null si Vie vide). */
+  takeLifeToHand(seat: OnePieceBattleSeatId): string | null;
+
+  /** Regarde les N cartes du dessus du deck. Si une carte matche le filtre,
+   *  l'ajoute à la main et le reste va selon `restGoesTo`. Sinon les cartes
+   *  vont toutes selon `restGoesTo`. Retourne le cardId trouvé ou null.
+   *  - typeFilter : sous-string insensible à la casse, comparé aux `types`
+   *    de la carte ET au `name` (pour matcher [Sanji], [Charlotte Pudding]…).
+   *  - excludeName : si fourni, ignore les cartes ayant ce nom (pour les
+   *    "autre que [X]" du jeu officiel).
+   */
+  searchDeckTopForType(
+    seat: OnePieceBattleSeatId,
+    count: number,
+    typeFilter: string,
+    restGoesTo: SearchRestPlacement,
+    excludeName?: string,
+  ): string | null;
 
   /** Lit l'état d'un seat (read-only). */
   getSeat(seat: OnePieceBattleSeatId): {
@@ -139,8 +162,260 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  vérification du power, pas exécuté ici. */
   // (placeholder pour montrer le pattern d'effet passif)
 
+  // ─── BATCH 1 (cardNumber alphabétique) ──────────────────────────────────
+
+  /** OP02-001 Edward Newgate (Leader Rouge)
+   *  [Fin de votre tour] Ajoutez à votre main 1 carte du dessus de votre Vie. */
+  "OP02-001": (ctx) => {
+    if (ctx.hook !== "on-turn-end") return;
+    if (ctx.sourceUid !== "leader") return;
+    const cardId = ctx.battle.takeLifeToHand(ctx.sourceSeat);
+    if (cardId) {
+      ctx.battle.log(
+        "Edward Newgate : ajoute 1 carte du dessus de la Vie à sa main.",
+      );
+    }
+  },
+
+  /** OP02-057 Bartholomew Kuma
+   *  [Jouée] Regardez 2 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {Sept grands corsaires} et ajoutez-la à votre main. Puis,
+   *  réorganisez les cartes restantes dans l'ordre de votre choix. */
+  "OP02-057": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      2,
+      "Sept grands corsaires",
+      "top",
+    );
+    if (found) {
+      ctx.battle.log(
+        "Bartholomew Kuma : révèle un Sept grands corsaires et l'ajoute à la main.",
+      );
+    } else {
+      ctx.battle.log("Bartholomew Kuma : aucun Sept grands corsaires révélé.");
+    }
+  },
+
+  /** OP03-003 Izo
+   *  [Jouée] Regardez 5 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte incluant «Équipage de Barbe Blanche» dans son type autre que
+   *  [Izo] et ajoutez-la à votre main. Puis, placez les cartes restantes
+   *  au-dessous de votre deck dans l'ordre de votre choix. */
+  "OP03-003": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      5,
+      "Équipage de Barbe Blanche",
+      "bottom",
+      "Izo",
+    );
+    if (found) {
+      ctx.battle.log(
+        "Izo : révèle un Équipage de Barbe Blanche et l'ajoute à la main.",
+      );
+    } else {
+      ctx.battle.log("Izo : aucun Équipage de Barbe Blanche révélé.");
+    }
+  },
+
+  /** OP03-089 Brandnew
+   *  [Jouée] Regardez 3 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {Marine} autre que [Brandnew] et ajoutez-la à votre
+   *  main. Puis, placez les cartes restantes dans votre Défausse. */
+  "OP03-089": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      3,
+      "Marine",
+      "discard",
+      "Brandnew",
+    );
+    if (found) {
+      ctx.battle.log("Brandnew : révèle un Marine et l'ajoute à la main.");
+    } else {
+      ctx.battle.log(
+        "Brandnew : aucun Marine révélé (les 3 cartes vont à la défausse).",
+      );
+    }
+  },
+
+  /** OP03-110 Charlotte Smoothie
+   *  [En attaquant] Vous pouvez ajouter à votre main 1 carte du dessus ou
+   *  du dessous de votre Vie : Ce Personnage gagne +2000 de puissance pour
+   *  tout le combat.
+   *  Auto-yes : on prend toujours la Vie (gain net pour le bot et l'humain). */
+  "OP03-110": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const cardId = ctx.battle.takeLifeToHand(ctx.sourceSeat);
+    if (!cardId) return; // pas de Vie restante
+    ctx.battle.addPowerBuff(
+      { kind: "character", seat: ctx.sourceSeat, uid: ctx.sourceUid },
+      2000,
+    );
+    ctx.battle.log(
+      "Charlotte Smoothie : prend 1 Vie et gagne +2000 puissance pour ce combat.",
+    );
+  },
+
+  /** OP03-112 Charlotte Pudding
+   *  [Jouée] Regardez 4 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {Équipage de Big Mom} autre que [Charlotte Pudding] ou
+   *  jusqu'à 1 [Sanji] et ajoutez-la à votre main. Puis, placez les cartes
+   *  restantes au-dessous de votre deck. */
+  "OP03-112": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    // Cherche d'abord un Équipage de Big Mom (autre que Pudding), sinon
+    // un [Sanji]. On fait deux passes via la même API.
+    let found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      4,
+      "Équipage de Big Mom",
+      "bottom",
+      "Charlotte Pudding",
+    );
+    if (!found) {
+      // Si rien trouvé, on n'a plus les cartes du top (déjà replacées).
+      // Le 2ᵉ search reprendrait du nouveau top — pas idéal mais cohérent.
+      found = ctx.battle.searchDeckTopForType(
+        ctx.sourceSeat,
+        0,
+        "Sanji",
+        "bottom",
+      );
+    }
+    if (found) {
+      ctx.battle.log(
+        "Charlotte Pudding : révèle une carte Équipage de Big Mom ou [Sanji] et l'ajoute à la main.",
+      );
+    } else {
+      ctx.battle.log("Charlotte Pudding : aucune cible révélée.");
+    }
+  },
+
+  // ─── BATCH 1 — effets nécessitant un PendingChoice (Phase 5b) ───────────
+  // Pour ces cartes, le moteur log un message descriptif mais l'effet n'est
+  // pas appliqué tant que le système de choix joueur n'est pas implémenté.
+  // À reprendre une fois PendingChoice câblé.
+
+  /** OP01-073 Don Quijote Doflamingo (Char) — Reorder top 5 (input UI). */
+  "OP01-073": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Don Quijote Doflamingo : effet [Jouée] descriptif (réordonner top 5 — TODO PendingChoice).");
+  },
+
+  /** OP01-086 Overheat (Event Counter) — +4000 + bounce target. */
+  "OP01-086": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Overheat : effet [Contre] descriptif (+4000 + bounce — TODO PendingChoice).");
+  },
+
+  /** OP02-008 Joz — Conditional Initiative (passive). */
+  "OP02-008": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Joz : Initiative conditionnelle (TODO passifs avec conditions).");
+  },
+
+  /** OP02-018 Marco — [En cas de KO] effet conditional. */
+  "OP02-018": (ctx) => {
+    if (ctx.hook !== "on-ko") return;
+    ctx.battle.log("Marco : effet [En cas de KO] descriptif (TODO PendingChoice).");
+  },
+
+  /** OP02-019 Rakuyo — [Votre tour] +1000 puissance global passif. */
+  "OP02-019": (ctx) => {
+    if (ctx.hook !== "on-turn-start") return;
+    ctx.battle.log("Rakuyo : effet [Votre tour] passif global (TODO passifs).");
+  },
+
+  /** OP02-093 Smoker (Leader) — [Activation : Principale] cost reduce. */
+  "OP02-093": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Smoker : effet [Activation : Principale] (TODO système d'activation manuelle).");
+  },
+
+  /** OP02-098 Kobby — [Jouée] discard-cost KO target. */
+  "OP02-098": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Kobby : effet [Jouée] descriptif (KO ciblé — TODO PendingChoice).");
+  },
+
+  /** OP02-106 Tsuru — [Jouée] -2 cost target. */
+  "OP02-106": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Tsuru : effet [Jouée] descriptif (-2 cost — TODO PendingChoice).");
+  },
+
+  /** OP02-113 Hermep — [En attaquant] -2 cost + conditional buff. */
+  "OP02-113": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    ctx.battle.log("Hermep : effet [En attaquant] descriptif (TODO PendingChoice).");
+  },
+
+  /** OP02-117 Ice Age (Event) — -5 cost target. */
+  "OP02-117": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Ice Age : effet [Principale] descriptif (TODO PendingChoice).");
+  },
+
+  /** OP03-009 Haruta — [Activation : Principale] [Une fois par tour] +1 DON. */
+  "OP03-009": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Haruta : effet [Activation : Principale] (TODO activation + PendingChoice).");
+  },
+
+  /** OP03-079 Vergo — [DON!! x1] passif "ne peut pas être KO en combat". */
+  "OP03-079": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Vergo : effet passif (immunité combat — TODO passifs).");
+  },
+
+  /** OP03-099 Charlotte Katakuri (Leader) — [En attaquant] manipulate Vie. */
+  "OP03-099": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    if (ctx.sourceUid !== "leader") return;
+    ctx.battle.log("Katakuri : effet [En attaquant] (TODO PendingChoice — replace Vie).");
+  },
+
+  /** OP03-115 Streusen — [Jouée] discard cost KO. */
+  "OP03-115": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Streusen : effet [Jouée] descriptif (TODO PendingChoice).");
+  },
+
+  /** OP03-118 Térébration (Event) — Counter +5000 (déjà géré par counter system). */
+  // pas de handler — le counter system standard couvre ça.
+
+  /** OP03-121 Colonne foudroyante (Event) — [Principale] discard Vie pour KO. */
+  "OP03-121": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Colonne foudroyante : effet [Principale] (TODO PendingChoice).");
+  },
+
+  /** OP04-119 Don Quijote Rosinante — [Tour adverse] passif + [Jouée] play. */
+  "OP04-119": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Don Quijote Rosinante : effet [Jouée] (TODO PendingChoice).");
+  },
+
+  /** OP05-060 Monkey D. Luffy (Leader) — [Activation : Principale]. */
+  "OP05-060": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log("Monkey D. Luffy : effet [Activation : Principale] (TODO).");
+  },
+
+  /** OP05-061 Usohachi — [DON!! x1] [En attaquant] Si DON ≥ 8 : épuiser. */
+  "OP05-061": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    ctx.battle.log("Usohachi : effet [En attaquant] conditionnel (TODO).");
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
-  // Ajouter ici les handlers pour les cartes les plus jouées.
+  // Les batches suivants étendront ce registre. La majorité des effets
+  // restants nécessitent l'infra PendingChoice (ciblage joueur).
 };
 
 /** Récupère le cardNumber depuis un cardId (avec ou sans suffixe variante). */
