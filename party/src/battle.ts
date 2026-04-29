@@ -434,7 +434,7 @@ export default class BattleServer implements Party.Server {
             data.attacks[idx].cost,
           )
         ) {
-          this.handleAttack("p2", idx);
+          this.handleAttack("p2", idx, null, null);
           // handleAttack fait avancer le tour (ou termine si KO)
           return;
         }
@@ -509,7 +509,12 @@ export default class BattleServer implements Party.Server {
         this.handleRetreat(seatId, data.benchIndex);
         break;
       case "battle-attack":
-        this.handleAttack(seatId, data.attackIndex);
+        this.handleAttack(
+          seatId,
+          data.attackIndex,
+          data.copyFromUid ?? null,
+          data.copyAttackIndex ?? null,
+        );
         break;
       case "battle-promote-active":
         this.handlePromoteActive(seatId, data.benchIndex);
@@ -827,8 +832,17 @@ export default class BattleServer implements Party.Server {
     this.broadcastState();
   }
 
-  /** Exécute une attaque de l'Actif. La 1ère ou 2nde selon attackIndex. */
-  private handleAttack(seatId: BattleSeatId, attackIndex: number) {
+  /** Exécute une attaque de l'Actif. La 1ère ou 2nde selon attackIndex.
+   *  Si `copyFromUid` + `copyAttackIndex` sont fournis ET que l'attaque
+   *  d'origine contient l'effet `copy-opp-attack` (Mew « Mémoire Ancestrale »),
+   *  on exécute l'attaque copiée à la place. L'attaquant doit toujours
+   *  payer le coût (avec ses propres énergies) — sinon l'attaque foire. */
+  private handleAttack(
+    seatId: BattleSeatId,
+    attackIndex: number,
+    copyFromUid: string | null,
+    copyAttackIndex: number | null,
+  ) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
     if (!this.requireOpponentReady(seatId)) return;
@@ -865,11 +879,58 @@ export default class BattleServer implements Party.Server {
     }
     const attackerData = getCardForBattle(seat.active.cardId);
     if (!attackerData) return;
-    const attack = attackerData.attacks[attackIndex];
-    if (!attack) {
+    const originalAttack = attackerData.attacks[attackIndex];
+    if (!originalAttack) {
       this.sendErrorToSeat(seatId, "Ce Pokémon n'a pas d'attaque.");
       return;
     }
+
+    // ── Copy attack (Mew « Mémoire Ancestrale ») ──
+    // Si l'attaque d'origine contient l'effet `copy-opp-attack`, on
+    // remplace `attack` par l'attaque copiée. Sinon, attaque normale.
+    let attack = originalAttack;
+    let copiedFromName: string | null = null;
+    const originalEffects = parseAttackEffects(originalAttack.text ?? null);
+    const isCopyAttack = originalEffects.some(
+      (e) => e.kind === "copy-opp-attack",
+    );
+    if (isCopyAttack) {
+      if (copyFromUid == null || copyAttackIndex == null) {
+        this.sendErrorToSeat(
+          seatId,
+          "Choisis une attaque adverse à copier.",
+        );
+        return;
+      }
+      const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
+      const opp = this.seats[oppId];
+      if (!opp) return;
+      const sourceCard = this.findOwnPokemon(opp, copyFromUid);
+      if (!sourceCard) {
+        this.sendErrorToSeat(seatId, "Cible de copie introuvable.");
+        return;
+      }
+      const sourceData = getCardForBattle(sourceCard.cardId);
+      const copied = sourceData?.attacks[copyAttackIndex];
+      if (!sourceData || !copied) {
+        this.sendErrorToSeat(seatId, "Attaque à copier introuvable.");
+        return;
+      }
+      attack = copied;
+      copiedFromName = sourceData.name;
+      // Pocket : « Si ce Pokémon n'a pas l'Énergie nécessaire pour utiliser
+      // cette attaque, cette attaque ne fait rien. » → si on n'a pas le coût,
+      // on log l'échec et on avance le tour SANS appliquer d'effets.
+      if (!this.canPayAttackCost(seat.active.attachedEnergies, copied.cost)) {
+        this.pushLog(
+          `${attackerData.name} utilise ${originalAttack.name} (copie ${copied.name} de ${sourceData.name}) → coût en Énergies non payé, ratée !`,
+        );
+        if (this.phase === "playing") this.advanceTurn();
+        else this.broadcastState();
+        return;
+      }
+    }
+
     if (!this.canPayAttackCost(seat.active.attachedEnergies, attack.cost)) {
       this.sendErrorToSeat(seatId, "Coût en Énergies non payé.");
       return;
@@ -938,9 +999,15 @@ export default class BattleServer implements Party.Server {
     opp.active.damage += damage;
 
     // Log unique style jeu Pokémon : « Pikachu utilise Éclair → 40 dégâts
-    // à Electhor (super efficace !) → K.O. ! ».
+    // à Electhor (super efficace !) → K.O. ! ». Pour Mew « Mémoire
+    // Ancestrale » : « Mew utilise Mémoire Ancestrale (copie Lance-Flammes
+    // de Goupix) → 30 dégâts à Electhor ».
     const willKo = opp.active.damage >= defenderData.hp;
-    const parts: string[] = [`${attackerData.name} utilise ${attack.name}`];
+    const headParts =
+      copiedFromName !== null
+        ? `${attackerData.name} utilise ${originalAttack.name} (copie ${attack.name} de ${copiedFromName})`
+        : `${attackerData.name} utilise ${attack.name}`;
+    const parts: string[] = [headParts];
     if (damage > 0) parts.push(`→ ${damage} dégâts à ${defenderData.name}`);
     if (isWeakness) parts.push("(super efficace !)");
     if (willKo) parts.push("→ K.O. !");

@@ -173,6 +173,12 @@ export type AttackEffect =
   // ─── Mélange Actif au deck ───────────────────────────────────────────
   /** L'adversaire mélange son Pokémon Actif dans son deck (avec coin flip). */
   | { kind: "shuffle-opp-active-to-deck"; conditional?: "coin-flip" }
+  // ─── Copy attack (Mew « Mémoire Ancestrale ») ───────────────────────
+  /** « Choisissez l'une des attaques des Pokémon de votre adversaire et
+   *  utilisez-la en tant que cette attaque ». Le client doit fournir
+   *  `copyFromUid` + `copyAttackIndex` au moment du `battle-attack` pour
+   *  préciser quelle attaque copier. */
+  | { kind: "copy-opp-attack" }
   // ─── Effets non implémentés (parsés pour debug, pas exécutés) ────────
   | { kind: "unimplemented"; pattern: string };
 
@@ -605,6 +611,14 @@ export function parseAttackEffects(
         kind: "shuffle-opp-active-to-deck",
         conditional: "coin-flip",
       });
+    },
+  );
+
+  // ── Copy attack (Mew « Mémoire Ancestrale ») ──
+  consume(
+    /Choisissez l'une des attaques des Pokémon de votre adversaire et utilisez-la en tant que cette attaque\./i,
+    () => {
+      effects.push({ kind: "copy-opp-attack" });
     },
   );
 

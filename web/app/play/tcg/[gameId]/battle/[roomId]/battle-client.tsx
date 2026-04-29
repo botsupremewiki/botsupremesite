@@ -241,8 +241,17 @@ export function BattleClient({
     send({ type: "battle-evolve", handIndex, targetUid });
   const retreat = (benchIndex: number) =>
     send({ type: "battle-retreat", benchIndex });
-  const attack = (attackIndex: number) =>
-    send({ type: "battle-attack", attackIndex });
+  const attack = (
+    attackIndex: number,
+    copyFromUid?: string | null,
+    copyAttackIndex?: number | null,
+  ) =>
+    send({
+      type: "battle-attack",
+      attackIndex,
+      copyFromUid,
+      copyAttackIndex,
+    });
   const promoteActive = (benchIndex: number) =>
     send({ type: "battle-promote-active", benchIndex });
   const playTrainer = (handIndex: number, targetUid?: string | null) =>
@@ -479,6 +488,7 @@ export function BattleClient({
               onClose={() => setTrainerReveal(null)}
             />
           )}
+
         </main>
       )}
     </div>
@@ -540,7 +550,11 @@ function BattleBoard({
   onAttachEnergy: (targetUid: string) => void;
   onEvolve: (handIndex: number, targetUid: string) => void;
   onRetreat: (benchIndex: number) => void;
-  onAttack: (attackIndex: number) => void;
+  onAttack: (
+    attackIndex: number,
+    copyFromUid?: string | null,
+    copyAttackIndex?: number | null,
+  ) => void;
   onPromoteActive: (benchIndex: number) => void;
   onPlayTrainer: (handIndex: number, targetUid?: string | null) => void;
   onUseAbility: (cardUid: string, targetUid?: string | null) => void;
@@ -563,6 +577,11 @@ function BattleBoard({
   const [pendingAbilityUid, setPendingAbilityUid] = useState<string | null>(
     null,
   );
+  // Mode "Copy attack picker" — quand le joueur clique sur l'attaque
+  // « Mémoire Ancestrale » de Mew, on stocke l'index de cette attaque et
+  // on affiche une modal qui liste les attaques des Pokémon adverses.
+  // Click sur une attaque adverse → battle-attack avec les indices.
+  const [pendingCopyFor, setPendingCopyFor] = useState<number | null>(null);
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
   // Carte sous le curseur (main ou board) → preview en grand dans la sidebar.
   const [hoveredCard, setHoveredCard] = useState<PokemonCardData | null>(null);
@@ -571,6 +590,7 @@ function BattleBoard({
     setPendingEvolveIdx(null);
     setPendingTrainerIdx(null);
     setPendingAbilityUid(null);
+    setPendingCopyFor(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
   // L'adversaire est en train de choisir son nouveau Actif (typiquement
@@ -693,6 +713,10 @@ function BattleBoard({
                 onConfirmSetup={onConfirmSetup}
                 onEndTurn={onEndTurn}
                 onAttack={onAttack}
+                onSelectCopyAttack={(idx) => {
+                  cancelPending();
+                  setPendingCopyFor(idx);
+                }}
                 attachEnergyMode={attachEnergyMode}
                 pendingEvolveIdx={pendingEvolveIdx}
                 pendingTrainerIdx={pendingTrainerIdx}
@@ -784,6 +808,19 @@ function BattleBoard({
 
         {/* Modal zoom carte (depuis click sur board uniquement) */}
         <CardZoomModal card={zoomedCard} onClose={() => setZoomedCard(null)} />
+
+        {/* Modal copy attack (Mew « Mémoire Ancestrale »). */}
+        {pendingCopyFor !== null && (
+          <CopyAttackPicker
+            opponent={state.opponent}
+            cardById={cardById}
+            onPick={(uid, attackIdx) => {
+              onAttack(pendingCopyFor, uid, attackIdx);
+              setPendingCopyFor(null);
+            }}
+            onCancel={() => setPendingCopyFor(null)}
+          />
+        )}
 
         {state.winner && (
           <div className="flex-shrink-0 bg-black/80 p-4 text-center">
@@ -1693,6 +1730,7 @@ function SelfControls({
   onConfirmSetup,
   onEndTurn,
   onAttack,
+  onSelectCopyAttack,
   attachEnergyMode,
   pendingEvolveIdx,
   pendingTrainerIdx,
@@ -1704,7 +1742,14 @@ function SelfControls({
   cardById: Map<string, PokemonCardData>;
   onConfirmSetup: () => void;
   onEndTurn: () => void;
-  onAttack: (attackIndex: number) => void;
+  onAttack: (
+    attackIndex: number,
+    copyFromUid?: string | null,
+    copyAttackIndex?: number | null,
+  ) => void;
+  /** Le joueur a cliqué sur une attaque "copy" (Mémoire Ancestrale). Le
+   *  parent affiche alors un picker des attaques adverses à copier. */
+  onSelectCopyAttack: (attackIndex: number) => void;
   attachEnergyMode: boolean;
   pendingEvolveIdx: number | null;
   pendingTrainerIdx: number | null;
@@ -1799,11 +1844,17 @@ function SelfControls({
               ? canPayCost(active.attachedEnergies, a.cost, cardById)
               : false;
             const disabled = blocked || !canPay;
+            // Si l'attaque est de type "copy" (Mémoire Ancestrale), on
+            // bascule en mode picker au lieu d'envoyer directement.
+            const isCopy = isCopyOppAttack(a.text);
             return (
               <button
                 key={i}
                 disabled={disabled}
-                onClick={() => onAttack(i)}
+                onClick={() => {
+                  if (isCopy) onSelectCopyAttack(i);
+                  else onAttack(i);
+                }}
                 className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
                   disabled
                     ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
@@ -1960,6 +2011,16 @@ const ABILITY_NEEDS_TARGET = new Set<string>([
   "Piège Parfumé", // Empiflor : cible un Banc adverse
   "Sheauriken", // Amphinobi : cible un Pokémon adverse
 ]);
+
+/** Détecte si une attaque est de type "copy" (Mew « Mémoire Ancestrale »).
+ *  Si oui, le client doit afficher un picker pour choisir une attaque
+ *  adverse à copier au lieu d'envoyer directement battle-attack. */
+function isCopyOppAttack(attackText: string | null | undefined): boolean {
+  if (!attackText) return false;
+  return /Choisissez l'une des attaques des Pokémon de votre adversaire et utilisez-la/i.test(
+    attackText,
+  );
+}
 
 /** Vue "comme un Pokémon" d'une carte sur le board. Pour les vrais Pokémon,
  *  retourne la carte telle quelle. Pour les Fossiles, synthétise un Pokémon
@@ -2660,6 +2721,116 @@ function TrainerRevealModal({
         <button
           onClick={onClose}
           aria-label="Fermer"
+          className="absolute -right-3 -top-3 rounded-full bg-zinc-900 p-2 text-zinc-200 shadow-lg ring-1 ring-white/20 hover:bg-zinc-800"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Modal du picker copy attack (Mew « Mémoire Ancestrale »). Affiche les
+ *  Pokémon de l'adversaire (Actif + Banc) et leurs attaques. Click sur une
+ *  attaque → callback avec (sourceUid, attackIdx). Click outside / croix =
+ *  annule. */
+function CopyAttackPicker({
+  opponent,
+  cardById,
+  onPick,
+  onCancel,
+}: {
+  opponent: BattlePlayerPublicState | null;
+  cardById: Map<string, PokemonCardData>;
+  onPick: (sourceUid: string, attackIdx: number) => void;
+  onCancel: () => void;
+}) {
+  const targets: BattleCard[] = [];
+  if (opponent?.active) targets.push(opponent.active);
+  if (opponent?.bench) targets.push(...opponent.bench);
+  return (
+    <div
+      onClick={onCancel}
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex max-h-[88vh] w-full max-w-[860px] flex-col gap-3 overflow-y-auto rounded-xl border border-amber-400/40 bg-zinc-950/95 p-5 shadow-2xl"
+      >
+        <div className="text-center">
+          <div className="text-xs uppercase tracking-widest text-amber-300">
+            🃏 Mémoire Ancestrale
+          </div>
+          <div className="mt-1 text-sm text-zinc-300">
+            Choisis l'attaque adverse à copier. Si Mew n'a pas l'Énergie
+            nécessaire, l'attaque ratera.
+          </div>
+        </div>
+        {targets.length === 0 ? (
+          <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-sm text-zinc-500">
+            L'adversaire n'a aucun Pokémon en jeu.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {targets.map((tgt) => {
+              const data = cardById.get(tgt.cardId);
+              if (data?.kind !== "pokemon" || data.attacks.length === 0)
+                return null;
+              return (
+                <div
+                  key={tgt.uid}
+                  className="flex items-stretch gap-3 rounded-lg border border-white/10 bg-black/30 p-3"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={data.image}
+                    alt={data.name}
+                    className="h-32 w-auto rounded object-contain"
+                  />
+                  <div className="flex flex-1 flex-col gap-2">
+                    <div className="text-sm font-bold text-zinc-100">
+                      {data.name}
+                    </div>
+                    {data.attacks.map((a, ai) => (
+                      <button
+                        key={ai}
+                        onClick={() => onPick(tgt.uid, ai)}
+                        className="flex items-center justify-between gap-2 rounded-md border-2 border-rose-400/60 bg-rose-500/15 px-3 py-2 text-left text-xs text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
+                      >
+                        <div className="flex items-center gap-1">
+                          {a.cost.map((c, j) => {
+                            const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
+                            const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
+                            return (
+                              <span
+                                key={j}
+                                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
+                              >
+                                {energyEmoji(c)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <span className="flex-1 font-bold">{a.name}</span>
+                        {a.damage !== undefined && (
+                          <span className="text-base font-black tabular-nums text-amber-300">
+                            {a.damage}
+                            {a.damageSuffix ?? ""}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button
+          onClick={onCancel}
+          aria-label="Annuler"
           className="absolute -right-3 -top-3 rounded-full bg-zinc-900 p-2 text-zinc-200 shadow-lg ring-1 ring-white/20 hover:bg-zinc-800"
         >
           ✕

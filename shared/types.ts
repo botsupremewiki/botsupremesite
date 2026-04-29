@@ -1288,6 +1288,11 @@ export type RuneterraSelfState = RuneterraPlayerPublicState & {
   hand: string[]; // cardCodes
 };
 
+export type RuneterraAttackLane = {
+  attackerUid: string;
+  blockerUid: string | null;
+};
+
 export type RuneterraBattleState = {
   roomId: string;
   phase: RuneterraBattlePhase;
@@ -1297,6 +1302,13 @@ export type RuneterraBattleState = {
   selfSeat: RuneterraSeatId | null;
   activeSeat: RuneterraSeatId | null; // qui a la priorité
   attackTokenSeat: RuneterraSeatId | null; // qui peut déclarer l'attaque ce round
+  // Attaque en cours (null si pas d'attaque). attackerSeat = qui attaque,
+  // lanes = liste ordonnée des paires attaquant→bloqueur (le bloqueur est
+  // null tant que le défenseur n'a pas assigné).
+  attackInProgress: {
+    attackerSeat: RuneterraSeatId;
+    lanes: RuneterraAttackLane[];
+  } | null;
   round: number;
   winner: RuneterraSeatId | null;
   log: string[]; // 20 derniers évènements
@@ -1667,7 +1679,17 @@ export type BattleClientMessage =
   | { type: "battle-attach-energy"; targetUid: string }
   | { type: "battle-evolve"; handIndex: number; targetUid: string }
   | { type: "battle-retreat"; benchIndex: number }
-  | { type: "battle-attack"; attackIndex: number }
+  /** Attaque normale ou attaque copiée (Mew « Mémoire Ancestrale »).
+   *  Si `copyFromUid` + `copyAttackIndex` sont fournis ET que l'attaque
+   *  d'origine contient l'effet `copy-opp-attack`, le serveur exécute
+   *  l'attaque copiée à la place (en utilisant les énergies de
+   *  l'attaquant pour payer le coût). */
+  | {
+      type: "battle-attack";
+      attackIndex: number;
+      copyFromUid?: string | null;
+      copyAttackIndex?: number | null;
+    }
   | { type: "battle-promote-active"; benchIndex: number }
   // Cartes Dresseur (subset starter implémenté côté serveur — voir handlePlayTrainer
   // dans party/src/battle.ts). targetUid optionnel selon la carte (ex Potion =
@@ -2463,6 +2485,32 @@ export type OnePieceBattleSelfState = OnePieceBattlePlayerPublicState & {
   hand: string[];
 };
 
+// Attaque en cours : ouverte par l'attaquant, fenêtre de défense pour
+// l'adversaire qui peut Bloquer / Counter / Passer.
+export type OnePieceBattlePendingAttack = {
+  attackerSeat: OnePieceBattleSeatId;
+  // "leader" ou uid d'un Personnage en jeu côté attaquant.
+  attackerUid: string;
+  // "leader" ou uid d'un Personnage en jeu côté défenseur.
+  targetUid: string;
+  // Power de l'attaquant (base + DON attachées × 1000 + bonus).
+  attackerPower: number;
+  // Power de base du défenseur (sans counter).
+  defenderBasePower: number;
+  // +1000/+2000 cumulés via Counter joués depuis la main.
+  defenderBoost: number;
+  // True si l'attaquant a Double Attaque (prend 2 Vies sur Leader hit).
+  doubleAttack: boolean;
+};
+
+// Trigger révélé : une Vie révélée a un effet [Trigger] (descriptif),
+// le défenseur peut choisir d'activer ou refuser. Bloque la résolution.
+export type OnePieceBattlePendingTrigger = {
+  defenderSeat: OnePieceBattleSeatId;
+  cardId: string;
+  trigger: string;
+};
+
 export type OnePieceBattleState = {
   roomId: string;
   phase: OnePieceBattlePhase;
@@ -2474,6 +2522,10 @@ export type OnePieceBattleState = {
   turnNumber: number;
   winner: OnePieceBattleSeatId | null;
   log: string[];
+  // null sauf pendant la fenêtre de défense.
+  pendingAttack: OnePieceBattlePendingAttack | null;
+  // null sauf pendant la résolution d'un Trigger.
+  pendingTrigger: OnePieceBattlePendingTrigger | null;
 };
 
 export type OnePieceBattleClientMessage =
