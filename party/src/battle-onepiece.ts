@@ -1259,9 +1259,27 @@ export default class OnePieceBattleServer implements Party.Server {
   private botDoMulligan() {
     const bot = this.seats.p2;
     if (!bot || bot.mulliganDecided) return;
-    // Stratégie minimale : on garde toujours.
+    // Stratégie : mulligan si la main est trop chère (aucun Persos ≤ 2 OU
+    // moins de 2 Persos ≤ 4). Sinon garde.
+    let cheapCount = 0; // ≤ 2
+    let earlyCount = 0; // ≤ 4
+    for (const card of bot.hand) {
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(card.cardId);
+      if (!meta || meta.kind !== "character") continue;
+      if (meta.cost <= 2) cheapCount++;
+      if (meta.cost <= 4) earlyCount++;
+    }
+    const shouldMulligan = cheapCount === 0 || earlyCount < 2;
+    if (shouldMulligan) {
+      bot.deck.push(...bot.hand);
+      bot.hand = [];
+      shuffle(bot.deck);
+      bot.hand = bot.deck.splice(0, OP_BATTLE_CONFIG.openingHandSize);
+      this.pushLog(`${bot.username} fait un mulligan (main trop chère).`);
+    } else {
+      this.pushLog(`${bot.username} garde sa main.`);
+    }
     bot.mulliganDecided = true;
-    this.pushLog(`${bot.username} garde sa main.`);
     if (this.seats.p1?.mulliganDecided) {
       this.startGame();
     } else {
@@ -1408,52 +1426,147 @@ export default class OnePieceBattleServer implements Party.Server {
       this.pushLog(`${bot.username} joue ${meta.name} (coût ${meta.cost}).`);
     }
 
-    // 2. Si reste du DON et qu'on va pouvoir attaquer ce tour : attache au
-    //    Leader (heuristique simple).
-    const canAttackThisTurn =
-      this.turnNumber > 1 &&
-      ((bot.leaderId && !bot.leaderRested) ||
-        bot.characters.some(
-          (c) =>
-            !c.rested &&
-            (!c.playedThisTurn ||
-              hasKeyword(
-                ONEPIECE_BASE_SET_BY_ID.get(c.cardId)?.effect,
-                "Initiative",
-              )),
-        ));
-    if (canAttackThisTurn && bot.donActive > 0 && bot.leaderId) {
+    // 2. Attaque tant que possible (sauf tour 1) — avec DON-management
+    //    intelligent : on attache des DON à un attaquant pour KO un Persos
+    //    adverse rested si possible, sinon au Leader pour booster l'attaque
+    //    Leader→Leader.
+    const human = this.seats.p1;
+    while (this.turnNumber > 1 && !this.pendingAttack && human) {
+      // Liste des attaquants dispos (Leader + Persos redressés non-played
+      // ou avec Initiative).
+      type Attacker = {
+        uid: string;
+        basePower: number;
+        attachedDon: number;
+        meta: { name: string };
+      };
+      const attackers: Attacker[] = [];
+      if (bot.leaderId && !bot.leaderRested) {
+        const lm = ONEPIECE_BASE_SET_BY_ID.get(bot.leaderId);
+        if (lm && lm.kind === "leader") {
+          attackers.push({
+            uid: "leader",
+            basePower: lm.power,
+            attachedDon: bot.leaderAttachedDon,
+            meta: { name: lm.name },
+          });
+        }
+      }
+      for (const c of bot.characters) {
+        if (c.rested) continue;
+        const cm = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+        if (!cm || cm.kind !== "character") continue;
+        const hasInit = hasKeyword(cm.effect, "Initiative");
+        if (c.playedThisTurn && !hasInit) continue;
+        attackers.push({
+          uid: c.uid,
+          basePower: cm.power,
+          attachedDon: c.attachedDon,
+          meta: { name: cm.name },
+        });
+      }
+      if (attackers.length === 0) break;
+
+      // Cibles potentielles : Persos rested adverses (KO = gain de tempo)
+      // + Leader. On préfère KO un Persos coûteux (≥ 4) si possible.
+      type Target = {
+        uid: string;
+        defenderPower: number;
+        priority: number; // plus haut = mieux
+        kind: "leader" | "character";
+      };
+      const targets: Target[] = [];
+      if (human.leaderId) {
+        const lm = ONEPIECE_BASE_SET_BY_ID.get(human.leaderId);
+        if (lm && lm.kind === "leader") {
+          targets.push({
+            uid: "leader",
+            defenderPower: lm.power + human.leaderAttachedDon * 1000,
+            // Priorité Leader : modérée, on prend des Vies si rien de mieux.
+            priority: 30,
+            kind: "leader",
+          });
+        }
+      }
+      for (const c of human.characters) {
+        if (!c.rested) continue;
+        const cm = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+        if (!cm || cm.kind !== "character") continue;
+        const dPower = cm.power + c.attachedDon * 1000;
+        // Priorité Persos rested : très élevé si KO possible (gain tempo
+        // + carte adverse défaussée).
+        targets.push({
+          uid: c.uid,
+          defenderPower: dPower,
+          priority: 50 + cm.cost * 10,
+          kind: "character",
+        });
+      }
+
+      // Choix attacker × target qui maximise un score : KO un Persos > toucher
+      // Leader > rater. On peut attacher des DON pour augmenter le power.
+      let bestPlan: {
+        attacker: Attacker;
+        target: Target;
+        donToAttach: number;
+        score: number;
+      } | null = null;
+      for (const att of attackers) {
+        for (const tg of targets) {
+          // Power requis pour toucher.
+          const need = tg.defenderPower;
+          const currentPower = att.basePower + att.attachedDon * 1000;
+          let donNeeded = 0;
+          if (currentPower < need) {
+            donNeeded = Math.ceil((need - currentPower) / 1000);
+            if (donNeeded > bot.donActive) continue; // pas assez de DON dispo
+          }
+          // Score : prioriser KO Persos coûteux, puis hits Leader, puis touché
+          // tout court. On garde aussi des DON pour les attaques suivantes
+          // donc on pénalise donNeeded.
+          const willHit = currentPower + donNeeded * 1000 >= need;
+          if (!willHit) continue;
+          const score = tg.priority - donNeeded * 5 + att.attachedDon;
+          if (!bestPlan || score > bestPlan.score) {
+            bestPlan = {
+              attacker: att,
+              target: tg,
+              donToAttach: donNeeded,
+              score,
+            };
+          }
+        }
+      }
+      if (!bestPlan) break;
+
+      // Attache les DON nécessaires à l'attaquant choisi avant l'attaque.
+      if (bestPlan.donToAttach > 0) {
+        bot.donActive -= bestPlan.donToAttach;
+        if (bestPlan.attacker.uid === "leader") {
+          bot.leaderAttachedDon += bestPlan.donToAttach;
+        } else {
+          const c = bot.characters.find(
+            (x) => x.uid === bestPlan!.attacker.uid,
+          );
+          if (c) c.attachedDon += bestPlan.donToAttach;
+        }
+        this.pushLog(
+          `${bot.username} attache ${bestPlan.donToAttach} DON à ${bestPlan.attacker.meta.name}.`,
+        );
+      }
+
+      this.botExecuteAttack(bestPlan.attacker.uid, bestPlan.target.uid);
+      // Si une defense window humaine est ouverte, on stoppe — le tour
+      // reprendra quand l'humain résoudra sa défense.
+      if (this.pendingAttack) return;
+    }
+
+    // 3. Reste du DON ? Attache au Leader pour le tour suivant (réserve).
+    if (bot.donActive > 0 && bot.leaderId) {
       const n = bot.donActive;
       bot.leaderAttachedDon += n;
       bot.donActive = 0;
-      this.pushLog(`${bot.username} attache ${n} DON à son Leader.`);
-    }
-
-    // 3. Attaque tant que possible (sauf tour 1).
-    while (this.turnNumber > 1 && !this.pendingAttack) {
-      let attackerUid: string | null = null;
-      // Préfère un Persos déjà épuisable plutôt que le Leader (le Leader
-      // est plus précieux, on évite de l'épuiser inutilement).
-      const charAtt = bot.characters.find(
-        (c) =>
-          !c.rested &&
-          (!c.playedThisTurn ||
-            hasKeyword(
-              ONEPIECE_BASE_SET_BY_ID.get(c.cardId)?.effect,
-              "Initiative",
-            )),
-      );
-      if (charAtt) attackerUid = charAtt.uid;
-      else if (bot.leaderId && !bot.leaderRested) attackerUid = "leader";
-      if (!attackerUid) break;
-
-      // Cible : Leader humain (toujours valide).
-      const targetUid = "leader";
-      this.botExecuteAttack(attackerUid, targetUid);
-      // Si l'attaque ouvre une defense window humaine, on stoppe ici. Le
-      // tour reprendra après resolveAttack quand maybeBotAct sera rappelé
-      // par un broadcastState humain (ou pas si le bot a fini son tour).
-      if (this.pendingAttack) return;
+      this.pushLog(`${bot.username} attache ${n} DON à son Leader (réserve).`);
     }
 
     // 4. Fin de tour automatique.
