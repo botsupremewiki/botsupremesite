@@ -1262,6 +1262,9 @@ export type RuneterraBattleUnit = {
   // Phase 3.4 : Barrière consommée ce round (réinitialisée à startRound).
   // Inerte si l'unité n'a pas le mot-clé "Barrier".
   barrierUsed: boolean;
+  // Phase 3.5 : compteurs pour conditions de level-up champion.
+  strikes: number; // nombre de fois où cette unité a frappé en combat
+  kills: number; // ennemis qu'elle a tués au combat
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de

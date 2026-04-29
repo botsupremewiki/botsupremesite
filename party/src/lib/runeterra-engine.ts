@@ -70,6 +70,13 @@ export type InternalPlayer = {
   nexusHealth: number;
   attackToken: boolean;
   hasMulliganed: boolean;
+  // Phase 3.5 : compteurs globaux pour conditions de level-up champion.
+  championCounters: {
+    alliesDied: number; // pour Lucian, Hécarim, etc.
+    spellsCast: number; // pour Karma, Ezreal, etc.
+    spellManaSpent: number; // pour Lux ("au moins 6 mana en sorts")
+    enemyStunned: number; // pour Yasuo (étourdis/rappelés)
+  };
 };
 
 // ────────────────────── Helpers de base ──────────────────────────────────
@@ -134,6 +141,8 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     level: 1,
     playedThisRound: true,
     barrierUsed: false,
+    strikes: 0,
+    kills: 0,
   };
 }
 
@@ -181,6 +190,12 @@ export function createInitialState(
     nexusHealth: cfg.initialNexusHealth,
     attackToken: hasToken,
     hasMulliganed: false,
+    championCounters: {
+      alliesDied: 0,
+      spellsCast: 0,
+      spellManaSpent: 0,
+      enemyStunned: 0,
+    },
   });
 
   return {
@@ -589,6 +604,11 @@ export function playSpell(
     hand: newHand,
     mana: player.mana - fromMana,
     spellMana: player.spellMana - fromSpellMana,
+    championCounters: {
+      ...player.championCounters,
+      spellsCast: player.championCounters.spellsCast + 1,
+      spellManaSpent: player.championCounters.spellManaSpent + card.cost,
+    },
   };
 
   const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
@@ -599,7 +619,7 @@ export function playSpell(
 
   return {
     ok: true,
-    state: {
+    state: checkLevelUps({
       ...state,
       players: newPlayers,
       activeSeatIdx: otherSeat(seatIdx),
@@ -608,7 +628,7 @@ export function playSpell(
         ...state.log,
         `${player.username} lance ${card.name} (coût ${card.cost}).`,
       ],
-    },
+    }),
   };
 }
 
@@ -898,6 +918,7 @@ function resolveCombat(state: InternalState): InternalState {
   for (const lane of state.attackInProgress.lanes) {
     const attacker = attackerBench.find((u) => u.uid === lane.attackerUid);
     if (!attacker) continue;
+    attacker.strikes++; // Phase 3.5 : tracker pour Garen et autres
     const attackerName = getCard(attacker.cardCode)?.name ?? attacker.cardCode;
     if (lane.blockerUid !== null) {
       const blocker = defenderBench.find((u) => u.uid === lane.blockerUid);
@@ -980,12 +1001,27 @@ function resolveCombat(state: InternalState): InternalState {
     }
   }
 
-  // Retire les unités mortes (damage >= health).
+  // Phase 3.5 : crédit kills aux attaquants/bloqueurs qui ont tué un ennemi.
+  // Un attaquant tue son bloqueur si blocker.damage >= blocker.health après combat.
+  for (const lane of state.attackInProgress.lanes) {
+    if (lane.blockerUid === null) continue;
+    const attacker = attackerBench.find((u) => u.uid === lane.attackerUid);
+    const blocker = defenderBench.find((u) => u.uid === lane.blockerUid);
+    if (!attacker || !blocker) continue;
+    if (blocker.damage >= blocker.health) attacker.kills++;
+    if (attacker.damage >= attacker.health) blocker.kills++;
+  }
+
+  // Retire les unités mortes (damage >= health) et incrémente alliesDied
+  // sur le joueur correspondant (Phase 3.5 : compteur Lucian etc.).
+  const attackerDied = { count: 0 };
+  const defenderDied = { count: 0 };
   const newAttackerBench = attackerBench.filter((u) => {
     if (u.damage >= u.health) {
       events.push(
         `${getCard(u.cardCode)?.name ?? u.cardCode} (attaquant) meurt.`,
       );
+      attackerDied.count++;
       return false;
     }
     return true;
@@ -995,6 +1031,7 @@ function resolveCombat(state: InternalState): InternalState {
       events.push(
         `${getCard(u.cardCode)?.name ?? u.cardCode} (défenseur) meurt.`,
       );
+      defenderDied.count++;
       return false;
     }
     return true;
@@ -1017,11 +1054,21 @@ function resolveCombat(state: InternalState): InternalState {
     ...attackerPlayer,
     bench: newAttackerBench,
     nexusHealth: newAttackerNexus,
+    championCounters: {
+      ...attackerPlayer.championCounters,
+      alliesDied:
+        attackerPlayer.championCounters.alliesDied + attackerDied.count,
+    },
   };
   defenderPlayer = {
     ...defenderPlayer,
     bench: newDefenderBench,
     nexusHealth: newDefenderNexus,
+    championCounters: {
+      ...defenderPlayer.championCounters,
+      alliesDied:
+        defenderPlayer.championCounters.alliesDied + defenderDied.count,
+    },
   };
 
   const newPlayers: [InternalPlayer, InternalPlayer] = [
@@ -1048,15 +1095,92 @@ function resolveCombat(state: InternalState): InternalState {
     };
   }
 
-  return {
+  return checkLevelUps({
     ...state,
     players: newPlayers,
     attackInProgress: null,
     activeSeatIdx: attackerSeat, // priorité retourne à l'attaquant
     consecutivePasses: 0,
     log,
-  };
+  });
 }
+
+// ────────────────────── Phase 3.5 : level-up champions ───────────────────
+
+/** Registry des conditions de level-up. Chaque champion a une `check`
+ *  pure-fonction qui regarde l'état et l'unité, et retourne true si la
+ *  condition est remplie. `levelUpCardCode` est la cardCode de la forme
+ *  niveau 2 (par convention Riot : suffixe T2 sur le cardCode niveau 1).
+ *
+ *  Phase 3.5 : 2 exemples implémentés (Garen, Fiora). Les autres champions
+ *  sont à ajouter ici au fur et à mesure (voir `levelupDescriptionRaw` dans
+ *  la data set 1 pour les conditions).
+ */
+const LEVEL_UP_REGISTRY: Record<
+  string,
+  {
+    levelUpCardCode: string;
+    check: (state: InternalState, unit: RuneterraBattleUnit, seatIdx: 0 | 1) => boolean;
+  }
+> = {
+  // Garen (Demacia) — "J'ai frappé deux fois."
+  "01DE012": {
+    levelUpCardCode: "01DE012T2",
+    check: (_s, u) => u.strikes >= 2,
+  },
+  // Fiora (Demacia) — "J'ai tué 2 ennemis."
+  "01DE045": {
+    levelUpCardCode: "01DE045T2",
+    check: (_s, u) => u.kills >= 2,
+  },
+  // TODO Phase 3.5.x : Lucian, Lux, Yasuo, Garen-équivalents Noxus/Ionia/PZ/Frelj/SI.
+};
+
+/** Scanne tous les champions niveau 1 sur les bancs et applique le
+ *  level-up si la condition de leur registry est remplie. Conserve
+ *  l'uid (continuité visuelle pour le client), les dégâts cumulés, et
+ *  les compteurs (strikes/kills). Mets à jour power/health/keywords
+ *  depuis la carte niveau 2.
+ */
+function checkLevelUps(state: InternalState): InternalState {
+  let newPlayers = state.players;
+  const events: string[] = [];
+
+  for (const seatIdx of [0, 1] as const) {
+    const player = newPlayers[seatIdx];
+    let benchChanged = false;
+    const newBench = player.bench.map((u) => {
+      if (u.level >= 2) return u; // déjà niveau 2
+      const card = getCard(u.cardCode);
+      if (!card || card.supertype !== "Champion") return u;
+      const entry = LEVEL_UP_REGISTRY[u.cardCode];
+      if (!entry) return u; // pas encore au registry
+      if (!entry.check(state, u, seatIdx)) return u;
+      const lvl2 = getCard(entry.levelUpCardCode);
+      if (!lvl2 || lvl2.type !== "Unit") return u; // mapping foireux, skip
+      benchChanged = true;
+      events.push(`${card.name} passe au niveau supérieur !`);
+      return {
+        ...u,
+        cardCode: entry.levelUpCardCode,
+        power: lvl2.attack ?? u.power,
+        health: lvl2.health ?? u.health,
+        keywords: lvl2.keywordRefs ?? u.keywords,
+        level: 2,
+      };
+    });
+    if (benchChanged) {
+      const updated = { ...player, bench: newBench };
+      newPlayers = [...newPlayers] as [InternalPlayer, InternalPlayer];
+      newPlayers[seatIdx] = updated;
+    }
+  }
+
+  if (events.length === 0) return state;
+  return { ...state, players: newPlayers, log: [...state.log, ...events] };
+}
+
+/** Prédicat UI : peut-on déclarer l'attaque maintenant ? */
 
 /** Prédicat UI : peut-on déclarer l'attaque maintenant ? */
 export function canDeclareAttack(
