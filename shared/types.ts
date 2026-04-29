@@ -1072,6 +1072,154 @@ export type TrainerCard = {
 
 export type PokemonCardData = PokemonCard | TrainerCard;
 
+// ─── Runeterra (LoL TCG) — Set 1 « Fondations » ──────────────────────────
+// Clone fidèle de Legends of Runeterra (Riot a sunset le multijoueur en 2024).
+// Les cartes proviennent du data feed officiel Riot destiné aux outils
+// communautaires. Voir scripts/runeterra-fetch.mjs.
+
+// Set 1 : 6 régions de base. Les autres (Bilgewater, Targon, Shurima,
+// Bandle City, Runeterra, etc.) arrivent dans les sets ultérieurs.
+//
+// Note : 4 cartes Set 1 (Teemo, Heimerdinger + leurs niveaux 2) ont été
+// rétroactivement étendues à BandleCity par Riot — elles restent dual-
+// région avec PiltoverZaun pour le filtrage Set 1. La string "BandleCity"
+// peut donc apparaître dans `RuneterraCard.regions` sans être typée ici.
+export type RuneterraRegion =
+  | "Demacia"
+  | "Noxus"
+  | "Ionia"
+  | "Freljord"
+  | "PiltoverZaun"
+  | "ShadowIsles";
+
+export type RuneterraRegionConfig = {
+  id: RuneterraRegion;
+  name: string; // FR display
+  abbreviation: string;
+  // Tailwind theme classes pour la collection / deck builder.
+  accent: string;
+  border: string;
+  glow: string;
+  gradient: string;
+};
+
+export const RUNETERRA_REGIONS: Record<RuneterraRegion, RuneterraRegionConfig> = {
+  Demacia: {
+    id: "Demacia",
+    name: "Demacia",
+    abbreviation: "DE",
+    accent: "text-yellow-200",
+    border: "border-yellow-300/40",
+    glow: "shadow-[0_0_40px_rgba(254,240,138,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(254,240,138,0.12),transparent_60%)]",
+  },
+  Noxus: {
+    id: "Noxus",
+    name: "Noxus",
+    abbreviation: "NX",
+    accent: "text-red-300",
+    border: "border-red-500/40",
+    glow: "shadow-[0_0_40px_rgba(248,113,113,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.15),transparent_60%)]",
+  },
+  Ionia: {
+    id: "Ionia",
+    name: "Ionia",
+    abbreviation: "IO",
+    accent: "text-pink-200",
+    border: "border-pink-400/40",
+    glow: "shadow-[0_0_40px_rgba(244,114,182,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(244,114,182,0.12),transparent_60%)]",
+  },
+  Freljord: {
+    id: "Freljord",
+    name: "Freljord",
+    abbreviation: "FR",
+    accent: "text-cyan-200",
+    border: "border-cyan-400/40",
+    glow: "shadow-[0_0_40px_rgba(103,232,249,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(103,232,249,0.12),transparent_60%)]",
+  },
+  PiltoverZaun: {
+    id: "PiltoverZaun",
+    name: "Piltover & Zaun",
+    abbreviation: "PZ",
+    accent: "text-orange-300",
+    border: "border-orange-500/40",
+    glow: "shadow-[0_0_40px_rgba(251,146,60,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(251,146,60,0.12),transparent_60%)]",
+  },
+  ShadowIsles: {
+    id: "ShadowIsles",
+    name: "Îles obscures",
+    abbreviation: "SI",
+    accent: "text-emerald-300",
+    border: "border-emerald-500/40",
+    glow: "shadow-[0_0_40px_rgba(52,211,153,0.4)]",
+    gradient:
+      "bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.12),transparent_60%)]",
+  },
+};
+
+export type RuneterraRarity =
+  | "Common"
+  | "Rare"
+  | "Epic"
+  | "Champion"
+  | "None"; // tokens / non-collectibles
+
+export type RuneterraSpellSpeed = "Burst" | "Fast" | "Slow" | "Focus";
+
+export type RuneterraCardType =
+  | "Unit"
+  | "Spell"
+  | "Landmark"
+  | "Ability"
+  | "Equipment"
+  | "Trap";
+
+export type RuneterraSupertype = "Champion" | "None";
+
+// Une carte Runeterra. On garde le ref anglais pour les identifiants
+// stables (rarity, spellSpeed, keywordRefs) que le moteur consomme, et le
+// libellé FR (keywords) pour l'UI.
+export type RuneterraCard = {
+  cardCode: string; // ex "01IO012"
+  name: string; // FR ex "Yasuo"
+  description: string; // FR formatté (peut contenir <br>, <style>)
+  descriptionRaw: string; // FR brut sans HTML
+  levelupDescription?: string; // condition de level-up (champions only)
+  levelupDescriptionRaw?: string;
+  flavorText?: string;
+  artistName?: string;
+  cost: number;
+  attack?: number; // unités uniquement
+  health?: number; // unités uniquement
+  type: RuneterraCardType;
+  supertype: RuneterraSupertype;
+  rarity: RuneterraRarity;
+  spellSpeed?: RuneterraSpellSpeed; // sorts uniquement
+  // Régions de la carte. Une carte est typiquement mono-région en Set 1.
+  // Champions multi-régions (ex Origines) viendront avec les sets futurs.
+  regions: string[];
+  keywords?: string[]; // FR display
+  keywordRefs?: string[]; // English refs stables (Elusive, Burst, …)
+  subtypes?: string[]; // ex ["Yordle"], ou nom du champion pour ses cartes
+  // Cartes invoquées / niveau-up (cardCodes liés). Ex Yasuo niveau 1
+  // référence Yasuo niveau 2 ici.
+  associatedCardRefs?: string[];
+  collectible: boolean;
+  set: string; // "Set1"
+  image?: string; // URL CDN Riot (https://dd.b.pvp.net/latest/...)
+};
+
+export type RuneterraCardData = RuneterraCard;
+
 // What the server emits in pack openings / welcomes — keeps this small
 // so we can reuse for non-Pokemon games later by widening the shape.
 export type TcgCardOwned = {
