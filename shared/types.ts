@@ -1438,6 +1438,24 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   "01SI001": { type: "kill-target-any" },
 };
 
+// ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
+// Effets déclenchés quand une unité avec le mot-clé LastBreath meurt.
+// L'engine appelle triggerLastBreath() à chaque mort + look up dans le
+// registre par cardCode.
+
+export type LastBreathEffect =
+  | { type: "draw-cards"; count: number }
+  | { type: "deal-damage-enemy-nexus"; amount: number };
+
+export const RUNETERRA_LAST_BREATH_EFFECTS: Record<
+  string,
+  LastBreathEffect
+> = {
+  // Guetteur avarosan (Freljord, 1 mana, 1|2) :
+  // « Dernier souffle : piochez 1 carte. »
+  "01FR003": { type: "draw-cards", count: 1 },
+};
+
 export type SpellTargetSide = "ally" | "enemy" | "any" | "none";
 
 export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {

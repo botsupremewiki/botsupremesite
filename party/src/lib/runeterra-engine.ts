@@ -8,6 +8,7 @@
 // token). PAS encore : combat, spells, keywords, level-up champions.
 
 import type {
+  LastBreathEffect,
   RuneterraBattlePhase,
   RuneterraBattleState,
   RuneterraBattleUnit,
@@ -18,6 +19,7 @@ import type {
 } from "../../../shared/types";
 import {
   RUNETERRA_BATTLE_CONFIG,
+  RUNETERRA_LAST_BREATH_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
   getSpellTargetSide,
 } from "../../../shared/types";
@@ -521,6 +523,71 @@ export function seatToId(seatIdx: 0 | 1): "p1" | "p2" {
   return seatIdx === 0 ? "p1" : "p2";
 }
 
+// ────────────────────── Phase 3.9b : Last Breath ─────────────────────────
+
+/** Déclenche le Last Breath d'une unité qui vient de mourir. Appelé après
+ *  le retrait de l'unité du banc. Retourne le nouvel état (potentiellement
+ *  inchangé si l'unité n'a pas LastBreath ou n'est pas dans le registry).
+ */
+export function triggerLastBreath(
+  state: InternalState,
+  dyingUnit: RuneterraBattleUnit,
+  dyingUnitSeat: 0 | 1,
+): InternalState {
+  if (!dyingUnit.keywords.includes("LastBreath")) return state;
+  const effect = RUNETERRA_LAST_BREATH_EFFECTS[dyingUnit.cardCode];
+  if (!effect) return state;
+  return applyLastBreathEffect(state, dyingUnitSeat, dyingUnit, effect);
+}
+
+function applyLastBreathEffect(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  dyingUnit: RuneterraBattleUnit,
+  effect: LastBreathEffect,
+): InternalState {
+  const unitName = getCard(dyingUnit.cardCode)?.name ?? dyingUnit.cardCode;
+  switch (effect.type) {
+    case "draw-cards": {
+      const result = drawCards(state, seatIdx, effect.count);
+      return {
+        ...result.state,
+        log: [
+          ...result.state.log,
+          `${unitName} (Dernier souffle) — ${state.players[seatIdx].username} pioche ${effect.count} carte${effect.count > 1 ? "s" : ""}.`,
+        ],
+      };
+    }
+    case "deal-damage-enemy-nexus": {
+      const oppSeat = otherSeat(seatIdx);
+      const opp = state.players[oppSeat];
+      const newNexus = opp.nexusHealth - effect.amount;
+      const newPlayers: [InternalPlayer, InternalPlayer] = [
+        state.players[0],
+        state.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      newPlayers[oppSeat] = { ...opp, nexusHealth: newNexus };
+      const log = [
+        ...state.log,
+        `${unitName} (Dernier souffle) inflige ${effect.amount} pt(s) au nexus de ${opp.username}.`,
+      ];
+      if (newNexus <= 0) {
+        return {
+          ...state,
+          players: newPlayers,
+          phase: "ended",
+          winnerSeatIdx: seatIdx,
+          log: [
+            ...log,
+            `${state.players[seatIdx].username} remporte la partie.`,
+          ],
+        };
+      }
+      return { ...state, players: newPlayers, log };
+    }
+  }
+}
+
 // ────────────────────── Projection serveur → client ──────────────────────
 
 /** Projette l'état interne complet vers la perspective d'un joueur :
@@ -922,11 +989,15 @@ function applySpellEffect(
     }
     case "kill-target-any": {
       // Cherche la cible des deux côtés et la retire du banc + crédit
-      // alliesDied au joueur du côté correspondant.
+      // alliesDied + déclenche Last Breath de la cible si applicable.
+      let killedUnit: RuneterraBattleUnit | null = null;
+      let killedSeat: 0 | 1 | null = null;
       for (const seat of [casterSeat, oppSeat] as const) {
         const player = newPlayers[seat];
         const idx = player.bench.findIndex((u) => u.uid === targetUid);
         if (idx === -1) continue;
+        killedUnit = player.bench[idx];
+        killedSeat = seat;
         newPlayers[seat] = {
           ...player,
           bench: [...player.bench.slice(0, idx), ...player.bench.slice(idx + 1)],
@@ -937,7 +1008,11 @@ function applySpellEffect(
         };
         break;
       }
-      return { ...state, players: newPlayers };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (killedUnit && killedSeat !== null) {
+        newState = triggerLastBreath(newState, killedUnit, killedSeat);
+      }
+      return newState;
     }
     case "heal-ally-or-nexus": {
       // Cible = allié sur ton banc → heal damage de X (cap 0). Ou nexus self
@@ -1410,14 +1485,19 @@ function resolveCombat(state: InternalState): InternalState {
 
   // Retire les unités mortes (damage >= health) et incrémente alliesDied
   // sur le joueur correspondant (Phase 3.5 : compteur Lucian etc.).
+  // Phase 3.9b : on collecte les morts pour déclencher Last Breath après
+  // le state update principal.
   const attackerDied = { count: 0 };
   const defenderDied = { count: 0 };
+  const attackerDeadUnits: RuneterraBattleUnit[] = [];
+  const defenderDeadUnits: RuneterraBattleUnit[] = [];
   const newAttackerBench = attackerBench.filter((u) => {
     if (u.damage >= u.health) {
       events.push(
         `${getCard(u.cardCode)?.name ?? u.cardCode} (attaquant) meurt.`,
       );
       attackerDied.count++;
+      attackerDeadUnits.push(u);
       return false;
     }
     return true;
@@ -1428,6 +1508,7 @@ function resolveCombat(state: InternalState): InternalState {
         `${getCard(u.cardCode)?.name ?? u.cardCode} (défenseur) meurt.`,
       );
       defenderDied.count++;
+      defenderDeadUnits.push(u);
       return false;
     }
     return true;
@@ -1491,14 +1572,28 @@ function resolveCombat(state: InternalState): InternalState {
     };
   }
 
-  return checkLevelUps({
+  // État principal après combat.
+  let postCombatState: InternalState = {
     ...state,
     players: newPlayers,
     attackInProgress: null,
     activeSeatIdx: attackerSeat, // priorité retourne à l'attaquant
     consecutivePasses: 0,
     log,
-  });
+  };
+
+  // Phase 3.9b : déclenche Last Breath pour chaque unité morte (attaquants
+  // d'abord puis défenseurs, ordre arbitraire au sein d'un côté).
+  for (const dead of attackerDeadUnits) {
+    postCombatState = triggerLastBreath(postCombatState, dead, attackerSeat);
+    if (postCombatState.phase === "ended") return postCombatState;
+  }
+  for (const dead of defenderDeadUnits) {
+    postCombatState = triggerLastBreath(postCombatState, dead, defenderSeat);
+    if (postCombatState.phase === "ended") return postCombatState;
+  }
+
+  return checkLevelUps(postCombatState);
 }
 
 // ────────────────────── Phase 3.5 : level-up champions ───────────────────
