@@ -14,6 +14,8 @@ type Queued = {
   authId: string;
   username: string;
   deckId: string;
+  // game_id du deck : on ne pair que des joueurs avec le même jeu.
+  gameId: string;
 };
 
 /**
@@ -99,10 +101,18 @@ export default class BattleLobbyServer implements Party.Server {
       return;
     }
     const total = (deck.cards ?? []).reduce((s, c) => s + c.count, 0);
-    if (total !== BATTLE_CONFIG.deckSize) {
+    const expectedSize = deck.game_id === "onepiece" ? 50 : BATTLE_CONFIG.deckSize;
+    if (total !== expectedSize) {
       this.sendTo(conn, {
         type: "lobby-error",
-        message: `Ce deck est invalide (${total}/${BATTLE_CONFIG.deckSize} cartes).`,
+        message: `Ce deck est invalide (${total}/${expectedSize} cartes).`,
+      });
+      return;
+    }
+    if (deck.game_id === "onepiece" && !deck.leader_id) {
+      this.sendTo(conn, {
+        type: "lobby-error",
+        message: "Ce deck One Piece n'a pas de Leader.",
       });
       return;
     }
@@ -114,34 +124,33 @@ export default class BattleLobbyServer implements Party.Server {
       authId: info.authId,
       username: info.username,
       deckId,
+      gameId: deck.game_id,
     });
     this.tryPair();
     this.broadcastPositions();
   }
 
   private tryPair() {
-    while (this.queue.length >= 2) {
-      const a = this.queue.shift()!;
-      const b = this.queue.shift()!;
-      if (a.authId === b.authId) {
-        // Même utilisateur (deux onglets) — on remet le 2ᵉ en file.
-        this.queue.unshift(b);
-        // Et on remet a aussi pour pas le pénaliser.
-        this.queue.unshift(a);
+    // On cherche la 1ère paire de joueurs avec game_id identique et authId
+    // différent (pas un même utilisateur dans 2 onglets). Le reste de la file
+    // attend.
+    for (let i = 0; i < this.queue.length; i++) {
+      const a = this.queue[i];
+      for (let j = i + 1; j < this.queue.length; j++) {
+        const b = this.queue[j];
+        if (a.authId === b.authId) continue;
+        if (a.gameId !== b.gameId) continue;
+        // Pair found.
+        this.queue.splice(j, 1);
+        this.queue.splice(i, 1);
+        const baseRoomId = crypto.randomUUID();
+        const roomId = this.rankedMode ? `ranked-${baseRoomId}` : baseRoomId;
+        this.sendTo(a.conn, { type: "matched", roomId, deckId: a.deckId });
+        this.sendTo(b.conn, { type: "matched", roomId, deckId: b.deckId });
+        // Récursion pour pair les éventuels suivants.
+        this.tryPair();
         return;
       }
-      const baseRoomId = crypto.randomUUID();
-      const roomId = this.rankedMode ? `ranked-${baseRoomId}` : baseRoomId;
-      this.sendTo(a.conn, {
-        type: "matched",
-        roomId,
-        deckId: a.deckId,
-      });
-      this.sendTo(b.conn, {
-        type: "matched",
-        roomId,
-        deckId: b.deckId,
-      });
     }
   }
 

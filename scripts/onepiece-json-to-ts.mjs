@@ -36,6 +36,13 @@ function tsValue(v) {
   return "null";
 }
 
+// URLs des images : on sert depuis web/public/onepiece-cards/ via Vercel
+// (le CDN Bandai bloque les hotlinks cross-origin). Les images sont
+// téléchargées une fois par scripts/download-onepiece-images.mjs.
+function localImageUrl(cardId) {
+  return `/onepiece-cards/${cardId}.webp`;
+}
+
 // Construit l'objet typé selon le `kind` (champs spécifiques).
 function buildCard(c) {
   // Pack principal = 1ère couleur. Multi-couleurs → extraPacks.
@@ -52,7 +59,7 @@ function buildCard(c) {
     cardNumber: c.cardNumber,
     name: c.name,
     rarity: c.rarity,
-    image: c.image,
+    image: localImageUrl(c.id),
     set: c.set,
     block: c.block,
     effect: c.effect,

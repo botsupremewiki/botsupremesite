@@ -3,6 +3,7 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { MarketClient } from "./market-client";
+import { OnePieceMarketClient } from "../_components/onepiece-market-client";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,17 @@ export default async function MarketPage({
     }
   }
 
+  if (gameId === "onepiece") {
+    return (
+      <OnePieceMarketClient
+        profile={profile}
+        initialActive={activeListings}
+        initialMine={myListings}
+        myCollection={myCollection}
+        favoriteIds={favoriteIds}
+      />
+    );
+  }
   return (
     <MarketClient
       profile={profile}

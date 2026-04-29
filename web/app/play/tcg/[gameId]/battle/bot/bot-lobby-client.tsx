@@ -77,14 +77,14 @@ export function BotLobbyClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, gameId]);
 
+  const expectedDeckSize =
+    gameId === "onepiece" ? 50 : BATTLE_CONFIG.deckSize;
   const validDecks = useMemo(
     () =>
       decks.filter(
-        (d) =>
-          d.cards.reduce((s, c) => s + c.count, 0) ===
-          BATTLE_CONFIG.deckSize,
+        (d) => d.cards.reduce((s, c) => s + c.count, 0) === expectedDeckSize,
       ),
-    [decks],
+    [decks, expectedDeckSize],
   );
 
   function startBotMatch() {
@@ -164,7 +164,7 @@ export function BotLobbyClient({
                         (s, c) => s + c.count,
                         0,
                       );
-                      const valid = total === BATTLE_CONFIG.deckSize;
+                      const valid = total === expectedDeckSize;
                       const isSelected = selectedDeckId === deck.id;
                       return (
                         <button
@@ -185,7 +185,7 @@ export function BotLobbyClient({
                               valid ? "text-emerald-300" : "text-rose-400"
                             }`}
                           >
-                            {total}/{BATTLE_CONFIG.deckSize}
+                            {total}/{expectedDeckSize}
                           </span>
                         </button>
                       );

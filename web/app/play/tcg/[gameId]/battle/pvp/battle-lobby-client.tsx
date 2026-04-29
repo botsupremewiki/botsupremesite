@@ -157,12 +157,16 @@ export function BattleLobbyClient({
     setLobbyState("idle");
   }, []);
 
+  const expectedDeckSize =
+    gameId === "onepiece" ? 50 : BATTLE_CONFIG.deckSize;
   const validDecks = useMemo(
     () =>
       decks.filter(
-        (d) => d.cards.reduce((s, c) => s + c.count, 0) === 20,
+        (d) =>
+          d.cards.reduce((s, c) => s + c.count, 0) === expectedDeckSize &&
+          (gameId !== "onepiece" || !!d.leaderId),
       ),
-    [decks],
+    [decks, expectedDeckSize, gameId],
   );
   const invalidDecks = decks.length - validDecks.length;
 
@@ -230,7 +234,9 @@ export function BattleLobbyClient({
                   <div className="flex flex-col gap-1.5">
                     {decks.map((deck) => {
                       const total = deck.cards.reduce((s, c) => s + c.count, 0);
-                      const valid = total === BATTLE_CONFIG.deckSize;
+                      const valid =
+                        total === expectedDeckSize &&
+                        (gameId !== "onepiece" || !!deck.leaderId);
                       const isSelected = selectedDeckId === deck.id;
                       return (
                         <button
@@ -251,7 +257,7 @@ export function BattleLobbyClient({
                               valid ? "text-emerald-300" : "text-rose-400"
                             }`}
                           >
-                            {total}/{BATTLE_CONFIG.deckSize}
+                            {total}/{expectedDeckSize}
                           </span>
                         </button>
                       );

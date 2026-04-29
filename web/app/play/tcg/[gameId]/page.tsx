@@ -169,7 +169,7 @@ export default async function TcgGameHub({
               accent="text-emerald-200"
               border="border-emerald-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
-              comingSoon={notImplemented}
+              comingSoon={gameId === "lol"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/pvp`}
@@ -179,7 +179,7 @@ export default async function TcgGameHub({
               accent="text-sky-200"
               border="border-sky-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.10),transparent_70%)]"
-              comingSoon={gameId === "onepiece"}
+              comingSoon={gameId === "lol"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/ranked`}
@@ -191,7 +191,7 @@ export default async function TcgGameHub({
               accent="text-rose-200"
               border="border-rose-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.10),transparent_70%)]"
-              comingSoon={notImplemented}
+              comingSoon={gameId === "lol"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/market`}
@@ -201,7 +201,7 @@ export default async function TcgGameHub({
               accent="text-emerald-200"
               border="border-emerald-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
-              comingSoon={notImplemented}
+              comingSoon={gameId === "lol"}
             />
           </div>
         </div>
