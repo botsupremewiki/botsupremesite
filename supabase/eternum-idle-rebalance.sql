@@ -12,9 +12,10 @@ drop table if exists public.eternum_daily_idle_os;
 -- 2) eternum_collect_idle — nouvelle formule
 --   * 1 tick = 10 minutes
 --   * Cap AFK = 8h = 48 ticks max
---   * OS/tick = floor((stage - 1) / 10) + 1 (augmente tous les 10 niveaux)
---     Stage 1-9 : 1 OS/tick → 48 OS / 8h
---     Stage 991-1000 : 100 OS/tick → 4 800 OS / 8h
+--   * OS/tick = greatest(1, stage / 10) (augmente tous les 10 niveaux)
+--     Stage 1-19 : 1 OS/tick → 48 OS / 8h
+--     Stage 49 : 4 OS/tick → 192 OS / 8h
+--     Stage 1000 : 100 OS/tick → 4 800 OS / 8h
 --   * XP/tick = OS/tick / 4
 --   * Aucun cap journalier — l'AFK 8h est la seule limite
 -- ──────────────────────────────────────────────────────────────────────
@@ -56,13 +57,13 @@ begin
       'xp_gained', 0,
       'stage', current_stage,
       'ticks', 0,
-      'os_per_tick', ((current_stage - 1) / 10) + 1
+      'os_per_tick', greatest(1, current_stage / 10)
     );
   end if;
 
-  -- Taux par tick : floor((stage - 1) / 10) + 1
-  -- Stage 1000 = 100 OS/tick → 4 800 OS sur 8h
-  os_per_tick_val := ((current_stage - 1) / 10) + 1;
+  -- Taux par tick : greatest(1, stage / 10)
+  -- Stage 1-19 : 1 OS/tick · Stage 20-29 : 2 · ... · Stage 1000 : 100 OS/tick (4 800 OS / 8h)
+  os_per_tick_val := greatest(1, current_stage / 10);
   os_gain := ticks * os_per_tick_val;
   xp_gain := os_gain / 4;
 

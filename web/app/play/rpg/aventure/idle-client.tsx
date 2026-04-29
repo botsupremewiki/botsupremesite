@@ -313,8 +313,8 @@ export function IdleClient({
             </button>
           </div>
           <div className="mt-1 text-[10px] text-zinc-500">
-            Tick toutes les 10 min · cap AFK {ADVENTURE_CAP_HOURS}h · taux augmente
-            tous les 10 niveaux · stage 1000 = 100 OS/tick = 4 800 OS / 8h
+            Tick toutes les 10 min · cap AFK {ADVENTURE_CAP_HOURS}h · taux = max(1,
+            stage/10) · stage 49 = 4 OS/tick · stage 1000 = 100 OS/tick → 4 800 OS / 8h
           </div>
         </div>
 
