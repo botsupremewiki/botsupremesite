@@ -1262,10 +1262,11 @@ export type RuneterraBattleUnit = {
   // Phase 3.4 : Barrière consommée ce round (réinitialisée à startRound).
   // Inerte si l'unité n'a pas le mot-clé "Barrier".
   barrierUsed: boolean;
-  // Phase 3.5 + 3.10 : compteurs pour conditions de level-up champion.
+  // Phase 3.5 + 3.10 + 3.12 : compteurs pour conditions de level-up champion.
   strikes: number; // nombre de fois où cette unité a frappé en combat
   kills: number; // ennemis qu'elle a tués au combat
   damageTaken: number; // total dégâts effectifs subis (post-Barrier/Tough)
+  nexusStrikes: number; // fois où cette unité a frappé le nexus ennemi (Zed)
   // Phase 3.7 : buffs temporaires expirant à endRound (les buffs permanents
   // sont déjà appliqués sur power/health). Defaults à 0.
   endOfRoundPowerBuff: number;

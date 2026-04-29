@@ -94,6 +94,8 @@ export type InternalPlayer = {
     // Phase 3.10
     alliesSurvivedDamage: number; // alliés qui ont survécu à des dégâts ce combat (Vladimir : 5)
     ephemeralAttackers: number; // alliés Éphémères ayant attaqué (Hécarim : 7)
+    // Phase 3.12
+    techPowerSummoned: number; // puissance totale d'alliés TECHNOLOGIE invoqués (Heimerdinger : 12)
   };
 };
 
@@ -162,6 +164,7 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     strikes: 0,
     kills: 0,
     damageTaken: 0,
+    nexusStrikes: 0,
     endOfRoundPowerBuff: 0,
     endOfRoundHealthBuff: 0,
     frozen: false,
@@ -239,6 +242,7 @@ export function createInitialState(
       enemiesFrostbitten: 0,
       alliesSurvivedDamage: 0,
       ephemeralAttackers: 0,
+      techPowerSummoned: 0,
     },
   });
 
@@ -717,11 +721,20 @@ export function playUnit(
   ];
   const newUnit = createUnit(handCard.uid, handCard.cardCode);
   const newBench = [...player.bench, newUnit];
+  // Phase 3.12 : techPowerSummoned (Heimerdinger) — incrémenté de la
+  // puissance imprimée si l'unité a le subtype TECHNOLOGIE.
+  const techPowerDelta =
+    card.subtypes?.includes("TECHNOLOGIE") ? (card.attack ?? 0) : 0;
   const updatedPlayer: InternalPlayer = {
     ...player,
     hand: newHand,
     bench: newBench,
     mana: player.mana - card.cost,
+    championCounters: {
+      ...player.championCounters,
+      techPowerSummoned:
+        player.championCounters.techPowerSummoned + techPowerDelta,
+    },
   };
 
   const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
@@ -1608,6 +1621,8 @@ function resolveCombat(state: InternalState): InternalState {
       ) {
         attackerNexusHeal += attacker.power;
       }
+      // Phase 3.12 : nexusStrikes per-unit (Zed level-up).
+      attacker.nexusStrikes += hasKeyword(attacker, "DoubleStrike") ? 2 : 1;
       events.push(`${attackerName} frappe le nexus pour ${attacker.power}.`);
     }
   }
@@ -1988,6 +2003,32 @@ const LEVEL_UP_REGISTRY: Record<
     levelUpCardCode: "01IO015T2",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.enemyStunned >= 5,
+  },
+
+  // ── Phase 3.12 : Zed + Heimerdinger
+  // Zed (Ionia) — « J'ai vu des Ombres vivantes alliées ou moi-même
+  // frapper à 2 reprises le Nexus ennemi. » Somme des nexusStrikes
+  // du Zed lui-même + toutes les Ombres vivantes (cardCode 01IO009T1)
+  // sur son banc.
+  "01IO009": {
+    levelUpCardCode: "01IO009T2",
+    check: (s, u, seat) => {
+      let total = u.nexusStrikes;
+      for (const ally of s.players[seat].bench) {
+        if (ally.uid === u.uid) continue;
+        if (ally.cardCode === "01IO009T1") total += ally.nexusStrikes;
+      }
+      return total >= 2;
+    },
+  },
+  // Heimerdinger (Piltover & Zaun) — « La puissance totale des alliés
+  // Technologie que je vous ai vu invoquer est d'au moins 12. »
+  // techPowerSummoned cumule la puissance imprimée de chaque allié
+  // TECHNOLOGIE joué (incrémenté dans playUnit).
+  "01PZ056": {
+    levelUpCardCode: "01PZ056T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.techPowerSummoned >= 12,
   },
 
   // TODO Phase 3.8d.x — Yasuo (étourdis/rappelés), Zed (Ombre Living strike),
