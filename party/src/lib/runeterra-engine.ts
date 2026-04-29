@@ -22,6 +22,12 @@ export type DeckCard = {
   cardCode: string;
 };
 
+/** Une lane d'attaque : 1 attaquant + 0 ou 1 bloqueur. */
+export type AttackLane = {
+  attackerUid: string;
+  blockerUid: string | null;
+};
+
 /** État interne complet (serveur). Le serveur projette ensuite vers
  *  RuneterraBattleState pour chaque destinataire (self/opponent). */
 export type InternalState = {
@@ -34,6 +40,14 @@ export type InternalState = {
   // Compteur de passes consécutives : 2 passes d'affilée = round termine.
   // Reset à 0 dès qu'une action non-pass est jouée (unit, spell, attaque).
   consecutivePasses: number;
+  // null = pas d'attaque en cours. Sinon, l'attaquant a déclaré ses unités
+  // et le défenseur doit assigner des bloqueurs (ou laisser passer au
+  // nexus). Phase 3.3 : résolution simultanée immédiate après assignBlockers
+  // (pas encore de spell stack pendant l'attaque — Phase 3.4).
+  attackInProgress: {
+    attackerSeatIdx: 0 | 1;
+    lanes: AttackLane[];
+  } | null;
   winnerSeatIdx: 0 | 1 | null;
   log: string[];
 };
@@ -173,6 +187,7 @@ export function createInitialState(
     attackTokenSeatIdx: startingAttacker,
     round: 0,
     consecutivePasses: 0,
+    attackInProgress: null,
     winnerSeatIdx: null,
     log: [`Partie démarrée. ${startingAttacker === 0 ? p1.username : p2.username} attaque en premier.`],
   };
@@ -610,6 +625,301 @@ export function passPriority(
       log,
     },
   };
+}
+
+// ────────────────────── Phase 3.3 : combat ───────────────────────────────
+
+/** Le porteur du jeton d'attaque déclare ses attaquants. Les unités passent
+ *  en lanes (ordre fourni par le client). Le défenseur prend ensuite la
+ *  priorité pour assigner ses bloqueurs (`assignBlockers`).
+ *
+ *   • Vérifie phase=round, c'est ton tour, tu as le jeton, pas d'attaque
+ *     déjà en cours
+ *   • Vérifie attackerUids tous présents sur ton banc, sans doublon, et
+ *     non-playedThisRound (les unités fraîches du round ne peuvent pas
+ *     attaquer le round où elles sont posées)
+ *   • Vérifie au moins 1 attaquant
+ *   • Consomme le jeton d'attaque (attackToken = false), passe la priorité
+ *     au défenseur
+ */
+export function declareAttack(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  attackerUids: string[],
+): EngineResult {
+  if (state.phase !== "round") {
+    return { ok: false, error: "La partie n'est pas en round." };
+  }
+  if (state.activeSeatIdx !== seatIdx) {
+    return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+  if (state.attackInProgress !== null) {
+    return { ok: false, error: "Une attaque est déjà en cours." };
+  }
+  const player = state.players[seatIdx];
+  if (!player.attackToken) {
+    return { ok: false, error: "Tu n'as pas le jeton d'attaque ce round." };
+  }
+  if (!Array.isArray(attackerUids) || attackerUids.length === 0) {
+    return { ok: false, error: "Sélectionne au moins 1 attaquant." };
+  }
+  // Vérifie unicité.
+  if (new Set(attackerUids).size !== attackerUids.length) {
+    return { ok: false, error: "Doublon dans les attaquants." };
+  }
+  // Vérifie que chaque uid est sur le banc et peut attaquer.
+  for (const uid of attackerUids) {
+    const unit = player.bench.find((u) => u.uid === uid);
+    if (!unit) {
+      return { ok: false, error: `Unité introuvable sur le banc : ${uid}.` };
+    }
+    if (unit.playedThisRound) {
+      return {
+        ok: false,
+        error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} ne peut pas attaquer le round où elle est posée.`,
+      };
+    }
+    if (unit.power <= 0) {
+      return {
+        ok: false,
+        error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} a 0 puissance — ne peut pas attaquer.`,
+      };
+    }
+  }
+
+  // Construit les lanes (sans bloqueurs).
+  const lanes: AttackLane[] = attackerUids.map((uid) => ({
+    attackerUid: uid,
+    blockerUid: null,
+  }));
+
+  // Consomme le jeton d'attaque.
+  const updatedPlayer: InternalPlayer = { ...player, attackToken: false };
+  const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
+    InternalPlayer,
+    InternalPlayer,
+  ];
+  newPlayers[seatIdx] = updatedPlayer;
+
+  return {
+    ok: true,
+    state: {
+      ...state,
+      players: newPlayers,
+      activeSeatIdx: otherSeat(seatIdx),
+      consecutivePasses: 0,
+      attackInProgress: { attackerSeatIdx: seatIdx, lanes },
+      log: [
+        ...state.log,
+        `${player.username} déclare une attaque (${lanes.length} unité${lanes.length > 1 ? "s" : ""}).`,
+      ],
+    },
+  };
+}
+
+/** Le défenseur assigne ses bloqueurs (1 par lane, ou null pour laisser
+ *  passer au nexus). Phase 3.3 : combat se résout immédiatement après
+ *  l'assignement (pas de fenêtre de réponse — Phase 3.4 ajoutera les
+ *  spells durant le combat).
+ *
+ *   • blockerAssignments : tableau parallèle aux lanes, chaque entrée est
+ *     soit un uid d'unité du défenseur, soit null (laisse passer au nexus)
+ *   • Vérifie phase=round, c'est ton tour, attackInProgress active, tu es
+ *     bien le défenseur
+ *   • Vérifie tableau de bonne longueur, bloqueurs uniques, présents sur
+ *     ton banc
+ *   • Résolution simultanée : chaque attaquant + bloqueur s'inflige
+ *     mutuellement leur puissance ; si pas de bloqueur, dégâts au nexus
+ *     ennemi
+ *   • Retire les unités mortes (damage >= health)
+ *   • Reset attackInProgress, switch priorité de retour à l'attaquant
+ *   • Vérifie game over (nexus <= 0)
+ */
+export function assignBlockers(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  blockerAssignments: (string | null)[],
+): EngineResult {
+  if (state.phase !== "round") {
+    return { ok: false, error: "La partie n'est pas en round." };
+  }
+  if (state.activeSeatIdx !== seatIdx) {
+    return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+  if (state.attackInProgress === null) {
+    return { ok: false, error: "Aucune attaque en cours." };
+  }
+  if (state.attackInProgress.attackerSeatIdx === seatIdx) {
+    return { ok: false, error: "Tu es l'attaquant, pas le défenseur." };
+  }
+  const lanes = state.attackInProgress.lanes;
+  if (
+    !Array.isArray(blockerAssignments) ||
+    blockerAssignments.length !== lanes.length
+  ) {
+    return {
+      ok: false,
+      error: `Attendu ${lanes.length} assignements (1 par lane), reçu ${blockerAssignments?.length ?? 0}.`,
+    };
+  }
+  const defender = state.players[seatIdx];
+  // Vérifie unicité des bloqueurs (un bloqueur ne peut bloquer qu'1 lane).
+  const blockerSet = new Set<string>();
+  for (const b of blockerAssignments) {
+    if (b === null) continue;
+    if (blockerSet.has(b)) {
+      return { ok: false, error: `Le bloqueur ${b} est assigné à plusieurs lanes.` };
+    }
+    blockerSet.add(b);
+    const unit = defender.bench.find((u) => u.uid === b);
+    if (!unit) {
+      return { ok: false, error: `Bloqueur introuvable sur ton banc : ${b}.` };
+    }
+  }
+
+  // Compose les lanes finales (avec bloqueurs).
+  const finalLanes: AttackLane[] = lanes.map((lane, i) => ({
+    attackerUid: lane.attackerUid,
+    blockerUid: blockerAssignments[i],
+  }));
+
+  return {
+    ok: true,
+    state: resolveCombat({ ...state, attackInProgress: { ...state.attackInProgress, lanes: finalLanes } }),
+  };
+}
+
+/** Résolution interne du combat. Pour chaque lane :
+ *   • Attaquant + bloqueur s'infligent mutuellement leur puissance (simultané)
+ *   • Si pas de bloqueur, l'attaquant inflige sa puissance au nexus ennemi
+ *  Puis retire les unités mortes, clear attackInProgress, redonne la
+ *  priorité à l'attaquant, vérifie game over.
+ *
+ *  Phase 3.3 : pas de Quick Strike, Overwhelm, etc. — simultané strict.
+ */
+function resolveCombat(state: InternalState): InternalState {
+  if (state.attackInProgress === null) return state;
+  const attackerSeat = state.attackInProgress.attackerSeatIdx;
+  const defenderSeat = otherSeat(attackerSeat);
+  let attackerPlayer = state.players[attackerSeat];
+  let defenderPlayer = state.players[defenderSeat];
+  let nexusDamageTotal = 0;
+  const events: string[] = [];
+
+  // Indexe les unités pour mutation locale.
+  const attackerBench = attackerPlayer.bench.map((u) => ({ ...u }));
+  const defenderBench = defenderPlayer.bench.map((u) => ({ ...u }));
+
+  for (const lane of state.attackInProgress.lanes) {
+    const attacker = attackerBench.find((u) => u.uid === lane.attackerUid);
+    if (!attacker) continue;
+    const attackerName = getCard(attacker.cardCode)?.name ?? attacker.cardCode;
+    if (lane.blockerUid !== null) {
+      const blocker = defenderBench.find((u) => u.uid === lane.blockerUid);
+      if (!blocker) {
+        // Bloqueur disparu (cas pathologique) : nexus prend les dégâts.
+        nexusDamageTotal += attacker.power;
+        events.push(
+          `${attackerName} frappe le nexus pour ${attacker.power} (bloqueur introuvable).`,
+        );
+        continue;
+      }
+      const blockerName = getCard(blocker.cardCode)?.name ?? blocker.cardCode;
+      // Résolution simultanée : chaque unité prend la puissance de l'autre.
+      attacker.damage += blocker.power;
+      blocker.damage += attacker.power;
+      events.push(
+        `${attackerName} (${attacker.power}|${attacker.health - attacker.damage}) ↔ ${blockerName} (${blocker.power}|${blocker.health - blocker.damage}).`,
+      );
+    } else {
+      nexusDamageTotal += attacker.power;
+      events.push(`${attackerName} frappe le nexus pour ${attacker.power}.`);
+    }
+  }
+
+  // Retire les unités mortes (damage >= health).
+  const newAttackerBench = attackerBench.filter((u) => {
+    if (u.damage >= u.health) {
+      events.push(
+        `${getCard(u.cardCode)?.name ?? u.cardCode} (attaquant) meurt.`,
+      );
+      return false;
+    }
+    return true;
+  });
+  const newDefenderBench = defenderBench.filter((u) => {
+    if (u.damage >= u.health) {
+      events.push(
+        `${getCard(u.cardCode)?.name ?? u.cardCode} (défenseur) meurt.`,
+      );
+      return false;
+    }
+    return true;
+  });
+
+  // Applique les dégâts au nexus du défenseur.
+  const newDefenderNexus = defenderPlayer.nexusHealth - nexusDamageTotal;
+  attackerPlayer = { ...attackerPlayer, bench: newAttackerBench };
+  defenderPlayer = {
+    ...defenderPlayer,
+    bench: newDefenderBench,
+    nexusHealth: newDefenderNexus,
+  };
+
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[attackerSeat] = attackerPlayer;
+  newPlayers[defenderSeat] = defenderPlayer;
+
+  // Game over si nexus défenseur <= 0 (nexus attaquant ne peut pas mourir
+  // pendant son propre tour d'attaque, mais on check par sécurité).
+  const log = [...state.log, ...events];
+  if (newDefenderNexus <= 0) {
+    log.push(
+      `${attackerPlayer.username} remporte la partie (nexus de ${defenderPlayer.username} à ${newDefenderNexus}).`,
+    );
+    return {
+      ...state,
+      players: newPlayers,
+      attackInProgress: null,
+      phase: "ended",
+      winnerSeatIdx: attackerSeat,
+      log,
+    };
+  }
+
+  return {
+    ...state,
+    players: newPlayers,
+    attackInProgress: null,
+    activeSeatIdx: attackerSeat, // priorité retourne à l'attaquant
+    consecutivePasses: 0,
+    log,
+  };
+}
+
+/** Prédicat UI : peut-on déclarer l'attaque maintenant ? */
+export function canDeclareAttack(
+  state: InternalState,
+  seatIdx: 0 | 1,
+): { ok: boolean; reason?: string } {
+  if (state.phase !== "round") return { ok: false, reason: "Hors round" };
+  if (state.activeSeatIdx !== seatIdx)
+    return { ok: false, reason: "Pas ton tour" };
+  if (state.attackInProgress !== null)
+    return { ok: false, reason: "Attaque déjà en cours" };
+  const player = state.players[seatIdx];
+  if (!player.attackToken)
+    return { ok: false, reason: "Tu n'as pas le jeton d'attaque" };
+  // Au moins 1 unité éligible sur le banc.
+  const eligible = player.bench.some(
+    (u) => !u.playedThisRound && u.power > 0,
+  );
+  if (!eligible)
+    return { ok: false, reason: "Aucune unité prête à attaquer sur le banc" };
+  return { ok: true };
 }
 
 // ────────────────────── Prédicats client (UI) ─────────────────────────────
