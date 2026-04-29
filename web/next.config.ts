@@ -6,8 +6,10 @@ const nextConfig: NextConfig = {
   // a fresh server fetch instead of replaying a stale snapshot.
   experimental: {
     staleTimes: {
-      dynamic: 0,
-      static: 0,
+      // Min imposé par Next 16 = 30s. En dessous → warning au build et
+      // erreur sur Vercel (config invalide). 30s est court et acceptable.
+      dynamic: 30,
+      static: 30,
     },
   },
 };
