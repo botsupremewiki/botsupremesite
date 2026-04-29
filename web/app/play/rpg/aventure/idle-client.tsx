@@ -9,29 +9,39 @@ import {
   eternumHeroStats,
   eternumXpForNextLevel,
 } from "@shared/types";
+import {
+  ADVENTURE_CAP_HOURS,
+  ADVENTURE_CAP_TICKS,
+  ADVENTURE_MAX_STAGE,
+  ADVENTURE_TICK_SECONDS,
+  STAGE_PHASE_ACCENT,
+  STAGE_PHASE_LABEL,
+  dailyIdleOsCap,
+  getStageComposition,
+  nextStageComposition,
+} from "@shared/eternum-adventure";
+import { RARITY_LABEL } from "@shared/eternum-familiers";
 import { createClient } from "@/lib/supabase/client";
 import { IdleBattleScene } from "@/components/eternum/idle-battle-scene";
-
-const TICK_SECONDS = 30; // doit matcher la SQL
-const IDLE_CAP_HOURS = 4; // doit matcher la SQL (cap_ticks = 14400/30)
-const IDLE_CAP_TICKS = (IDLE_CAP_HOURS * 3600) / TICK_SECONDS;
 
 export function IdleClient({
   initialHero,
   initialGold,
+  initialEarnedToday,
   userId,
 }: {
   initialHero: EternumHero;
   initialGold: number;
+  initialEarnedToday: number;
   userId: string;
 }) {
   const router = useRouter();
   const [hero, setHero] = useState<EternumHero>(initialHero);
   const [gold, setGold] = useState<number>(initialGold);
+  const [earnedToday, setEarnedToday] = useState<number>(initialEarnedToday);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  // Tick local pour afficher l'AFK pending live (cosmétique).
   const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -44,22 +54,47 @@ export function IdleClient({
   const stats = eternumHeroStats(hero.classId, hero.level);
   const xpNeeded = eternumXpForNextLevel(hero.level);
 
-  // Estimation OS en attente depuis idleUpdatedAt.
-  // Doit matcher la formule SQL : OS = ticks * stage * 1.5 (via (stage*3)/2),
-  // XP = ticks * stage * 1, cap 4h.
+  // Compositions stage actuel + suivant
+  const currentComp = useMemo(
+    () => getStageComposition(hero.idleStage),
+    [hero.idleStage],
+  );
+  const nextComp = useMemo(
+    () => nextStageComposition(hero.idleStage),
+    [hero.idleStage],
+  );
+
+  // Cap journalier OS idle
+  const dailyCap = useMemo(
+    () => dailyIdleOsCap(hero.idleStage),
+    [hero.idleStage],
+  );
+  const capRemaining = Math.max(0, dailyCap - earnedToday);
+  const capPct = Math.min(1, earnedToday / Math.max(1, dailyCap));
+
+  // Pending OS depuis dernière collecte. Formule SQL : OS = ticks × stage,
+  // XP = ticks × stage / 4, tick = 10 min, cap 8h.
   const pending = useMemo(() => {
     const elapsedSec = Math.max(
       0,
       Math.floor((now - hero.idleUpdatedAt) / 1000),
     );
-    const ticks = Math.min(IDLE_CAP_TICKS, Math.floor(elapsedSec / TICK_SECONDS));
+    const ticks = Math.min(
+      ADVENTURE_CAP_TICKS,
+      Math.floor(elapsedSec / ADVENTURE_TICK_SECONDS),
+    );
+    const osPotential = ticks * hero.idleStage;
+    // Le credit réel est cappé par le reste journalier
+    const osActual = Math.min(osPotential, capRemaining);
     return {
       ticks,
-      os: Math.floor((ticks * hero.idleStage * 3) / 2),
-      xp: ticks * hero.idleStage * 1,
+      os: osActual,
+      osPotential,
+      xp: Math.floor((ticks * hero.idleStage) / 4),
       seconds: elapsedSec,
+      capped: osActual < osPotential,
     };
-  }, [now, hero.idleUpdatedAt, hero.idleStage]);
+  }, [now, hero.idleUpdatedAt, hero.idleStage, capRemaining]);
 
   // Régen énergie estimée live.
   const liveEnergy = useMemo(() => {
@@ -85,19 +120,33 @@ export function IdleClient({
     }
     const r = data as {
       os_gained: number;
+      os_potential?: number;
       xp_gained: number;
       stage: number;
       ticks: number;
+      daily_cap?: number;
+      earned_today_after?: number;
+      capped?: boolean;
     };
-    if (r.os_gained > 0) {
-      setGold((g) => g + r.os_gained);
+    if (r.ticks > 0) {
+      if (r.os_gained > 0) setGold((g) => g + r.os_gained);
+      if (typeof r.earned_today_after === "number")
+        setEarnedToday(r.earned_today_after);
       setHero((h) => ({
         ...h,
         xp: h.xp + r.xp_gained,
         idleUpdatedAt: Date.now(),
       }));
+      const cappedHint =
+        r.capped && r.os_potential
+          ? ` (cap journalier · ${(
+              r.os_potential - r.os_gained
+            ).toLocaleString("fr-FR")} OS perdus)`
+          : "";
       setOkMsg(
-        `+${r.os_gained.toLocaleString("fr-FR")} OS · +${r.xp_gained.toLocaleString("fr-FR")} XP (${r.ticks} ticks)`,
+        `+${r.os_gained.toLocaleString("fr-FR")} OS · +${r.xp_gained.toLocaleString(
+          "fr-FR",
+        )} XP${cappedHint}`,
       );
     } else {
       setOkMsg("Rien à récolter pour l'instant.");
@@ -171,15 +220,53 @@ export function IdleClient({
 
       {/* Stage actuel + idle */}
       <div className="rounded-2xl border border-sky-400/30 bg-black/50 p-6">
-        <div className="text-[10px] uppercase tracking-widest text-sky-300">
-          Carte du monde — Eternum
-        </div>
-        <div className="mt-1 flex items-baseline gap-3">
-          <div className="text-4xl font-bold text-zinc-100">
-            Stage {hero.idleStage}
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-sky-300">
+              Carte du monde — Eternum
+            </div>
+            <div className="mt-1 flex items-baseline gap-3">
+              <div className="text-4xl font-bold text-zinc-100">
+                Stage {hero.idleStage}
+              </div>
+              <div className="text-xs text-zinc-500">
+                / {ADVENTURE_MAX_STAGE}
+              </div>
+            </div>
+            <div
+              className={`mt-1 inline-block rounded-md border px-2 py-0.5 text-[10px] uppercase tracking-widest ${
+                STAGE_PHASE_ACCENT[currentComp.phase]
+              }`}
+            >
+              {STAGE_PHASE_LABEL[currentComp.phase]} · {currentComp.label}
+            </div>
           </div>
-          <div className="text-xs text-zinc-500">
-            Combat automatique · Drop OS + XP
+          {/* Cap journalier OS idle */}
+          <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.04] p-2 text-right">
+            <div className="text-[9px] uppercase tracking-widest text-amber-300">
+              Cap idle aujourd&apos;hui
+            </div>
+            <div className="text-sm font-bold tabular-nums text-amber-200">
+              {earnedToday.toLocaleString("fr-FR")} /{" "}
+              {dailyCap.toLocaleString("fr-FR")} OS
+            </div>
+            <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-black/60">
+              <div
+                className={`h-1 rounded-full ${
+                  capPct >= 1
+                    ? "bg-rose-500"
+                    : capPct > 0.8
+                      ? "bg-orange-400"
+                      : "bg-amber-400/80"
+                }`}
+                style={{ width: `${capPct * 100}%` }}
+              />
+            </div>
+            <div className="mt-1 text-[9px] text-zinc-500">
+              {capRemaining > 0
+                ? `Reste ${capRemaining.toLocaleString("fr-FR")} OS`
+                : "Cap atteint — XP continue"}
+            </div>
           </div>
         </div>
 
@@ -192,15 +279,60 @@ export function IdleClient({
           />
         </div>
 
+        {/* Composition ennemie actuelle / suivante */}
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+          <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+            <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+              Adversaires actuels
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {currentComp.enemies.map((e, i) => (
+                <span
+                  key={i}
+                  className="rounded bg-white/5 px-1.5 py-0.5 text-[10px]"
+                >
+                  {RARITY_LABEL[e.rarity]} · niv {e.level}
+                </span>
+              ))}
+            </div>
+          </div>
+          {nextComp && (
+            <div className="rounded-lg border border-sky-400/20 bg-sky-400/[0.04] p-3">
+              <div className="text-[9px] uppercase tracking-widest text-sky-300">
+                Stage {nextComp.stage} → {nextComp.label}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {nextComp.enemies.map((e, i) => (
+                  <span
+                    key={i}
+                    className="rounded bg-white/5 px-1.5 py-0.5 text-[10px]"
+                  >
+                    {RARITY_LABEL[e.rarity]} · niv {e.level}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {!nextComp && (
+            <div className="rounded-lg border border-fuchsia-400/40 bg-fuchsia-400/[0.05] p-3 text-center text-[11px] text-fuchsia-200">
+              🌟 Stage final atteint — tu es au sommet d&apos;Eternum
+            </div>
+          )}
+        </div>
+
         {/* AFK pending */}
-        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-4">
+        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
           <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-            En attente (AFK depuis{" "}
-            {formatDuration(pending.seconds)})
+            En attente (AFK depuis {formatDuration(pending.seconds)})
           </div>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
             <div className="text-xl font-bold tabular-nums text-amber-300">
               +{pending.os.toLocaleString("fr-FR")} OS
+              {pending.capped && pending.osPotential > pending.os && (
+                <span className="ml-2 text-xs font-normal text-zinc-500 line-through">
+                  +{pending.osPotential.toLocaleString("fr-FR")}
+                </span>
+              )}
               <span className="ml-2 text-sm font-normal text-violet-300">
                 +{pending.xp.toLocaleString("fr-FR")} XP
               </span>
@@ -214,29 +346,31 @@ export function IdleClient({
             </button>
           </div>
           <div className="mt-1 text-[10px] text-zinc-500">
-            Tick toutes les 30s · cap AFK {IDLE_CAP_HOURS}h · OS = stage × 1.5/tick
-            · XP = stage × 1/tick
+            Tick toutes les 10 min · cap AFK {ADVENTURE_CAP_HOURS}h · 1 OS × stage par
+            tick · cap journalier {dailyCap.toLocaleString("fr-FR")} OS (= stage × 30)
           </div>
         </div>
 
         {/* Avancer */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
-          <div>
-            <div className="text-sm font-semibold text-zinc-200">
-              Avancer au stage {hero.idleStage + 1}
+        {nextComp && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
+            <div>
+              <div className="text-sm font-semibold text-zinc-200">
+                Avancer au stage {hero.idleStage + 1}
+              </div>
+              <div className="text-[11px] text-zinc-400">
+                Coût : 5 énergie · vs {nextComp.label}
+              </div>
             </div>
-            <div className="text-[11px] text-zinc-400">
-              Coût : 5 énergie · réussite si ton niveau ≥ stage − 5
-            </div>
+            <button
+              onClick={advance}
+              disabled={liveEnergy < 5 || isPending}
+              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-sky-950 hover:bg-sky-400 disabled:opacity-40"
+            >
+              ⚔️ Combattre &amp; avancer
+            </button>
           </div>
-          <button
-            onClick={advance}
-            disabled={liveEnergy < 5 || isPending}
-            className="rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-sky-950 hover:bg-sky-400 disabled:opacity-40"
-          >
-            ⚔️ Combattre &amp; avancer
-          </button>
-        </div>
+        )}
       </div>
 
       {error && (
