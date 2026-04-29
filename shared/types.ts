@@ -1375,7 +1375,15 @@ export type SpellEffect =
       requireWounded?: boolean;
     }
   | { type: "grant-keyword-ally-round"; keyword: string }
-  | { type: "frostbite-enemy"; maxHealth?: number };
+  | { type: "frostbite-enemy"; maxHealth?: number }
+  // Phase 3.9a
+  // Sans cible : dégâts directs au nexus ennemi (ex Décimation).
+  | { type: "deal-damage-enemy-nexus"; amount: number }
+  // Cible : unité de l'un ou l'autre côté, retirée du board (kill).
+  | { type: "kill-target-any" }
+  // Cible : allié blessé OU son propre nexus → soigne X PV (allié = damage,
+  // nexus = nexusHealth + X capé à initial).
+  | { type: "heal-ally-or-nexus"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1403,6 +1411,31 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     health: 3,
     requireWounded: true,
   },
+
+  // ── Noxus (Phase 3.9a)
+  // Élixir de rage (1 mana, Burst) :
+  // « Conférez +3|+0 à un allié pour ce round. »
+  "01NX027": { type: "buff-ally-round", power: 3, health: 0 },
+  // Décimation (6 mana, Slow) :
+  // « Infligez 4 pt(s) de dégâts au Nexus ennemi. »
+  "01NX002": { type: "deal-damage-enemy-nexus", amount: 4 },
+
+  // ── Piltover & Zaun (Phase 3.9a)
+  // Carte du Puisard (2 mana, Burst) :
+  // « Octroyez Insaisissable à un allié. »
+  "01PZ026": { type: "grant-keyword-ally", keyword: "Elusive" },
+
+  // ── Ionia (Phase 3.9a)
+  // Fantôme (1 mana, Burst) :
+  // « Conférez Insaisissable à un allié pour ce round. »
+  "01IO022": { type: "grant-keyword-ally-round", keyword: "Elusive" },
+  // Potion de soin (1 mana, Burst) :
+  // « Soignez un allié ou votre Nexus de 3 PV. »
+  "01IO004": { type: "heal-ally-or-nexus", amount: 3 },
+
+  // ── Îles obscures (Phase 3.9a)
+  // Vengeance (6 mana, Slow) : « Tuez une unité. »
+  "01SI001": { type: "kill-target-any" },
 };
 
 export type SpellTargetSide = "ally" | "enemy" | "any" | "none";
@@ -1413,11 +1446,15 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "buff-ally-permanent":
     case "grant-keyword-ally":
     case "grant-keyword-ally-round":
+    case "heal-ally-or-nexus":
       return "ally";
     case "deal-damage-anywhere":
+    case "kill-target-any":
       return "any";
     case "frostbite-enemy":
       return "enemy";
+    case "deal-damage-enemy-nexus":
+      return "none";
   }
 }
 

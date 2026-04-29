@@ -899,6 +899,58 @@ function applySpellEffect(
       newPlayers[oppSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "deal-damage-enemy-nexus": {
+      // Pas de cible : dégâts directs au nexus ennemi.
+      const player = newPlayers[oppSeat];
+      const newNexus = player.nexusHealth - effect.amount;
+      newPlayers[oppSeat] = { ...player, nexusHealth: newNexus };
+      // Vérifie game over (le check final se fait dans le pipeline serveur,
+      // mais on prépare l'état si nexus <= 0).
+      if (newNexus <= 0) {
+        return {
+          ...state,
+          players: newPlayers,
+          phase: "ended",
+          winnerSeatIdx: casterSeat,
+          log: [
+            ...state.log,
+            `${state.players[casterSeat].username} remporte la partie (sort direct au nexus).`,
+          ],
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
+    case "kill-target-any": {
+      // Cherche la cible des deux côtés et la retire du banc + crédit
+      // alliesDied au joueur du côté correspondant.
+      for (const seat of [casterSeat, oppSeat] as const) {
+        const player = newPlayers[seat];
+        const idx = player.bench.findIndex((u) => u.uid === targetUid);
+        if (idx === -1) continue;
+        newPlayers[seat] = {
+          ...player,
+          bench: [...player.bench.slice(0, idx), ...player.bench.slice(idx + 1)],
+          championCounters: {
+            ...player.championCounters,
+            alliesDied: player.championCounters.alliesDied + 1,
+          },
+        };
+        break;
+      }
+      return { ...state, players: newPlayers };
+    }
+    case "heal-ally-or-nexus": {
+      // Cible = allié sur ton banc → heal damage de X (cap 0). Ou nexus self
+      // si targetUid === "nexus-self" (côté UI à formaliser, pour Phase 3.9a
+      // on ne supporte que les unités alliées).
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        return { ...u, damage: Math.max(0, u.damage - effect.amount) };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.
       let target: RuneterraBattleUnit | undefined;
