@@ -165,6 +165,7 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     endOfRoundPowerBuff: 0,
     endOfRoundHealthBuff: 0,
     frozen: false,
+    stunned: false,
   };
 }
 
@@ -470,15 +471,16 @@ function applyRegeneration(player: InternalPlayer): InternalPlayer {
   return { ...player, bench: newBench };
 }
 
-/** Phase 3.7+3.8c : annule les buffs round-only à la fin du round. Soustrait
- *  endOfRoundPowerBuff/HealthBuff de power/health, puis reset les deltas.
- *  Reset aussi frozen = false (le Gel expire en fin de round). */
+/** Phase 3.7+3.8c+3.11 : annule les buffs round-only à la fin du round.
+ *  Soustrait endOfRoundPowerBuff/HealthBuff de power/health, puis reset
+ *  les deltas. Reset aussi frozen et stunned (statuts round-only). */
 function expireRoundBuffs(player: InternalPlayer): InternalPlayer {
   const newBench = player.bench.map((u) => {
     if (
       u.endOfRoundPowerBuff === 0 &&
       u.endOfRoundHealthBuff === 0 &&
-      !u.frozen
+      !u.frozen &&
+      !u.stunned
     ) {
       return u;
     }
@@ -489,6 +491,7 @@ function expireRoundBuffs(player: InternalPlayer): InternalPlayer {
       endOfRoundPowerBuff: 0,
       endOfRoundHealthBuff: 0,
       frozen: false,
+      stunned: false,
     };
   });
   return { ...player, bench: newBench };
@@ -1075,6 +1078,82 @@ function applySpellEffect(
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "recall-ally": {
+      // Retire l'allié du banc, l'ajoute à la main du caster.
+      const player = newPlayers[casterSeat];
+      const idx = player.bench.findIndex((u) => u.uid === targetUid);
+      if (idx === -1) return state;
+      const unit = player.bench[idx];
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [
+          ...player.bench.slice(0, idx),
+          ...player.bench.slice(idx + 1),
+        ],
+        hand: [
+          ...player.hand,
+          { uid: unit.uid, cardCode: unit.cardCode },
+        ],
+        // Phase 3.11 : "rappelé" compte pour Yasuo level-up.
+        championCounters: {
+          ...player.championCounters,
+          enemyStunned: player.championCounters.enemyStunned + 1,
+        },
+      };
+      return { ...state, players: newPlayers };
+    }
+    case "recall-any": {
+      // Retourne l'unité dans la main de SON propriétaire (le caster reçoit
+      // le crédit Yasuo "rappelé" peu importe le côté).
+      for (const seat of [casterSeat, oppSeat] as const) {
+        const player = newPlayers[seat];
+        const idx = player.bench.findIndex((u) => u.uid === targetUid);
+        if (idx === -1) continue;
+        const unit = player.bench[idx];
+        newPlayers[seat] = {
+          ...player,
+          bench: [
+            ...player.bench.slice(0, idx),
+            ...player.bench.slice(idx + 1),
+          ],
+          hand: [...player.hand, { uid: unit.uid, cardCode: unit.cardCode }],
+        };
+        break;
+      }
+      // Compteur Yasuo sur le caster.
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        championCounters: {
+          ...caster.championCounters,
+          enemyStunned: caster.championCounters.enemyStunned + 1,
+        },
+      };
+      return { ...state, players: newPlayers };
+    }
+    case "stun-enemy": {
+      // Étourdit l'ennemi pour le round (ne peut plus attaquer/bloquer).
+      const player = newPlayers[oppSeat];
+      let appliedNew = false;
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        if (u.stunned) return u; // déjà stunned
+        appliedNew = true;
+        return { ...u, stunned: true };
+      });
+      newPlayers[oppSeat] = { ...player, bench: newBench };
+      if (appliedNew) {
+        const caster = newPlayers[casterSeat];
+        newPlayers[casterSeat] = {
+          ...caster,
+          championCounters: {
+            ...caster.championCounters,
+            enemyStunned: caster.championCounters.enemyStunned + 1,
+          },
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.
       let target: RuneterraBattleUnit | undefined;
@@ -1210,6 +1289,12 @@ export function declareAttack(
         error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} a 0 puissance — ne peut pas attaquer.`,
       };
     }
+    if (unit.stunned) {
+      return {
+        ok: false,
+        error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} est étourdie — ne peut pas attaquer ce round.`,
+      };
+    }
   }
 
   // Construit les lanes (sans bloqueurs).
@@ -1315,6 +1400,12 @@ export function assignBlockers(
     const unit = defender.bench.find((u) => u.uid === b);
     if (!unit) {
       return { ok: false, error: `Bloqueur introuvable sur ton banc : ${b}.` };
+    }
+    if (unit.stunned) {
+      return {
+        ok: false,
+        error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} est étourdie — ne peut pas bloquer ce round.`,
+      };
     }
     // Validation Elusive / Fearsome : l'attaquant impose des contraintes
     // sur quels bloqueurs sont légaux.
@@ -1886,6 +1977,17 @@ const LEVEL_UP_REGISTRY: Record<
   "01FR039": {
     levelUpCardCode: "01FR039T2",
     check: () => false, // jamais via checkLevelUps — handle via tryReviveOnDeath
+  },
+
+  // ── Phase 3.11 : Yasuo
+  // Yasuo (Ionia) — « Vous avez étourdi ou rappelé au moins 5 unités. »
+  // Le compteur enemyStunned est incrémenté par : recall-ally, recall-any,
+  // stun-enemy (cf applySpellEffect). Pour cumuler étourdissements et
+  // rappels dans le même compteur (Riot les regroupe dans la condition).
+  "01IO015": {
+    levelUpCardCode: "01IO015T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.enemyStunned >= 5,
   },
 
   // TODO Phase 3.8d.x — Yasuo (étourdis/rappelés), Zed (Ombre Living strike),

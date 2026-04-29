@@ -1274,6 +1274,9 @@ export type RuneterraBattleUnit = {
   // round (le delta est tracké dans endOfRoundPowerBuff pour restauration
   // à endRound). L'unité ne peut pas attaquer (power=0 < 1).
   frozen: boolean;
+  // Phase 3.11 : Étourdissement (Stun). Retire l'unité du combat pour
+  // ce round (ne peut pas attaquer ni bloquer). Reset à endRound.
+  stunned: boolean;
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de
@@ -1384,7 +1387,16 @@ export type SpellEffect =
   | { type: "kill-target-any" }
   // Cible : allié blessé OU son propre nexus → soigne X PV (allié = damage,
   // nexus = nexusHealth + X capé à initial).
-  | { type: "heal-ally-or-nexus"; amount: number };
+  | { type: "heal-ally-or-nexus"; amount: number }
+  // Phase 3.11
+  // Cible : allié sur ton banc → retourne dans ta main (cancel summon).
+  | { type: "recall-ally" }
+  // Cible : unité de l'un ou l'autre côté → retourne dans la main du
+  // propriétaire. Compteur enemyStunned (Yasuo) incrémenté pour le caster.
+  | { type: "recall-any" }
+  // Cible : unité ennemie → étourdie pour le round (ne peut pas attaquer
+  // ni bloquer). Compteur enemyStunned (Yasuo) incrémenté.
+  | { type: "stun-enemy" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1437,6 +1449,12 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Îles obscures (Phase 3.9a)
   // Vengeance (6 mana, Slow) : « Tuez une unité. »
   "01SI001": { type: "kill-target-any" },
+
+  // ── Ionia (Phase 3.11)
+  // Rappel (1 mana, Burst) : « Rappelez un allié. »
+  "01IO011": { type: "recall-ally" },
+  // Volonté d'Ionia (4 mana, Burst) : « Rappelez une unité. »
+  "01IO002": { type: "recall-any" },
 };
 
 // ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
@@ -1466,11 +1484,14 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-keyword-ally":
     case "grant-keyword-ally-round":
     case "heal-ally-or-nexus":
+    case "recall-ally":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
+    case "recall-any":
       return "any";
     case "frostbite-enemy":
+    case "stun-enemy":
       return "enemy";
     case "deal-damage-enemy-nexus":
       return "none";
@@ -2691,6 +2712,41 @@ export type OnePieceBattlePendingTrigger = {
   trigger: string;
 };
 
+// Choix demandé au joueur pendant la résolution d'un effet de carte
+// (ciblage Persos pour KO, sélection main pour discard, etc.). Bloque le
+// flow jusqu'à réception d'un `op-resolve-choice` du joueur concerné.
+export type OnePiecePendingChoiceKind =
+  | "ko-character" // Choisir un Persos adverse à mettre KO (avec maxCost optionnel)
+  | "ko-character-own" // Choisir un de ses propres Persos à mettre KO
+  | "buff-target" // Choisir un de ses Leader/Persos pour booster
+  | "discard-card" // Défausser N carte(s) de sa main (count + filtre)
+  | "select-target" // Sélectionner une cible générique (Leader ou Persos)
+  | "yes-no"; // Choix oui/non simple (l'effet est-il activé ?)
+
+export type OnePiecePendingChoice = {
+  // Identifiant unique pour matcher la résolution.
+  id: string;
+  // Qui doit choisir (en général le joueur qui a joué la carte).
+  seat: OnePieceBattleSeatId;
+  // CardNumber de la source (pour router la résolution vers le bon handler).
+  sourceCardNumber: string;
+  // Uid de la source en jeu (Persos posé / "leader") — pour effets [Activation].
+  sourceUid: string;
+  kind: OnePiecePendingChoiceKind;
+  // Texte affiché au joueur.
+  prompt: string;
+  // Paramètres du choix selon le kind. Champs optionnels selon le besoin :
+  // - maxCost : coût max (ko-character)
+  // - count : nombre à défausser (discard-card)
+  // - amount : montant du buff (buff-target)
+  // - excludeName : nom à exclure
+  // - allowLeader / allowCharacters : booléens (select-target)
+  // - requireTrigger : ne défausser que des cartes ayant [Déclenchement]
+  params: Record<string, number | string | boolean | null>;
+  // Si true, le joueur peut passer sans rien faire (l'effet est ignoré).
+  cancellable: boolean;
+};
+
 export type OnePieceBattleState = {
   roomId: string;
   phase: OnePieceBattlePhase;
@@ -2706,6 +2762,9 @@ export type OnePieceBattleState = {
   pendingAttack: OnePieceBattlePendingAttack | null;
   // null sauf pendant la résolution d'un Trigger.
   pendingTrigger: OnePieceBattlePendingTrigger | null;
+  // null sauf pendant la résolution d'un effet de carte qui demande un
+  // choix au joueur (cible KO, carte à défausser, etc.).
+  pendingChoice: OnePiecePendingChoice | null;
 };
 
 export type OnePieceBattleClientMessage =
@@ -2725,6 +2784,19 @@ export type OnePieceBattleClientMessage =
   | { type: "op-pass-defense" }
   // Trigger révélé d'une Vie : accepter / refuser.
   | { type: "op-trigger-resolve"; activate: boolean }
+  // Résolution d'un PendingChoice. choiceId doit matcher state.pendingChoice.id.
+  // skipped=true → annulé / passé (effet ignoré). selection contient le choix
+  // (uid de la cible, handIndices à défausser, etc.) selon le kind.
+  | {
+      type: "op-resolve-choice";
+      choiceId: string;
+      skipped: boolean;
+      selection?: {
+        targetUid?: string; // ko-character / buff-target / select-target
+        handIndices?: number[]; // discard-card
+        yesNo?: boolean; // yes-no
+      };
+    }
   | { type: "op-end-turn" }
   | { type: "op-concede" }
   | { type: "chat"; text: string };
