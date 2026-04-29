@@ -179,7 +179,7 @@ export default async function TcgGameHub({
               accent="text-sky-200"
               border="border-sky-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.10),transparent_70%)]"
-              comingSoon={notImplemented}
+              comingSoon={gameId === "onepiece"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/ranked`}

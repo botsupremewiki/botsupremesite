@@ -14,6 +14,7 @@
     "battle": "src/battle.ts",
     "battleop": "src/battle-onepiece.ts",
     "battlelor": "src/runeterra-battle.ts",
+    "lorlobby": "src/runeterra-lobby.ts",
     "eternumraid": "src/eternum-raid.ts",
     "global": "src/global.ts",
     "zone": "src/zone.ts",

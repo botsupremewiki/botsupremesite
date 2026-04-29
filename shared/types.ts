@@ -1343,6 +1343,17 @@ export type RuneterraBattleServerMessage =
   | { type: "lor-battle-state"; state: RuneterraBattleState }
   | { type: "lor-battle-error"; message: string };
 
+// ─── Lobby matchmaking LoR (Phase 3.6d) ──────────────────────────────────
+
+export type LorLobbyClientMessage =
+  | { type: "lor-queue"; deckId: string }
+  | { type: "lor-leave-queue" };
+
+export type LorLobbyServerMessage =
+  | { type: "lor-queued"; position: number }
+  | { type: "lor-matched"; roomId: string; deckId: string }
+  | { type: "lor-lobby-error"; message: string };
+
 // ─── Boosters Runeterra — 6 packs régions de Set 1 ───────────────────────
 // Riot n'avait pas de système de packs (LoR utilisait des shards/wildcards).
 // On invente un pack par région — pattern similaire à Pokémon TCG Pocket
