@@ -20,11 +20,14 @@ import {
 } from "./lib/supabase";
 import {
   type DeckCard,
+  FOSSIL_NAMES,
   dealOpeningHand,
   deriveEnergyTypes,
   expandDeck,
   getCard,
+  getCardForBattle,
   isBasicPokemon,
+  isPlayableAsBasic,
   pickRandomEnergy,
   shuffle,
 } from "./lib/battle-engine";
@@ -302,13 +305,18 @@ export default class BattleServer implements Party.Server {
   private botDoSetup() {
     const seat = this.seats.p2;
     if (!seat || seat.hasSetup || this.phase !== "setup") return;
-    // Active : premier Basic en main
-    const basicIdx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+    // Active : préfère un VRAI Pokémon de Base (pas un Fossile) — un Fossile
+    // ne peut pas attaquer, donc l'utiliser comme Actif est suicidaire.
+    let basicIdx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+    if (basicIdx < 0) {
+      basicIdx = seat.hand.findIndex((c) => isPlayableAsBasic(c.cardId));
+    }
     if (basicIdx < 0) return;
     this.handleSetActive("p2", basicIdx);
-    // Banc : jusqu'à 3 autres Basics
+    // Banc : jusqu'à 3 autres Basics (les Fossiles peuvent y aller — ils
+    // servent de tank).
     for (let n = 0; n < 3; n++) {
-      const idx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+      const idx = seat.hand.findIndex((c) => isPlayableAsBasic(c.cardId));
       if (idx < 0) break;
       if (seat.bench.length >= MAX_BENCH) break;
       this.handleAddBench("p2", idx);
@@ -320,13 +328,14 @@ export default class BattleServer implements Party.Server {
   private botPromote() {
     const seat = this.seats.p2;
     if (!seat?.mustPromoteActive || seat.bench.length === 0) return;
-    // Préfère un Pokémon avec le plus de PV restants
+    // Préfère un Pokémon avec le plus de PV restants — et déprio les Fossiles
+    // (incapables d'attaquer) en cas d'égalité.
     let bestIdx = 0;
     let bestRemaining = -Infinity;
     for (let i = 0; i < seat.bench.length; i++) {
       const c = seat.bench[i];
-      const data = getCard(c.cardId);
-      if (data?.kind !== "pokemon") continue;
+      const data = getCardForBattle(c.cardId);
+      if (!data) continue;
       const remaining = data.hp - c.damage;
       if (remaining > bestRemaining) {
         bestRemaining = remaining;
@@ -370,9 +379,9 @@ export default class BattleServer implements Party.Server {
       }
     }
 
-    // 2. Pose un Basic au Banc si banc pas plein
+    // 2. Pose un Basic au Banc si banc pas plein (Fossiles inclus = tank)
     if (seat.bench.length < MAX_BENCH) {
-      const basicIdx = seat.hand.findIndex((c) => isBasicPokemon(c.cardId));
+      const basicIdx = seat.hand.findIndex((c) => isPlayableAsBasic(c.cardId));
       if (basicIdx >= 0) {
         this.handlePlayBasic("p2", basicIdx);
         this.scheduleNextBotStep();
@@ -387,11 +396,12 @@ export default class BattleServer implements Party.Server {
       return;
     }
 
-    // 4. Attaque (la plus forte payée)
-    const data = seat.active ? getCard(seat.active.cardId) : null;
+    // 4. Attaque (la plus forte payée). Les Fossiles n'ayant pas d'attaque,
+    // `data.attacks` sera vide et la boucle sautera ce step.
+    const data = seat.active ? getCardForBattle(seat.active.cardId) : null;
     if (
       seat.active &&
-      data?.kind === "pokemon" &&
+      data &&
       !seat.active.playedThisTurn &&
       !seat.active.statuses.includes("asleep") &&
       !seat.active.statuses.includes("paralyzed")
@@ -516,7 +526,7 @@ export default class BattleServer implements Party.Server {
     if (!seat || seat.hasSetup) return;
     if (seat.active) return; // déjà placé
     const card = seat.hand[handIndex];
-    if (!card || !isBasicPokemon(card.cardId)) {
+    if (!card || !isPlayableAsBasic(card.cardId)) {
       this.sendErrorToSeat(seatId, "Choisis un Pokémon de Base de ta main.");
       return;
     }
@@ -534,7 +544,7 @@ export default class BattleServer implements Party.Server {
       return;
     }
     const card = seat.hand[handIndex];
-    if (!card || !isBasicPokemon(card.cardId)) {
+    if (!card || !isPlayableAsBasic(card.cardId)) {
       this.sendErrorToSeat(seatId, "Seuls des Pokémon de Base au banc.");
       return;
     }
@@ -616,7 +626,7 @@ export default class BattleServer implements Party.Server {
       return;
     }
     const card = seat.hand[handIndex];
-    if (!card || !isBasicPokemon(card.cardId)) {
+    if (!card || !isPlayableAsBasic(card.cardId)) {
       this.sendErrorToSeat(seatId, "Seuls les Pokémon de Base se posent au Banc.");
       return;
     }
@@ -744,8 +754,8 @@ export default class BattleServer implements Party.Server {
       this.sendErrorToSeat(seatId, "Pas de Pokémon de Banc à promouvoir.");
       return;
     }
-    const data = getCard(seat.active.cardId);
-    if (!data || data.kind !== "pokemon") return;
+    const data = getCardForBattle(seat.active.cardId);
+    if (!data) return;
     const cost = Math.max(0, data.retreatCost - seat.retreatDiscount);
     if (seat.active.attachedEnergies.length < cost) {
       this.sendErrorToSeat(
@@ -793,10 +803,13 @@ export default class BattleServer implements Party.Server {
       );
       return;
     }
-    const attackerData = getCard(seat.active.cardId);
-    if (!attackerData || attackerData.kind !== "pokemon") return;
+    const attackerData = getCardForBattle(seat.active.cardId);
+    if (!attackerData) return;
     const attack = attackerData.attacks[attackIndex];
-    if (!attack) return;
+    if (!attack) {
+      this.sendErrorToSeat(seatId, "Ce Pokémon n'a pas d'attaque.");
+      return;
+    }
     if (!this.canPayAttackCost(seat.active.attachedEnergies, attack.cost)) {
       this.sendErrorToSeat(seatId, "Coût en Énergies non payé.");
       return;
@@ -829,8 +842,8 @@ export default class BattleServer implements Party.Server {
       this.sendErrorToSeat(seatId, "Pas de cible.");
       return;
     }
-    const defenderData = getCard(opp.active.cardId);
-    if (!defenderData || defenderData.kind !== "pokemon") return;
+    const defenderData = getCardForBattle(opp.active.cardId);
+    if (!defenderData) return;
 
     let damage = attack.damage ?? 0;
     // Bonus Giovanni / Auguste / etc. — +N dégâts ce tour si actif.
@@ -928,6 +941,16 @@ export default class BattleServer implements Party.Server {
     const card = getCard(handCard.cardId);
     if (!card || card.kind !== "trainer") {
       this.sendErrorToSeat(seatId, "Cette carte n'est pas un Dresseur.");
+      return;
+    }
+    // Les Fossiles sont des cartes Dresseur de type Item, mais elles se
+    // POSENT au Banc comme un Pokémon de Base (battle-play-basic), pas via
+    // ce flow.
+    if (FOSSIL_NAMES.has(card.name)) {
+      this.sendErrorToSeat(
+        seatId,
+        "Pose ce Fossile au Banc — il joue comme un Pokémon de Base.",
+      );
       return;
     }
     // Pocket : 1 Supporter max par tour.
@@ -1074,8 +1097,8 @@ export default class BattleServer implements Party.Server {
           this.sendErrorToSeat(seatId, "Cible invalide.");
           return;
         }
-        const tData = getCard(target.cardId);
-        if (tData?.kind !== "pokemon" || tData.type !== "grass") {
+        const tData = getCardForBattle(target.cardId);
+        if (!tData || tData.type !== "grass") {
           this.sendErrorToSeat(seatId, "Erika ne soigne que les Pokémon Plante.");
           return;
         }
@@ -1098,9 +1121,9 @@ export default class BattleServer implements Party.Server {
           this.sendErrorToSeat(seatId, "Cible invalide.");
           return;
         }
-        const tData = getCard(target.cardId);
+        const tData = getCardForBattle(target.cardId);
         const validNames = new Set(["Grolem", "Onix"]);
-        if (tData?.kind !== "pokemon" || !validNames.has(tData.name)) {
+        if (!tData || !validNames.has(tData.name)) {
           this.sendErrorToSeat(
             seatId,
             "Pierre ne s'utilise que sur Grolem ou Onix.",
@@ -1117,6 +1140,165 @@ export default class BattleServer implements Party.Server {
         // on utilise le `attackDamageBonus` global mais on documente que
         // c'est imprécis (frappe trop large). MVP acceptable.
         seat.attackDamageBonus += 30;
+        consumed = true;
+        break;
+      }
+      case "Koga": {
+        // Renvoie l'Actif (Grotadmorv ou Smogogo) en main et force la
+        // promotion d'un Pokémon de Banc.
+        if (!seat.active) {
+          this.sendErrorToSeat(seatId, "Pas de Pokémon Actif.");
+          return;
+        }
+        const activeData = getCardForBattle(seat.active.cardId);
+        const validNames = new Set(["Grotadmorv", "Smogogo"]);
+        if (!activeData || !validNames.has(activeData.name)) {
+          this.sendErrorToSeat(
+            seatId,
+            "Koga ne ramène que Grotadmorv ou Smogogo.",
+          );
+          return;
+        }
+        if (seat.bench.length === 0) {
+          this.sendErrorToSeat(
+            seatId,
+            "Tu n'as pas de Pokémon de Banc pour remplacer.",
+          );
+          return;
+        }
+        // Renvoie l'Actif (et ses dégâts/énergies/statuts disparaissent — Pocket).
+        seat.hand.push({ uid: seat.active.uid, cardId: seat.active.cardId });
+        seat.active = null;
+        seat.mustPromoteActive = true;
+        consumed = true;
+        break;
+      }
+      case "Major Bob": {
+        // Déplace TOUTES les Énergies {L} (lightning) du Banc vers Raichu /
+        // Électrode / Élektek qui doit être Actif.
+        if (!seat.active) {
+          this.sendErrorToSeat(seatId, "Pas de Pokémon Actif.");
+          return;
+        }
+        const activeData = getCardForBattle(seat.active.cardId);
+        const validNames = new Set(["Raichu", "Électrode", "Élektek"]);
+        if (!activeData || !validNames.has(activeData.name)) {
+          this.sendErrorToSeat(
+            seatId,
+            "Major Bob ne s'utilise qu'avec Raichu, Électrode ou Élektek Actif.",
+          );
+          return;
+        }
+        let moved = 0;
+        for (const benchCard of seat.bench) {
+          const before = benchCard.attachedEnergies.length;
+          benchCard.attachedEnergies = benchCard.attachedEnergies.filter(
+            (e) => {
+              if (e === "lightning") {
+                seat.active!.attachedEnergies.push("lightning");
+                return false;
+              }
+              return true;
+            },
+          );
+          moved += before - benchCard.attachedEnergies.length;
+        }
+        if (moved === 0) {
+          this.sendErrorToSeat(
+            seatId,
+            "Aucune Énergie ⚡ sur tes Pokémon de Banc.",
+          );
+          return;
+        }
+        consumed = true;
+        break;
+      }
+      case "Morgane": {
+        // « Échangez le Pokémon Actif de votre adversaire avec l'un de ses
+        // Pokémon de Banc. (Votre adversaire choisit le nouveau Pokémon
+        // Actif.) » — MVP : choix simplifié côté serveur (le Pokémon de Banc
+        // avec le plus de PV restants), pour ne pas bloquer le tour de
+        // l'attaquant en attendant un input adverse.
+        const opp = this.seats[oppId];
+        if (!opp || !opp.active) {
+          this.sendErrorToSeat(seatId, "Pas de cible.");
+          return;
+        }
+        if (opp.bench.length === 0) {
+          this.sendErrorToSeat(
+            seatId,
+            "L'adversaire n'a pas de Banc à promouvoir.",
+          );
+          return;
+        }
+        let bestIdx = 0;
+        let bestRemaining = -Infinity;
+        for (let i = 0; i < opp.bench.length; i++) {
+          const c = opp.bench[i];
+          const data = getCardForBattle(c.cardId);
+          if (!data) continue;
+          const remaining = data.hp - c.damage;
+          if (remaining > bestRemaining) {
+            bestRemaining = remaining;
+            bestIdx = i;
+          }
+        }
+        const newActive = opp.bench[bestIdx];
+        opp.bench.splice(bestIdx, 1);
+        opp.bench.push(opp.active);
+        opp.active = newActive;
+        consumed = true;
+        break;
+      }
+      case "Ondine": {
+        // Choisis un Pokémon Eau, lance pile/face jusqu'à pile, attache 1
+        // Énergie Eau par face. Animation : on émet 1 coin-flip par lancer
+        // dans la queue côté client.
+        if (!targetUid) {
+          this.sendErrorToSeat(seatId, "Choisis un Pokémon Eau.");
+          return;
+        }
+        const target = this.findOwnPokemon(seat, targetUid);
+        if (!target) {
+          this.sendErrorToSeat(seatId, "Cible invalide.");
+          return;
+        }
+        const tData = getCardForBattle(target.cardId);
+        if (!tData || tData.type !== "water") {
+          this.sendErrorToSeat(
+            seatId,
+            "Ondine ne fonctionne qu'avec un Pokémon Eau.",
+          );
+          return;
+        }
+        let heads = 0;
+        let flips = 0;
+        // Cap raisonnable pour éviter une boucle pathologique (1/2 de pile à
+        // chaque lancer, donc 20 = ~1 chance sur 1M).
+        while (flips < 20) {
+          flips++;
+          const isHeads = this.coinFlip();
+          if (isHeads) {
+            heads++;
+            target.attachedEnergies.push("water");
+            this.emitCoinFlip(
+              `Ondine — lancer ${flips}`,
+              true,
+              `+1 Énergie 💧 (total ${heads})`,
+              flips,
+            );
+          } else {
+            this.emitCoinFlip(
+              `Ondine — lancer ${flips}`,
+              false,
+              heads === 0
+                ? "Aucune Énergie attachée."
+                : `Fin : ${heads} Énergie${heads > 1 ? "s" : ""} 💧 attachée${heads > 1 ? "s" : ""}.`,
+              flips,
+            );
+            break;
+          }
+        }
         consumed = true;
         break;
       }
@@ -1183,7 +1365,6 @@ export default class BattleServer implements Party.Server {
     if (!def || !att || !def.active) return;
     // Le KO est annoncé inline dans le log d'attaque (« → K.O. ! »), donc
     // pas de pushLog séparé ici.
-    void getCard(def.active.cardId);
     // Discard l'Actif (ses énergies attachées partent avec en Pocket — pas
     // remises au deck/main, juste supprimées).
     def.discard.push({
@@ -1228,8 +1409,8 @@ export default class BattleServer implements Party.Server {
       if (!s?.active) continue;
       if (s.active.statuses.includes("poisoned")) {
         s.active.damage += 10;
-        const data = getCard(s.active.cardId);
-        if (data?.kind === "pokemon" && s.active.damage >= data.hp) {
+        const data = getCardForBattle(s.active.cardId);
+        if (data && s.active.damage >= data.hp) {
           // KO inter-tours — l'adversaire incrémente son koCount (Pocket).
           const otherId: BattleSeatId = sId === "p1" ? "p2" : "p1";
           this.knockOut(otherId, sId);

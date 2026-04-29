@@ -12,9 +12,11 @@ import type {
   BattleServerMessage,
   BattleState,
   ChatMessage,
+  PokemonCard,
   PokemonCardData,
   PokemonEnergyType,
   TcgGameId,
+  TrainerCard,
 } from "@shared/types";
 import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
@@ -925,13 +927,17 @@ function BoardArea({
       {/* Active */}
       {active
         ? (() => {
-            const data = cardById.get(active.cardId);
-            if (!data || data.kind !== "pokemon") return null;
-            const handler = makeCardHandler(active, data, null);
+            // `realData` = la carte d'origine (Pokémon OU Fossile/Dresseur)
+            // pour le hover (la sidebar gère les deux via leur kind).
+            // `data` = vue "comme un Pokémon" pour le rendu board (HP, etc).
+            const realData = cardById.get(active.cardId);
+            const data = getCardForBattle(active.cardId, cardById);
+            if (!realData || !data) return null;
+            const handler = makeCardHandler(active, realData, null);
             return (
               <button
                 onClick={handler}
-                onMouseEnter={() => onHoverCard?.(data)}
+                onMouseEnter={() => onHoverCard?.(realData)}
                 onMouseLeave={() => onHoverCard?.(null)}
                 {...makeDropProps(active)}
                 className={`rounded-lg transition-all ${
@@ -964,14 +970,15 @@ function BoardArea({
               </div>
             );
           }
-          const data = cardById.get(card.cardId);
-          if (!data || data.kind !== "pokemon") return null;
-          const handler = makeCardHandler(card, data, i);
+          const realData = cardById.get(card.cardId);
+          const data = getCardForBattle(card.cardId, cardById);
+          if (!realData || !data) return null;
+          const handler = makeCardHandler(card, realData, i);
           return (
             <button
               key={i}
               onClick={handler}
-              onMouseEnter={() => onHoverCard?.(data)}
+              onMouseEnter={() => onHoverCard?.(realData)}
               onMouseLeave={() => onHoverCard?.(null)}
               {...makeDropProps(card)}
               className={`rounded-lg transition-all ${
@@ -1035,8 +1042,10 @@ function BoardCard({
   cardById: Map<string, PokemonCardData>;
   large?: boolean;
 }) {
-  const data = cardById.get(card.cardId);
-  if (!data || data.kind !== "pokemon") return null;
+  // Vue "comme un Pokémon" — pour les Fossiles, synthétise un Pokémon
+  // de Base 40 PV / Incolore.
+  const data = getCardForBattle(card.cardId, cardById);
+  if (!data) return null;
   // Pocket : carte officielle FR (tcgdex) en ratio 5:7. Overlays :
   //   • HP courant en bas (gros, rouge si dégâts)
   //   • Énergies attachées sous la carte (pastilles colorées par type)
@@ -1192,8 +1201,10 @@ function SelfControls({
   if (state.phase !== "playing") return null;
   const self = state.self;
   const active = self?.active;
-  const data = active ? cardById.get(active.cardId) : null;
-  const attacks = data?.kind === "pokemon" ? data.attacks : [];
+  // Vue Pokémon (synthétise les Fossiles avec 0 attaque) — c'est ce qu'on
+  // veut pour décider quoi rendre dans la liste « Attaques ».
+  const data = active ? getCardForBattle(active.cardId, cardById) : null;
+  const attacks = data?.attacks ?? [];
   const blocked =
     !isMyTurn ||
     !!self?.mustPromoteActive ||
@@ -1372,7 +1383,12 @@ type HandAction =
 // Cartes Dresseur supportées par le moteur. La résolution exacte des effets
 // vit côté serveur (handlePlayTrainer dans party/src/battle.ts) — ces sets
 // servent juste au client pour décider du flow d'UI (target picker ou pas).
-const TRAINER_NEEDS_TARGET = new Set<string>(["Potion", "Erika", "Pierre"]);
+const TRAINER_NEEDS_TARGET = new Set<string>([
+  "Potion",
+  "Erika",
+  "Pierre",
+  "Ondine",
+]);
 const TRAINER_NO_TARGET = new Set<string>([
   "Poké Ball",
   "Recherches Professorales",
@@ -1382,7 +1398,58 @@ const TRAINER_NO_TARGET = new Set<string>([
   "Carton Rouge",
   "Giovanni",
   "Auguste",
+  "Koga",
+  "Major Bob",
+  "Morgane",
 ]);
+
+/** Fossiles : cartes Dresseur qui se POSENT au Banc comme un Pokémon de
+ *  Base à 40 PV (au lieu de passer par battle-play-trainer). On l'autorise
+ *  côté UI via le flow d'évolution/setup. */
+const FOSSIL_NAMES = new Set<string>([
+  "Vieil Ambre",
+  "Fossile Dôme",
+  "Fossile Nautile",
+]);
+
+/** Vue "comme un Pokémon" d'une carte sur le board. Pour les vrais Pokémon,
+ *  retourne la carte telle quelle. Pour les Fossiles, synthétise un Pokémon
+ *  de Base 40 PV / Incolore / 0 attaque / coût de retraite ∞ — équivalent
+ *  client de `getCardForBattle` côté serveur. Utilisé partout où on rend
+ *  une carte sur le board (BoardArea, BoardCard, SelfControls). */
+function fossilAsPokemon(card: TrainerCard): PokemonCard {
+  return {
+    kind: "pokemon",
+    id: card.id,
+    number: card.number,
+    pokedexId: null,
+    name: card.name,
+    type: "colorless",
+    stage: "basic",
+    hp: 40,
+    retreatCost: 999,
+    weakness: null,
+    attacks: [],
+    rarity: card.rarity,
+    image: card.image,
+    illustrator: card.illustrator ?? null,
+    isEx: false,
+    pack: card.pack,
+    description:
+      "Fossile — joue comme un Pokémon de Base à 40 PV. Sans attaque, ne peut pas battre en retraite.",
+  };
+}
+
+function getCardForBattle(
+  cardId: string,
+  cardById: Map<string, PokemonCardData>,
+): PokemonCard | null {
+  const c = cardById.get(cardId);
+  if (!c) return null;
+  if (c.kind === "pokemon") return c;
+  if (FOSSIL_NAMES.has(c.name)) return fossilAsPokemon(c);
+  return null;
+}
 
 function SelfHand({
   state,
@@ -1426,6 +1493,8 @@ function SelfHand({
   const usedSupporter = self.usedSupporterThisTurn ?? false;
   // Capture pour les closures (TS perd le narrowing de `self`).
   const mustPromoteActive = !!self.mustPromoteActive;
+  const selfActive = self.active;
+  const selfBench = self.bench;
 
   /** Calcule l'action d'une carte au tour courant, ou la raison du blocage.
    *  Renvoie null pour un cas où ni jouable ni intéressant à signaler. */
@@ -1512,7 +1581,45 @@ function SelfHand({
       return null;
     }
 
-    // ── Trainer ──────────────────────────────────────────────────────
+    // ── Fossile (Item Dresseur qui se POSE comme un Basic) ───────────
+    if (FOSSIL_NAMES.has(card.name)) {
+      if (inSetup) {
+        if (!hasActive) {
+          return {
+            kind: "playable",
+            label: "→ Mettre Actif",
+            handler: () => onSetActive(i),
+          };
+        }
+        if (benchLen < benchCap) {
+          return {
+            kind: "playable",
+            label: "→ Ajouter au Banc",
+            handler: () => onAddBench(i),
+          };
+        }
+        return { kind: "blocked", reason: "Banc plein." };
+      }
+      if (!inMain) {
+        return {
+          kind: "blocked",
+          reason: !isMyTurn ? "Pas encore ton tour." : "Indisponible.",
+        };
+      }
+      if (benchLen >= benchCap) {
+        return {
+          kind: "blocked",
+          reason: `Banc plein (${benchCap}/${benchCap}).`,
+        };
+      }
+      return {
+        kind: "playable",
+        label: "→ Poser au Banc",
+        handler: () => onPlayBasic(i),
+      };
+    }
+
+    // ── Trainer "classique" (Supporter / Item / Outil / Stade) ───────
     if (inSetup) {
       return {
         kind: "blocked",
@@ -1542,6 +1649,46 @@ function SelfHand({
           };
         }
       }
+      // Erika : nécessite un Pokémon Plante blessé.
+      if (card.name === "Erika") {
+        const grassHurt = inPlay.some((c) => {
+          const d = getCardForBattle(c.cardId, cardById);
+          return d?.type === "grass" && c.damage > 0;
+        });
+        if (!grassHurt) {
+          return {
+            kind: "blocked",
+            reason: "Aucun Pokémon Plante blessé.",
+          };
+        }
+      }
+      // Pierre : nécessite Grolem ou Onix en jeu.
+      if (card.name === "Pierre") {
+        const validNames = new Set(["Grolem", "Onix"]);
+        const ok = inPlay.some((c) => {
+          const d = getCardForBattle(c.cardId, cardById);
+          return d ? validNames.has(d.name) : false;
+        });
+        if (!ok) {
+          return {
+            kind: "blocked",
+            reason: "Pas de Grolem ou Onix en jeu.",
+          };
+        }
+      }
+      // Ondine : nécessite un Pokémon Eau en jeu.
+      if (card.name === "Ondine") {
+        const water = inPlay.some((c) => {
+          const d = getCardForBattle(c.cardId, cardById);
+          return d?.type === "water";
+        });
+        if (!water) {
+          return {
+            kind: "blocked",
+            reason: "Pas de Pokémon Eau en jeu.",
+          };
+        }
+      }
       return {
         kind: "playable",
         label: "→ Choisir cible",
@@ -1549,6 +1696,57 @@ function SelfHand({
       };
     }
     if (TRAINER_NO_TARGET.has(card.name)) {
+      // Koga : Actif doit être Grotadmorv ou Smogogo, et il faut au moins un Banc.
+      if (card.name === "Koga") {
+        const activeData = selfActive
+          ? getCardForBattle(selfActive.cardId, cardById)
+          : null;
+        const validActive = new Set(["Grotadmorv", "Smogogo"]);
+        if (!activeData || !validActive.has(activeData.name)) {
+          return {
+            kind: "blocked",
+            reason: "L'Actif doit être Grotadmorv ou Smogogo.",
+          };
+        }
+        if (benchLen === 0) {
+          return {
+            kind: "blocked",
+            reason: "Pas de Banc pour remplacer ton Actif.",
+          };
+        }
+      }
+      // Major Bob : Actif doit être Raichu / Électrode / Élektek + ⚡ sur le Banc.
+      if (card.name === "Major Bob") {
+        const activeData = selfActive
+          ? getCardForBattle(selfActive.cardId, cardById)
+          : null;
+        const validActive = new Set(["Raichu", "Électrode", "Élektek"]);
+        if (!activeData || !validActive.has(activeData.name)) {
+          return {
+            kind: "blocked",
+            reason: "L'Actif doit être Raichu, Électrode ou Élektek.",
+          };
+        }
+        const hasLightningOnBench = selfBench.some((c) =>
+          c.attachedEnergies.includes("lightning"),
+        );
+        if (!hasLightningOnBench) {
+          return {
+            kind: "blocked",
+            reason: "Aucune Énergie ⚡ sur ton Banc.",
+          };
+        }
+      }
+      // Morgane : adversaire doit avoir un Banc à choisir.
+      if (card.name === "Morgane") {
+        const opp = state.opponent;
+        if (!opp || opp.bench.length === 0) {
+          return {
+            kind: "blocked",
+            reason: "L'adversaire n'a pas de Banc.",
+          };
+        }
+      }
       return {
         kind: "playable",
         label: "→ Jouer la carte",

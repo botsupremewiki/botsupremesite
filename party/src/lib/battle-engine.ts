@@ -1,7 +1,11 @@
 // Helpers communs à toutes les phases du battle Pokémon. Volontairement
 // pure-fonctionnels (pas de state) pour qu'on puisse les tester en isolation.
 
-import type { PokemonCardData, PokemonEnergyType } from "../../../shared/types";
+import type {
+  PokemonCard,
+  PokemonCardData,
+  PokemonEnergyType,
+} from "../../../shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "../../../shared/tcg-pokemon-base";
 
 /** Une carte de deck encapsulée (ce qu'on shuffle / pioche). On garde
@@ -12,13 +16,69 @@ export type DeckCard = {
   cardId: string;
 };
 
+/** Cartes Dresseur "Fossile" qui se jouent comme un Pokémon de Base à 40 PV
+ *  (Pocket : pas d'attaque, retrait impossible). Vérifié par NOM (les ids
+ *  varient entre boosters mewtwo/charizard/pikachu). */
+export const FOSSIL_NAMES = new Set<string>([
+  "Vieil Ambre",
+  "Fossile Dôme",
+  "Fossile Nautile",
+]);
+
 export function getCard(cardId: string): PokemonCardData | undefined {
   return POKEMON_BASE_SET_BY_ID.get(cardId);
 }
 
+/** Comme `getCard` mais retourne un Pokémon synthétique pour les Fossiles
+ *  (40 PV / type Incolore / 0 attaque / coût de retraite ∞). Utilisé partout
+ *  dans le moteur de combat pour lire HP / type / attaques d'un Pokémon
+ *  posé sur le board, pour que les Fossiles se comportent comme des
+ *  Pokémon de Base sans avoir à dupliquer la logique. */
+export function getCardForBattle(cardId: string): PokemonCard | undefined {
+  const c = POKEMON_BASE_SET_BY_ID.get(cardId);
+  if (!c) return undefined;
+  if (c.kind === "pokemon") return c;
+  if (c.kind === "trainer" && FOSSIL_NAMES.has(c.name)) {
+    // Synthétise un Pokémon depuis les données Dresseur. 999 = "ne peut
+    // jamais battre en retraite" (limite pratique).
+    return {
+      kind: "pokemon",
+      id: c.id,
+      number: c.number,
+      pokedexId: null,
+      name: c.name,
+      type: "colorless",
+      stage: "basic",
+      hp: 40,
+      retreatCost: 999,
+      weakness: null,
+      attacks: [],
+      rarity: c.rarity,
+      image: c.image,
+      illustrator: c.illustrator ?? null,
+      isEx: false,
+      pack: c.pack,
+      description:
+        "Fossile — joue comme un Pokémon de Base à 40 PV. Sans attaque, ne peut pas battre en retraite.",
+    };
+  }
+  return undefined;
+}
+
+/** Vrai Pokémon de Base (carte `kind: "pokemon"` stage basic). Utilisé par
+ *  Poké Ball qui cherche spécifiquement « un Pokémon de base ». */
 export function isBasicPokemon(cardId: string): boolean {
   const c = getCard(cardId);
   return c?.kind === "pokemon" && c.stage === "basic";
+}
+
+/** Carte jouable comme Pokémon de Base : vrai Basic OU Fossile. C'est ce
+ *  qu'on veut pour le setup, le placement au Banc, le mulligan check, etc. */
+export function isPlayableAsBasic(cardId: string): boolean {
+  const c = getCard(cardId);
+  if (!c) return false;
+  if (c.kind === "pokemon") return c.stage === "basic";
+  return c.kind === "trainer" && FOSSIL_NAMES.has(c.name);
 }
 
 export function isPokemon(cardId: string): boolean {
@@ -52,10 +112,10 @@ export function expandDeck(
   return out;
 }
 
-/** Vérifie qu'au moins 1 Pokémon de Base est dans la main. Sinon, le
- *  joueur fait mulligan. */
+/** Vérifie qu'au moins 1 Pokémon de Base (ou Fossile, qui se joue comme
+ *  un Pokémon de Base) est dans la main. Sinon, le joueur fait mulligan. */
 export function handHasBasic(hand: DeckCard[]): boolean {
-  return hand.some((c) => isBasicPokemon(c.cardId));
+  return hand.some((c) => isPlayableAsBasic(c.cardId));
 }
 
 /** Pioche `n` cartes en haut du deck. Mute le deck. */
