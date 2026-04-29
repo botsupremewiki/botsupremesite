@@ -1259,6 +1259,9 @@ export type RuneterraBattleUnit = {
   keywords: string[]; // mot-clés actifs (refs anglaises)
   level: number; // 1 ou 2 (champions). 1 par défaut.
   playedThisRound: boolean; // ne peut pas attaquer le tour où on est posé
+  // Phase 3.4 : Barrière consommée ce round (réinitialisée à startRound).
+  // Inerte si l'unité n'a pas le mot-clé "Barrier".
+  barrierUsed: boolean;
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de

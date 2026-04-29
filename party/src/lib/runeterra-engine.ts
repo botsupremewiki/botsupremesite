@@ -133,7 +133,14 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     keywords: card.keywordRefs ?? [],
     level: 1,
     playedThisRound: true,
+    barrierUsed: false,
   };
+}
+
+/** Helper : l'unité a-t-elle ce mot-clé actif ? Match case-sensitive sur
+ *  les keywordRefs anglais (Burst, QuickStrike, Tough, etc.). */
+export function hasKeyword(unit: RuneterraBattleUnit, kw: string): boolean {
+  return unit.keywords.includes(kw);
 }
 
 // ────────────────────── État initial / mulligan ──────────────────────────
@@ -323,8 +330,13 @@ function refreshPlayerForRound(
     newDeck = newDeck.slice(1);
     newHand = [...newHand, drawn];
   }
-  // Reset playedThisRound (les unités déjà sur le banc peuvent maintenant attaquer).
-  const newBench = player.bench.map((u) => ({ ...u, playedThisRound: false }));
+  // Reset playedThisRound (les unités déjà sur le banc peuvent maintenant
+  // attaquer) et barrierUsed (les Barrières se rechargent chaque round).
+  const newBench = player.bench.map((u) => ({
+    ...u,
+    playedThisRound: false,
+    barrierUsed: false,
+  }));
   return {
     ...player,
     deck: newDeck,
@@ -341,9 +353,11 @@ function refreshPlayerForRound(
  *  round suivant. */
 export function endRound(state: InternalState): InternalState {
   const cfg = RUNETERRA_BATTLE_CONFIG;
+  // 1) Bank spell mana
+  // 2) Regeneration : les unités avec ce mot-clé soignent tous leurs dégâts
   const updatedPlayers: [InternalPlayer, InternalPlayer] = [
-    bankSpellMana(state.players[0]),
-    bankSpellMana(state.players[1]),
+    applyRegeneration(bankSpellMana(state.players[0])),
+    applyRegeneration(bankSpellMana(state.players[1])),
   ];
 
   // Vérifier game over.
@@ -382,6 +396,19 @@ function bankSpellMana(player: InternalPlayer): InternalPlayer {
     mana: 0, // sera réassignée dans startRound
     spellMana: banked,
   };
+}
+
+/** Régénération (mot-clé Regeneration) : à la fin de chaque round, les
+ *  unités avec ce mot-clé soignent tous leurs dégâts. Appliqué dans
+ *  endRound avant que le round suivant démarre. */
+function applyRegeneration(player: InternalPlayer): InternalPlayer {
+  const newBench = player.bench.map((u) => {
+    if (u.damage > 0 && hasKeyword(u, "Regeneration")) {
+      return { ...u, damage: 0 };
+    }
+    return u;
+  });
+  return { ...player, bench: newBench };
 }
 
 // ────────────────────── Pioche / utilitaires ─────────────────────────────
@@ -763,9 +790,12 @@ export function assignBlockers(
     };
   }
   const defender = state.players[seatIdx];
+  const attackerSeat = state.attackInProgress.attackerSeatIdx;
+  const attacker = state.players[attackerSeat];
   // Vérifie unicité des bloqueurs (un bloqueur ne peut bloquer qu'1 lane).
   const blockerSet = new Set<string>();
-  for (const b of blockerAssignments) {
+  for (let i = 0; i < blockerAssignments.length; i++) {
+    const b = blockerAssignments[i];
     if (b === null) continue;
     if (blockerSet.has(b)) {
       return { ok: false, error: `Le bloqueur ${b} est assigné à plusieurs lanes.` };
@@ -774,6 +804,36 @@ export function assignBlockers(
     const unit = defender.bench.find((u) => u.uid === b);
     if (!unit) {
       return { ok: false, error: `Bloqueur introuvable sur ton banc : ${b}.` };
+    }
+    // Validation Elusive / Fearsome : l'attaquant impose des contraintes
+    // sur quels bloqueurs sont légaux.
+    const lane = lanes[i];
+    const attackerUnit = attacker.bench.find(
+      (u) => u.uid === lane.attackerUid,
+    );
+    if (!attackerUnit) {
+      return {
+        ok: false,
+        error: `Attaquant introuvable : ${lane.attackerUid}.`,
+      };
+    }
+    const attackerName =
+      getCard(attackerUnit.cardCode)?.name ?? attackerUnit.cardCode;
+    const blockerName = getCard(unit.cardCode)?.name ?? unit.cardCode;
+    if (
+      hasKeyword(attackerUnit, "Elusive") &&
+      !hasKeyword(unit, "Elusive")
+    ) {
+      return {
+        ok: false,
+        error: `${attackerName} est Insaisissable — seul un bloqueur Insaisissable peut le bloquer (${blockerName} ne l'est pas).`,
+      };
+    }
+    if (hasKeyword(attackerUnit, "Fearsome") && unit.power < 3) {
+      return {
+        ok: false,
+        error: `${attackerName} est Redoutable — bloqueur ${blockerName} a une puissance < 3.`,
+      };
     }
   }
 
@@ -789,13 +849,37 @@ export function assignBlockers(
   };
 }
 
+/** Applique des dégâts à une unité en respectant Tough (-1) et Barrier
+ *  (annule la 1re instance ce round). Mutate l'objet target en place.
+ *  Retourne le nombre de dégâts effectivement infligés (utile pour
+ *  Lifesteal). */
+function applyDamageToUnit(
+  target: RuneterraBattleUnit,
+  rawAmount: number,
+): number {
+  if (rawAmount <= 0) return 0;
+  // Barrier annule la 1re instance entière (avant Tough).
+  if (hasKeyword(target, "Barrier") && !target.barrierUsed) {
+    target.barrierUsed = true;
+    return 0;
+  }
+  let amount = rawAmount;
+  if (hasKeyword(target, "Tough")) {
+    amount = Math.max(0, amount - 1);
+  }
+  target.damage += amount;
+  return amount;
+}
+
 /** Résolution interne du combat. Pour chaque lane :
- *   • Attaquant + bloqueur s'infligent mutuellement leur puissance (simultané)
- *   • Si pas de bloqueur, l'attaquant inflige sa puissance au nexus ennemi
+ *   • Si bloqueur : attaquant + bloqueur s'infligent leur puissance, en
+ *     respectant Quick Strike (timing), Tough (-1), Barrier (annule 1re
+ *     instance), Overwhelm (excès → nexus), Lifesteal (heal nexus du
+ *     porteur)
+ *   • Si pas de bloqueur, l'attaquant frappe le nexus ennemi (avec
+ *     Lifesteal si applicable)
  *  Puis retire les unités mortes, clear attackInProgress, redonne la
  *  priorité à l'attaquant, vérifie game over.
- *
- *  Phase 3.3 : pas de Quick Strike, Overwhelm, etc. — simultané strict.
  */
 function resolveCombat(state: InternalState): InternalState {
   if (state.attackInProgress === null) return state;
@@ -804,6 +888,7 @@ function resolveCombat(state: InternalState): InternalState {
   let attackerPlayer = state.players[attackerSeat];
   let defenderPlayer = state.players[defenderSeat];
   let nexusDamageTotal = 0;
+  let attackerNexusHeal = 0; // Lifesteal de l'attaquant
   const events: string[] = [];
 
   // Indexe les unités pour mutation locale.
@@ -819,20 +904,78 @@ function resolveCombat(state: InternalState): InternalState {
       if (!blocker) {
         // Bloqueur disparu (cas pathologique) : nexus prend les dégâts.
         nexusDamageTotal += attacker.power;
+        if (hasKeyword(attacker, "Lifesteal")) {
+          attackerNexusHeal += attacker.power;
+        }
         events.push(
           `${attackerName} frappe le nexus pour ${attacker.power} (bloqueur introuvable).`,
         );
         continue;
       }
       const blockerName = getCard(blocker.cardCode)?.name ?? blocker.cardCode;
-      // Résolution simultanée : chaque unité prend la puissance de l'autre.
-      attacker.damage += blocker.power;
-      blocker.damage += attacker.power;
+      const aQS = hasKeyword(attacker, "QuickStrike");
+      const bQS = hasKeyword(blocker, "QuickStrike");
+
+      // Quick Strike asymétrique = celui qui l'a frappe en premier.
+      // Si les 2 ou aucun, simultané. La cible peut mourir avant de rendre
+      // les dégâts.
+      let blockerHealthBefore = blocker.health - blocker.damage;
+      let dealtToBlocker = 0;
+      let dealtToAttacker = 0;
+
+      if (aQS && !bQS) {
+        // Attaquant frappe en premier
+        dealtToBlocker = applyDamageToUnit(blocker, attacker.power);
+        const blockerDead = blocker.damage >= blocker.health;
+        if (!blockerDead) {
+          dealtToAttacker = applyDamageToUnit(attacker, blocker.power);
+        }
+      } else if (bQS && !aQS) {
+        // Bloqueur frappe en premier
+        dealtToAttacker = applyDamageToUnit(attacker, blocker.power);
+        const attackerDead = attacker.damage >= attacker.health;
+        if (!attackerDead) {
+          dealtToBlocker = applyDamageToUnit(blocker, attacker.power);
+        }
+      } else {
+        // Simultané (les 2 QS ou aucun)
+        dealtToBlocker = applyDamageToUnit(blocker, attacker.power);
+        dealtToAttacker = applyDamageToUnit(attacker, blocker.power);
+      }
+
+      // Overwhelm : si bloqueur tué et attaquant a Overwhelm, l'excès
+      // (puissance attaquant - PV restants du bloqueur AVANT le coup)
+      // file au nexus.
+      if (
+        hasKeyword(attacker, "Overwhelm") &&
+        blocker.damage >= blocker.health
+      ) {
+        const excess = Math.max(0, attacker.power - blockerHealthBefore);
+        if (excess > 0) {
+          nexusDamageTotal += excess;
+          events.push(
+            `${attackerName} (Surpuissance) overflow ${excess} dégâts au nexus.`,
+          );
+        }
+      }
+
+      // Lifesteal : l'attaquant heal son nexus pour les dégâts effectivement
+      // infligés au bloqueur (et au nexus en cas d'Overwhelm).
+      if (hasKeyword(attacker, "Lifesteal")) {
+        attackerNexusHeal += dealtToBlocker;
+      }
+
       events.push(
-        `${attackerName} (${attacker.power}|${attacker.health - attacker.damage}) ↔ ${blockerName} (${blocker.power}|${blocker.health - blocker.damage}).`,
+        `${attackerName} (${attacker.power}|${attacker.health - attacker.damage})${aQS ? " QS" : ""} ↔ ${blockerName} (${blocker.power}|${blocker.health - blocker.damage})${bQS ? " QS" : ""}.`,
       );
+      // dealtToAttacker conservé pour debug futur (Lifesteal sur bloqueurs).
+      void dealtToAttacker;
     } else {
+      // Aucun bloqueur : nexus.
       nexusDamageTotal += attacker.power;
+      if (hasKeyword(attacker, "Lifesteal")) {
+        attackerNexusHeal += attacker.power;
+      }
       events.push(`${attackerName} frappe le nexus pour ${attacker.power}.`);
     }
   }
@@ -857,9 +1000,24 @@ function resolveCombat(state: InternalState): InternalState {
     return true;
   });
 
-  // Applique les dégâts au nexus du défenseur.
+  // Applique les dégâts au nexus du défenseur + Lifesteal heal de
+  // l'attaquant (capped à initialNexusHealth).
+  const cfg = RUNETERRA_BATTLE_CONFIG;
   const newDefenderNexus = defenderPlayer.nexusHealth - nexusDamageTotal;
-  attackerPlayer = { ...attackerPlayer, bench: newAttackerBench };
+  const newAttackerNexus = Math.min(
+    cfg.initialNexusHealth,
+    attackerPlayer.nexusHealth + attackerNexusHeal,
+  );
+  if (attackerNexusHeal > 0) {
+    events.push(
+      `${attackerPlayer.username} regagne ${attackerNexusHeal} PV nexus (Vol de vie).`,
+    );
+  }
+  attackerPlayer = {
+    ...attackerPlayer,
+    bench: newAttackerBench,
+    nexusHealth: newAttackerNexus,
+  };
   defenderPlayer = {
     ...defenderPlayer,
     bench: newDefenderBench,
