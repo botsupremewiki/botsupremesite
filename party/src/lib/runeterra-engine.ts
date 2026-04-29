@@ -80,7 +80,7 @@ export type InternalPlayer = {
   nexusHealth: number;
   attackToken: boolean;
   hasMulliganed: boolean;
-  // Phase 3.5 + 3.9c : compteurs globaux pour conditions de level-up.
+  // Phase 3.5 + 3.9c + 3.10 : compteurs globaux pour conditions de level-up.
   championCounters: {
     alliesDied: number; // pour Lucian, Hécarim, etc.
     spellsCast: number; // pour Karma, etc.
@@ -91,6 +91,9 @@ export type InternalPlayer = {
     barriersGranted: number; // grant Barrier (Shen : 5 barrières)
     enemyTargetCount: number; // sorts ciblant un ennemi (Ezreal : 8+)
     enemiesFrostbitten: number; // frostbite-enemy résolu (Ashe : 5)
+    // Phase 3.10
+    alliesSurvivedDamage: number; // alliés qui ont survécu à des dégâts ce combat (Vladimir : 5)
+    ephemeralAttackers: number; // alliés Éphémères ayant attaqué (Hécarim : 7)
   };
 };
 
@@ -158,6 +161,7 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     barrierUsed: false,
     strikes: 0,
     kills: 0,
+    damageTaken: 0,
     endOfRoundPowerBuff: 0,
     endOfRoundHealthBuff: 0,
     frozen: false,
@@ -232,6 +236,8 @@ export function createInitialState(
       barriersGranted: 0,
       enemyTargetCount: 0,
       enemiesFrostbitten: 0,
+      alliesSurvivedDamage: 0,
+      ephemeralAttackers: 0,
     },
   });
 
@@ -1213,7 +1219,20 @@ export function declareAttack(
   }));
 
   // Consomme le jeton d'attaque.
-  const updatedPlayer: InternalPlayer = { ...player, attackToken: false };
+  // Phase 3.10 : ephemeralAttackers compteur (Hécarim).
+  const ephemeralCount = attackerUids.reduce((n, uid) => {
+    const u = player.bench.find((x) => x.uid === uid);
+    return n + (u && hasKeyword(u, "Ephemeral") ? 1 : 0);
+  }, 0);
+  const updatedPlayer: InternalPlayer = {
+    ...player,
+    attackToken: false,
+    championCounters: {
+      ...player.championCounters,
+      ephemeralAttackers:
+        player.championCounters.ephemeralAttackers + ephemeralCount,
+    },
+  };
   const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
     InternalPlayer,
     InternalPlayer,
@@ -1345,7 +1364,7 @@ export function assignBlockers(
 /** Applique des dégâts à une unité en respectant Tough (-1) et Barrier
  *  (annule la 1re instance ce round). Mutate l'objet target en place.
  *  Retourne le nombre de dégâts effectivement infligés (utile pour
- *  Lifesteal). */
+ *  Lifesteal). Phase 3.10 : trace damageTaken pour Braum level-up. */
 function applyDamageToUnit(
   target: RuneterraBattleUnit,
   rawAmount: number,
@@ -1361,6 +1380,7 @@ function applyDamageToUnit(
     amount = Math.max(0, amount - 1);
   }
   target.damage += amount;
+  target.damageTaken += amount;
   return amount;
 }
 
@@ -1387,6 +1407,11 @@ function resolveCombat(state: InternalState): InternalState {
   // Indexe les unités pour mutation locale.
   const attackerBench = attackerPlayer.bench.map((u) => ({ ...u }));
   const defenderBench = defenderPlayer.bench.map((u) => ({ ...u }));
+  // Phase 3.10 : snapshot des dégâts pré-combat pour calculer
+  // alliesSurvivedDamage (Vladimir) après résolution.
+  const preCombatDamage = new Map<string, number>();
+  for (const u of attackerBench) preCombatDamage.set(u.uid, u.damage);
+  for (const u of defenderBench) preCombatDamage.set(u.uid, u.damage);
 
   for (const lane of state.attackInProgress.lanes) {
     const attacker = attackerBench.find((u) => u.uid === lane.attackerUid);
@@ -1528,14 +1553,20 @@ function resolveCombat(state: InternalState): InternalState {
 
   // Retire les unités mortes (damage >= health) et incrémente alliesDied
   // sur le joueur correspondant (Phase 3.5 : compteur Lucian etc.).
-  // Phase 3.9b : on collecte les morts pour déclencher Last Breath après
-  // le state update principal.
+  // Phase 3.9b : collecte les morts pour Last Breath.
+  // Phase 3.10 : Tryndamere special — ne meurt pas, gagne un niveau à la place.
   const attackerDied = { count: 0 };
   const defenderDied = { count: 0 };
   const attackerDeadUnits: RuneterraBattleUnit[] = [];
   const defenderDeadUnits: RuneterraBattleUnit[] = [];
   const newAttackerBench = attackerBench.filter((u) => {
     if (u.damage >= u.health) {
+      if (tryReviveOnDeath(u)) {
+        events.push(
+          `${getCard(u.cardCode)?.name ?? u.cardCode} gagne un niveau au lieu de mourir !`,
+        );
+        return true; // reste sur le banc
+      }
       events.push(
         `${getCard(u.cardCode)?.name ?? u.cardCode} (attaquant) meurt.`,
       );
@@ -1547,6 +1578,12 @@ function resolveCombat(state: InternalState): InternalState {
   });
   const newDefenderBench = defenderBench.filter((u) => {
     if (u.damage >= u.health) {
+      if (tryReviveOnDeath(u)) {
+        events.push(
+          `${getCard(u.cardCode)?.name ?? u.cardCode} gagne un niveau au lieu de mourir !`,
+        );
+        return true;
+      }
       events.push(
         `${getCard(u.cardCode)?.name ?? u.cardCode} (défenseur) meurt.`,
       );
@@ -1556,6 +1593,19 @@ function resolveCombat(state: InternalState): InternalState {
     }
     return true;
   });
+
+  // Phase 3.10 : alliesSurvivedDamage compteur (Vladimir) — alliés qui
+  // ont pris des dégâts ce combat MAIS ont survécu.
+  let attackerSurvivedDmg = 0;
+  for (const u of newAttackerBench) {
+    const pre = preCombatDamage.get(u.uid) ?? 0;
+    if (u.damage > pre) attackerSurvivedDmg++;
+  }
+  let defenderSurvivedDmg = 0;
+  for (const u of newDefenderBench) {
+    const pre = preCombatDamage.get(u.uid) ?? 0;
+    if (u.damage > pre) defenderSurvivedDmg++;
+  }
 
   // Applique les dégâts au nexus du défenseur + Lifesteal heal de
   // l'attaquant (capped à initialNexusHealth).
@@ -1573,6 +1623,7 @@ function resolveCombat(state: InternalState): InternalState {
   // Phase 3.9c : unitsDied = toutes les morts (alliées + ennemies) — pour
   // Thresh. On crédite chaque joueur de la totalité (ils voient les mêmes
   // morts dans la partie).
+  // Phase 3.10 : alliesSurvivedDamage par côté.
   const totalDied = attackerDied.count + defenderDied.count;
   attackerPlayer = {
     ...attackerPlayer,
@@ -1583,6 +1634,9 @@ function resolveCombat(state: InternalState): InternalState {
       alliesDied:
         attackerPlayer.championCounters.alliesDied + attackerDied.count,
       unitsDied: attackerPlayer.championCounters.unitsDied + totalDied,
+      alliesSurvivedDamage:
+        attackerPlayer.championCounters.alliesSurvivedDamage +
+        attackerSurvivedDmg,
     },
   };
   defenderPlayer = {
@@ -1594,6 +1648,9 @@ function resolveCombat(state: InternalState): InternalState {
       alliesDied:
         defenderPlayer.championCounters.alliesDied + defenderDied.count,
       unitsDied: defenderPlayer.championCounters.unitsDied + totalDied,
+      alliesSurvivedDamage:
+        defenderPlayer.championCounters.alliesSurvivedDamage +
+        defenderSurvivedDmg,
     },
   };
 
@@ -1646,6 +1703,31 @@ function resolveCombat(state: InternalState): InternalState {
 }
 
 // ────────────────────── Phase 3.5 : level-up champions ───────────────────
+
+/** Phase 3.10 : Tryndamere special — au lieu de mourir, il gagne un niveau
+ *  et reste sur le banc à pleine vie. Mutate l'unité en place et retourne
+ *  true si le revive a été appliqué (skip le retrait du banc).
+ *
+ *  Pattern extensible si d'autres champions ajoutent un "death-replace"
+ *  trigger (ex Anivia → Œuf d'Anivia est différent : revive AS DIFFERENT
+ *  CARD plutôt que level-up — futur 3.10.x). */
+function tryReviveOnDeath(u: RuneterraBattleUnit): boolean {
+  // Tryndamere niveau 1
+  if (u.cardCode === "01FR039" && u.level === 1) {
+    const lvl2 = getCard("01FR039T2");
+    if (lvl2 && lvl2.type === "Unit") {
+      u.cardCode = "01FR039T2";
+      u.power = lvl2.attack ?? u.power;
+      u.health = lvl2.health ?? u.health;
+      u.keywords = lvl2.keywordRefs ?? u.keywords;
+      u.level = 2;
+      u.damage = 0;
+      return true;
+    }
+  }
+  return false;
+}
+
 
 /** Registry des conditions de level-up. Chaque champion a une `check`
  *  pure-fonction qui regarde l'état et l'unité, et retourne true si la
@@ -1759,6 +1841,51 @@ const LEVEL_UP_REGISTRY: Record<
     levelUpCardCode: "01FR038T2",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.enemiesFrostbitten >= 5,
+  },
+
+  // ── Phase 3.10
+  // Braum (Freljord) — « J'ai survécu à au moins 10 pts de dégâts au total. »
+  "01FR009": {
+    levelUpCardCode: "01FR009T2",
+    check: (_s, u) => u.damageTaken >= 10,
+  },
+  // Vladimir (Noxus) — « Au moins 5 alliés ont survécu à des dégâts. »
+  "01NX006": {
+    levelUpCardCode: "01NX006T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.alliesSurvivedDamage >= 5,
+  },
+  // Hécarim (Îles obscures) — « Vous avez attaqué avec au moins 7 alliés
+  // éphémères. »
+  "01SI042": {
+    levelUpCardCode: "01SI042T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.ephemeralAttackers >= 7,
+  },
+  // Elise (Îles obscures) — « Début du round : vous avez au moins 3 autres
+  // araignées. » Simplifié : check à chaque state update (au moment où la
+  // condition est remplie, level-up se déclenche — pas strictement « début
+  // de round » mais effet équivalent).
+  "01SI053": {
+    levelUpCardCode: "01SI053T2",
+    check: (s, u, seat) => {
+      let spiders = 0;
+      for (const other of s.players[seat].bench) {
+        if (other.uid === u.uid) continue; // exclure Elise elle-même
+        const card = getCard(other.cardCode);
+        if (card?.subtypes?.includes("ARAIGNÉE")) spiders++;
+      }
+      return spiders >= 3;
+    },
+  },
+  // Tryndamere (Freljord) : level-up déclenché par tryReviveOnDeath() dans
+  // resolveCombat (special death-replace). Pas via cette registry — mais
+  // on note ici pour clarté future. Si on veut le check générique aussi
+  // (ex pour `checkLevelUps()` post-combat sur un Tryndamere déjà mort),
+  // ajouter une condition false :
+  "01FR039": {
+    levelUpCardCode: "01FR039T2",
+    check: () => false, // jamais via checkLevelUps — handle via tryReviveOnDeath
   },
 
   // TODO Phase 3.8d.x — Yasuo (étourdis/rappelés), Zed (Ombre Living strike),
