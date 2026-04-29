@@ -14,8 +14,13 @@ import type {
   RuneterraCardData,
   RuneterraPlayerPublicState,
   RuneterraSelfState,
+  SpellEffect,
 } from "../../../shared/types";
-import { RUNETERRA_BATTLE_CONFIG } from "../../../shared/types";
+import {
+  RUNETERRA_BATTLE_CONFIG,
+  RUNETERRA_SPELL_EFFECTS,
+  getSpellTargetSide,
+} from "../../../shared/types";
 import { RUNETERRA_BASE_SET_BY_CODE } from "../../../shared/tcg-runeterra-base";
 
 /** Une carte de deck encapsulée (uid unique pour l'instance, cardCode pour
@@ -146,6 +151,8 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     barrierUsed: false,
     strikes: 0,
     kills: 0,
+    endOfRoundPowerBuff: 0,
+    endOfRoundHealthBuff: 0,
   };
 }
 
@@ -372,10 +379,11 @@ function refreshPlayerForRound(
 export function endRound(state: InternalState): InternalState {
   const cfg = RUNETERRA_BATTLE_CONFIG;
   // 1) Bank spell mana
-  // 2) Regeneration : les unités avec ce mot-clé soignent tous leurs dégâts
+  // 2) Expire round-only buffs (Phase 3.7)
+  // 3) Regeneration : les unités avec ce mot-clé soignent tous leurs dégâts
   const updatedPlayers: [InternalPlayer, InternalPlayer] = [
-    applyRegeneration(bankSpellMana(state.players[0])),
-    applyRegeneration(bankSpellMana(state.players[1])),
+    applyRegeneration(expireRoundBuffs(bankSpellMana(state.players[0]))),
+    applyRegeneration(expireRoundBuffs(bankSpellMana(state.players[1]))),
   ];
 
   // Vérifier game over.
@@ -425,6 +433,22 @@ function applyRegeneration(player: InternalPlayer): InternalPlayer {
       return { ...u, damage: 0 };
     }
     return u;
+  });
+  return { ...player, bench: newBench };
+}
+
+/** Phase 3.7 : annule les buffs round-only à la fin du round. Soustrait
+ *  endOfRoundPowerBuff/HealthBuff de power/health, puis reset les deltas. */
+function expireRoundBuffs(player: InternalPlayer): InternalPlayer {
+  const newBench = player.bench.map((u) => {
+    if (u.endOfRoundPowerBuff === 0 && u.endOfRoundHealthBuff === 0) return u;
+    return {
+      ...u,
+      power: u.power - u.endOfRoundPowerBuff,
+      health: u.health - u.endOfRoundHealthBuff,
+      endOfRoundPowerBuff: 0,
+      endOfRoundHealthBuff: 0,
+    };
   });
   return { ...player, bench: newBench };
 }
@@ -612,20 +636,20 @@ export function playUnit(
   };
 }
 
-/** Joue un sort depuis la main.
+/** Joue un sort depuis la main avec ciblage optionnel (Phase 3.7).
  *   • Vérifie phase=round, c'est ton tour, hand index valide, carte est Spell
  *   • Vérifie mana + spellMana >= cost (mana utilisée d'abord, puis spellMana)
- *   • Déduit le coût, retire de la main
+ *   • Si le sort a un effet enregistré dans SPELL_EFFECT_REGISTRY :
+ *     - Vérifie que le ciblage est correct (allié/ennemi/aucun selon l'effet)
+ *     - Applique l'effet via le resolver
+ *   • Sinon, le sort se joue sans effet (mana déduite, retiré de la main)
  *   • Reset consecutivePasses, switch priorité à l'adversaire
- *
- *  NOTE Phase 3.2 : pas de spell stack ni de résolution d'effets. Le sort
- *  est juste retiré de la main + mana déduite. La résolution effective des
- *  effets viendra en Phase 3.4 avec les keywords.
  */
 export function playSpell(
   state: InternalState,
   seatIdx: 0 | 1,
   handIndex: number,
+  targetUid?: string | null,
 ): EngineResult {
   if (state.phase !== "round") {
     return { ok: false, error: "La partie n'est pas en round." };
@@ -653,6 +677,13 @@ export function playSpell(
     };
   }
 
+  // Phase 3.7 : valide le ciblage si le sort en a besoin.
+  const effect = RUNETERRA_SPELL_EFFECTS[handCard.cardCode];
+  if (effect) {
+    const validation = validateSpellTarget(state, seatIdx, effect, targetUid);
+    if (!validation.ok) return { ok: false, error: validation.error };
+  }
+
   // Mana standard d'abord, spellMana en complément.
   const fromMana = Math.min(card.cost, player.mana);
   const fromSpellMana = card.cost - fromMana;
@@ -672,25 +703,152 @@ export function playSpell(
     },
   };
 
-  const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
+  let newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
     InternalPlayer,
     InternalPlayer,
   ];
   newPlayers[seatIdx] = updatedPlayer;
 
+  // Applique l'effet enregistré.
+  let intermediateState: InternalState = {
+    ...state,
+    players: newPlayers,
+  };
+  if (effect) {
+    intermediateState = applySpellEffect(
+      intermediateState,
+      seatIdx,
+      effect,
+      targetUid ?? null,
+    );
+    newPlayers = intermediateState.players;
+  }
+
   return {
     ok: true,
     state: checkLevelUps({
-      ...state,
-      players: newPlayers,
+      ...intermediateState,
       activeSeatIdx: otherSeat(seatIdx),
       consecutivePasses: 0,
       log: [
-        ...state.log,
+        ...intermediateState.log,
         `${player.username} lance ${card.name} (coût ${card.cost}).`,
       ],
     }),
   };
+}
+
+// ────────────────────── Phase 3.7 : résolution des sorts ────────────────
+
+/** Validation serveur : la cible passée par le client est-elle légale pour
+ *  cet effet ? (le client utilise getSpellTargetSide pour piloter l'UI). */
+function validateSpellTarget(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  effect: SpellEffect,
+  targetUid: string | null | undefined,
+): { ok: true } | { ok: false; error: string } {
+  const side = getSpellTargetSide(effect);
+  if (side === "none") return { ok: true };
+  if (!targetUid) return { ok: false, error: "Ce sort nécessite une cible." };
+  const caster = state.players[casterSeat];
+  const opponent = state.players[otherSeat(casterSeat)];
+  if (side === "ally") {
+    const allyUnit = caster.bench.find((u) => u.uid === targetUid);
+    if (!allyUnit) {
+      return { ok: false, error: "La cible doit être un allié sur ton banc." };
+    }
+    return { ok: true };
+  }
+  if (side === "enemy") {
+    const enemyUnit = opponent.bench.find((u) => u.uid === targetUid);
+    if (!enemyUnit) {
+      return { ok: false, error: "La cible doit être une unité ennemie." };
+    }
+    return { ok: true };
+  }
+  // any
+  const found =
+    caster.bench.find((u) => u.uid === targetUid) ??
+    opponent.bench.find((u) => u.uid === targetUid);
+  if (!found) {
+    return { ok: false, error: "La cible doit être une unité." };
+  }
+  return { ok: true };
+}
+
+function applySpellEffect(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  effect: SpellEffect,
+  targetUid: string | null,
+): InternalState {
+  if (!targetUid) return state;
+  const oppSeat = otherSeat(casterSeat);
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+
+  switch (effect.type) {
+    case "buff-ally-round": {
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "grant-keyword-ally": {
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        if (u.keywords.includes(effect.keyword)) return u;
+        return { ...u, keywords: [...u.keywords, effect.keyword] };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "deal-damage-anywhere": {
+      // Cherche cible des deux côtés.
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else {
+        const oppUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) return state;
+      const player = newPlayers[targetSeat];
+      const newBench = player.bench
+        .map((u) => {
+          if (u.uid !== targetUid) return u;
+          const updated = { ...u };
+          applyDamageToUnit(updated, effect.amount);
+          return updated;
+        })
+        .filter((u) => u.damage < u.health);
+      newPlayers[targetSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+  }
 }
 
 /** Le joueur actif passe la priorité à l'adversaire. Si les 2 joueurs ont

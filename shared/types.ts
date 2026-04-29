@@ -1265,6 +1265,10 @@ export type RuneterraBattleUnit = {
   // Phase 3.5 : compteurs pour conditions de level-up champion.
   strikes: number; // nombre de fois où cette unité a frappé en combat
   kills: number; // ennemis qu'elle a tués au combat
+  // Phase 3.7 : buffs temporaires expirant à endRound (les buffs permanents
+  // sont déjà appliqués sur power/health). Defaults à 0.
+  endOfRoundPowerBuff: number;
+  endOfRoundHealthBuff: number;
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de
@@ -1328,7 +1332,13 @@ export const RUNETERRA_BATTLE_CONFIG = {
 export type RuneterraBattleClientMessage =
   | { type: "lor-mulligan"; replaceIndices: number[] }
   | { type: "lor-play-unit"; handIndex: number }
-  | { type: "lor-play-spell"; handIndex: number }
+  | {
+      type: "lor-play-spell";
+      handIndex: number;
+      // Phase 3.7 : uid d'unité ciblée (allié ou ennemi selon le sort) ou
+      // null pour les sorts sans cible. Phase 3.7+ ajoutera nexus targets.
+      targetUid?: string | null;
+    }
   | { type: "lor-declare-attack"; attackerUids: string[] }
   | { type: "lor-assign-blockers"; blockerUids: (string | null)[] }
   | { type: "lor-pass" }
@@ -1342,6 +1352,37 @@ export type RuneterraBattleServerMessage =
     }
   | { type: "lor-battle-state"; state: RuneterraBattleState }
   | { type: "lor-battle-error"; message: string };
+
+// ─── Effets de sorts LoR (Phase 3.7) ─────────────────────────────────────
+// Registry partagé serveur+client : le client connaît les effets pour
+// piloter le mode targeting (savoir quel côté est valide), le serveur
+// résout l'effet via runeterra-engine.applySpellEffect.
+
+export type SpellEffect =
+  | { type: "buff-ally-round"; power: number; health: number }
+  | { type: "grant-keyword-ally"; keyword: string }
+  | { type: "deal-damage-anywhere"; amount: number };
+
+export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
+  // Frappe rayonnante (Demacia, coût 1, Burst) :
+  // « Conférez +1|+1 à un allié pour ce round. »
+  "01DE018": { type: "buff-ally-round", power: 1, health: 1 },
+  // Cotte de mailles (Demacia, coût 1, Burst) :
+  // « Octroyez Robuste à un allié. »
+  "01DE013": { type: "grant-keyword-ally", keyword: "Tough" },
+};
+
+export type SpellTargetSide = "ally" | "enemy" | "any" | "none";
+
+export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
+  switch (effect.type) {
+    case "buff-ally-round":
+    case "grant-keyword-ally":
+      return "ally";
+    case "deal-damage-anywhere":
+      return "any";
+  }
+}
 
 // ─── Lobby matchmaking LoR (Phase 3.6d) ──────────────────────────────────
 

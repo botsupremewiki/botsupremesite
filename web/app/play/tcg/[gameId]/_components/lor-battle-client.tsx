@@ -21,8 +21,13 @@ import type {
   RuneterraBattleUnit,
   RuneterraPlayerPublicState,
   RuneterraSelfState,
+  SpellTargetSide,
 } from "@shared/types";
-import { TCG_GAMES } from "@shared/types";
+import {
+  RUNETERRA_SPELL_EFFECTS,
+  TCG_GAMES,
+  getSpellTargetSide,
+} from "@shared/types";
 import { RUNETERRA_BASE_SET_BY_CODE } from "@shared/tcg-runeterra-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
@@ -54,6 +59,12 @@ export function LorBattleClient({
   const [zoomedCard, setZoomedCard] = useState<RuneterraBattleUnit | string | null>(
     null,
   );
+  // Phase 3.7 : sort en attente de cible (null = pas de targeting en cours).
+  const [pendingSpell, setPendingSpell] = useState<{
+    handIndex: number;
+    side: SpellTargetSide;
+    cardCode: string;
+  } | null>(null);
 
   const send = useCallback((msg: RuneterraBattleClientMessage) => {
     const ws = socketRef.current;
@@ -111,7 +122,8 @@ export function LorBattleClient({
     };
   }, [profile, roomId, deckId]);
 
-  // Click sur carte main : si c'est une unité jouable, on l'envoie au serveur.
+  // Click sur carte main : unit → joue ; sort avec effet ciblé → entre en
+  // targeting mode ; sort sans effet → joue sans cible (mana déduite).
   const playHandCard = useCallback(
     (handIndex: number) => {
       if (!state?.self) return;
@@ -121,15 +133,42 @@ export function LorBattleClient({
       setErrorMsg(null);
       if (card.type === "Unit") {
         send({ type: "lor-play-unit", handIndex });
-      } else if (card.type === "Spell") {
-        // Phase 3.6b minimum : pas de targeting — ignore pour l'instant.
-        setErrorMsg(
-          "Les sorts ne sont pas encore jouables (targeting Phase 3.6c).",
-        );
+        return;
+      }
+      if (card.type === "Spell") {
+        const effect = RUNETERRA_SPELL_EFFECTS[cardCode];
+        if (!effect) {
+          // Pas d'effet enregistré : sort joué sans résolution (Phase 3.7+
+          // ajoutera plus de sorts au registry).
+          send({ type: "lor-play-spell", handIndex, targetUid: null });
+          return;
+        }
+        const side = getSpellTargetSide(effect);
+        if (side === "none") {
+          send({ type: "lor-play-spell", handIndex, targetUid: null });
+          return;
+        }
+        // Mode targeting : attend que le user clique une cible valide.
+        setPendingSpell({ handIndex, side, cardCode });
       }
     },
     [state, send],
   );
+
+  const targetSpell = useCallback(
+    (targetUid: string) => {
+      if (!pendingSpell) return;
+      send({
+        type: "lor-play-spell",
+        handIndex: pendingSpell.handIndex,
+        targetUid,
+      });
+      setPendingSpell(null);
+    },
+    [pendingSpell, send],
+  );
+
+  const cancelSpell = useCallback(() => setPendingSpell(null), []);
 
   if (!profile) {
     return (
@@ -213,6 +252,9 @@ export function LorBattleClient({
             onAssignBlockers={(uids) =>
               send({ type: "lor-assign-blockers", blockerUids: uids })
             }
+            pendingSpell={pendingSpell}
+            onTargetSpell={targetSpell}
+            onCancelSpell={cancelSpell}
             onZoom={(c) => setZoomedCard(c)}
           />
         )}
@@ -319,6 +361,9 @@ function RoundView({
   onConcede,
   onDeclareAttack,
   onAssignBlockers,
+  pendingSpell,
+  onTargetSpell,
+  onCancelSpell,
   onZoom,
 }: {
   state: RuneterraBattleState;
@@ -327,6 +372,13 @@ function RoundView({
   onConcede: () => void;
   onDeclareAttack: (attackerUids: string[]) => void;
   onAssignBlockers: (blockerUids: (string | null)[]) => void;
+  pendingSpell: {
+    handIndex: number;
+    side: SpellTargetSide;
+    cardCode: string;
+  } | null;
+  onTargetSpell: (uid: string) => void;
+  onCancelSpell: () => void;
   onZoom: (c: RuneterraBattleUnit | string) => void;
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
@@ -372,9 +424,27 @@ function RoundView({
         else next.add(unit.uid);
         return next;
       });
-    } else {
-      onZoom(unit);
+      return;
     }
+    if (
+      pendingSpell &&
+      (pendingSpell.side === "ally" || pendingSpell.side === "any")
+    ) {
+      onTargetSpell(unit.uid);
+      return;
+    }
+    onZoom(unit);
+  };
+
+  const handleOpponentBenchClick = (unit: RuneterraBattleUnit) => {
+    if (
+      pendingSpell &&
+      (pendingSpell.side === "enemy" || pendingSpell.side === "any")
+    ) {
+      onTargetSpell(unit.uid);
+      return;
+    }
+    onZoom(unit);
   };
 
   const handleConfirmAttack = () => {
@@ -403,7 +473,13 @@ function RoundView({
       <PlayerStrip player={state.opponent} isOpponent />
       <BenchRow
         units={state.opponent.bench}
-        onUnitClick={(u) => onZoom(u)}
+        onUnitClick={handleOpponentBenchClick}
+        highlighted={
+          pendingSpell &&
+          (pendingSpell.side === "enemy" || pendingSpell.side === "any")
+            ? new Set(state.opponent.bench.map((u) => u.uid))
+            : undefined
+        }
       />
 
       {/* Attack lanes (visible quand attaque en cours, peu importe le côté) */}
@@ -454,9 +530,27 @@ function RoundView({
               🛡 L'adversaire t'attaque — assigne tes bloqueurs
             </span>
           )}
+          {pendingSpell && (
+            <span className="text-violet-300">
+              ✨ Choisis une cible (
+              {pendingSpell.side === "ally"
+                ? "allié"
+                : pendingSpell.side === "enemy"
+                  ? "ennemi"
+                  : "n'importe quelle unité"}
+              )
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
-          {combatMode === "attacker-pick" ? (
+          {pendingSpell ? (
+            <button
+              onClick={onCancelSpell}
+              className="rounded-md border border-violet-400/40 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/20"
+            >
+              Annuler le sort
+            </button>
+          ) : combatMode === "attacker-pick" ? (
             <>
               <button
                 onClick={handleConfirmAttack}
@@ -511,11 +605,17 @@ function RoundView({
         </div>
       </div>
 
-      {/* Self bench (cliquable pour zoom OU pick selon combat mode) */}
+      {/* Self bench (cliquable pour zoom OU pick selon combat mode OU
+          target selon spell targeting). */}
       <BenchRow
         units={state.self.bench}
         highlighted={
-          combatMode === "attacker-pick" ? pickedAttackers : undefined
+          combatMode === "attacker-pick"
+            ? pickedAttackers
+            : pendingSpell &&
+                (pendingSpell.side === "ally" || pendingSpell.side === "any")
+              ? new Set(state.self.bench.map((u) => u.uid))
+              : undefined
         }
         attackerPickMode={combatMode === "attacker-pick"}
         onUnitClick={handleSelfBenchClick}
@@ -523,7 +623,12 @@ function RoundView({
       <PlayerStrip player={state.self} isOpponent={false} />
       <HandRow
         self={state.self}
-        myTurn={myTurn && combatMode === "none" && !mustAssignBlockers}
+        myTurn={
+          myTurn &&
+          combatMode === "none" &&
+          !mustAssignBlockers &&
+          pendingSpell === null
+        }
         onPlay={onPlayHand}
         onZoom={(c) => onZoom(c)}
       />
