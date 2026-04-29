@@ -96,6 +96,8 @@ export type InternalPlayer = {
     ephemeralAttackers: number; // alliés Éphémères ayant attaqué (Hécarim : 7)
     // Phase 3.12
     techPowerSummoned: number; // puissance totale d'alliés TECHNOLOGIE invoqués (Heimerdinger : 12)
+    // Phase 3.13
+    mushroomsPlanted: number; // pour Teemo : 5 par frappe Teemo au nexus
   };
 };
 
@@ -243,6 +245,7 @@ export function createInitialState(
       alliesSurvivedDamage: 0,
       ephemeralAttackers: 0,
       techPowerSummoned: 0,
+      mushroomsPlanted: 0,
     },
   });
 
@@ -1506,6 +1509,7 @@ function resolveCombat(state: InternalState): InternalState {
   let defenderPlayer = state.players[defenderSeat];
   let nexusDamageTotal = 0;
   let attackerNexusHeal = 0; // Lifesteal de l'attaquant
+  let teemoNexusStrikes = 0; // Phase 3.13 : compteur frappes Teemo (01PZ008)
   const events: string[] = [];
 
   // Indexe les unités pour mutation locale.
@@ -1622,7 +1626,13 @@ function resolveCombat(state: InternalState): InternalState {
         attackerNexusHeal += attacker.power;
       }
       // Phase 3.12 : nexusStrikes per-unit (Zed level-up).
-      attacker.nexusStrikes += hasKeyword(attacker, "DoubleStrike") ? 2 : 1;
+      const strikesThisLane = hasKeyword(attacker, "DoubleStrike") ? 2 : 1;
+      attacker.nexusStrikes += strikesThisLane;
+      // Phase 3.13 : Teemo (01PZ008) plante 5 Champignons vénéneux par
+      // frappe au nexus (Frappe du Nexus). Crédit au joueur attaquant.
+      if (attacker.cardCode === "01PZ008") {
+        teemoNexusStrikes += strikesThisLane;
+      }
       events.push(`${attackerName} frappe le nexus pour ${attacker.power}.`);
     }
   }
@@ -1743,6 +1753,10 @@ function resolveCombat(state: InternalState): InternalState {
       alliesSurvivedDamage:
         attackerPlayer.championCounters.alliesSurvivedDamage +
         attackerSurvivedDmg,
+      // Phase 3.13 : 5 Champignons par frappe Teemo au nexus.
+      mushroomsPlanted:
+        attackerPlayer.championCounters.mushroomsPlanted +
+        teemoNexusStrikes * 5,
     },
   };
   defenderPlayer = {
@@ -2029,6 +2043,26 @@ const LEVEL_UP_REGISTRY: Record<
     levelUpCardCode: "01PZ056T2",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.techPowerSummoned >= 12,
+  },
+
+  // ── Phase 3.13 : Teemo + Draven (les 2 derniers Set 1)
+  // Teemo (Piltover & Zaun) — « Vous avez planté au moins 15 Champignons
+  // vénéneux. » Approximation : compte 5 Champignons par frappe Teemo
+  // au nexus (cf resolveCombat). Donc 3 frappes Teemo nexus = 15.
+  // Note : la version Riot inclut aussi des plants par d'autres Yordle
+  // Mushroom planters — non implémentés ici.
+  "01PZ008": {
+    levelUpCardCode: "01PZ008T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.mushroomsPlanted >= 15,
+  },
+  // Draven (Noxus) — « J'ai frappé avec au moins 2 Haches tournoyantes
+  // au total. » Approximation : check u.strikes >= 2 (Draven génère une
+  // Hache à chaque frappe ou ETB par sa description, on assume qu'il l'a
+  // toujours équipée — fidélité partielle, pas le vrai item system).
+  "01NX020": {
+    levelUpCardCode: "01NX020T2",
+    check: (_s, u) => u.strikes >= 2,
   },
 
   // TODO Phase 3.8d.x — Yasuo (étourdis/rappelés), Zed (Ombre Living strike),
