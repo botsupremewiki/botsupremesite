@@ -1238,6 +1238,74 @@ export type RuneterraCard = {
 
 export type RuneterraCardData = RuneterraCard;
 
+// ─── Runeterra Battle (Phase 3.1 : skeleton round/mulligan, pas encore de
+// combat ni de spells/keywords). État envoyé du serveur PartyKit au client.
+
+export type RuneterraSeatId = "p1" | "p2";
+
+export type RuneterraBattlePhase =
+  | "waiting" // en attente du second joueur
+  | "mulligan" // chaque joueur choisit ses cartes à remplacer
+  | "round" // round en cours
+  | "ended";
+
+export type RuneterraBattleUnit = {
+  uid: string;
+  cardCode: string;
+  // Stats courantes (peuvent diverger des stats imprimées via buffs/debuffs).
+  power: number;
+  health: number;
+  damage: number; // dégâts cumulés
+  keywords: string[]; // mot-clés actifs (refs anglaises)
+  level: number; // 1 ou 2 (champions). 1 par défaut.
+  playedThisRound: boolean; // ne peut pas attaquer le tour où on est posé
+};
+
+// État public d'un joueur (visible par l'adversaire). Pas de hand, pas de
+// deck contents — juste les comptes.
+export type RuneterraPlayerPublicState = {
+  authId: string;
+  username: string;
+  deckSize: number;
+  handCount: number;
+  bench: RuneterraBattleUnit[];
+  mana: number;
+  manaMax: number;
+  spellMana: number; // banking 0-3
+  nexusHealth: number;
+  attackToken: boolean;
+  hasMulliganed: boolean;
+};
+
+// État "self" : public + ta main visible (cardCodes).
+export type RuneterraSelfState = RuneterraPlayerPublicState & {
+  hand: string[]; // cardCodes
+};
+
+export type RuneterraBattleState = {
+  roomId: string;
+  phase: RuneterraBattlePhase;
+  // Toujours envoyé depuis la perspective du destinataire : self = vous.
+  self: RuneterraSelfState | null;
+  opponent: RuneterraPlayerPublicState | null;
+  selfSeat: RuneterraSeatId | null;
+  activeSeat: RuneterraSeatId | null; // qui a la priorité
+  attackTokenSeat: RuneterraSeatId | null; // qui peut déclarer l'attaque ce round
+  round: number;
+  winner: RuneterraSeatId | null;
+  log: string[]; // 20 derniers évènements
+};
+
+export const RUNETERRA_BATTLE_CONFIG = {
+  initialNexusHealth: 20,
+  deckSize: 40,
+  initialHandSize: 4,
+  maxMana: 10,
+  maxSpellMana: 3,
+  maxHand: 10,
+  maxBench: 6,
+} as const;
+
 // ─── Boosters Runeterra — 6 packs régions de Set 1 ───────────────────────
 // Riot n'avait pas de système de packs (LoR utilisait des shards/wildcards).
 // On invente un pack par région — pattern similaire à Pokémon TCG Pocket
@@ -1487,6 +1555,20 @@ export type BattleCard = {
   statuses: BattleStatus[];
   // Ne devient false qu'au tour suivant (interdit d'attaquer le tour où on est posé).
   playedThisTurn: boolean;
+  /** Numéro de tour pendant lequel les flags "prochain tour" sont actifs.
+   *  Posés par une attaque/talent, ils expirent à advanceTurn une fois ce
+   *  tour terminé. Si null/undefined : pas de flag actif. */
+  nextTurnFlagsTurn?: number | null;
+  /** Ne peut pas battre en retraite ce tour. */
+  noRetreatNextTurn?: boolean;
+  /** Ne peut pas attaquer ce tour. */
+  noAttackNextTurn?: boolean;
+  /** Subit -N dégâts venant des attaques ce tour (M. Mime Attaque d'Obstacle). */
+  damageReductionNextTurn?: number;
+  /** Les attaques de ce Pokémon infligent -N dégâts ce tour. */
+  attackDamagePenaltyNextTurn?: number;
+  /** Évite tous les dégâts et effets d'attaques ce tour. */
+  invulnerableNextTurn?: boolean;
 };
 
 export type BattlePlayerPublicState = {
@@ -1514,6 +1596,9 @@ export type BattlePlayerPublicState = {
   /** UIDs des Pokémon ayant déjà utilisé leur talent activable ce tour. Le
    *  client utilise cette liste pour griser le bouton ⭐ correspondant. */
   abilitiesUsedThisTurn: string[];
+  /** Posé par une attaque/effet adverse : ce joueur ne peut pas jouer de
+   *  Supporter pendant son tour courant. Reset à end-turn. */
+  noSupporterThisTurn?: boolean;
   // Pocket : énergie générée automatiquement chaque tour, prête à être
   // attachée à un Pokémon (1 attache max/tour). null si pas d'énergie en
   // attente (consommée, ou tour 1 du first player qui n'en génère pas).
@@ -2270,3 +2355,131 @@ export const ONEPIECE_SETS: Record<OnePieceSetId, OnePieceSetConfig> = {
     color: "rouge",
   },
 };
+
+// ─── One Piece TCG — Battle (Phase 3a : squelette) ─────────────────────────
+// Combat fidèle au jeu officiel Bandai. Mécaniques implémentées
+// progressivement (3a-3e) — voir party/src/battle-onepiece.ts.
+
+export const OP_BATTLE_CONFIG = {
+  /** Taille du deck principal One Piece TCG. */
+  deckSize: 50,
+  /** Max copies par cardNumber (alt-arts inclus). */
+  maxCopies: 4,
+  /** Cartes piochées au setup avant mulligan. */
+  openingHandSize: 5,
+  /** Cartes DON dans le deck DON séparé. */
+  donDeckSize: 10,
+  /** Personnages max sur le terrain. */
+  maxCharacters: 5,
+  /** Lieux max sur le terrain. */
+  maxStages: 1,
+} as const;
+
+export type OnePieceBattleSeatId = "p1" | "p2";
+
+export type OnePieceBattlePhase =
+  | "waiting" // en attente du 2ème joueur
+  | "mulligan" // chaque joueur peut mulligan une fois (accepter / refuser)
+  | "playing" // tours actifs
+  | "ended";
+
+// Phases dans un tour One Piece TCG (officiel).
+export type OnePieceTurnPhase =
+  | "refresh" // redresse les cartes épuisées
+  | "draw" // pioche 1 (sauf 1er tour du joueur 1)
+  | "don" // ajoute 2 DON depuis le DON deck (1 au 1er tour du joueur 1)
+  | "main" // phase principale (joueur agit)
+  | "end"; // effets de fin de tour, retire les DON attachées
+
+export type OnePieceBattleCardInPlay = {
+  uid: string; // identifiant serveur unique pour cette instance posée
+  cardId: string; // référence vers OnePieceCardData
+  attachedDon: number; // nombre de DON attachées (boost +1000 power chacune)
+  rested: boolean; // true = épuisée (a déjà attaqué ou été ciblée)
+  // Vrai si la carte est arrivée ce tour — interdit d'attaquer (sauf
+  // [Initiative]/Rush).
+  playedThisTurn: boolean;
+};
+
+export type OnePieceBattlePlayerPublicState = {
+  authId: string;
+  username: string;
+  deckName: string | null;
+  // Leader posé en début de partie. Toujours visible. attachedDon est public.
+  leader: {
+    cardId: string;
+    rested: boolean;
+    attachedDon: number;
+  } | null;
+  // Personnages sur le terrain (≤ OP_BATTLE_CONFIG.maxCharacters).
+  characters: OnePieceBattleCardInPlay[];
+  // Lieu actif (max 1).
+  stage: OnePieceBattleCardInPlay | null;
+  // Vies restantes (le Leader prend une carte Vie quand il subit une attaque
+  // — cette carte va dans la main du joueur, avec possibilité de Trigger).
+  life: number;
+  // DON area : redressées (utilisables) vs épuisées (déjà utilisées ce tour).
+  donActive: number;
+  donRested: number;
+  // Cartes restantes dans le DON deck séparé.
+  donDeckSize: number;
+  // Cartes restantes dans le deck principal.
+  deckSize: number;
+  // Cartes en main (cachées pour l'adverse, count public).
+  handCount: number;
+  // Défausse (count public).
+  discardSize: number;
+  // True si le mulligan a été décidé (oui/non) en setup.
+  mulliganDecided: boolean;
+};
+
+export type OnePieceBattleSelfState = OnePieceBattlePlayerPublicState & {
+  // Cartes de la main visibles pour soi.
+  hand: string[];
+};
+
+export type OnePieceBattleState = {
+  roomId: string;
+  phase: OnePieceBattlePhase;
+  turnPhase: OnePieceTurnPhase;
+  self: OnePieceBattleSelfState | null;
+  opponent: OnePieceBattlePlayerPublicState | null;
+  selfSeat: OnePieceBattleSeatId | null;
+  activeSeat: OnePieceBattleSeatId | null;
+  turnNumber: number;
+  winner: OnePieceBattleSeatId | null;
+  log: string[];
+};
+
+export type OnePieceBattleClientMessage =
+  // Mulligan : true = refait sa main une fois (1× max).
+  | { type: "op-mulligan"; take: boolean }
+  // Main phase actions
+  | { type: "op-play-character"; handIndex: number }
+  | { type: "op-play-event"; handIndex: number }
+  | { type: "op-play-stage"; handIndex: number }
+  // targetUid : "leader" pour le Leader, sinon uid d'un Personnage en jeu.
+  | { type: "op-attach-don"; targetUid: string }
+  | { type: "op-activate-main"; uid: string }
+  | { type: "op-attack"; attackerUid: string; targetUid: string }
+  // Réponses pendant une attaque adverse.
+  | { type: "op-block"; blockerUid: string }
+  | { type: "op-counter"; handIndex: number }
+  | { type: "op-pass-defense" }
+  // Trigger révélé d'une Vie : accepter / refuser.
+  | { type: "op-trigger-resolve"; activate: boolean }
+  | { type: "op-end-turn" }
+  | { type: "op-concede" }
+  | { type: "chat"; text: string };
+
+export type OnePieceBattleServerMessage =
+  | {
+      type: "op-welcome";
+      selfId: string;
+      selfSeat: OnePieceBattleSeatId | null;
+    }
+  | { type: "op-state"; state: OnePieceBattleState }
+  | { type: "op-error"; message: string }
+  // Reveal de Trigger sur Vie révélée (privé pour le défenseur).
+  | { type: "op-trigger-reveal"; cardId: string; trigger: string | null }
+  | { type: "chat"; message: ChatMessage };
