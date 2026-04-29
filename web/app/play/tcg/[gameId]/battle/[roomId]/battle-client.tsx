@@ -12,6 +12,7 @@ import type {
   BattleServerMessage,
   BattleState,
   ChatMessage,
+  PokemonAbility,
   PokemonCard,
   PokemonCardData,
   PokemonEnergyType,
@@ -246,6 +247,8 @@ export function BattleClient({
     send({ type: "battle-promote-active", benchIndex });
   const playTrainer = (handIndex: number, targetUid?: string | null) =>
     send({ type: "battle-play-trainer", handIndex, targetUid });
+  const useAbility = (cardUid: string, targetUid?: string | null) =>
+    send({ type: "battle-use-ability", cardUid, targetUid });
   const endTurn = () => send({ type: "battle-end-turn" });
   const sendChat = useCallback(
     (text: string) => send({ type: "chat", text }),
@@ -409,6 +412,7 @@ export function BattleClient({
               onAttack={attack}
               onPromoteActive={promoteActive}
               onPlayTrainer={playTrainer}
+              onUseAbility={useAbility}
             />
           )}
 
@@ -520,6 +524,7 @@ function BattleBoard({
   onAttack,
   onPromoteActive,
   onPlayTrainer,
+  onUseAbility,
 }: {
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
@@ -538,6 +543,7 @@ function BattleBoard({
   onAttack: (attackIndex: number) => void;
   onPromoteActive: (benchIndex: number) => void;
   onPlayTrainer: (handIndex: number, targetUid?: string | null) => void;
+  onUseAbility: (cardUid: string, targetUid?: string | null) => void;
 }) {
   // Mode "attach energy" : Pocket génère 1 énergie automatique par tour. Si
   // pendingEnergy est définie côté serveur et qu'aucune attache n'a encore eu
@@ -550,6 +556,13 @@ function BattleBoard({
   const [pendingTrainerIdx, setPendingTrainerIdx] = useState<number | null>(
     null,
   );
+  // Mode "Talent target picker" — quand le joueur active un talent qui
+  // demande une cible (Sheauriken, Piège Parfumé). On stocke l'uid du
+  // Pokémon qui utilise le talent, et on attend que le joueur clique sur
+  // une cible (ennemie ou alliée selon le talent).
+  const [pendingAbilityUid, setPendingAbilityUid] = useState<string | null>(
+    null,
+  );
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
   // Carte sous le curseur (main ou board) → preview en grand dans la sidebar.
   const [hoveredCard, setHoveredCard] = useState<PokemonCardData | null>(null);
@@ -557,6 +570,7 @@ function BattleBoard({
     setAttachEnergyMode(false);
     setPendingEvolveIdx(null);
     setPendingTrainerIdx(null);
+    setPendingAbilityUid(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
   // L'adversaire est en train de choisir son nouveau Actif (typiquement
@@ -578,7 +592,12 @@ function BattleBoard({
             onPlayTrainer(pendingTrainerIdx, uid);
             setPendingTrainerIdx(null);
           }
-        : null;
+        : pendingAbilityUid !== null
+          ? (uid: string) => {
+              onUseAbility(pendingAbilityUid, uid);
+              setPendingAbilityUid(null);
+            }
+          : null;
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -630,6 +649,42 @@ function BattleBoard({
                     ? onRetreat
                     : null
                 }
+                /* Bouton Talent ⭐ visible sur les cartes alliées avec
+                   un talent activable, c'est notre tour, et le talent
+                   n'a pas encore été utilisé ce tour. Pour les talents
+                   qui demandent une cible, on bascule en mode picker. */
+                onUseAbility={
+                  state.phase === "playing" &&
+                  isMyTurn &&
+                  !state.self.mustPromoteActive &&
+                  !oppPromoting
+                    ? (uid) => {
+                        // Trouve la carte pour savoir si son talent
+                        // demande une cible.
+                        const c =
+                          state.self?.active?.uid === uid
+                            ? state.self?.active
+                            : state.self?.bench.find((b) => b.uid === uid);
+                        if (!c) return;
+                        const data = cardById.get(c.cardId);
+                        if (data?.kind !== "pokemon" || !data.ability) return;
+                        if (ABILITY_NEEDS_TARGET.has(data.ability.name)) {
+                          // Mode picker : on attend que l'utilisateur clique
+                          // sur une cible (alliée ou adverse selon le talent).
+                          setAttachEnergyMode(false);
+                          setPendingEvolveIdx(null);
+                          setPendingTrainerIdx(null);
+                          setPendingAbilityUid(uid);
+                        } else {
+                          // Pas de cible : exécute directement.
+                          onUseAbility(uid, null);
+                        }
+                      }
+                    : null
+                }
+                abilitiesUsedThisTurn={
+                  new Set(state.self.abilitiesUsedThisTurn)
+                }
               />
               <SelfControls
                 state={state}
@@ -646,13 +701,16 @@ function BattleBoard({
               />
               {(attachEnergyMode ||
                 pendingEvolveIdx !== null ||
-                pendingTrainerIdx !== null) && (
+                pendingTrainerIdx !== null ||
+                pendingAbilityUid !== null) && (
                 <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-xs text-amber-200">
                   {attachEnergyMode
                     ? "Choisis un Pokémon à qui attacher l'Énergie."
                     : pendingEvolveIdx !== null
                       ? "Choisis le Pokémon à faire évoluer."
-                      : "Choisis le Pokémon à soigner avec la Potion."}
+                      : pendingTrainerIdx !== null
+                        ? "Choisis le Pokémon ciblé par la carte Dresseur."
+                        : "Choisis la cible du talent."}
                   <button
                     onClick={cancelPending}
                     className="ml-auto rounded border border-white/10 bg-white/5 px-2 py-0.5 text-zinc-200 hover:bg-white/10"
@@ -684,6 +742,12 @@ function BattleBoard({
                 isOpponent
                 onZoomCard={setZoomedCard}
                 onHoverCard={setHoveredCard}
+                /* Quand on est en mode talent qui cible l'adversaire (ex
+                   Sheauriken, Piège Parfumé), on rend le board adverse
+                   cliquable pour sélectionner la cible. */
+                attachMode={
+                  pendingAbilityUid !== null ? attachModeHandler : null
+                }
               />
               <HandHidden count={state.opponent.handCount} />
             </div>
@@ -1010,6 +1074,8 @@ function BoardArea({
   onRetreat,
   onZoomCard,
   onHoverCard,
+  onUseAbility,
+  abilitiesUsedThisTurn,
 }: {
   active: BattleCard | null;
   bench: BattleCard[];
@@ -1021,18 +1087,25 @@ function BoardArea({
   onRetreat?: ((benchIndex: number) => void) | null;
   onZoomCard?: (card: PokemonCardData) => void;
   onHoverCard?: (card: PokemonCardData | null) => void;
+  /** Si défini (côté allié uniquement), un bouton ⭐ s'affiche sur les
+   *  cartes ayant un talent activable. Le clic appelle ce callback. */
+  onUseAbility?: ((cardUid: string) => void) | null;
+  abilitiesUsedThisTurn?: Set<string>;
 }) {
   const ownActions = !isOpponent;
 
   // Build le handler de click sur une carte du board (Actif ou Banc).
   // Priorité : attachMode > promoteMode > retreat > zoom.
+  // Note : `attachMode` est autorisé même sur le board adverse (parent
+  // décide de le passer ou pas selon le mode courant — typiquement
+  // pour les talents qui ciblent l'adversaire).
   function makeCardHandler(
     battleCard: BattleCard,
     cardData: PokemonCardData,
     benchIndex: number | null,
   ) {
     return () => {
-      if (ownActions && attachMode) {
+      if (attachMode) {
         attachMode(battleCard.uid);
         return;
       }
@@ -1126,6 +1199,21 @@ function BoardArea({
               </motion.div>
             )}
         </AnimatePresence>
+        {/* Bouton ⭐ Talent (overlay top-left de l'Actif) */}
+        {active &&
+          ownActions &&
+          (() => {
+            const data = getCardForBattle(active.cardId, cardById);
+            if (data?.ability?.kind !== "activated") return null;
+            return (
+              <AbilityButton
+                ability={data.ability}
+                used={abilitiesUsedThisTurn?.has(active.uid) ?? false}
+                onClick={() => onUseAbility?.(active.uid)}
+                disabled={!onUseAbility}
+              />
+            );
+          })()}
       </div>
       {/* Bench (Pocket : max 3 slots) — chaque carte keyée par uid pour
           que AnimatePresence anime son entrée / sa sortie. Cards qui
@@ -1191,6 +1279,24 @@ function BoardArea({
                     </motion.div>
                   )}
               </AnimatePresence>
+              {/* Bouton ⭐ Talent (overlay top-left du banc) */}
+              {card &&
+                ownActions &&
+                (() => {
+                  const d = getCardForBattle(card.cardId, cardById);
+                  if (d?.ability?.kind !== "activated") return null;
+                  return (
+                    <AbilityButton
+                      ability={d.ability}
+                      used={
+                        abilitiesUsedThisTurn?.has(card.uid) ?? false
+                      }
+                      onClick={() => onUseAbility?.(card.uid)}
+                      disabled={!onUseAbility}
+                      small
+                    />
+                  );
+                })()}
             </div>
           );
         })}
@@ -1323,7 +1429,7 @@ function BoardCard({
 
   return (
     <div className="flex flex-col items-center gap-1.5">
-      {/* Wrapper qui shake quand on est touché */}
+      {/* Wrapper qui shake quand on est touché + card foil 3D au hover */}
       <motion.div
         key={`shake-${hitKey}`}
         animate={
@@ -1333,12 +1439,32 @@ function BoardCard({
         }
         transition={{ duration: 0.45, ease: "easeOut" }}
         className="relative"
-        style={{ width: w, height: h }}
+        style={{ width: w, height: h, perspective: "800px" }}
         data-battle-card-uid={card.uid}
       >
         <div
-          className="relative h-full w-full overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-xl"
+          className="card-foil relative h-full w-full overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-xl transition-transform duration-200 ease-out"
           title={data.name}
+          style={{ transformStyle: "preserve-3d" }}
+          onMouseMove={(e) => {
+            // Parallax 3D au hover : la carte tilt vers la souris.
+            const el = e.currentTarget;
+            const r = el.getBoundingClientRect();
+            const cx = (e.clientX - r.left) / r.width - 0.5;
+            const cy = (e.clientY - r.top) / r.height - 0.5;
+            const rotY = cx * 14;
+            const rotX = -cy * 14;
+            el.style.transform = `rotateY(${rotY}deg) rotateX(${rotX}deg) scale(1.04)`;
+            // Reflet brillant qui suit la souris (positionné via custom prop).
+            el.style.setProperty("--shine-x", `${(cx + 0.5) * 100}%`);
+            el.style.setProperty("--shine-y", `${(cy + 0.5) * 100}%`);
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget;
+            el.style.transform = "";
+            el.style.removeProperty("--shine-x");
+            el.style.removeProperty("--shine-y");
+          }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -1347,6 +1473,9 @@ function BoardCard({
             className="h-full w-full object-contain"
             loading="lazy"
           />
+          {/* Reflet brillant qui glisse au hover (visible surtout sur les
+              cartes rares). */}
+          <div className="card-shine pointer-events-none absolute inset-0" />
 
           {/* Flash rouge à l'impact (overlay) */}
           {hitKey > 0 && (
@@ -1468,6 +1597,43 @@ function BoardCard({
         </div>
       )}
     </div>
+  );
+}
+
+/** Petit bouton ⭐ qui pop sur le coin haut-gauche d'une carte du board pour
+ *  activer son Talent. Glow ambré pulsant tant que disponible, grisé une
+ *  fois utilisé ce tour. Tooltip = nom + effet du talent. */
+function AbilityButton({
+  ability,
+  used,
+  onClick,
+  disabled,
+  small,
+}: {
+  ability: PokemonAbility;
+  used: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  small?: boolean;
+}) {
+  const isDisabled = disabled || used;
+  const size = small ? "h-7 w-7 text-xs" : "h-8 w-8 text-sm";
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!isDisabled) onClick();
+      }}
+      disabled={isDisabled}
+      title={`Talent : ${ability.name}\n\n${ability.effect}${used ? "\n\n(Déjà utilisé ce tour)" : ""}`}
+      className={`pointer-events-auto absolute -left-2 -top-2 z-10 flex items-center justify-center rounded-full border-2 font-bold shadow-lg transition-all ${size} ${
+        isDisabled
+          ? "border-zinc-600/60 bg-zinc-800/90 text-zinc-500"
+          : "border-amber-300/80 bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 hover:scale-110 animate-pulse cursor-pointer"
+      }`}
+    >
+      ⭐
+    </button>
   );
 }
 
@@ -1786,6 +1952,13 @@ const FOSSIL_NAMES = new Set<string>([
   "Vieil Ambre",
   "Fossile Dôme",
   "Fossile Nautile",
+]);
+
+/** Talents qui demandent une cible (Pokémon adverse) — l'UI bascule en mode
+ *  picker au clic du bouton ⭐, et le 2nd clic envoie la cible au serveur. */
+const ABILITY_NEEDS_TARGET = new Set<string>([
+  "Piège Parfumé", // Empiflor : cible un Banc adverse
+  "Sheauriken", // Amphinobi : cible un Pokémon adverse
 ]);
 
 /** Vue "comme un Pokémon" d'une carte sur le board. Pour les vrais Pokémon,

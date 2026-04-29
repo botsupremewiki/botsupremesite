@@ -952,10 +952,11 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
   onepiece: {
     id: "onepiece",
     name: "One Piece",
-    tagline: "À venir",
-    packPrice: 150,
-    packSize: 5,
-    active: false,
+    tagline:
+      "One Piece TCG — OP-09 + ST-15 à ST-21 (281 cartes FR — collection seulement, combat à venir)",
+    packPrice: 10_000,
+    packSize: 6,
+    active: true,
     accent: "text-rose-300",
     border: "border-rose-400/40",
     glow: "shadow-[0_0_40px_rgba(251,113,133,0.4)]",
@@ -965,10 +966,11 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
   lol: {
     id: "lol",
     name: "League of Legends",
-    tagline: "À venir",
+    tagline:
+      "Legends of Runeterra — Set 1 « Fondations » (318 cartes FR — collection seulement, combat à venir)",
     packPrice: 200,
     packSize: 5,
-    active: false,
+    active: true,
     accent: "text-sky-300",
     border: "border-sky-400/40",
     glow: "shadow-[0_0_40px_rgba(56,189,248,0.4)]",
@@ -1020,9 +1022,23 @@ export type PokemonAttack = {
   text?: string | null; // effet en FR (descriptif uniquement, pas exécuté par le moteur MVP)
 };
 
-// Note : ability + attack effects machine-readable retirés avec la refonte
-// Pocket. Le moteur exécute juste le damage. Les effets descriptifs vivent
-// dans `attack.text` pour info au joueur. Réintroduire si besoin plus tard.
+// Note : `attack.text` est descriptif (FR officiel) — mais désormais parsé
+// côté serveur (party/src/lib/attack-effects.ts) pour ~25 patterns
+// (statuts, multi-coin, scaling, heal, etc).
+
+/** Talent (ability en VO) d'un Pokémon. Effet permanent ou activable
+ *  1 fois par tour qui modifie les règles. Implémenté côté serveur dans
+ *  party/src/lib/abilities.ts pour les ~13 talents A1. */
+export type PokemonAbility = {
+  /** Nom FR officiel (ex « Pendulo Dodo », « Coque Armure »). */
+  name: string;
+  /** Texte officiel de l'effet (FR). Affiché dans la sidebar. */
+  effect: string;
+  /** Mode d'activation :
+   *   • "passive" : appliqué automatiquement sans clic (Coque Armure −10).
+   *   • "activated" : 1× par tour, clic du joueur sur la carte. */
+  kind: "passive" | "activated";
+};
 
 export type PokemonCard = {
   kind: "pokemon";
@@ -1037,6 +1053,7 @@ export type PokemonCard = {
   weakness?: PokemonEnergyType | null;
   retreatCost: number;
   attacks: PokemonAttack[];
+  ability?: PokemonAbility | null;
   rarity: TcgRarity;
   image: string; // URL high.webp tcgdex.net
   description?: string | null;
@@ -1215,10 +1232,108 @@ export type RuneterraCard = {
   associatedCardRefs?: string[];
   collectible: boolean;
   set: string; // "Set1"
-  image?: string; // URL CDN Riot (https://dd.b.pvp.net/latest/...)
+  image?: string; // URL CDN Riot — carte avec cadre (gameAbsolutePath)
+  fullArt?: string; // URL CDN Riot — illustration sans cadre (fullAbsolutePath)
 };
 
 export type RuneterraCardData = RuneterraCard;
+
+// ─── Boosters Runeterra — 6 packs régions de Set 1 ───────────────────────
+// Riot n'avait pas de système de packs (LoR utilisait des shards/wildcards).
+// On invente un pack par région — pattern similaire à Pokémon TCG Pocket
+// (3 packs thématiques) mais adapté à LoR : un pack tire dans le pool de
+// sa région (cartes dont `regions` inclut la région du pack).
+
+export type RuneterraPackTypeId =
+  | "demacia"
+  | "noxus"
+  | "ionia"
+  | "freljord"
+  | "piltoverzaun"
+  | "shadowisles";
+
+export type RuneterraPackType = {
+  id: RuneterraPackTypeId;
+  region: RuneterraRegion;
+  name: string;
+  description: string;
+  glyph: string;
+  active: boolean;
+  accent: string;
+  border: string;
+};
+
+export const RUNETERRA_PACK_TYPES: Record<
+  RuneterraPackTypeId,
+  RuneterraPackType
+> = {
+  demacia: {
+    id: "demacia",
+    region: "Demacia",
+    name: "Pack Demacia",
+    description:
+      "Booster Demacia — chevaliers, élites, magie sacrée. Lucian, Garen, Lux, Fiora.",
+    glyph: "⚔️",
+    active: true,
+    accent: "text-yellow-200",
+    border: "border-yellow-300/40",
+  },
+  noxus: {
+    id: "noxus",
+    region: "Noxus",
+    name: "Pack Noxus",
+    description:
+      "Booster Noxus — soldats, force brute, conquête. Darius, Katarina, Draven, Vladimir.",
+    glyph: "🔥",
+    active: true,
+    accent: "text-red-300",
+    border: "border-red-500/40",
+  },
+  ionia: {
+    id: "ionia",
+    region: "Ionia",
+    name: "Pack Ionia",
+    description:
+      "Booster Ionia — équilibre, esprit, agilité. Yasuo, Karma, Shen, Zed.",
+    glyph: "🌸",
+    active: true,
+    accent: "text-pink-200",
+    border: "border-pink-400/40",
+  },
+  freljord: {
+    id: "freljord",
+    region: "Freljord",
+    name: "Pack Freljord",
+    description:
+      "Booster Freljord — gel, tribus, primalité. Ashe, Tryndamere, Anivia, Braum.",
+    glyph: "❄️",
+    active: true,
+    accent: "text-cyan-200",
+    border: "border-cyan-400/40",
+  },
+  piltoverzaun: {
+    id: "piltoverzaun",
+    region: "PiltoverZaun",
+    name: "Pack Piltover & Zaun",
+    description:
+      "Booster P&Z — invention, chimie, machines. Jinx, Heimerdinger, Ezreal, Vi, Teemo.",
+    glyph: "⚙️",
+    active: true,
+    accent: "text-orange-300",
+    border: "border-orange-500/40",
+  },
+  shadowisles: {
+    id: "shadowisles",
+    region: "ShadowIsles",
+    name: "Pack Îles obscures",
+    description:
+      "Booster Îles obscures — morts, brume noire, esprits. Hécarim, Kalista, Thresh, Elise.",
+    glyph: "💀",
+    active: true,
+    accent: "text-emerald-300",
+    border: "border-emerald-500/40",
+  },
+};
 
 // What the server emits in pack openings / welcomes — keeps this small
 // so we can reuse for non-Pokemon games later by widening the shape.
@@ -1247,6 +1362,8 @@ export type TcgDeck = {
   // du deck. Le moteur de combat ne génère que ces types (peu importe les
   // types des Pokémon présents dans le deck).
   energyTypes: PokemonEnergyType[];
+  // One Piece : id du Leader (carte hors deck). null pour Pokémon.
+  leaderId: string | null;
   updatedAt: number;
 };
 
@@ -1258,6 +1375,8 @@ export type TcgClientMessage =
       name: string;
       cards: TcgDeckEntry[];
       energyTypes: PokemonEnergyType[];
+      // One Piece : id du Leader. null pour Pokémon.
+      leaderId: string | null;
     }
   | { type: "tcg-delete-deck"; deckId: string }
   // Force re-fetch + broadcast pour soi-même.
@@ -1386,6 +1505,9 @@ export type BattlePlayerPublicState = {
   usedSupporterThisTurn: boolean;
   // Réduction de coût de retraite ce tour (cumulable, ex Vitesse +). 0 par défaut.
   retreatDiscount: number;
+  /** UIDs des Pokémon ayant déjà utilisé leur talent activable ce tour. Le
+   *  client utilise cette liste pour griser le bouton ⭐ correspondant. */
+  abilitiesUsedThisTurn: string[];
   // Pocket : énergie générée automatiquement chaque tour, prête à être
   // attachée à un Pokémon (1 attache max/tour). null si pas d'énergie en
   // attente (consommée, ou tour 1 du first player qui n'en génère pas).
@@ -1437,6 +1559,14 @@ export type BattleClientMessage =
   | {
       type: "battle-play-trainer";
       handIndex: number;
+      targetUid?: string | null;
+    }
+  /** Active le talent (ability) d'un de nos Pokémon en jeu (Actif ou Banc).
+   *  Pour les talents qui demandent une cible (Sheauriken, Roucarnage, Empiflor),
+   *  une étape interactive supplémentaire est gérée côté UI puis renvoyée. */
+  | {
+      type: "battle-use-ability";
+      cardUid: string;
       targetUid?: string | null;
     }
   // Always available
@@ -1918,6 +2048,11 @@ type OnePieceCardBase = {
   // Familles / affiliations (multiples) telles qu'écrites par Bandai —
   // ex ["Quatre Empereurs", "Équipage de Barbe Blanche"].
   types: string[];
+  // Booster thématique principal de la carte (1ère couleur). Une carte
+  // multi-couleurs peut apparaître dans plusieurs boosters via extraPacks.
+  pack: OnePiecePackTypeId;
+  // Boosters supplémentaires si carte multi-couleurs (sinon undefined).
+  extraPacks?: OnePiecePackTypeId[];
 };
 
 export type OnePieceLeaderCard = OnePieceCardBase & {
@@ -1983,6 +2118,93 @@ export type OnePieceSetConfig = {
   // Couleur dominante du set (null pour boosters multi-couleurs).
   color: OnePieceColor | null;
 };
+
+// ─── Boosters One Piece TCG : 6 packs thématiques par couleur ─────────────
+// Chaque carte appartient à un pack principal (sa première couleur) et peut
+// avoir des extraPacks si elle est multi-couleurs. Tirage du pack = pool des
+// cartes assignées à ce pack (principal + extra).
+
+export type OnePiecePackTypeId =
+  | "rouge"
+  | "vert"
+  | "bleu"
+  | "violet"
+  | "noir"
+  | "jaune";
+
+export type OnePiecePackType = {
+  id: OnePiecePackTypeId;
+  name: string;
+  description: string;
+  glyph: string;
+  active: boolean;
+  accent: string;
+  border: string;
+};
+
+export const ONEPIECE_PACK_TYPES: Record<OnePiecePackTypeId, OnePiecePackType> =
+  {
+    rouge: {
+      id: "rouge",
+      name: "Pack Rouge",
+      description:
+        "Cartes rouges — Chapeaux de Paille, Quatre Empereurs (Shanks/Newgate), Armée révolutionnaire.",
+      glyph: "🔴",
+      active: true,
+      accent: "text-red-300",
+      border: "border-red-500/50",
+    },
+    vert: {
+      id: "vert",
+      name: "Pack Vert",
+      description:
+        "Cartes vertes — Uta, Bonney, Yamato, factions hybrides et tireurs.",
+      glyph: "🟢",
+      active: true,
+      accent: "text-emerald-300",
+      border: "border-emerald-500/50",
+    },
+    bleu: {
+      id: "bleu",
+      name: "Pack Bleu",
+      description:
+        "Cartes bleues — Marine, Doflamingo, Hancock, contrôle et bouncing.",
+      glyph: "🔵",
+      active: true,
+      accent: "text-sky-300",
+      border: "border-sky-500/50",
+    },
+    violet: {
+      id: "violet",
+      name: "Pack Violet",
+      description:
+        "Cartes violettes — Luffy V/N, Marshall D. Teach, Kaido, ramp DON!! agressif.",
+      glyph: "🟣",
+      active: true,
+      accent: "text-violet-300",
+      border: "border-violet-500/50",
+    },
+    noir: {
+      id: "noir",
+      name: "Pack Noir",
+      description:
+        "Cartes noires — Smoker, Doflamingo, CP-0, Pirates de Barbe Noire et coût-réduction.",
+      glyph: "⚫",
+      active: true,
+      accent: "text-zinc-200",
+      border: "border-zinc-400/50",
+    },
+    jaune: {
+      id: "jaune",
+      name: "Pack Jaune",
+      description:
+        "Cartes jaunes — Charlotte Katakuri, Pirates de Big Mom, manipulation des Vies.",
+      glyph: "🟡",
+      active: true,
+      accent: "text-yellow-300",
+      border: "border-yellow-500/50",
+    },
+  };
 
 export const ONEPIECE_SETS: Record<OnePieceSetId, OnePieceSetConfig> = {
   "OP-09": {

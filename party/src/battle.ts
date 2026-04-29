@@ -77,6 +77,8 @@ type SeatState = {
   // Bonus de dégâts ajouté à toutes les attaques ce tour (Giovanni = +10,
   // Auguste = +30 conditionnel, etc.). Reset à end-turn.
   attackDamageBonus: number;
+  /** UIDs des Pokémon ayant déjà utilisé leur talent activable ce tour. */
+  abilitiesUsedThisTurn: Set<string>;
   mustPromoteActive: boolean;
 };
 
@@ -196,6 +198,7 @@ export default class BattleServer implements Party.Server {
         usedSupporterThisTurn: false,
         retreatDiscount: 0,
         attackDamageBonus: 0,
+        abilitiesUsedThisTurn: new Set(),
         mustPromoteActive: false,
       };
       this.connToSeat.set(conn.id, seatId);
@@ -262,6 +265,7 @@ export default class BattleServer implements Party.Server {
       usedSupporterThisTurn: false,
       retreatDiscount: 0,
       attackDamageBonus: 0,
+      abilitiesUsedThisTurn: new Set(),
       mustPromoteActive: false,
     };
     // Logs mulligan + setup volontairement omis.
@@ -499,6 +503,9 @@ export default class BattleServer implements Party.Server {
         break;
       case "battle-play-trainer":
         this.handlePlayTrainer(seatId, data.handIndex, data.targetUid ?? null);
+        break;
+      case "battle-use-ability":
+        this.handleUseAbility(seatId, data.cardUid, data.targetUid ?? null);
         break;
       case "battle-end-turn":
         this.handleEndTurn(seatId);
@@ -909,6 +916,23 @@ export default class BattleServer implements Party.Server {
     if (willKo) parts.push("→ K.O. !");
     this.pushLog(parts.join(" "));
 
+    // ── Talent passif Tartard « Contre-Attaque » ──
+    // Si le défenseur est Tartard Actif, l'attaquant subit 20 dégâts.
+    if (
+      damage > 0 &&
+      defenderData.ability?.kind === "passive" &&
+      defenderData.ability.name === "Contre-Attaque" &&
+      seat.active
+    ) {
+      seat.active.damage += 20;
+      this.pushLog(`${defenderData.name} contre-attaque → 20 dégâts à ${attackerData.name} !`);
+      const sd = getCardForBattle(seat.active.cardId);
+      if (sd && seat.active.damage >= sd.hp) {
+        // Self-KO sur la riposte → l'adversaire marque 1 KO.
+        this.knockOut(oppId, seatId);
+      }
+    }
+
     // ═══ Phase 3 : effets secondaires (status, heal, bench damage…) ══
     // Appliqués QUE si l'attaque a touché (Pocket : si l'attaque foire,
     // aucun effet ne déclenche).
@@ -1100,6 +1124,16 @@ export default class BattleServer implements Party.Server {
     ) {
       damage += 20;
       weaknessApplied = true;
+    }
+
+    // ── Talents passifs de réduction sur le DÉFENSEUR ──
+    // Crustabri Coque Armure (−10), Melmetal Strate Dure (−20).
+    if (damage > 0 && opp.active) {
+      const defAbility = getCardForBattle(opp.active.cardId)?.ability;
+      if (defAbility?.kind === "passive") {
+        if (defAbility.name === "Coque Armure") damage = Math.max(0, damage - 10);
+        else if (defAbility.name === "Strate Dure") damage = Math.max(0, damage - 20);
+      }
     }
 
     return { finalDamage: damage, weaknessApplied, cancelled: false };
@@ -1367,6 +1401,26 @@ export default class BattleServer implements Party.Server {
         "Tu as déjà joué une carte Supporter ce tour.",
       );
       return;
+    }
+    // ── Talent passif Ectoplasma-ex « Maléfice des Ombres » ──
+    // Tant qu'Ectoplasma-ex est Actif chez l'adversaire, on ne peut pas
+    // jouer de carte Supporter.
+    if (card.trainerType === "supporter") {
+      const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
+      const opp = this.seats[oppId];
+      const oppActiveAbility = opp?.active
+        ? getCardForBattle(opp.active.cardId)?.ability
+        : null;
+      if (
+        oppActiveAbility?.kind === "passive" &&
+        oppActiveAbility.name === "Maléfice des Ombres"
+      ) {
+        this.sendErrorToSeat(
+          seatId,
+          "Maléfice des Ombres : impossible de jouer un Supporter pendant qu'Ectoplasma-ex est Actif.",
+        );
+        return;
+      }
     }
 
     const playedName = card.name;
@@ -1722,6 +1776,241 @@ export default class BattleServer implements Party.Server {
     this.broadcastState();
   }
 
+  /** Active le talent (ability) d'un Pokémon en jeu. Switch sur le NOM du
+   *  talent pour l'effet — propre car les talents apparaissent rarement en
+   *  doublon entre cartes différentes. Validations communes : tour en cours,
+   *  carte sur le board, talent activable, talent pas déjà utilisé ce tour
+   *  par CETTE carte (uid). */
+  private handleUseAbility(
+    seatId: BattleSeatId,
+    cardUid: string,
+    targetUid: string | null,
+  ) {
+    if (this.phase !== "playing") return;
+    if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
+    const seat = this.seats[seatId];
+    if (!seat || seat.mustPromoteActive) return;
+    const card = this.findOwnPokemon(seat, cardUid);
+    if (!card) {
+      this.sendErrorToSeat(seatId, "Pokémon introuvable sur le board.");
+      return;
+    }
+    const data = getCardForBattle(card.cardId);
+    if (!data || !data.ability || data.ability.kind !== "activated") {
+      this.sendErrorToSeat(seatId, "Ce Pokémon n'a pas de talent activable.");
+      return;
+    }
+    if (seat.abilitiesUsedThisTurn.has(cardUid)) {
+      this.sendErrorToSeat(
+        seatId,
+        "Le talent de ce Pokémon a déjà été utilisé ce tour.",
+      );
+      return;
+    }
+
+    const isActive = seat.active?.uid === cardUid;
+    const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
+    const opp = this.seats[oppId];
+    if (!opp) return;
+    const abilityName = data.ability.name;
+
+    switch (abilityName) {
+      case "Soin Poudre": {
+        // Papilusion : soigne 20 dégâts de CHACUN de vos Pokémon.
+        const all = [...(seat.active ? [seat.active] : []), ...seat.bench];
+        let healed = 0;
+        for (const p of all) {
+          if (p.damage > 0) {
+            p.damage = Math.max(0, p.damage - 20);
+            healed++;
+          }
+        }
+        if (healed === 0) {
+          this.sendErrorToSeat(seatId, "Aucun Pokémon n'est blessé.");
+          return;
+        }
+        break;
+      }
+      case "Piège Parfumé": {
+        // Empiflor (Actif requis) : échange un Pokémon de Base du Banc adverse
+        // contre son Actif. Cible = le bench Pokemon que l'adversaire VEUT
+        // promouvoir → mais ici l'attaquant choisit. targetUid = le banc adverse
+        // qui devient Actif.
+        if (!isActive) {
+          this.sendErrorToSeat(seatId, "Empiflor doit être Actif.");
+          return;
+        }
+        if (!opp.active) {
+          this.sendErrorToSeat(seatId, "L'adversaire n'a pas de Pokémon Actif.");
+          return;
+        }
+        if (!targetUid) {
+          this.sendErrorToSeat(
+            seatId,
+            "Choisis le Pokémon de Base du Banc adverse à promouvoir.",
+          );
+          return;
+        }
+        const idx = opp.bench.findIndex((c) => c.uid === targetUid);
+        if (idx < 0) {
+          this.sendErrorToSeat(seatId, "Cible invalide (doit être un Banc adverse).");
+          return;
+        }
+        const tData = getCardForBattle(opp.bench[idx].cardId);
+        if (!tData || tData.stage !== "basic") {
+          this.sendErrorToSeat(
+            seatId,
+            "Piège Parfumé ne fonctionne que sur un Pokémon de Base.",
+          );
+          return;
+        }
+        // Swap.
+        const newActive = opp.bench[idx];
+        opp.bench[idx] = opp.active;
+        opp.active = newActive;
+        break;
+      }
+      case "Sheauriken": {
+        // Amphinobi : inflige 20 dégâts à un Pokémon adverse au choix.
+        if (!targetUid) {
+          this.sendErrorToSeat(seatId, "Choisis un Pokémon adverse.");
+          return;
+        }
+        const target =
+          opp.active?.uid === targetUid
+            ? opp.active
+            : opp.bench.find((c) => c.uid === targetUid);
+        if (!target) {
+          this.sendErrorToSeat(seatId, "Cible invalide.");
+          return;
+        }
+        target.damage += 20;
+        // Vérifie KO.
+        const tData = getCardForBattle(target.cardId);
+        if (tData && target.damage >= tData.hp) {
+          if (opp.active?.uid === target.uid) {
+            this.knockOut(seatId, oppId);
+          } else {
+            // KO sur le Banc adverse — incrémente koCount sans déclencher promote.
+            seat.koCount += 1;
+            opp.bench = opp.bench.filter((c) => c.uid !== target.uid);
+            opp.discard.push({
+              uid: `disc-${this.uidCounter++}`,
+              cardId: target.cardId,
+            });
+            if (seat.koCount >= KO_WIN_TARGET) {
+              this.declareWinner(seatId, `${KO_WIN_TARGET} KO infligés.`);
+              return;
+            }
+          }
+        }
+        break;
+      }
+      case "Charge Volt": {
+        // Magnéton : attache une Énergie ⚡ à CE Pokémon.
+        card.attachedEnergies.push("lightning");
+        break;
+      }
+      case "Pendulo Dodo": {
+        // Hypnomade : pile/face. Si face, Actif adverse Endormi.
+        if (!opp.active) {
+          this.sendErrorToSeat(seatId, "Pas de cible.");
+          return;
+        }
+        const heads = this.coinFlip();
+        this.emitCoinFlip(
+          `${data.name} — Pendulo Dodo`,
+          heads,
+          heads ? "Adversaire Endormi !" : "Pas d'effet.",
+        );
+        if (heads && !opp.active.statuses.includes("asleep")) {
+          opp.active.statuses.push("asleep");
+        }
+        break;
+      }
+      case "Ombre Psy": {
+        // Gardevoir : attache une Énergie 🌀 au Pokémon Psy Actif.
+        if (!seat.active) {
+          this.sendErrorToSeat(seatId, "Pas de Pokémon Actif.");
+          return;
+        }
+        const activeData = getCardForBattle(seat.active.cardId);
+        if (activeData?.type !== "psychic") {
+          this.sendErrorToSeat(
+            seatId,
+            "Ombre Psy ne s'utilise que si l'Actif est de type Psy.",
+          );
+          return;
+        }
+        seat.active.attachedEnergies.push("psychic");
+        break;
+      }
+      case "Fuite de Gaz": {
+        // Smogogo (Actif requis) : Actif adverse Empoisonné.
+        if (!isActive) {
+          this.sendErrorToSeat(seatId, "Smogogo doit être Actif.");
+          return;
+        }
+        if (!opp.active) {
+          this.sendErrorToSeat(seatId, "Pas de cible.");
+          return;
+        }
+        if (!opp.active.statuses.includes("poisoned")) {
+          opp.active.statuses.push("poisoned");
+        }
+        break;
+      }
+      case "Déroute": {
+        // Roucarnage : force l'adversaire à choisir un nouvel Actif (comme
+        // Morgane). On déplace l'Actif adverse au Banc et on flag mustPromoteActive.
+        if (!opp.active) {
+          this.sendErrorToSeat(seatId, "Pas de cible.");
+          return;
+        }
+        if (opp.bench.length === 0) {
+          this.sendErrorToSeat(
+            seatId,
+            "L'adversaire n'a pas de Banc à promouvoir.",
+          );
+          return;
+        }
+        opp.bench.push(opp.active);
+        opp.active = null;
+        opp.mustPromoteActive = true;
+        break;
+      }
+      case "Numérisation": {
+        // Porygon : peek top deck. Privé au joueur.
+        const top = seat.deck[seat.deck.length - 1];
+        if (!top) {
+          this.sendErrorToSeat(seatId, "Plus de cartes à regarder.");
+          return;
+        }
+        if (seat.conn) {
+          this.sendTo(seat.conn, {
+            type: "battle-trainer-reveal",
+            trainerName: "Numérisation",
+            cardIds: [top.cardId],
+          });
+        }
+        break;
+      }
+      default: {
+        this.sendErrorToSeat(
+          seatId,
+          `Talent « ${abilityName} » non implémenté.`,
+        );
+        return;
+      }
+    }
+
+    // Marque le talent comme utilisé pour cette carte ce tour + log + broadcast.
+    seat.abilitiesUsedThisTurn.add(cardUid);
+    this.pushLog(`${data.name} utilise son Talent « ${abilityName} ».`);
+    this.broadcastState();
+  }
+
   // ─────────────── combat helpers ───────────────
 
   /** Trouve un BattleCard du joueur (Actif ou Banc) par uid. */
@@ -1857,6 +2146,7 @@ export default class BattleServer implements Party.Server {
     seat.usedSupporterThisTurn = false;
     seat.retreatDiscount = 0;
     seat.attackDamageBonus = 0;
+    seat.abilitiesUsedThisTurn = new Set();
     // Pocket : énergie pending non attachée est perdue à end-of-turn.
     seat.pendingEnergy = null;
 
@@ -2015,6 +2305,7 @@ export default class BattleServer implements Party.Server {
       hasRetreatedThisTurn: seat.hasRetreatedThisTurn,
       usedSupporterThisTurn: seat.usedSupporterThisTurn,
       retreatDiscount: seat.retreatDiscount,
+      abilitiesUsedThisTurn: [...seat.abilitiesUsedThisTurn],
       pendingEnergy: seat.pendingEnergy,
     };
   }
