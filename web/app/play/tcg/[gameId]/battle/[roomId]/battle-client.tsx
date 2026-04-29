@@ -582,6 +582,22 @@ function BattleBoard({
   // on affiche une modal qui liste les attaques des Pokémon adverses.
   // Click sur une attaque adverse → battle-attack avec les indices.
   const [pendingCopyFor, setPendingCopyFor] = useState<number | null>(null);
+  // Main minimisable : permet de masquer la main pour libérer ~200px de
+  // hauteur. Auto-redéployée à chaque début de notre tour (la nouvelle
+  // carte piochée apparaît dans la main, autant qu'on la voie).
+  const [handMinimized, setHandMinimized] = useState(false);
+  const prevActiveSeatRef = useRef(state.activeSeat);
+  useEffect(() => {
+    if (
+      prevActiveSeatRef.current !== state.activeSeat &&
+      state.activeSeat === state.selfSeat
+    ) {
+      // Notre tour vient de commencer → on remontre la main si elle
+      // était masquée.
+      setHandMinimized(false);
+    }
+    prevActiveSeatRef.current = state.activeSeat;
+  }, [state.activeSeat, state.selfSeat]);
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
   // Carte sous le curseur (main ou board) → preview en grand dans la sidebar.
   const [hoveredCard, setHoveredCard] = useState<PokemonCardData | null>(null);
@@ -704,24 +720,11 @@ function BattleBoard({
                       new Set(state.self.abilitiesUsedThisTurn)
                     }
                   />
-                  {/* Énergie à attacher : visible juste sous le board. Le
-                      drag est géré directement par EnergyAttach (pointer
-                      events natifs). Click "fallback" reste dispo aussi. */}
-                  {state.phase === "playing" &&
-                    state.self.pendingEnergy &&
-                    !state.self.energyAttachedThisTurn &&
-                    isMyTurn &&
-                    !oppPromoting && (
-                      <EnergyAttach
-                        energyType={state.self.pendingEnergy}
-                        onDropOnUid={(uid) => onAttachEnergy(uid)}
-                        onClickFallback={() => setAttachEnergyMode(true)}
-                      />
-                    )}
                 </div>
-                {/* En phase combat : attaques + Fin du tour à DROITE du
-                    board. En phase setup : on rend SelfControls plus bas
-                    (centré sous le board) pour le bouton « Confirmer ». */}
+                {/* En phase combat : attaques + énergie + Fin du tour à
+                    DROITE du board. En phase setup : on rend SelfControls
+                    plus bas (centré sous le board) pour le bouton
+                    « Confirmer ». */}
                 {state.phase === "playing" && (
                   <SelfControls
                     state={state}
@@ -735,6 +738,19 @@ function BattleBoard({
                       setPendingCopyFor(idx);
                     }}
                     oppPromoting={oppPromoting}
+                    /* Énergie pending : intégrée dans SelfControls entre
+                       les attaques et le bouton Fin du tour. Le drag (via
+                       EnergyAttach) marche depuis n'importe où grâce aux
+                       pointer events + document.elementFromPoint. */
+                    pendingEnergy={
+                      !state.self.energyAttachedThisTurn &&
+                      isMyTurn &&
+                      !oppPromoting
+                        ? state.self.pendingEnergy
+                        : null
+                    }
+                    onAttachEnergy={onAttachEnergy}
+                    onActivateAttachMode={() => setAttachEnergyMode(true)}
                   />
                 )}
               </div>
@@ -808,31 +824,49 @@ function BattleBoard({
           )}
         </div>
 
-        {/* Hand pleine largeur en bas (cartes visibles en entier). */}
+        {/* Hand pleine largeur en bas (cartes visibles en entier).
+            Minimisable via le bouton ▼/▲ pour libérer ~200px de hauteur
+            quand on n'a pas besoin de la main (ex tour adverse). Re-show
+            auto à chaque début de notre tour. */}
         {state.self && (
-          <div className="shrink-0 border-t border-white/10 bg-black/40 p-3">
-            <SelfHand
-              state={state}
-              cardById={cardById}
-              isMyTurn={isMyTurn}
-              oppPromoting={oppPromoting}
-              onSetActive={onSetActive}
-              onAddBench={onAddBench}
-              onRemoveBench={onRemoveBench}
-              onPlayBasic={onPlayBasic}
-              onHoverCard={setHoveredCard}
-              onSelectEvolve={(i) => {
-                setAttachEnergyMode(false);
-                setPendingTrainerIdx(null);
-                setPendingEvolveIdx(i);
-              }}
-              onPlayTrainerNoTarget={(i) => onPlayTrainer(i, null)}
-              onSelectTrainerTarget={(i) => {
-                setAttachEnergyMode(false);
-                setPendingEvolveIdx(null);
-                setPendingTrainerIdx(i);
-              }}
-            />
+          <div className="shrink-0 border-t border-white/10 bg-black/40">
+            <button
+              onClick={() => setHandMinimized((v) => !v)}
+              className="flex w-full items-center justify-center gap-2 border-b border-white/5 py-1 text-[10px] uppercase tracking-widest text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-300"
+              title={
+                handMinimized
+                  ? "Afficher la main"
+                  : "Masquer la main (libère de l'espace)"
+              }
+            >
+              {handMinimized ? "▲" : "▼"} Ta main ({state.self.hand.length})
+            </button>
+            {!handMinimized && (
+              <div className="p-3">
+                <SelfHand
+                  state={state}
+                  cardById={cardById}
+                  isMyTurn={isMyTurn}
+                  oppPromoting={oppPromoting}
+                  onSetActive={onSetActive}
+                  onAddBench={onAddBench}
+                  onRemoveBench={onRemoveBench}
+                  onPlayBasic={onPlayBasic}
+                  onHoverCard={setHoveredCard}
+                  onSelectEvolve={(i) => {
+                    setAttachEnergyMode(false);
+                    setPendingTrainerIdx(null);
+                    setPendingEvolveIdx(i);
+                  }}
+                  onPlayTrainerNoTarget={(i) => onPlayTrainer(i, null)}
+                  onSelectTrainerTarget={(i) => {
+                    setAttachEnergyMode(false);
+                    setPendingEvolveIdx(null);
+                    setPendingTrainerIdx(i);
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -1209,7 +1243,7 @@ function BoardArea({
 
   return (
     <div
-      className={`flex flex-col items-center gap-3 rounded-xl border-2 px-6 py-4 ${
+      className={`flex flex-col items-center gap-6 rounded-xl border-2 px-6 py-4 ${
         isOpponent
           ? "border-rose-400/30 bg-rose-950/20"
           : "border-emerald-400/30 bg-emerald-950/20"
@@ -1762,6 +1796,9 @@ function SelfControls({
   onAttack,
   onSelectCopyAttack,
   oppPromoting,
+  pendingEnergy,
+  onAttachEnergy,
+  onActivateAttachMode,
 }: {
   state: BattleState;
   isMyTurn: boolean;
@@ -1777,6 +1814,11 @@ function SelfControls({
    *  parent affiche alors un picker des attaques adverses à copier. */
   onSelectCopyAttack: (attackIndex: number) => void;
   oppPromoting: boolean;
+  /** Énergie à attacher ce tour (null si déjà attachée ou pas notre tour).
+   *  Optionnels : ils sont uniquement utilisés en phase « playing ». */
+  pendingEnergy?: PokemonEnergyType | null;
+  onAttachEnergy?: (targetUid: string) => void;
+  onActivateAttachMode?: () => void;
 }) {
   if (state.phase === "setup") {
     const ready = state.self?.hasSetup;
@@ -1878,6 +1920,25 @@ function SelfControls({
           </button>
         );
       })}
+
+      {/* Énergie pending entre Attaques et Fin du tour. Drag avec
+          pointer events natifs depuis ce point vers n'importe quelle
+          carte alliée du board. */}
+      {pendingEnergy && onAttachEnergy && onActivateAttachMode && (
+        <div className="mt-2 flex flex-col items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-2">
+          <span className="text-[10px] uppercase tracking-widest text-amber-300/70">
+            ⚡ Énergie à attacher
+          </span>
+          <EnergyAttach
+            energyType={pendingEnergy}
+            onDropOnUid={onAttachEnergy}
+            onClickFallback={onActivateAttachMode}
+          />
+          <span className="text-[9px] text-zinc-500">
+            Glisse-la sur un Pokémon allié
+          </span>
+        </div>
+      )}
 
       {/* Bouton "Fin du tour" en bas */}
       <button
