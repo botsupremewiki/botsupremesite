@@ -10,28 +10,30 @@ import {
   eternumXpForNextLevel,
 } from "@shared/types";
 import {
-  ADVENTURE_CAP_HOURS,
   ADVENTURE_CAP_TICKS,
-  ADVENTURE_MAX_STAGE,
   ADVENTURE_TICK_SECONDS,
-  STAGE_PHASE_ACCENT,
-  STAGE_PHASE_LABEL,
-  getStageComposition,
-  nextStageComposition,
   osPerTick,
   xpPerTick,
 } from "@shared/eternum-adventure";
-import { RARITY_LABEL } from "@shared/eternum-familiers";
 import { createClient } from "@/lib/supabase/client";
-import { IdleBattleScene } from "@/components/eternum/idle-battle-scene";
+import { AdventureBattle } from "@/components/eternum/adventure-battle";
+
+type TeamMember = {
+  id: string;
+  familier_id: string;
+  element_id: string;
+  level: number;
+};
 
 export function IdleClient({
   initialHero,
   initialGold,
+  team,
   userId,
 }: {
   initialHero: EternumHero;
   initialGold: number;
+  team: TeamMember[];
   userId: string;
 }) {
   const router = useRouter();
@@ -52,17 +54,7 @@ export function IdleClient({
   const stats = eternumHeroStats(hero.classId, hero.level);
   const xpNeeded = eternumXpForNextLevel(hero.level);
 
-  // Compositions stage actuel + suivant
-  const currentComp = useMemo(
-    () => getStageComposition(hero.idleStage),
-    [hero.idleStage],
-  );
-  const nextComp = useMemo(
-    () => nextStageComposition(hero.idleStage),
-    [hero.idleStage],
-  );
-
-  // Taux courant
+  // Taux courant (basé sur stage actuel)
   const currentOsPerTick = useMemo(
     () => osPerTick(hero.idleStage),
     [hero.idleStage],
@@ -131,37 +123,14 @@ export function IdleClient({
     startTransition(() => router.refresh());
   }
 
-  async function advance() {
-    const supabase = createClient();
-    if (!supabase) return;
-    setError(null);
-    setOkMsg(null);
-    const { data, error: rpcErr } = await supabase.rpc(
-      "eternum_advance_stage",
-      { p_user_id: userId },
-    );
-    if (rpcErr) {
-      setError(rpcErr.message);
-      return;
-    }
-    const r = data as { ok: boolean; error?: string; new_stage?: number };
-    if (!r.ok) {
-      setError(r.error ?? "Échec.");
-      return;
-    }
-    setHero((h) => ({
-      ...h,
-      idleStage: r.new_stage!,
-      idleUpdatedAt: Date.now(),
-      energy: Math.max(0, h.energy - 5),
-      energyUpdatedAt: Date.now(),
-    }));
-    setOkMsg(`Stage ${r.new_stage} atteint !`);
+  // Quand AdventureBattle avance le stage côté serveur, on sync localement.
+  function handleStageChange(newStage: number) {
+    setHero((h) => ({ ...h, idleStage: newStage }));
     startTransition(() => router.refresh());
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       {/* Bandeau héros */}
       <div className="rounded-xl border border-white/10 bg-black/40 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -195,112 +164,39 @@ export function IdleClient({
         </div>
       </div>
 
-      {/* Stage actuel + idle */}
-      <div className="rounded-2xl border border-sky-400/30 bg-black/50 p-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
+      {/* Combat automatique d'aventure (auto-loop, layout vertical SW) */}
+      <AdventureBattle
+        hero={hero}
+        team={team}
+        initialStage={hero.idleStage}
+        userId={userId}
+        onStageChange={handleStageChange}
+      />
+
+      {/* Récolte passive */}
+      <div className="rounded-xl border border-amber-400/30 bg-black/40 p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-sky-300">
-              Carte du monde — Eternum
+            <div className="text-[10px] uppercase tracking-widest text-amber-300">
+              💰 Récolte passive (timer)
             </div>
-            <div className="mt-1 flex items-baseline gap-3">
-              <div className="text-4xl font-bold text-zinc-100">
-                Stage {hero.idleStage}
-              </div>
-              <div className="text-xs text-zinc-500">
-                / {ADVENTURE_MAX_STAGE}
-              </div>
+            <div className="mt-0.5 text-[11px] text-zinc-400">
+              Taux courant : {currentOsPerTick} OS / 10 min · max{" "}
+              {(currentOsPerTick * ADVENTURE_CAP_TICKS).toLocaleString("fr-FR")} OS / 8h
             </div>
-            <div
-              className={`mt-1 inline-block rounded-md border px-2 py-0.5 text-[10px] uppercase tracking-widest ${
-                STAGE_PHASE_ACCENT[currentComp.phase]
-              }`}
-            >
-              {STAGE_PHASE_LABEL[currentComp.phase]} · {currentComp.label}
-            </div>
-          </div>
-          {/* Taux actuel */}
-          <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.04] p-2 text-right">
-            <div className="text-[9px] uppercase tracking-widest text-amber-300">
-              Taux actuel
-            </div>
-            <div className="text-sm font-bold tabular-nums text-amber-200">
-              {currentOsPerTick} OS / tick
-            </div>
-            <div className="text-[9px] text-zinc-400">
-              soit {(currentOsPerTick * ADVENTURE_CAP_TICKS).toLocaleString(
-                "fr-FR",
-              )}{" "}
-              OS / 8h max
-            </div>
-            <div className="mt-1 text-[9px] text-zinc-500">
-              Prochain palier : stage{" "}
-              {Math.min(
-                ADVENTURE_MAX_STAGE,
-                Math.floor(hero.idleStage / 10) * 10 + 11,
-              )}
+            <div className="text-[10px] text-zinc-500">
+              Indépendant du combat — continue tant que ton stage progresse.
             </div>
           </div>
         </div>
-
-        {/* Animation combat idle */}
-        <div className="mt-4">
-          <IdleBattleScene
-            classId={hero.classId}
-            elementId={hero.elementId}
-            stage={hero.idleStage}
-          />
-        </div>
-
-        {/* Composition ennemie actuelle / suivante */}
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-            <div className="text-[9px] uppercase tracking-widest text-zinc-500">
-              Adversaires actuels
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {currentComp.enemies.map((e, i) => (
-                <span
-                  key={i}
-                  className="rounded bg-white/5 px-1.5 py-0.5 text-[10px]"
-                >
-                  {RARITY_LABEL[e.rarity]} · niv {e.level}
-                </span>
-              ))}
-            </div>
-          </div>
-          {nextComp && (
-            <div className="rounded-lg border border-sky-400/20 bg-sky-400/[0.04] p-3">
-              <div className="text-[9px] uppercase tracking-widest text-sky-300">
-                Stage {nextComp.stage} → {nextComp.label}
-              </div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {nextComp.enemies.map((e, i) => (
-                  <span
-                    key={i}
-                    className="rounded bg-white/5 px-1.5 py-0.5 text-[10px]"
-                  >
-                    {RARITY_LABEL[e.rarity]} · niv {e.level}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {!nextComp && (
-            <div className="rounded-lg border border-fuchsia-400/40 bg-fuchsia-400/[0.05] p-3 text-center text-[11px] text-fuchsia-200">
-              🌟 Stage final atteint — tu es au sommet d&apos;Eternum
-            </div>
-          )}
-        </div>
-
-        {/* AFK pending */}
-        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
-          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+          <div className="text-[11px] text-zinc-400">
             En attente (AFK depuis {formatDuration(pending.seconds)})
           </div>
-          <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xl font-bold tabular-nums text-amber-300">
+          <div className="flex items-center gap-3">
+            <div className="text-base font-bold tabular-nums text-amber-300">
               +{pending.os.toLocaleString("fr-FR")} OS
-              <span className="ml-2 text-sm font-normal text-violet-300">
+              <span className="ml-2 text-xs font-normal text-violet-300">
                 +{pending.xp.toLocaleString("fr-FR")} XP
               </span>
             </div>
@@ -309,35 +205,10 @@ export function IdleClient({
               disabled={pending.ticks === 0 || isPending}
               className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400 disabled:opacity-40"
             >
-              💰 Récolter
+              Récolter
             </button>
-          </div>
-          <div className="mt-1 text-[10px] text-zinc-500">
-            Tick toutes les 10 min · cap AFK {ADVENTURE_CAP_HOURS}h · taux = max(1,
-            stage/10) · stage 49 = 4 OS/tick · stage 1000 = 100 OS/tick → 4 800 OS / 8h
           </div>
         </div>
-
-        {/* Avancer */}
-        {nextComp && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
-            <div>
-              <div className="text-sm font-semibold text-zinc-200">
-                Avancer au stage {hero.idleStage + 1}
-              </div>
-              <div className="text-[11px] text-zinc-400">
-                Coût : 5 énergie · vs {nextComp.label}
-              </div>
-            </div>
-            <button
-              onClick={advance}
-              disabled={liveEnergy < 5 || isPending}
-              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-sky-950 hover:bg-sky-400 disabled:opacity-40"
-            >
-              ⚔️ Combattre &amp; avancer
-            </button>
-          </div>
-        )}
       </div>
 
       {error && (
