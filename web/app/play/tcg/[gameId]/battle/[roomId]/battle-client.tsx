@@ -36,6 +36,31 @@ type CoinFlipEvent = {
   followUp?: string;
 };
 
+/** Animation d'un projectile qui part d'une position de départ vers une
+ *  position d'arrivée (ex énergie qui vole du logo vers une carte). */
+type FlyAnim = {
+  id: string;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  // Contenu rendu pendant le vol (emoji, badge, etc).
+  content: React.ReactNode;
+  // Couleur du badge rond derrière le contenu (Tailwind class).
+  bg: string;
+  fg: string;
+};
+
+/** Cherche un BattleCard sur un side (active ou bench) par uid. */
+function findOnSide(
+  side: { active: BattleCard | null; bench: BattleCard[] } | null,
+  uid: string,
+): BattleCard | null {
+  if (!side) return null;
+  if (side.active?.uid === uid) return side.active;
+  return side.bench.find((c) => c.uid === uid) ?? null;
+}
+
 const TYPE_BG: Record<PokemonEnergyType, string> = {
   fire: "from-orange-500/30 to-red-700/40",
   water: "from-blue-400/30 to-blue-700/40",
@@ -84,6 +109,16 @@ export function BattleClient({
     trainerName: string;
     cardIds: string[];
   } | null>(null);
+  // Animation de changement de tour : bandeau plein écran « À toi ! » /
+  // « Tour adverse… » qui apparaît brièvement à chaque flip.
+  const [turnBanner, setTurnBanner] = useState<{
+    text: string;
+    accent: "self" | "opp";
+    key: number;
+  } | null>(null);
+  // File des animations "fly" : un projectile qui part d'un point A vers
+  // un point B (énergie qui vole du logo vers une carte, etc).
+  const [flyAnims, setFlyAnims] = useState<FlyAnim[]>([]);
 
   useEffect(() => {
     if (!profile) {
@@ -121,10 +156,32 @@ export function BattleClient({
         case "battle-welcome":
           setErrorMsg(null);
           break;
-        case "battle-state":
-          setState(msg.state);
+        case "battle-state": {
+          // Détection du changement de tour pour le bandeau plein écran.
+          // On ne déclenche QUE si on est passé d'un activeSeat valide à un
+          // autre activeSeat valide (pas au démarrage / fin de partie).
+          setState((prev) => {
+            const prevActive = prev?.activeSeat;
+            const nextActive = msg.state.activeSeat;
+            const phaseStartedNow =
+              prev?.phase !== "playing" && msg.state.phase === "playing";
+            if (
+              msg.state.phase === "playing" &&
+              ((prevActive && nextActive && prevActive !== nextActive) ||
+                phaseStartedNow)
+            ) {
+              const isMine = nextActive === msg.state.selfSeat;
+              setTurnBanner({
+                text: isMine ? "À toi !" : "Tour adverse",
+                accent: isMine ? "self" : "opp",
+                key: Date.now(),
+              });
+            }
+            return msg.state;
+          });
           setErrorMsg(null);
           break;
+        }
         case "battle-error":
           setErrorMsg(msg.message);
           break;
@@ -207,6 +264,69 @@ export function BattleClient({
     if (!confirm("Abandonner la partie ?")) return;
     send({ type: "battle-concede" });
   };
+
+  // ─── Détection state-diff pour les fly animations cross-card ───────
+  // On garde la dernière vue des `attachedEnergies` par uid (Pokémon Actif
+  // + Banc des deux côtés). Quand un count augmente, on lance une fly anim
+  // depuis le logo énergie (côté concerné) vers la carte cible.
+  const prevAttachedRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!state) return;
+    const next = new Map<string, number>();
+    const collect = (
+      side: BattleSelfState | BattlePlayerPublicState | null,
+    ) => {
+      if (!side) return;
+      if (side.active) next.set(side.active.uid, side.active.attachedEnergies.length);
+      for (const c of side.bench) next.set(c.uid, c.attachedEnergies.length);
+    };
+    collect(state.self);
+    collect(state.opponent);
+
+    // Cherche le 1er uid dont le count a augmenté → fly anim.
+    for (const [uid, count] of next) {
+      const prev = prevAttachedRef.current.get(uid) ?? 0;
+      if (count > prev) {
+        // Trouve le type de la dernière énergie attachée pour la rendre.
+        const card =
+          findOnSide(state.self, uid) ?? findOnSide(state.opponent, uid);
+        if (card) {
+          const lastType = card.attachedEnergies[card.attachedEnergies.length - 1] as PokemonEnergyType;
+          // Source : le logo énergie du joueur dont le Pokémon est ciblé
+          // (côté self uniquement — l'adversaire n'a pas de logo visible
+          // chez nous). Si la cible est sur le banc adverse, on utilise
+          // sa propre carte comme source (effet "ping" sur place).
+          const targetEl = document.querySelector(
+            `[data-battle-card-uid="${uid}"]`,
+          ) as HTMLElement | null;
+          const logoEl = document.querySelector(
+            `[data-energy-logo="self"]`,
+          ) as HTMLElement | null;
+          const isSelfSide = !!findOnSide(state.self, uid);
+          const sourceEl = isSelfSide && logoEl ? logoEl : targetEl;
+          if (targetEl && sourceEl) {
+            const sR = sourceEl.getBoundingClientRect();
+            const tR = targetEl.getBoundingClientRect();
+            const id = `fly-${Date.now()}-${uid}`;
+            setFlyAnims((prev) => [
+              ...prev,
+              {
+                id,
+                fromX: sR.left + sR.width / 2,
+                fromY: sR.top + sR.height / 2,
+                toX: tR.left + tR.width / 2,
+                toY: tR.top + tR.height / 2,
+                content: energyEmoji(lastType),
+                bg: ENERGY_BADGE_BG[lastType] ?? "bg-zinc-400",
+                fg: ENERGY_BADGE_TEXT[lastType] ?? "text-zinc-900",
+              },
+            ]);
+          }
+        }
+      }
+    }
+    prevAttachedRef.current = next;
+  }, [state]);
 
   const isMyTurn = !!state && state.activeSeat === state.selfSeat;
 
@@ -325,6 +445,24 @@ export function BattleClient({
             queue={coinQueue}
             onConsume={(id) =>
               setCoinQueue((prev) => prev.filter((e) => e.id !== id))
+            }
+          />
+
+          {/* Bandeau « À toi ! » / « Tour adverse » à chaque changement de tour. */}
+          {turnBanner && (
+            <TurnChangeBanner
+              key={turnBanner.key}
+              text={turnBanner.text}
+              accent={turnBanner.accent}
+              onDone={() => setTurnBanner(null)}
+            />
+          )}
+
+          {/* Couche d'animations cross-card (énergie qui vole, etc). */}
+          <FlyAnimLayer
+            anims={flyAnims}
+            onConsume={(id) =>
+              setFlyAnims((prev) => prev.filter((a) => a.id !== id))
             }
           />
 
@@ -937,80 +1075,123 @@ function BoardArea({
           : "border-emerald-400/30 bg-emerald-950/20"
       }`}
     >
-      {/* Active */}
-      {active
-        ? (() => {
-            // `realData` = la carte d'origine (Pokémon OU Fossile/Dresseur)
-            // pour le hover (la sidebar gère les deux via leur kind).
-            // `data` = vue "comme un Pokémon" pour le rendu board (HP, etc).
-            const realData = cardById.get(active.cardId);
-            const data = getCardForBattle(active.cardId, cardById);
-            if (!realData || !data) return null;
-            const handler = makeCardHandler(active, realData, null);
-            return (
-              <button
-                onClick={handler}
-                onMouseEnter={() => onHoverCard?.(realData)}
-                onMouseLeave={() => onHoverCard?.(null)}
-                {...makeDropProps(active)}
-                className={`rounded-lg transition-all ${
-                  ownActions && attachMode
-                    ? "ring-2 ring-amber-300 hover:ring-amber-200"
-                    : "hover:ring-2 hover:ring-white/30"
-                }`}
-                title={data.name}
+      {/* Active — wrapper AnimatePresence : si l'Actif est KO ou retraité,
+          on anime sa sortie (fade + shrink + rotation). */}
+      <div className="relative h-56 w-40">
+        <AnimatePresence mode="popLayout">
+          {active
+            ? (() => {
+                const realData = cardById.get(active.cardId);
+                const data = getCardForBattle(active.cardId, cardById);
+                if (!realData || !data) return null;
+                const handler = makeCardHandler(active, realData, null);
+                return (
+                  <motion.button
+                    key={active.uid}
+                    layout
+                    initial={{ opacity: 0, scale: 0.85, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.4,
+                      rotate: 12,
+                      y: 24,
+                      filter: "grayscale(100%) brightness(0.5)",
+                    }}
+                    transition={{ duration: 0.55, ease: "easeOut" }}
+                    onClick={handler}
+                    onMouseEnter={() => onHoverCard?.(realData)}
+                    onMouseLeave={() => onHoverCard?.(null)}
+                    {...makeDropProps(active)}
+                    className={`absolute inset-0 rounded-lg ${
+                      ownActions && attachMode
+                        ? "ring-2 ring-amber-300 hover:ring-amber-200"
+                        : "hover:ring-2 hover:ring-white/30"
+                    }`}
+                    title={data.name}
+                  >
+                    <BoardCard card={active} cardById={cardById} large />
+                  </motion.button>
+                );
+              })()
+            : (
+              <motion.div
+                key="placeholder-active"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-white/10 text-xs text-zinc-500"
               >
-                <BoardCard card={active} cardById={cardById} large />
-              </button>
-            );
-          })()
-        : (
-          <div className="flex h-56 w-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-xs text-zinc-500">
-            Actif
-          </div>
-        )}
-      {/* Bench (Pocket : max 3 slots) */}
+                Actif
+              </motion.div>
+            )}
+        </AnimatePresence>
+      </div>
+      {/* Bench (Pocket : max 3 slots) — chaque carte keyée par uid pour
+          que AnimatePresence anime son entrée / sa sortie. Cards qui
+          shiftent (ex bench[0] KO → bench[1] devient bench[0]) glissent
+          via `layout`. */}
       <div className="flex gap-2">
         {Array.from({ length: BATTLE_CONFIG.maxBench }, (_, i) => {
           const card = bench[i];
-          if (!card) {
-            return (
-              <div
-                key={i}
-                className="flex h-36 w-24 items-center justify-center rounded-lg border border-dashed border-white/10 text-[10px] text-zinc-500"
-              >
-                Banc
-              </div>
-            );
-          }
-          const realData = cardById.get(card.cardId);
-          const data = getCardForBattle(card.cardId, cardById);
-          if (!realData || !data) return null;
-          const handler = makeCardHandler(card, realData, i);
           return (
-            <button
-              key={i}
-              onClick={handler}
-              onMouseEnter={() => onHoverCard?.(realData)}
-              onMouseLeave={() => onHoverCard?.(null)}
-              {...makeDropProps(card)}
-              className={`rounded-lg transition-all ${
-                ownActions && (attachMode || promoteMode)
-                  ? "ring-2 ring-amber-300 hover:ring-amber-200"
-                  : ownActions && onRetreat
-                    ? "hover:ring-2 hover:ring-sky-300"
-                    : "hover:ring-2 hover:ring-white/30"
-              }`}
-              title={
-                promoteMode
-                  ? "Promouvoir comme Actif"
-                  : onRetreat && ownActions
-                    ? "Battre en retraite vers ce Pokémon"
-                    : data.name
-              }
-            >
-              <BoardCard card={card} cardById={cardById} />
-            </button>
+            <div key={`bench-slot-${i}`} className="relative h-36 w-24">
+              <AnimatePresence mode="popLayout">
+                {card
+                  ? (() => {
+                      const realData = cardById.get(card.cardId);
+                      const data = getCardForBattle(card.cardId, cardById);
+                      if (!realData || !data) return null;
+                      const handler = makeCardHandler(card, realData, i);
+                      return (
+                        <motion.button
+                          key={card.uid}
+                          layout
+                          initial={{ opacity: 0, scale: 0.7, y: 12 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{
+                            opacity: 0,
+                            scale: 0.4,
+                            rotate: 10,
+                            filter: "grayscale(100%) brightness(0.5)",
+                          }}
+                          transition={{ duration: 0.5, ease: "easeOut" }}
+                          onClick={handler}
+                          onMouseEnter={() => onHoverCard?.(realData)}
+                          onMouseLeave={() => onHoverCard?.(null)}
+                          {...makeDropProps(card)}
+                          className={`absolute inset-0 rounded-lg ${
+                            ownActions && (attachMode || promoteMode)
+                              ? "ring-2 ring-amber-300 hover:ring-amber-200"
+                              : ownActions && onRetreat
+                                ? "hover:ring-2 hover:ring-sky-300"
+                                : "hover:ring-2 hover:ring-white/30"
+                          }`}
+                          title={
+                            promoteMode
+                              ? "Promouvoir comme Actif"
+                              : onRetreat && ownActions
+                                ? "Battre en retraite vers ce Pokémon"
+                                : data.name
+                          }
+                        >
+                          <BoardCard card={card} cardById={cardById} />
+                        </motion.button>
+                      );
+                    })()
+                  : (
+                    <motion.div
+                      key={`placeholder-bench-${i}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-white/10 text-[10px] text-zinc-500"
+                    >
+                      Banc
+                    </motion.div>
+                  )}
+              </AnimatePresence>
+            </div>
           );
         })}
       </div>
@@ -1058,6 +1239,77 @@ function BoardCard({
   // Vue "comme un Pokémon" — pour les Fossiles, synthétise un Pokémon
   // de Base 40 PV / Incolore.
   const data = getCardForBattle(card.cardId, cardById);
+
+  // ─── Animations card-local — détectées via state diffs sur card ───────
+  // Damage tick (attaque OU poison/brûlure) : on garde la valeur précédente,
+  // si la nouvelle est plus haute on déclenche un floating number + un
+  // flash rouge + un shake.
+  const prevDamageRef = useRef(card.damage);
+  const [damageBurst, setDamageBurst] = useState<{
+    amount: number;
+    key: number;
+  } | null>(null);
+  const [hitKey, setHitKey] = useState(0);
+  useEffect(() => {
+    if (card.damage > prevDamageRef.current) {
+      const delta = card.damage - prevDamageRef.current;
+      setDamageBurst({ amount: delta, key: Date.now() });
+      setHitKey((k) => k + 1);
+      const t = window.setTimeout(() => setDamageBurst(null), 1200);
+      prevDamageRef.current = card.damage;
+      return () => window.clearTimeout(t);
+    }
+    prevDamageRef.current = card.damage;
+  }, [card.damage]);
+
+  // Heal tick (Potion, Erika) : damage descend → +N vert qui flotte.
+  const [healBurst, setHealBurst] = useState<{
+    amount: number;
+    key: number;
+  } | null>(null);
+  useEffect(() => {
+    // Note: prevDamageRef est mis à jour dans l'effet damage ci-dessus,
+    // donc on doit aussi gérer la baisse séparément. On utilise un autre
+    // ref pour heal.
+    /* heal handled in same effect via separate ref below */
+  }, []);
+  const prevDamageHealRef = useRef(card.damage);
+  useEffect(() => {
+    if (card.damage < prevDamageHealRef.current) {
+      const delta = prevDamageHealRef.current - card.damage;
+      setHealBurst({ amount: delta, key: Date.now() });
+      const t = window.setTimeout(() => setHealBurst(null), 1200);
+      prevDamageHealRef.current = card.damage;
+      return () => window.clearTimeout(t);
+    }
+    prevDamageHealRef.current = card.damage;
+  }, [card.damage]);
+
+  // Évolution : le `cardId` change pour le même `uid` (le BattleCard reste
+  // le même côté serveur). Flash blanc + scale.
+  const prevCardIdRef = useRef(card.cardId);
+  const [evoKey, setEvoKey] = useState(0);
+  useEffect(() => {
+    if (card.cardId !== prevCardIdRef.current) {
+      setEvoKey((k) => k + 1);
+      prevCardIdRef.current = card.cardId;
+    }
+  }, [card.cardId]);
+
+  // Énergie attachée : on track les longueurs successives, et on flag
+  // l'index de la nouvelle énergie pour la pop-in animer.
+  const prevEnergyCountRef = useRef(card.attachedEnergies.length);
+  const [newEnergyIdx, setNewEnergyIdx] = useState<number | null>(null);
+  useEffect(() => {
+    if (card.attachedEnergies.length > prevEnergyCountRef.current) {
+      setNewEnergyIdx(card.attachedEnergies.length - 1);
+      const t = window.setTimeout(() => setNewEnergyIdx(null), 700);
+      prevEnergyCountRef.current = card.attachedEnergies.length;
+      return () => window.clearTimeout(t);
+    }
+    prevEnergyCountRef.current = card.attachedEnergies.length;
+  }, [card.attachedEnergies.length]);
+
   if (!data) return null;
   // Pocket : carte officielle FR (tcgdex) en ratio 5:7. Overlays :
   //   • HP courant en bas (gros, rouge si dégâts)
@@ -1068,59 +1320,129 @@ function BoardCard({
   const remainingHp = Math.max(0, data.hp - card.damage);
   const damaged = card.damage > 0;
   const hpPct = Math.max(0, Math.min(1, remainingHp / data.hp));
+
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <div
-        className="relative overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-xl"
+      {/* Wrapper qui shake quand on est touché */}
+      <motion.div
+        key={`shake-${hitKey}`}
+        animate={
+          hitKey > 0
+            ? { x: [0, -4, 4, -3, 3, -2, 2, 0] }
+            : undefined
+        }
+        transition={{ duration: 0.45, ease: "easeOut" }}
+        className="relative"
         style={{ width: w, height: h }}
-        title={data.name}
+        data-battle-card-uid={card.uid}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={data.image}
-          alt={data.name}
-          className="h-full w-full object-contain"
-          loading="lazy"
-        />
+        <div
+          className="relative h-full w-full overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-xl"
+          title={data.name}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={data.image}
+            alt={data.name}
+            className="h-full w-full object-contain"
+            loading="lazy"
+          />
 
-        {/* Barre HP en bas (jauge verte → rouge selon ratio) */}
-        <div className="absolute inset-x-0 bottom-0 flex flex-col bg-gradient-to-t from-black/90 via-black/50 to-transparent px-1.5 py-1">
-          <div className="flex items-center justify-between text-xs tabular-nums">
-            <span
-              className={`font-bold ${
-                damaged ? "text-rose-300" : "text-emerald-200"
-              }`}
-            >
-              {remainingHp}
-              <span className="text-zinc-400">/{data.hp}</span>
-            </span>
-            <span className="text-[10px] uppercase tracking-widest text-zinc-400">
-              PV
-            </span>
-          </div>
-          <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-black/50">
-            <div
-              className={`h-full transition-all ${
-                hpPct > 0.5
-                  ? "bg-emerald-400"
-                  : hpPct > 0.25
-                    ? "bg-amber-400"
-                    : "bg-rose-500"
-              }`}
-              style={{ width: `${hpPct * 100}%` }}
+          {/* Flash rouge à l'impact (overlay) */}
+          {hitKey > 0 && (
+            <motion.div
+              key={`flash-${hitKey}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.7, 0] }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="pointer-events-none absolute inset-0 bg-rose-500 mix-blend-multiply"
             />
-          </div>
-        </div>
+          )}
 
-        {/* Statuses en haut à droite */}
-        {card.statuses.length > 0 && (
-          <div className="absolute right-1 top-1 flex gap-0.5 rounded bg-black/80 px-1 py-0.5 text-sm">
-            {card.statuses.map((s, i) => (
-              <span key={i}>{statusEmoji(s)}</span>
-            ))}
+          {/* Flash blanc à l'évolution */}
+          {evoKey > 0 && (
+            <motion.div
+              key={`evo-${evoKey}`}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: [0, 1, 0], scale: [0.95, 1.1, 1] }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="pointer-events-none absolute inset-0 bg-white"
+            />
+          )}
+
+          {/* Barre HP en bas (jauge verte → rouge selon ratio) */}
+          <div className="absolute inset-x-0 bottom-0 flex flex-col bg-gradient-to-t from-black/90 via-black/50 to-transparent px-1.5 py-1">
+            <div className="flex items-center justify-between text-xs tabular-nums">
+              <span
+                className={`font-bold ${
+                  damaged ? "text-rose-300" : "text-emerald-200"
+                }`}
+              >
+                {/* HP descend smooth via composant dédié */}
+                <SmoothNumber value={remainingHp} />
+                <span className="text-zinc-400">/{data.hp}</span>
+              </span>
+              <span className="text-[10px] uppercase tracking-widest text-zinc-400">
+                PV
+              </span>
+            </div>
+            <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-black/50">
+              <motion.div
+                animate={{ width: `${hpPct * 100}%` }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className={`h-full ${
+                  hpPct > 0.5
+                    ? "bg-emerald-400"
+                    : hpPct > 0.25
+                      ? "bg-amber-400"
+                      : "bg-rose-500"
+                }`}
+              />
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Statuses en haut à droite */}
+          {card.statuses.length > 0 && (
+            <div className="absolute right-1 top-1 flex gap-0.5 rounded bg-black/80 px-1 py-0.5 text-sm">
+              {card.statuses.map((s, i) => (
+                <span key={i}>{statusEmoji(s)}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Floating damage number (au-dessus de la carte) */}
+          <AnimatePresence>
+            {damageBurst && (
+              <motion.div
+                key={damageBurst.key}
+                initial={{ opacity: 0, y: 0, scale: 0.6 }}
+                animate={{ opacity: [0, 1, 1, 0], y: -56, scale: 1.6 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.1, ease: "easeOut" }}
+                className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-3xl font-black text-rose-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]"
+              >
+                -{damageBurst.amount}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Floating heal number */}
+          <AnimatePresence>
+            {healBurst && (
+              <motion.div
+                key={healBurst.key}
+                initial={{ opacity: 0, y: 0, scale: 0.6 }}
+                animate={{ opacity: [0, 1, 1, 0], y: -50, scale: 1.4 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.1, ease: "easeOut" }}
+                className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 text-2xl font-black text-emerald-300 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]"
+              >
+                +{healBurst.amount}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
 
       {/* Pastilles d'énergies attachées (sous la carte). */}
       {card.attachedEnergies.length > 0 && (
@@ -1129,20 +1451,51 @@ function BoardCard({
             const t = e as PokemonEnergyType;
             const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
             const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
+            const isNew = newEnergyIdx === i;
             return (
-              <span
+              <motion.span
                 key={i}
+                initial={isNew ? { scale: 0, rotate: -180 } : false}
+                animate={isNew ? { scale: [0, 1.3, 1], rotate: 0 } : undefined}
+                transition={{ duration: 0.5, ease: "backOut" }}
                 className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold shadow ring-1 ring-black/30 ${bg} ${fg}`}
                 title={e}
               >
                 {energyEmoji(t)}
-              </span>
+              </motion.span>
             );
           })}
         </div>
       )}
     </div>
   );
+}
+
+/** Petit composant qui anime un nombre vers une cible (utile pour les PV
+ *  qui descendent / remontent en douceur au lieu d'un saut net). */
+function SmoothNumber({ value }: { value: number }) {
+  const [displayed, setDisplayed] = useState(value);
+  const fromRef = useRef(value);
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = value;
+    if (from === to) return;
+    const duration = 600; // ms
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      const v = Math.round(from + (to - from) * eased);
+      setDisplayed(v);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{displayed}</>;
 }
 
 function statusEmoji(s: string): string {
@@ -1248,6 +1601,7 @@ function SelfControls({
           {showEnergy && energyType ? (
             <span
               draggable
+              data-energy-logo="self"
               onClick={onActivateAttachMode}
               onDragStart={(e) => {
                 e.dataTransfer.setData("text/x-tcg-energy", "1");
@@ -1808,19 +2162,21 @@ function SelfHand({
         </span>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {self.hand.map((cardId, i) => {
-          const data = cardById.get(cardId);
-          if (!data) return null;
-          const action = getAction(data, i);
-          return (
-            <HandCard
-              key={`${i}-${cardId}`}
-              data={data}
-              action={action}
-              onHover={onHoverCard}
-            />
-          );
-        })}
+        <AnimatePresence mode="popLayout">
+          {self.hand.map((entry, i) => {
+            const data = cardById.get(entry.cardId);
+            if (!data) return null;
+            const action = getAction(data, i);
+            return (
+              <HandCard
+                key={entry.uid}
+                data={data}
+                action={action}
+                onHover={onHoverCard}
+              />
+            );
+          })}
+        </AnimatePresence>
       </div>
       {inSetup && self.bench.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/5 pt-2">
@@ -1861,14 +2217,25 @@ function HandCard({
       : data.name;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
+      layout
+      // Entrée : la carte tombe depuis le haut (pioche)
+      initial={{ opacity: 0, y: -120, rotate: -8, scale: 0.85 }}
+      animate={{ opacity: 1, y: 0, rotate: 0, scale: 1 }}
+      // Sortie : la carte s'envole vers le haut (carte jouée)
+      exit={{
+        opacity: 0,
+        y: -180,
+        scale: 0.7,
+        rotate: 8,
+        transition: { duration: 0.45, ease: "easeIn" },
+      }}
+      transition={{ duration: 0.5, ease: "backOut" }}
       onClick={() => {
         if (action?.kind === "playable") action.handler();
       }}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
-      className={`relative shrink-0 overflow-hidden rounded-lg border transition-all ${
+      className={`relative shrink-0 overflow-hidden rounded-lg border transition-colors ${
         playable
           ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
           : blocked
@@ -2096,6 +2463,120 @@ function TrainerRevealModal({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Bandeau plein écran qui s'affiche à chaque changement de tour. Texte
+ *  « À toi ! » (accent vert) ou « Tour adverse » (accent rouge), traversant
+ *  l'écran de gauche à droite avec un effet de glow. Auto-dismiss ~1.4s. */
+function TurnChangeBanner({
+  text,
+  accent,
+  onDone,
+}: {
+  text: string;
+  accent: "self" | "opp";
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const t = window.setTimeout(onDone, 1400);
+    return () => window.clearTimeout(t);
+  }, [onDone]);
+  const color =
+    accent === "self"
+      ? "from-emerald-500/0 via-emerald-400/40 to-emerald-500/0 text-emerald-200"
+      : "from-rose-500/0 via-rose-400/40 to-rose-500/0 text-rose-200";
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
+    >
+      <motion.div
+        initial={{ x: "-100%", scaleY: 0.6, opacity: 0 }}
+        animate={{
+          x: ["-100%", "0%", "0%", "100%"],
+          scaleY: [0.6, 1, 1, 0.6],
+          opacity: [0, 1, 1, 0],
+        }}
+        transition={{
+          duration: 1.4,
+          times: [0, 0.25, 0.7, 1],
+          ease: "easeOut",
+        }}
+        className={`flex w-full items-center justify-center bg-gradient-to-r ${color} py-6`}
+      >
+        <span className="text-5xl font-black uppercase tracking-[0.25em] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
+          {text}
+        </span>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/** Rend une couche full-screen (`fixed inset-0`) qui affiche les projectiles
+ *  en vol. Chaque anim part de `(fromX, fromY)` (centre) vers `(toX, toY)` en
+ *  ~600ms, avec une légère courbe (via translate Y intermédiaire). À la fin,
+ *  le parent retire l'anim de la queue. */
+function FlyAnimLayer({
+  anims,
+  onConsume,
+}: {
+  anims: FlyAnim[];
+  onConsume: (id: string) => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[55]">
+      <AnimatePresence>
+        {anims.map((a) => (
+          <FlyProjectile
+            key={a.id}
+            anim={a}
+            onComplete={() => onConsume(a.id)}
+          />
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function FlyProjectile({
+  anim,
+  onComplete,
+}: {
+  anim: FlyAnim;
+  onComplete: () => void;
+}) {
+  useEffect(() => {
+    const t = window.setTimeout(onComplete, 700);
+    return () => window.clearTimeout(t);
+  }, [onComplete]);
+  return (
+    <motion.div
+      initial={{
+        x: anim.fromX - 20,
+        y: anim.fromY - 20,
+        scale: 0.6,
+        opacity: 0,
+      }}
+      animate={{
+        x: [anim.fromX - 20, (anim.fromX + anim.toX) / 2 - 20, anim.toX - 20],
+        y: [
+          anim.fromY - 20,
+          // Courbe : monte un peu au milieu (parabole simple)
+          (anim.fromY + anim.toY) / 2 - 60,
+          anim.toY - 20,
+        ],
+        scale: [0.6, 1.4, 1],
+        opacity: [0, 1, 1, 0.2],
+      }}
+      transition={{ duration: 0.65, ease: [0.4, 0, 0.2, 1] }}
+      className={`absolute flex h-10 w-10 items-center justify-center rounded-full text-xl font-bold shadow-2xl ring-4 ring-white/40 ${anim.bg} ${anim.fg}`}
+    >
+      {anim.content}
+    </motion.div>
   );
 }
 

@@ -1392,9 +1392,14 @@ export type BattlePlayerPublicState = {
   pendingEnergy: PokemonEnergyType | null;
 };
 
+/** Carte en main vue par son propriétaire — cardId pour rendre l'image, uid
+ *  pour avoir un identifiant stable (utile aux animations d'entrée/sortie
+ *  côté client : la même copie de Pikachu garde son uid quand l'index
+ *  shifte). */
+export type BattleHandCard = { uid: string; cardId: string };
+
 export type BattleSelfState = BattlePlayerPublicState & {
-  // Cartes de la main visibles pour soi.
-  hand: string[]; // card_ids
+  hand: BattleHandCard[];
 };
 
 export type BattleState = {
@@ -1831,5 +1836,209 @@ export const ETERNUM_JOBS: Record<EternumJobId, EternumJobConfig> = {
     description:
       "Crafte du pain qui rend de l'énergie (cooldown / cap journalier).",
     classes: [],
+  },
+};
+
+// ────────────────────────────── ONE PIECE TCG ─────────────────────────────
+// Phase 1 : OP-09 (Les Nouveaux Empereurs) + ST-15 à ST-21 (les 6 starters
+// + 1 starter EX du lancement officiel français de Bandai en 2024-2025).
+// Bandai France n'a jamais traduit OP-01 à OP-08 ni ST-01 à ST-14.
+// Données scrapées en français depuis fr.onepiece-cardgame.com (rendu côté
+// serveur — voir scripts/generate-onepiece-cards-fr.mjs).
+
+export type OnePieceColor =
+  | "rouge"
+  | "vert"
+  | "bleu"
+  | "violet"
+  | "noir"
+  | "jaune";
+
+export type OnePieceCategory =
+  | "leader"
+  | "character"
+  | "event"
+  | "stage"
+  | "don";
+
+// Attribut (icône sur la carte) pour Personnages/Leaders.
+export type OnePieceAttribute =
+  | "frappe" // Strike
+  | "tranche" // Slash
+  | "distance" // Ranged
+  | "special" // Spécial
+  | "sagesse"; // Wisdom
+
+// Raretés Bandai officielles.
+//   c   = Commune
+//   uc  = Peu Commune
+//   r   = Rare
+//   sr  = Super Rare
+//   sec = Secret Rare
+//   l   = Leader
+//   p   = Promo
+//   tr  = Treasure Rare (gold/foil)
+//   sp  = Special (alt-art)
+//   don = DON!! card
+export type OnePieceRarity =
+  | "c"
+  | "uc"
+  | "r"
+  | "sr"
+  | "sec"
+  | "l"
+  | "p"
+  | "tr"
+  | "sp"
+  | "don";
+
+// Champs partagés entre toutes les cartes One Piece.
+type OnePieceCardBase = {
+  // Identifiant complet (avec suffixe variante alt-art : ex "OP02-001_p1").
+  // C'est cet ID qui sert de PK côté collection / deck.
+  id: string;
+  // ID de carte sans suffixe variante : "OP02-001". Permet de regrouper
+  // toutes les versions d'une même carte.
+  cardNumber: string;
+  // Nom FR (les noms de personnages One Piece sont identiques EN/FR).
+  name: string;
+  rarity: OnePieceRarity;
+  // URL absolue de l'image full-card sur le CDN Bandai FR.
+  image: string;
+  // Extension où la carte a été observée (peut être différente de
+  // l'extension d'origine pour les rééditions alt-art).
+  set: string;
+  // Numéro de bloc compétitif Bandai (1, 2, 3…).
+  block: number;
+  // Effet — descriptif uniquement tant que le moteur d'effets n'est pas
+  // implémenté (Phase 3 : combat fidèle).
+  effect: string | null;
+  // Trigger : effet qui se déclenche quand la carte est révélée d'une Vie.
+  trigger: string | null;
+  // Familles / affiliations (multiples) telles qu'écrites par Bandai —
+  // ex ["Quatre Empereurs", "Équipage de Barbe Blanche"].
+  types: string[];
+};
+
+export type OnePieceLeaderCard = OnePieceCardBase & {
+  kind: "leader";
+  color: OnePieceColor[]; // 1-2 couleurs (mono ou bi-colore)
+  life: number; // 4-5 typiquement
+  power: number;
+  attribute: OnePieceAttribute;
+};
+
+export type OnePieceCharacterCard = OnePieceCardBase & {
+  kind: "character";
+  color: OnePieceColor[];
+  cost: number; // 0-10
+  power: number; // 1000-13000 par incréments de 1000
+  counter: number | null; // 0 / 1000 / 2000 ou null si pas de counter
+  attribute: OnePieceAttribute;
+};
+
+export type OnePieceEventCard = OnePieceCardBase & {
+  kind: "event";
+  color: OnePieceColor[];
+  cost: number;
+  counter: number | null;
+};
+
+export type OnePieceStageCard = OnePieceCardBase & {
+  kind: "stage";
+  color: OnePieceColor[];
+  cost: number;
+  counter: number | null;
+};
+
+// DON!! : ressource neutre, séparée du deck principal (10 par deck).
+export type OnePieceDonCard = OnePieceCardBase & {
+  kind: "don";
+};
+
+export type OnePieceCardData =
+  | OnePieceLeaderCard
+  | OnePieceCharacterCard
+  | OnePieceEventCard
+  | OnePieceStageCard
+  | OnePieceDonCard;
+
+export type OnePieceSetId =
+  | "OP-09"
+  | "ST-15"
+  | "ST-16"
+  | "ST-17"
+  | "ST-18"
+  | "ST-19"
+  | "ST-20"
+  | "ST-21";
+
+export type OnePieceSetConfig = {
+  id: OnePieceSetId;
+  name: string; // FR
+  // Identifiant interne `series` du site Bandai FR (param ?series=).
+  // Utilisé par le scraper.
+  seriesId: number;
+  kind: "booster" | "starter" | "starter-ex";
+  // Couleur dominante du set (null pour boosters multi-couleurs).
+  color: OnePieceColor | null;
+};
+
+export const ONEPIECE_SETS: Record<OnePieceSetId, OnePieceSetConfig> = {
+  "OP-09": {
+    id: "OP-09",
+    name: "Les Nouveaux Empereurs",
+    seriesId: 622109,
+    kind: "booster",
+    color: null,
+  },
+  "ST-15": {
+    id: "ST-15",
+    name: "Edward Newgate",
+    seriesId: 622015,
+    kind: "starter",
+    color: "rouge",
+  },
+  "ST-16": {
+    id: "ST-16",
+    name: "Uta",
+    seriesId: 622016,
+    kind: "starter",
+    color: "vert",
+  },
+  "ST-17": {
+    id: "ST-17",
+    name: "Donquixote Doflamingo",
+    seriesId: 622017,
+    kind: "starter",
+    color: "bleu",
+  },
+  "ST-18": {
+    id: "ST-18",
+    name: "Monkey D. Luffy",
+    seriesId: 622018,
+    kind: "starter",
+    color: "violet",
+  },
+  "ST-19": {
+    id: "ST-19",
+    name: "Smoker",
+    seriesId: 622019,
+    kind: "starter",
+    color: "noir",
+  },
+  "ST-20": {
+    id: "ST-20",
+    name: "Charlotte Katakuri",
+    seriesId: 622020,
+    kind: "starter",
+    color: "jaune",
+  },
+  "ST-21": {
+    id: "ST-21",
+    name: "Gear 5th",
+    seriesId: 622021,
+    kind: "starter-ex",
+    color: "rouge",
   },
 };

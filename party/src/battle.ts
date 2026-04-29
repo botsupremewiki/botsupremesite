@@ -1640,7 +1640,7 @@ export default class BattleServer implements Party.Server {
     if (!pub || !seat) return null;
     return {
       ...pub,
-      hand: seat.hand.map((c) => c.cardId),
+      hand: seat.hand.map((c) => ({ uid: c.uid, cardId: c.cardId })),
     };
   }
 
