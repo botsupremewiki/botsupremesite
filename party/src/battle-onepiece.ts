@@ -38,6 +38,13 @@ import {
   recordBattleResult,
   recordBotWin,
 } from "./lib/supabase";
+import {
+  type BattleEffectAccess,
+  type CardRef,
+  type EffectContext,
+  type EffectHook,
+  fireCardEffect,
+} from "./lib/onepiece-effects";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -79,6 +86,11 @@ type SeatState = {
   donRested: number;
   // True si le joueur a décidé du mulligan (peu importe le choix).
   mulliganDecided: boolean;
+  // Buffs de puissance temporaires (jusqu'à fin de tour) par target.
+  // Clé : "leader" ou uid d'un Personnage. Valeur : +/- N de puissance.
+  // Reset à end-turn du seat. Utilisé par les effets type [En attaquant]
+  // gagne +X / Persos adverse perd -X.
+  tempPowerBuffs: Map<string, number>;
 };
 
 function sanitizeName(raw: unknown): string | null {
@@ -203,6 +215,7 @@ export default class OnePieceBattleServer implements Party.Server {
         donActive: 0,
         donRested: 0,
         mulliganDecided: false,
+        tempPowerBuffs: new Map(),
       };
       this.connToSeat.set(conn.id, seatId);
 
@@ -499,6 +512,8 @@ export default class OnePieceBattleServer implements Party.Server {
     this.pushLog(
       `${seat.username} joue ${meta.name} (coût ${meta.cost}, ${seat.donActive} DON restantes).`,
     );
+    // Hook on-play : déclenche l'effet [Jouée] s'il est implémenté.
+    this.fireEffectFor(handCard.cardId, "on-play", newCard.uid, seatId);
     this.broadcastState();
   }
 
@@ -571,6 +586,13 @@ export default class OnePieceBattleServer implements Party.Server {
 
     // End phase : détache les DON, retournent dans la pool DON épuisée.
     this.turnPhase = "end";
+    // Hook on-turn-end : effets [Fin de votre tour] des cartes en jeu.
+    if (seat.leaderId) {
+      this.fireEffectFor(seat.leaderId, "on-turn-end", "leader", seatId);
+    }
+    for (const c of seat.characters) {
+      this.fireEffectFor(c.cardId, "on-turn-end", c.uid, seatId);
+    }
     const detached = seat.leaderAttachedDon;
     seat.donRested += seat.leaderAttachedDon;
     seat.leaderAttachedDon = 0;
@@ -585,6 +607,11 @@ export default class OnePieceBattleServer implements Party.Server {
         `${seat.username} détache ${detached + charDetached} DON (fin de tour).`,
       );
     }
+    // Reset des buffs temporaires des deux seats : les effets "pour tout le
+    // tour" expirent à la fin du tour de l'attaquant (convention courante).
+    seat.tempPowerBuffs.clear();
+    const opponentSeat = seatId === "p1" ? "p2" : "p1";
+    this.seats[opponentSeat]?.tempPowerBuffs.clear();
     this.pushLog(`${seat.username} termine son tour.`);
 
     // Passe au joueur suivant.
@@ -815,6 +842,21 @@ export default class OnePieceBattleServer implements Party.Server {
       c.rested = true;
     }
 
+    // Hook on-attack : applique les buffs avant le calcul final.
+    const sourceCardId =
+      attackerUid === "leader"
+        ? seat.leaderId!
+        : seat.characters.find((c) => c.uid === attackerUid)?.cardId;
+    if (sourceCardId) {
+      this.fireEffectFor(sourceCardId, "on-attack", attackerUid, seatId);
+    }
+    // Ré-ajoute les buffs temporaires sur l'attaquant après l'effet on-attack.
+    attackerPower += this.getPowerBuff(seatId, attackerUid);
+
+    // Le défenseur peut aussi avoir des buffs temporaires (ex: Leader Shanks
+    // qui inflige -1000 à l'adversaire). On les applique au defenderBasePower.
+    defenderBasePower += this.getPowerBuff(opponentSeatId, targetUid);
+
     // Ouvre la defense window.
     this.pendingAttack = {
       attackerSeat: seatId,
@@ -978,6 +1020,8 @@ export default class OnePieceBattleServer implements Party.Server {
         defender.discard.push({ cardId: ko.cardId });
         const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
         this.pushLog(`${meta?.name ?? "?"} est mis KO.`);
+        // Hook on-ko : effet [En cas de KO] (pioche, recyclage défausse…).
+        this.fireEffectFor(ko.cardId, "on-ko", ko.uid, defenderSeatId);
       }
       this.pendingAttack = null;
       this.broadcastState();
@@ -1168,6 +1212,7 @@ export default class OnePieceBattleServer implements Party.Server {
       donActive: 0,
       donRested: 0,
       mulliganDecided: false,
+      tempPowerBuffs: new Map(),
     };
     if (this.phase === "waiting") this.phase = "mulligan";
   }
@@ -1457,6 +1502,17 @@ export default class OnePieceBattleServer implements Party.Server {
       defenderName = meta.name;
     }
 
+    // Hook on-attack : applique les effets [En attaquant] du bot.
+    const sourceCardId =
+      attackerUid === "leader"
+        ? seat.leaderId!
+        : seat.characters.find((c) => c.uid === attackerUid)?.cardId;
+    if (sourceCardId) {
+      this.fireEffectFor(sourceCardId, "on-attack", attackerUid, "p2");
+    }
+    attackerPower += this.getPowerBuff("p2", attackerUid);
+    defenderBasePower += this.getPowerBuff("p1", targetUid);
+
     this.pendingAttack = {
       attackerSeat: "p2",
       attackerUid,
@@ -1478,12 +1534,20 @@ export default class OnePieceBattleServer implements Party.Server {
     if (!seat || this.activeSeat !== "p2" || this.phase !== "playing") return;
 
     this.turnPhase = "end";
+    if (seat.leaderId) {
+      this.fireEffectFor(seat.leaderId, "on-turn-end", "leader", "p2");
+    }
+    for (const c of seat.characters) {
+      this.fireEffectFor(c.cardId, "on-turn-end", c.uid, "p2");
+    }
     seat.donRested += seat.leaderAttachedDon;
     seat.leaderAttachedDon = 0;
     for (const c of seat.characters) {
       seat.donRested += c.attachedDon;
       c.attachedDon = 0;
     }
+    seat.tempPowerBuffs.clear();
+    this.seats.p1?.tempPowerBuffs.clear();
     this.pushLog(`${seat.username} termine son tour.`);
 
     if (this.seats.p1) {
@@ -1491,6 +1555,95 @@ export default class OnePieceBattleServer implements Party.Server {
       this.runTurnStartPhases("p1", false);
     }
     this.broadcastState();
+  }
+
+  // ─── Moteur d'effets ─────────────────────────────────────────────────────
+
+  /** Construit l'objet BattleEffectAccess passé aux handlers d'effets pour
+   *  qu'ils puissent muter l'état (pioche, défausse, buffs power, etc.). */
+  private getBattleAccess(): BattleEffectAccess {
+    return {
+      drawCards: (seatId, count) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        const taken = Math.min(count, s.deck.length);
+        for (let i = 0; i < taken; i++) {
+          s.hand.push(s.deck.shift()!);
+        }
+      },
+      discardRandom: (seatId, count) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        for (let i = 0; i < count; i++) {
+          if (s.hand.length === 0) break;
+          const idx = Math.floor(Math.random() * s.hand.length);
+          s.discard.push(s.hand.splice(idx, 1)[0]);
+        }
+      },
+      giveDonFromDeck: (seatId, count) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        const taken = Math.min(count, s.donDeck);
+        s.donDeck -= taken;
+        s.donActive += taken;
+      },
+      addPowerBuff: (ref: CardRef, amount: number) => {
+        const s = this.seats[ref.seat];
+        if (!s) return;
+        const key =
+          ref.kind === "leader"
+            ? "leader"
+            : ref.kind === "character"
+              ? ref.uid
+              : "stage";
+        s.tempPowerBuffs.set(
+          key,
+          (s.tempPowerBuffs.get(key) ?? 0) + amount,
+        );
+      },
+      log: (line) => this.pushLog(line),
+      getSeat: (seatId) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        return {
+          leaderId: s.leaderId,
+          leaderRested: s.leaderRested,
+          leaderAttachedDon: s.leaderAttachedDon,
+          characters: s.characters,
+          handSize: s.hand.length,
+          deckSize: s.deck.length,
+          lifeCount: s.life.length,
+          discardSize: s.discard.length,
+          donActive: s.donActive,
+        };
+      },
+    };
+  }
+
+  /** Tente d'exécuter le handler d'effet d'une carte sur un hook donné. */
+  private fireEffectFor(
+    cardId: string,
+    hook: EffectHook,
+    sourceUid: string,
+    sourceSeat: OnePieceBattleSeatId,
+  ) {
+    const ctx: EffectContext = {
+      hook,
+      sourceUid,
+      sourceSeat,
+      battle: this.getBattleAccess(),
+    };
+    fireCardEffect(cardId, ctx);
+  }
+
+  /** Récupère le buff de puissance temporaire pour une cible. 0 si aucun. */
+  private getPowerBuff(
+    seatId: OnePieceBattleSeatId,
+    targetUid: string,
+  ): number {
+    const s = this.seats[seatId];
+    if (!s) return 0;
+    return s.tempPowerBuffs.get(targetUid) ?? 0;
   }
 
   /** Helper : valide que c'est mon tour en main phase. */
