@@ -80,12 +80,17 @@ export type InternalPlayer = {
   nexusHealth: number;
   attackToken: boolean;
   hasMulliganed: boolean;
-  // Phase 3.5 : compteurs globaux pour conditions de level-up champion.
+  // Phase 3.5 + 3.9c : compteurs globaux pour conditions de level-up.
   championCounters: {
     alliesDied: number; // pour Lucian, Hécarim, etc.
-    spellsCast: number; // pour Karma, Ezreal, etc.
+    spellsCast: number; // pour Karma, etc.
     spellManaSpent: number; // pour Lux ("au moins 6 mana en sorts")
     enemyStunned: number; // pour Yasuo (étourdis/rappelés)
+    // Phase 3.9c
+    unitsDied: number; // toute mort, alliée OU ennemie (Thresh : 6+ morts)
+    barriersGranted: number; // grant Barrier (Shen : 5 barrières)
+    enemyTargetCount: number; // sorts ciblant un ennemi (Ezreal : 8+)
+    enemiesFrostbitten: number; // frostbite-enemy résolu (Ashe : 5)
   };
 };
 
@@ -223,6 +228,10 @@ export function createInitialState(
       spellsCast: 0,
       spellManaSpent: 0,
       enemyStunned: 0,
+      unitsDied: 0,
+      barriersGranted: 0,
+      enemyTargetCount: 0,
+      enemiesFrostbitten: 0,
     },
   });
 
@@ -782,6 +791,12 @@ export function playSpell(
     ...player.hand.slice(0, handIndex),
     ...player.hand.slice(handIndex + 1),
   ];
+  // Phase 3.9c : enemyTargetCount incrémenté si cible ennemie (Ezreal).
+  const targetSide = effect ? getSpellTargetSide(effect) : "none";
+  const targetIsEnemy =
+    targetUid !== null &&
+    targetUid !== undefined &&
+    state.players[otherSeat(seatIdx)].bench.some((u) => u.uid === targetUid);
   const updatedPlayer: InternalPlayer = {
     ...player,
     hand: newHand,
@@ -791,6 +806,11 @@ export function playSpell(
       ...player.championCounters,
       spellsCast: player.championCounters.spellsCast + 1,
       spellManaSpent: player.championCounters.spellManaSpent + card.cost,
+      enemyTargetCount:
+        player.championCounters.enemyTargetCount +
+        (targetIsEnemy && (targetSide === "enemy" || targetSide === "any")
+          ? 1
+          : 0),
     },
   };
 
@@ -942,15 +962,27 @@ function applySpellEffect(
         if (u.keywords.includes(effect.keyword)) return u;
         return { ...u, keywords: [...u.keywords, effect.keyword] };
       });
-      newPlayers[casterSeat] = { ...player, bench: newBench };
+      // Phase 3.9c : barriersGranted compteur (Shen).
+      const grantedBarrier = effect.keyword === "Barrier" ? 1 : 0;
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: newBench,
+        championCounters: {
+          ...player.championCounters,
+          barriersGranted:
+            player.championCounters.barriersGranted + grantedBarrier,
+        },
+      };
       return { ...state, players: newPlayers };
     }
     case "frostbite-enemy": {
       // Cherche l'ennemi (côté opposé de caster).
       const player = newPlayers[oppSeat];
+      let appliedNew = false;
       const newBench = player.bench.map((u) => {
         if (u.uid !== targetUid) return u;
-        if (u.frozen) return u; // déjà gelé, no-op
+        if (u.frozen) return u; // déjà gelé, no-op (pas de counter incrément)
+        appliedNew = true;
         // Set power à 0 pour le round, restauré à endRound via
         // endOfRoundPowerBuff. Math : new endOfRoundPowerBuff = ancien + (-power)
         // → à endRound : power - newDelta = 0 - (oldDelta - power) = power - oldDelta
@@ -964,6 +996,17 @@ function applySpellEffect(
         };
       });
       newPlayers[oppSeat] = { ...player, bench: newBench };
+      // Phase 3.9c : enemiesFrostbitten compteur (Ashe).
+      if (appliedNew) {
+        const caster = newPlayers[casterSeat];
+        newPlayers[casterSeat] = {
+          ...caster,
+          championCounters: {
+            ...caster.championCounters,
+            enemiesFrostbitten: caster.championCounters.enemiesFrostbitten + 1,
+          },
+        };
+      }
       return { ...state, players: newPlayers };
     }
     case "deal-damage-enemy-nexus": {
@@ -1527,6 +1570,10 @@ function resolveCombat(state: InternalState): InternalState {
       `${attackerPlayer.username} regagne ${attackerNexusHeal} PV nexus (Vol de vie).`,
     );
   }
+  // Phase 3.9c : unitsDied = toutes les morts (alliées + ennemies) — pour
+  // Thresh. On crédite chaque joueur de la totalité (ils voient les mêmes
+  // morts dans la partie).
+  const totalDied = attackerDied.count + defenderDied.count;
   attackerPlayer = {
     ...attackerPlayer,
     bench: newAttackerBench,
@@ -1535,6 +1582,7 @@ function resolveCombat(state: InternalState): InternalState {
       ...attackerPlayer.championCounters,
       alliesDied:
         attackerPlayer.championCounters.alliesDied + attackerDied.count,
+      unitsDied: attackerPlayer.championCounters.unitsDied + totalDied,
     },
   };
   defenderPlayer = {
@@ -1545,6 +1593,7 @@ function resolveCombat(state: InternalState): InternalState {
       ...defenderPlayer.championCounters,
       alliesDied:
         defenderPlayer.championCounters.alliesDied + defenderDied.count,
+      unitsDied: defenderPlayer.championCounters.unitsDied + totalDied,
     },
   };
 
@@ -1678,6 +1727,38 @@ const LEVEL_UP_REGISTRY: Record<
   "01SI030": {
     levelUpCardCode: "01SI030T2",
     check: (s, _u, seat) => s.players[seat].championCounters.alliesDied >= 3,
+  },
+  // Thresh (Phase 3.9c) — « J'ai vu au moins 6 unités mourir. »
+  // unitsDied compte des deux côtés (toute mort observée).
+  "01SI052": {
+    levelUpCardCode: "01SI052T2",
+    check: (s, _u, seat) => s.players[seat].championCounters.unitsDied >= 6,
+  },
+
+  // ── Ionia (Phase 3.9c)
+  // Shen — « J'ai vu des alliés bénéficier de Barrière 5 fois. »
+  "01IO032": {
+    levelUpCardCode: "01IO032T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.barriersGranted >= 5,
+  },
+
+  // ── Piltover & Zaun (Phase 3.9c)
+  // Ezreal — « Vous avez ciblé des ennemis au moins 8 fois. »
+  "01PZ036": {
+    levelUpCardCode: "01PZ036T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.enemyTargetCount >= 8,
+  },
+
+  // ── Freljord (Phase 3.9c)
+  // Ashe — « Vous avez réduit à 0 la puissance d'au moins 5 ennemis. »
+  // Approximation : enemiesFrostbitten count (autres sources de power=0
+  // pourront s'ajouter en 3.9c.x — Stun, Silence, etc.).
+  "01FR038": {
+    levelUpCardCode: "01FR038T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.enemiesFrostbitten >= 5,
   },
 
   // TODO Phase 3.8d.x — Yasuo (étourdis/rappelés), Zed (Ombre Living strike),
