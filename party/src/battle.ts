@@ -32,6 +32,7 @@ import {
   shuffle,
 } from "./lib/battle-engine";
 import { parseAttackEffects, type AttackEffect } from "./lib/attack-effects";
+import { pickRandomBotDeck } from "./lib/bot-decks";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -222,9 +223,10 @@ export default class BattleServer implements Party.Server {
       void mulligans;
 
       // En mode bot, dès que p1 est seated on remplit p2 avec le Bot Suprême
-      // (mirror du même deck pour un match équilibré).
+      // équipé d'un deck aléatoire pioché parmi BOT_DECKS (variété des
+      // matchups). On ne mirror plus le deck du joueur.
       if (this.botMode && seatId === "p1" && !this.seats.p2) {
-        this.fillBotSeat(deckCards, deckEnergyTypes);
+        this.fillBotSeat();
       }
     } else {
       // Reconnexion (même authId).
@@ -248,18 +250,19 @@ export default class BattleServer implements Party.Server {
 
   // ─────────────── bot ───────────────
 
-  /** Remplit p2 avec le Bot Suprême en utilisant un mirror du deck p1. */
-  private fillBotSeat(
-    deckCards: { cardId: string; count: number }[],
-    energyTypes: PokemonEnergyType[],
-  ) {
-    const deck = expandDeck(deckCards);
+  /** Remplit p2 avec le Bot Suprême équipé d'un deck choisi au hasard
+   *  parmi `BOT_DECKS` (5 archétypes différents : Feu, Eau, Élec, Plante,
+   *  Combat). Permet des matchups variés au lieu d'un mirror du deck
+   *  joueur. */
+  private fillBotSeat() {
+    const botDeck = pickRandomBotDeck();
+    const deck = expandDeck(botDeck.cards);
     shuffle(deck);
     const { hand, mulligans } = dealOpeningHand(deck, OPENING_HAND_SIZE);
     this.seats.p2 = {
       authId: BOT_AUTH_ID,
       username: BOT_USERNAME,
-      deckName: "Bot Mirror",
+      deckName: botDeck.name,
       conn: null,
       deck,
       hand,
@@ -269,7 +272,7 @@ export default class BattleServer implements Party.Server {
       hasSetup: false,
       koCount: 0,
       pendingEnergy: null,
-      energyTypes,
+      energyTypes: botDeck.energyTypes,
       energyAttachedThisTurn: false,
       hasRetreatedThisTurn: false,
       evolvedThisTurn: new Set(),
