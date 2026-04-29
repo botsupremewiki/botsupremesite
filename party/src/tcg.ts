@@ -1,8 +1,14 @@
 import type * as Party from "partykit/server";
 import type {
+  OnePieceCardData,
+  OnePiecePackTypeId,
+  OnePieceRarity,
   PokemonCardData,
   PokemonEnergyType,
   PokemonPackTypeId,
+  RuneterraCardData,
+  RuneterraPackTypeId,
+  RuneterraRarity,
   TcgCardOwned,
   TcgClientMessage,
   TcgDeck,
@@ -11,8 +17,19 @@ import type {
   TcgRarity,
   TcgServerMessage,
 } from "../../shared/types";
-import { BATTLE_CONFIG, POKEMON_PACK_TYPES, TCG_GAMES } from "../../shared/types";
+import {
+  BATTLE_CONFIG,
+  ONEPIECE_PACK_TYPES,
+  POKEMON_PACK_TYPES,
+  RUNETERRA_PACK_TYPES,
+  TCG_GAMES,
+} from "../../shared/types";
 import { POKEMON_BASE_SET, POKEMON_BASE_SET_BY_ID } from "../../shared/tcg-pokemon-base";
+import { ONEPIECE_BASE_SET } from "../../shared/tcg-onepiece-base";
+import {
+  RUNETERRA_BASE_SET,
+  RUNETERRA_BASE_SET_BY_CODE,
+} from "../../shared/tcg-runeterra-base";
 import {
   addTcgCards,
   consumeTcgFreePack,
@@ -61,6 +78,42 @@ function getThemedPool(
       pool.push(card);
     }
   }
+  return pool.length > 0 ? pool : null;
+}
+
+// Thematic pool One Piece = cartes assignées au booster (couleur principale
+// OU couleur en extraPacks pour les multi-couleurs). Le pack "Rouge" inclut
+// donc aussi les bi-Rouge/X.
+function getOnePieceThemedPool(
+  gameId: TcgGameId,
+  packTypeId: string,
+): OnePieceCardData[] | null {
+  if (gameId !== "onepiece") return null;
+  if (!(packTypeId in ONEPIECE_PACK_TYPES)) return null;
+  const target = packTypeId as OnePiecePackTypeId;
+  const pool: OnePieceCardData[] = [];
+  for (const card of ONEPIECE_BASE_SET) {
+    if (card.pack === target || card.extraPacks?.includes(target)) {
+      pool.push(card);
+    }
+  }
+  return pool.length > 0 ? pool : null;
+}
+
+// Thematic pool Runeterra = cartes collectibles dont la liste de régions
+// contient la région du pack. Pour les cartes dual-région (ex Teemo
+// PiltoverZaun + BandleCity), elles apparaissent dans le pack PiltoverZaun.
+function getRuneterraThemedPool(
+  gameId: TcgGameId,
+  packTypeId: string,
+): RuneterraCardData[] | null {
+  if (gameId !== "lol") return null;
+  if (!(packTypeId in RUNETERRA_PACK_TYPES)) return null;
+  const target = packTypeId as RuneterraPackTypeId;
+  const region = RUNETERRA_PACK_TYPES[target].region;
+  const pool = RUNETERRA_BASE_SET.filter(
+    (c) => c.collectible && c.regions.includes(region),
+  );
   return pool.length > 0 ? pool : null;
 }
 
@@ -123,6 +176,86 @@ const RARE_SLOT_WEIGHTS: Record<TcgRarity, number> = {
   "star-3": 1,
   crown: 0.5,
   promo: 0,
+};
+
+// ─── Weights One Piece TCG ─────────────────────────────────────────────────
+// Distribution par slot (6 cartes/pack — packSize=6). Raretés Bandai :
+//   c=Common, uc=Uncommon, r=Rare, sr=Super Rare, sec=Secret Rare,
+//   l=Leader, sp=Special/Alt-Art, tr=Treasure Rare, p=Promo, don=DON!!.
+//
+//   • OP_REGULAR_LOW   → slots 1-3 : commune dominante, peu d'UC
+//   • OP_REGULAR_HIGH  → slots 4-5 : UC + R + chance de SR/SEC
+//   • OP_RARE_SLOT     → slot 6   : R + SR + petite chance de SEC/SP/L/TR
+const OP_REGULAR_LOW_WEIGHTS: Record<OnePieceRarity, number> = {
+  c: 80,
+  uc: 18,
+  r: 2,
+  sr: 0,
+  sec: 0,
+  l: 0,
+  p: 0,
+  tr: 0,
+  sp: 0,
+  don: 0,
+};
+
+const OP_REGULAR_HIGH_WEIGHTS: Record<OnePieceRarity, number> = {
+  c: 0,
+  uc: 60,
+  r: 28,
+  sr: 9,
+  sec: 1.5,
+  l: 0.5,
+  p: 0,
+  tr: 0,
+  sp: 1,
+  don: 0,
+};
+
+const OP_RARE_SLOT_WEIGHTS: Record<OnePieceRarity, number> = {
+  c: 0,
+  uc: 0,
+  r: 60,
+  sr: 25,
+  sec: 5,
+  l: 4, // Leaders rarement (~4% du slot rare)
+  p: 1,
+  tr: 0.5,
+  sp: 4.5,
+  don: 0,
+};
+
+// ─── Weights Legends of Runeterra ──────────────────────────────────────────
+// Distribution par slot (5 cartes/pack — packSize=5). Raretés Riot :
+//   Common, Rare, Epic, Champion. None est exclu (tokens non-collectibles).
+//
+//   • LOR_REGULAR_LOW   → slots 1-3 : Common dominant
+//   • LOR_REGULAR_HIGH  → slot 4    : Rare dominant + ~5% Champion
+//   • LOR_RARE_SLOT     → slot 5    : Rare garanti + ~12% Champion
+//
+// Taux global Champion par pack ≈ 17% (5% slot 4 + 12% slot 5, indépendants).
+const LOR_REGULAR_LOW_WEIGHTS: Record<RuneterraRarity, number> = {
+  Common: 90,
+  Rare: 9,
+  Epic: 1,
+  Champion: 0,
+  None: 0,
+};
+
+const LOR_REGULAR_HIGH_WEIGHTS: Record<RuneterraRarity, number> = {
+  Common: 0,
+  Rare: 70,
+  Epic: 25,
+  Champion: 5,
+  None: 0,
+};
+
+const LOR_RARE_SLOT_WEIGHTS: Record<RuneterraRarity, number> = {
+  Common: 0,
+  Rare: 55,
+  Epic: 33,
+  Champion: 12,
+  None: 0,
 };
 
 export default class TcgServer implements Party.Server {
@@ -212,6 +345,8 @@ export default class TcgServer implements Party.Server {
           count: c.count,
         })),
         energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
+        leaderId: d.leader_id ?? null,
+        regions: (d.regions ?? []) as string[],
         updatedAt: Date.parse(d.updated_at) || Date.now(),
       }));
     } else {
@@ -260,6 +395,8 @@ export default class TcgServer implements Party.Server {
         data.name,
         data.cards,
         data.energyTypes,
+        data.leaderId,
+        data.regions ?? [],
       );
     } else if (data.type === "tcg-delete-deck") {
       await this.handleDeleteDeck(sender, info, data.deckId);
@@ -298,6 +435,8 @@ export default class TcgServer implements Party.Server {
         count: c.count,
       })),
       energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
+      leaderId: d.leader_id ?? null,
+      regions: (d.regions ?? []) as string[],
       updatedAt: Date.parse(d.updated_at) || Date.now(),
     }));
     this.sendTo(conn, {
@@ -336,6 +475,8 @@ export default class TcgServer implements Party.Server {
     name: string,
     cards: { cardId: string; count: number }[],
     energyTypes: string[],
+    leaderId: string | null,
+    regions: string[],
   ) {
     if (!info.authId) {
       this.sendError(conn, "Connecte-toi pour sauvegarder un deck.");
@@ -345,71 +486,23 @@ export default class TcgServer implements Party.Server {
       this.sendError(conn, "Deck vide.");
       return;
     }
-    // Pocket : deck = 20 cartes exactement, max 2 copies par NOM de carte
-    // (toutes raretés confondues — Pikachu-ex ◆◆◆◆ et Pikachu-ex ★ comptent
-    // ensemble), pas de cartes énergie (énergies générées auto en combat).
-    const total = cards.reduce((s, c) => s + c.count, 0);
-    if (total !== BATTLE_CONFIG.deckSize) {
-      this.sendError(
-        conn,
-        `Le deck doit contenir exactement ${BATTLE_CONFIG.deckSize} cartes (actuellement ${total}).`,
-      );
+
+    // Validation par jeu : Pokémon Pocket (20/2/énergies), One Piece TCG
+    // (50/4/Leader+couleur), Runeterra (40/3/1-2 régions, 6 champions max).
+    if (this.gameId === "pokemon") {
+      const ok = this.validatePokemonDeck(conn, info, cards, energyTypes);
+      if (!ok) return;
+    } else if (this.gameId === "onepiece") {
+      const ok = this.validateOnePieceDeck(conn, info, cards, leaderId);
+      if (!ok) return;
+    } else if (this.gameId === "lol") {
+      const ok = this.validateRuneterraDeck(conn, info, cards, regions);
+      if (!ok) return;
+    } else {
+      this.sendError(conn, "Sauvegarde de deck non supportée pour ce jeu.");
       return;
     }
-    // Agrège par nom pour vérifier la limite Pocket "max 2 par nom",
-    // et compte les Pokémon de Base (au moins 1 requis sinon mulligan
-    // infini au démarrage du combat).
-    const byName = new Map<string, number>();
-    let basicCount = 0;
-    for (const entry of cards) {
-      const owned = info.collection.get(entry.cardId) ?? 0;
-      if (entry.count > owned) {
-        this.sendError(
-          conn,
-          `Tu n'as que ${owned} ${entry.cardId} en collection.`,
-        );
-        return;
-      }
-      const meta = POKEMON_BASE_SET_BY_ID.get(entry.cardId);
-      const cardName = meta?.name ?? entry.cardId;
-      byName.set(cardName, (byName.get(cardName) ?? 0) + entry.count);
-      if (meta?.kind === "pokemon" && meta.stage === "basic") {
-        basicCount += entry.count;
-      }
-    }
-    for (const [cardName, count] of byName) {
-      if (count > BATTLE_CONFIG.maxCopies) {
-        this.sendError(
-          conn,
-          `Max ${BATTLE_CONFIG.maxCopies} cartes "${cardName}" (toutes raretés confondues), tu en as ${count}.`,
-        );
-        return;
-      }
-    }
-    if (basicCount === 0) {
-      this.sendError(
-        conn,
-        "Au moins 1 Pokémon de Base est requis pour pouvoir démarrer un combat.",
-      );
-      return;
-    }
-    // Validation des types d'énergies : 1 à 3, parmi les 11 types valides.
-    const VALID_TYPES = new Set([
-      "fire", "water", "grass", "lightning", "psychic", "fighting",
-      "darkness", "metal", "dragon", "fairy", "colorless",
-    ]);
-    if (
-      !Array.isArray(energyTypes) ||
-      energyTypes.length < 1 ||
-      energyTypes.length > 3 ||
-      energyTypes.some((t) => !VALID_TYPES.has(t))
-    ) {
-      this.sendError(
-        conn,
-        "Sélectionne entre 1 et 3 types d'énergie pour ton deck.",
-      );
-      return;
-    }
+
     const result = await saveTcgDeck(
       this.room,
       info.authId,
@@ -418,6 +511,8 @@ export default class TcgServer implements Party.Server {
       name,
       cards.map((c) => ({ card_id: c.cardId, count: c.count })),
       energyTypes,
+      leaderId,
+      regions,
     );
     if (!result.ok) {
       this.sendError(conn, result.error);
@@ -433,9 +528,266 @@ export default class TcgServer implements Party.Server {
         count: c.count,
       })),
       energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
+      leaderId: d.leader_id ?? null,
+      regions: (d.regions ?? []) as string[],
       updatedAt: Date.parse(d.updated_at) || Date.now(),
     }));
     this.sendTo(conn, { type: "tcg-decks", decks });
+  }
+
+  /** Validations Pokémon Pocket : 20 cartes, max 2 par NOM, 1-3 énergies,
+   *  au moins 1 Pokémon de Base. Retourne false et envoie l'erreur si KO. */
+  private validatePokemonDeck(
+    conn: Party.Connection,
+    info: ConnInfo,
+    cards: { cardId: string; count: number }[],
+    energyTypes: string[],
+  ): boolean {
+    const total = cards.reduce((s, c) => s + c.count, 0);
+    if (total !== BATTLE_CONFIG.deckSize) {
+      this.sendError(
+        conn,
+        `Le deck doit contenir exactement ${BATTLE_CONFIG.deckSize} cartes (actuellement ${total}).`,
+      );
+      return false;
+    }
+    const byName = new Map<string, number>();
+    let basicCount = 0;
+    for (const entry of cards) {
+      const owned = info.collection.get(entry.cardId) ?? 0;
+      if (entry.count > owned) {
+        this.sendError(
+          conn,
+          `Tu n'as que ${owned} ${entry.cardId} en collection.`,
+        );
+        return false;
+      }
+      const meta = POKEMON_BASE_SET_BY_ID.get(entry.cardId);
+      const cardName = meta?.name ?? entry.cardId;
+      byName.set(cardName, (byName.get(cardName) ?? 0) + entry.count);
+      if (meta?.kind === "pokemon" && meta.stage === "basic") {
+        basicCount += entry.count;
+      }
+    }
+    for (const [cardName, count] of byName) {
+      if (count > BATTLE_CONFIG.maxCopies) {
+        this.sendError(
+          conn,
+          `Max ${BATTLE_CONFIG.maxCopies} cartes "${cardName}" (toutes raretés confondues), tu en as ${count}.`,
+        );
+        return false;
+      }
+    }
+    if (basicCount === 0) {
+      this.sendError(
+        conn,
+        "Au moins 1 Pokémon de Base est requis pour pouvoir démarrer un combat.",
+      );
+      return false;
+    }
+    const VALID_TYPES = new Set([
+      "fire", "water", "grass", "lightning", "psychic", "fighting",
+      "darkness", "metal", "dragon", "fairy", "colorless",
+    ]);
+    if (
+      !Array.isArray(energyTypes) ||
+      energyTypes.length < 1 ||
+      energyTypes.length > 3 ||
+      energyTypes.some((t) => !VALID_TYPES.has(t))
+    ) {
+      this.sendError(
+        conn,
+        "Sélectionne entre 1 et 3 types d'énergie pour ton deck.",
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /** Validations Runeterra (Set 1) : 40 cartes, max 3 copies par cardCode,
+   *  1-2 régions choisies, max 6 champions, toutes les cartes partagent au
+   *  moins une région avec celles choisies. */
+  private validateRuneterraDeck(
+    conn: Party.Connection,
+    info: ConnInfo,
+    cards: { cardId: string; count: number }[],
+    regions: string[],
+  ): boolean {
+    const VALID_REGIONS = new Set([
+      "Demacia",
+      "Noxus",
+      "Ionia",
+      "Freljord",
+      "PiltoverZaun",
+      "ShadowIsles",
+    ]);
+    if (
+      !Array.isArray(regions) ||
+      regions.length < 1 ||
+      regions.length > 2 ||
+      regions.some((r) => !VALID_REGIONS.has(r))
+    ) {
+      this.sendError(
+        conn,
+        `Sélectionne 1 ou 2 régions valides (actuellement ${regions?.length ?? 0}).`,
+      );
+      return false;
+    }
+    const allowed = new Set(regions);
+    const total = cards.reduce((s, c) => s + c.count, 0);
+    if (total !== 40) {
+      this.sendError(
+        conn,
+        `Le deck Runeterra doit contenir exactement 40 cartes (actuellement ${total}).`,
+      );
+      return false;
+    }
+    const byCode = new Map<string, number>();
+    let championCount = 0;
+    for (const entry of cards) {
+      const owned = info.collection.get(entry.cardId) ?? 0;
+      if (entry.count > owned) {
+        this.sendError(
+          conn,
+          `Tu n'as que ${owned} ${entry.cardId} en collection.`,
+        );
+        return false;
+      }
+      const meta = RUNETERRA_BASE_SET_BY_CODE.get(entry.cardId);
+      if (!meta) {
+        this.sendError(conn, `Carte inconnue : ${entry.cardId}.`);
+        return false;
+      }
+      if (!meta.collectible) {
+        this.sendError(
+          conn,
+          `${meta.name} n'est pas une carte collectible.`,
+        );
+        return false;
+      }
+      const sharesRegion = meta.regions.some((r) => allowed.has(r));
+      if (!sharesRegion) {
+        this.sendError(
+          conn,
+          `${meta.name} (${meta.regions.join("/")}) ne partage aucune région avec celles choisies (${regions.join("/")}).`,
+        );
+        return false;
+      }
+      if (meta.supertype === "Champion") championCount += entry.count;
+      byCode.set(
+        entry.cardId,
+        (byCode.get(entry.cardId) ?? 0) + entry.count,
+      );
+    }
+    for (const [code, count] of byCode) {
+      if (count > 3) {
+        this.sendError(
+          conn,
+          `Max 3 copies par carte. ${code} : ${count}.`,
+        );
+        return false;
+      }
+    }
+    if (championCount > 6) {
+      this.sendError(
+        conn,
+        `Max 6 champions par deck (actuellement ${championCount}).`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /** Validations One Piece TCG : 1 Leader (hors deck), 50 cartes, max 4
+   *  copies par cardNumber (alt-arts comptent ensemble), toutes les cartes
+   *  partagent au moins une couleur avec le Leader. */
+  private validateOnePieceDeck(
+    conn: Party.Connection,
+    info: ConnInfo,
+    cards: { cardId: string; count: number }[],
+    leaderId: string | null,
+  ): boolean {
+    if (!leaderId) {
+      this.sendError(conn, "Sélectionne un Leader pour ton deck.");
+      return false;
+    }
+    const leader = ONEPIECE_BASE_SET.find((c) => c.id === leaderId);
+    if (!leader || leader.kind !== "leader") {
+      this.sendError(conn, "Leader invalide.");
+      return false;
+    }
+    const ownedLeader = info.collection.get(leaderId) ?? 0;
+    if (ownedLeader < 1) {
+      this.sendError(
+        conn,
+        `Tu ne possèdes pas le Leader ${leader.name}.`,
+      );
+      return false;
+    }
+    const total = cards.reduce((s, c) => s + c.count, 0);
+    if (total !== 50) {
+      this.sendError(
+        conn,
+        `Le deck One Piece doit contenir exactement 50 cartes (actuellement ${total}).`,
+      );
+      return false;
+    }
+
+    const byCardNumber = new Map<string, number>();
+    const allowedColors = new Set(leader.color);
+    for (const entry of cards) {
+      const owned = info.collection.get(entry.cardId) ?? 0;
+      if (entry.count > owned) {
+        this.sendError(
+          conn,
+          `Tu n'as que ${owned} ${entry.cardId} en collection.`,
+        );
+        return false;
+      }
+      const meta = ONEPIECE_BASE_SET.find((c) => c.id === entry.cardId);
+      if (!meta) {
+        this.sendError(conn, `Carte inconnue : ${entry.cardId}.`);
+        return false;
+      }
+      if (meta.kind === "leader") {
+        this.sendError(
+          conn,
+          "Les Leaders ne peuvent pas être dans le deck principal.",
+        );
+        return false;
+      }
+      if (meta.kind === "don") {
+        this.sendError(
+          conn,
+          "Les cartes DON!! sont gérées séparément, pas dans le deck principal.",
+        );
+        return false;
+      }
+      // Contrainte de couleur : au moins une couleur partagée avec le Leader.
+      const cardColors = "color" in meta ? meta.color : [];
+      const sharesColor = cardColors.some((c) => allowedColors.has(c));
+      if (!sharesColor) {
+        this.sendError(
+          conn,
+          `${meta.name} (${cardColors.join("/")}) ne partage aucune couleur avec ton Leader ${leader.name} (${leader.color.join("/")}).`,
+        );
+        return false;
+      }
+      byCardNumber.set(
+        meta.cardNumber,
+        (byCardNumber.get(meta.cardNumber) ?? 0) + entry.count,
+      );
+    }
+    for (const [cardNumber, count] of byCardNumber) {
+      if (count > 4) {
+        this.sendError(
+          conn,
+          `Max 4 copies par carte (alt-arts inclus). ${cardNumber} : ${count}.`,
+        );
+        return false;
+      }
+    }
+    return true;
   }
 
   private async handleDeleteDeck(
@@ -461,6 +813,8 @@ export default class TcgServer implements Party.Server {
         count: c.count,
       })),
       energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
+      leaderId: d.leader_id ?? null,
+      regions: (d.regions ?? []) as string[],
       updatedAt: Date.parse(d.updated_at) || Date.now(),
     }));
     this.sendTo(conn, { type: "tcg-decks", decks });
@@ -483,8 +837,27 @@ export default class TcgServer implements Party.Server {
 
     // Validate pack type belongs to this game and is active with cards.
     if (this.gameId === "pokemon") {
-      const packType =
-        POKEMON_PACK_TYPES[packTypeId as PokemonPackTypeId];
+      const packType = POKEMON_PACK_TYPES[packTypeId as PokemonPackTypeId];
+      if (!packType) {
+        this.sendError(conn, "Type de booster inconnu.");
+        return;
+      }
+      if (!packType.active) {
+        this.sendError(conn, `${packType.name} arrive bientôt.`);
+        return;
+      }
+    } else if (this.gameId === "onepiece") {
+      const packType = ONEPIECE_PACK_TYPES[packTypeId as OnePiecePackTypeId];
+      if (!packType) {
+        this.sendError(conn, "Type de booster inconnu.");
+        return;
+      }
+      if (!packType.active) {
+        this.sendError(conn, `${packType.name} arrive bientôt.`);
+        return;
+      }
+    } else if (this.gameId === "lol") {
+      const packType = RUNETERRA_PACK_TYPES[packTypeId as RuneterraPackTypeId];
       if (!packType) {
         this.sendError(conn, "Type de booster inconnu.");
         return;
@@ -494,9 +867,39 @@ export default class TcgServer implements Party.Server {
         return;
       }
     }
-    const themedPool = getThemedPool(this.gameId, packTypeId);
-    const fullPool = getFullPool(this.gameId);
-    if (!themedPool || themedPool.length === 0 || fullPool.length === 0) {
+
+    // Resolve pool selon le jeu. On garde des branches strictes pour ne
+    // pas mélanger les types Pokémon/OnePiece/Runeterra dans le drawCard.
+    const pokemonThemed =
+      this.gameId === "pokemon" ? getThemedPool(this.gameId, packTypeId) : null;
+    const pokemonFull =
+      this.gameId === "pokemon" ? getFullPool(this.gameId) : null;
+    const onePieceThemed =
+      this.gameId === "onepiece"
+        ? getOnePieceThemedPool(this.gameId, packTypeId)
+        : null;
+    const lorThemed =
+      this.gameId === "lol"
+        ? getRuneterraThemedPool(this.gameId, packTypeId)
+        : null;
+    if (
+      this.gameId === "pokemon" &&
+      (!pokemonThemed ||
+        pokemonThemed.length === 0 ||
+        !pokemonFull ||
+        pokemonFull.length === 0)
+    ) {
+      this.sendError(conn, "Ce booster n'a pas encore de cartes.");
+      return;
+    }
+    if (
+      this.gameId === "onepiece" &&
+      (!onePieceThemed || onePieceThemed.length === 0)
+    ) {
+      this.sendError(conn, "Ce booster n'a pas encore de cartes.");
+      return;
+    }
+    if (this.gameId === "lol" && (!lorThemed || lorThemed.length === 0)) {
       this.sendError(conn, "Ce booster n'a pas encore de cartes.");
       return;
     }
@@ -519,14 +922,12 @@ export default class TcgServer implements Party.Server {
       await patchProfileGold(this.room, info.authId, info.gold);
       this.sendTo(conn, { type: "gold-update", gold: info.gold });
     }
-    // Booster composition Pocket-style : les 5 cartes viennent toutes du
-    // booster choisi (themed pool). Distribution croissante de rareté :
-    //   slots 0-2 : REGULAR_LOW   (~90% ◆, ~9% ◆◆, ~1% ◆◆◆)
-    //   slot 3    : REGULAR_HIGH  (~76% ◆◆◆, ~20% ◆◆◆◆, étoiles rares)
-    //   slot 4    : RARE_SLOT     (~70% ◆◆◆, ~23.5% ◆◆◆◆, plus d'étoiles)
-    // Le fullPool n'est plus utilisé pour les boosters Pokémon afin de
-    // matcher Pocket : un Pack Mewtwo ne donne que des cartes Mewtwo, etc.
-    const cards: PokemonCardData[] = [];
+
+    // Distribution des slots : les N-2 premiers slots tirent du REGULAR_LOW,
+    // l'avant-dernier du REGULAR_HIGH et le dernier du RARE_SLOT. Les
+    // raretés sont propres au jeu (Pokémon : ◆/◆◆/★/👑 ; One Piece :
+    // C/UC/R/SR/SEC/SP/L/TR).
+    const cardIds: string[] = [];
     for (let i = 0; i < game.packSize; i++) {
       const slotKind: SlotKind =
         i === game.packSize - 1
@@ -534,9 +935,16 @@ export default class TcgServer implements Party.Server {
           : i === game.packSize - 2
             ? "regular-high"
             : "regular-low";
-      const pool = this.gameId === "pokemon" ? themedPool : fullPool;
-      cards.push(this.drawCard(pool, slotKind));
+      if (this.gameId === "pokemon") {
+        cardIds.push(this.drawCard(pokemonThemed!, slotKind).id);
+      } else if (this.gameId === "onepiece") {
+        cardIds.push(this.drawOnePieceCard(onePieceThemed!, slotKind).id);
+      } else if (this.gameId === "lol") {
+        cardIds.push(this.drawRuneterraCard(lorThemed!, slotKind).cardCode);
+      }
     }
+    // Stub typé pour le reste du flow : on travaille uniquement avec les ids.
+    const cards = cardIds.map((id) => ({ id }));
 
     // Update local + persist.
     const counts: Map<string, number> = new Map();
@@ -578,6 +986,101 @@ export default class TcgServer implements Party.Server {
       freePacks: info.freePacks,
       usedFreePack,
     });
+  }
+
+  private drawOnePieceCard(
+    pool: OnePieceCardData[],
+    slotKind: SlotKind,
+  ): OnePieceCardData {
+    const weights =
+      slotKind === "rare"
+        ? OP_RARE_SLOT_WEIGHTS
+        : slotKind === "regular-high"
+          ? OP_REGULAR_HIGH_WEIGHTS
+          : OP_REGULAR_LOW_WEIGHTS;
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+    let r = Math.random() * totalWeight;
+    let chosen: OnePieceRarity = "c";
+    for (const [tier, w] of Object.entries(weights) as [
+      OnePieceRarity,
+      number,
+    ][]) {
+      if (r < w) {
+        chosen = tier;
+        break;
+      }
+      r -= w;
+    }
+    // Fallback : du plus rare au plus commun.
+    const fullOrder: OnePieceRarity[] = [
+      "tr",
+      "sec",
+      "sp",
+      "l",
+      "sr",
+      "r",
+      "uc",
+      "c",
+      "p",
+      "don",
+    ];
+    const startIdx = fullOrder.indexOf(chosen);
+    const order = [
+      ...fullOrder.slice(startIdx),
+      ...fullOrder.slice(0, startIdx),
+    ];
+    for (const tier of order) {
+      const subset = pool.filter((c) => c.rarity === tier);
+      if (subset.length > 0) {
+        return subset[Math.floor(Math.random() * subset.length)];
+      }
+    }
+    return pool[0];
+  }
+
+  private drawRuneterraCard(
+    pool: RuneterraCardData[],
+    slotKind: SlotKind,
+  ): RuneterraCardData {
+    const weights =
+      slotKind === "rare"
+        ? LOR_RARE_SLOT_WEIGHTS
+        : slotKind === "regular-high"
+          ? LOR_REGULAR_HIGH_WEIGHTS
+          : LOR_REGULAR_LOW_WEIGHTS;
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+    let r = Math.random() * totalWeight;
+    let chosen: RuneterraRarity = "Common";
+    for (const [tier, w] of Object.entries(weights) as [
+      RuneterraRarity,
+      number,
+    ][]) {
+      if (r < w) {
+        chosen = tier;
+        break;
+      }
+      r -= w;
+    }
+    // Fallback : du plus rare au plus commun.
+    const fullOrder: RuneterraRarity[] = [
+      "Champion",
+      "Epic",
+      "Rare",
+      "Common",
+      "None",
+    ];
+    const startIdx = fullOrder.indexOf(chosen);
+    const order = [
+      ...fullOrder.slice(startIdx),
+      ...fullOrder.slice(0, startIdx),
+    ];
+    for (const tier of order) {
+      const subset = pool.filter((c) => c.rarity === tier);
+      if (subset.length > 0) {
+        return subset[Math.floor(Math.random() * subset.length)];
+      }
+    }
+    return pool[0];
   }
 
   private drawCard(

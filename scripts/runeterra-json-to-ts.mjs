@@ -99,8 +99,13 @@ function buildCard(c) {
   }
   obj.collectible = !!c.collectible;
   obj.set = c.set;
-  const img = normalizeImageUrl(c.assets?.[0]?.fullAbsolutePath);
+  // gameAbsolutePath = carte avec cadre + texte (standard pour deck builder
+  // / collection). fullAbsolutePath = illustration sans cadre, gardée à part
+  // pour les zooms/splash.
+  const img = normalizeImageUrl(c.assets?.[0]?.gameAbsolutePath);
   if (img) obj.image = img;
+  const fullArt = normalizeImageUrl(c.assets?.[0]?.fullAbsolutePath);
+  if (fullArt && fullArt !== img) obj.fullArt = fullArt;
   return obj;
 }
 

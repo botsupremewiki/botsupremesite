@@ -4,6 +4,8 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { POKEMON_BASE_SET } from "@shared/tcg-pokemon-base";
+import { ONEPIECE_BASE_SET } from "@shared/tcg-onepiece-base";
+import { RUNETERRA_BASE_SET } from "@shared/tcg-runeterra-base";
 import { UserPill } from "@/components/user-pill";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +22,24 @@ export default async function TcgGameHub({
 
   // Stats serveur (collection, free packs, ELO) si user connecté.
   let owned = 0;
-  let totalCards = gameId === "pokemon" ? POKEMON_BASE_SET.length : 0;
+  let totalCards =
+    gameId === "pokemon"
+      ? POKEMON_BASE_SET.length
+      : gameId === "onepiece"
+        ? ONEPIECE_BASE_SET.length
+        : gameId === "lol"
+          ? RUNETERRA_BASE_SET.filter((c) => c.collectible).length
+          : 0;
   let deckCount = 0;
   let freePacks = 0;
   let elo: number | null = null;
+  const deckSizeLabel =
+    gameId === "lol"
+      ? "40 cartes (Runeterra)"
+      : gameId === "onepiece"
+        ? "50 cartes + 1 Leader (One Piece TCG)"
+        : "20 cartes (Pocket)";
+  const notImplemented = gameId === "lol" || gameId === "onepiece";
 
   if (profile) {
     const supabase = await createClient();
@@ -140,7 +156,7 @@ export default async function TcgGameHub({
               href={`/play/tcg/${gameId}/decks`}
               icon="🛠️"
               title="Mes Decks"
-              description={`${deckCount} deck${deckCount > 1 ? "s" : ""} sauvegardé${deckCount > 1 ? "s" : ""} — éditeur 20 cartes (Pocket)`}
+              description={`${deckCount} deck${deckCount > 1 ? "s" : ""} sauvegardé${deckCount > 1 ? "s" : ""} — éditeur ${deckSizeLabel}`}
               accent="text-violet-200"
               border="border-violet-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(167,139,250,0.10),transparent_70%)]"
@@ -153,6 +169,7 @@ export default async function TcgGameHub({
               accent="text-emerald-200"
               border="border-emerald-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
+              comingSoon={notImplemented}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/pvp`}
@@ -162,6 +179,7 @@ export default async function TcgGameHub({
               accent="text-sky-200"
               border="border-sky-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.10),transparent_70%)]"
+              comingSoon={notImplemented}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/ranked`}
@@ -173,6 +191,7 @@ export default async function TcgGameHub({
               accent="text-rose-200"
               border="border-rose-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.10),transparent_70%)]"
+              comingSoon={notImplemented}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/market`}
@@ -182,6 +201,7 @@ export default async function TcgGameHub({
               accent="text-emerald-200"
               border="border-emerald-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
+              comingSoon={notImplemented}
             />
           </div>
         </div>
@@ -235,6 +255,7 @@ function MenuButton({
   border,
   gradient,
   highlight,
+  comingSoon,
 }: {
   href: string;
   icon: string;
@@ -244,19 +265,33 @@ function MenuButton({
   border: string;
   gradient: string;
   highlight?: boolean;
+  comingSoon?: boolean;
 }) {
-  return (
-    <Link
-      href={href}
-      className={`group flex h-full flex-col gap-2 rounded-xl border p-5 transition-colors ${border} bg-black/40 hover:bg-white/[0.04] ${gradient} ${
-        highlight ? "ring-1 ring-amber-400/30" : ""
-      }`}
-    >
-      <div className="text-3xl">{icon}</div>
+  const className = `group flex h-full flex-col gap-2 rounded-xl border p-5 ${border} bg-black/40 ${gradient} ${
+    comingSoon
+      ? "opacity-50 cursor-not-allowed"
+      : "transition-colors hover:bg-white/[0.04]"
+  } ${highlight ? "ring-1 ring-amber-400/30" : ""}`;
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-3xl">{icon}</div>
+        {comingSoon && (
+          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-300">
+            Bientôt
+          </span>
+        )}
+      </div>
       <div className={`text-base font-semibold ${accent}`}>{title}</div>
       <div className="text-[11px] leading-relaxed text-zinc-400">
         {description}
       </div>
+    </>
+  );
+  if (comingSoon) return <div className={className}>{content}</div>;
+  return (
+    <Link href={href} className={className}>
+      {content}
     </Link>
   );
 }

@@ -179,6 +179,10 @@ export type TcgDeckRow = {
   name: string;
   cards: { card_id: string; count: number }[] | null;
   energy_types?: string[] | null;
+  regions?: string[] | null;
+  // One Piece : id du Leader (carte hors deck, requise pour ce game_id).
+  // Pour Pokémon : null.
+  leader_id?: string | null;
   updated_at: string;
 };
 
@@ -192,7 +196,7 @@ export async function fetchTcgDecks(
   if (!env) return [];
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,game_id,name,cards,energy_types,updated_at&order=updated_at.desc`,
+      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,game_id,name,cards,energy_types,leader_id,regions,updated_at&order=updated_at.desc`,
       {
         headers: {
           apikey: env.key,
@@ -218,7 +222,7 @@ export async function fetchTcgDeckById(
   if (!env) return null;
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,game_id,name,cards,energy_types,updated_at`,
+      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,game_id,name,cards,energy_types,leader_id,regions,updated_at`,
       {
         headers: {
           apikey: env.key,
@@ -245,6 +249,8 @@ export async function saveTcgDeck(
   name: string,
   cards: { card_id: string; count: number }[],
   energyTypes: string[],
+  leaderId: string | null,
+  regions: string[] = [],
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const env = getSupabaseEnv(room);
   if (!env) return { ok: false, error: "DB indisponible." };
@@ -263,6 +269,8 @@ export async function saveTcgDeck(
         p_name: name,
         p_cards: cards,
         p_energy_types: energyTypes,
+        p_leader_id: leaderId,
+        p_regions: regions,
       }),
     });
     if (!resp.ok) {

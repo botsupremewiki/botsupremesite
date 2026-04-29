@@ -4,8 +4,12 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { POKEMON_BASE_SET } from "@shared/tcg-pokemon-base";
+import { ONEPIECE_BASE_SET } from "@shared/tcg-onepiece-base";
+import { RUNETERRA_BASE_SET } from "@shared/tcg-runeterra-base";
 import { UserPill } from "@/components/user-pill";
 import { CollectionGrid } from "../_components/collection-grid";
+import { LorCollectionGrid } from "../_components/lor-collection-grid";
+import { OnePieceCollectionGrid } from "../_components/onepiece-collection-grid";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +42,14 @@ export default async function CollectionPage({
     }
   }
 
-  const pool = gameId === "pokemon" ? POKEMON_BASE_SET : [];
+  // Dispatch par jeu : pool typé spécifiquement pour chaque TCG.
+  const pokemonPool = gameId === "pokemon" ? POKEMON_BASE_SET : [];
+  const onePiecePool = gameId === "onepiece" ? ONEPIECE_BASE_SET : [];
+  const lorPool =
+    gameId === "lol"
+      ? RUNETERRA_BASE_SET.filter((c) => c.collectible)
+      : [];
+  const poolSize = pokemonPool.length + onePiecePool.length + lorPool.length;
   const owned = Array.from(collection.values()).filter((n) => n > 0).length;
 
   return (
@@ -71,8 +82,12 @@ export default async function CollectionPage({
               📚 Ma Collection
             </h1>
             <p className="mt-1 text-sm text-zinc-400">
-              {owned} / {pool.length} cartes possédées. Filtre par type,
-              rareté, statut, ou recherche par nom.
+              {owned} / {poolSize} cartes possédées.{" "}
+              {gameId === "lol"
+                ? "Filtre par région, coût, type, rareté, ou recherche par nom."
+                : gameId === "onepiece"
+                  ? "Filtre par catégorie, couleur, rareté, ou recherche par nom."
+                  : "Filtre par type, rareté, statut, ou recherche par nom."}
             </p>
           </div>
 
@@ -80,8 +95,15 @@ export default async function CollectionPage({
             <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
               Connecte-toi pour voir ta collection.
             </div>
+          ) : gameId === "lol" ? (
+            <LorCollectionGrid pool={lorPool} collection={collection} />
+          ) : gameId === "onepiece" ? (
+            <OnePieceCollectionGrid
+              pool={onePiecePool}
+              collection={collection}
+            />
           ) : (
-            <CollectionGrid pool={pool} collection={collection} />
+            <CollectionGrid pool={pokemonPool} collection={collection} />
           )}
         </div>
       </main>

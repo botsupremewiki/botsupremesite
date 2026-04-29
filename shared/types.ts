@@ -1362,8 +1362,12 @@ export type TcgDeck = {
   // du deck. Le moteur de combat ne génère que ces types (peu importe les
   // types des Pokémon présents dans le deck).
   energyTypes: PokemonEnergyType[];
-  // One Piece : id du Leader (carte hors deck). null pour Pokémon.
+  // One Piece : id du Leader (carte hors deck). null pour Pokémon/LoR.
   leaderId: string | null;
+  // LoR : 1 ou 2 régions choisies (ex ["Demacia", "Noxus"]). Vide pour
+  // Pokémon/OnePiece. Toutes les cartes du deck doivent partager au moins
+  // une région avec celles-ci.
+  regions: string[];
   updatedAt: number;
 };
 
@@ -1375,8 +1379,10 @@ export type TcgClientMessage =
       name: string;
       cards: TcgDeckEntry[];
       energyTypes: PokemonEnergyType[];
-      // One Piece : id du Leader. null pour Pokémon.
+      // One Piece : id du Leader. null pour Pokémon/LoR.
       leaderId: string | null;
+      // LoR : régions choisies. Optionnel pour compat avec clients existants.
+      regions?: string[];
     }
   | { type: "tcg-delete-deck"; deckId: string }
   // Force re-fetch + broadcast pour soi-même.

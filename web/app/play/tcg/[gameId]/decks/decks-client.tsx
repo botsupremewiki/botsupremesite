@@ -313,6 +313,7 @@ export function DecksClient({
       name: draftName.trim().slice(0, DECK_NAME_MAX),
       cards: entries,
       energyTypes: draftEnergyTypes,
+      leaderId: null,
     });
   }, [
     send,
