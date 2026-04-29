@@ -16,9 +16,10 @@ import {
   ADVENTURE_TICK_SECONDS,
   STAGE_PHASE_ACCENT,
   STAGE_PHASE_LABEL,
-  dailyIdleOsCap,
   getStageComposition,
   nextStageComposition,
+  osPerTick,
+  xpPerTick,
 } from "@shared/eternum-adventure";
 import { RARITY_LABEL } from "@shared/eternum-familiers";
 import { createClient } from "@/lib/supabase/client";
@@ -27,18 +28,15 @@ import { IdleBattleScene } from "@/components/eternum/idle-battle-scene";
 export function IdleClient({
   initialHero,
   initialGold,
-  initialEarnedToday,
   userId,
 }: {
   initialHero: EternumHero;
   initialGold: number;
-  initialEarnedToday: number;
   userId: string;
 }) {
   const router = useRouter();
   const [hero, setHero] = useState<EternumHero>(initialHero);
   const [gold, setGold] = useState<number>(initialGold);
-  const [earnedToday, setEarnedToday] = useState<number>(initialEarnedToday);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -64,16 +62,14 @@ export function IdleClient({
     [hero.idleStage],
   );
 
-  // Cap journalier OS idle
-  const dailyCap = useMemo(
-    () => dailyIdleOsCap(hero.idleStage),
+  // Taux courant
+  const currentOsPerTick = useMemo(
+    () => osPerTick(hero.idleStage),
     [hero.idleStage],
   );
-  const capRemaining = Math.max(0, dailyCap - earnedToday);
-  const capPct = Math.min(1, earnedToday / Math.max(1, dailyCap));
 
-  // Pending OS depuis dernière collecte. Formule SQL : OS = ticks × stage,
-  // XP = ticks × stage / 4, tick = 10 min, cap 8h.
+  // Pending OS depuis dernière collecte. Formule SQL :
+  //   OS = ticks × osPerTick(stage), XP = OS / 4, tick = 10 min, cap 8h.
   const pending = useMemo(() => {
     const elapsedSec = Math.max(
       0,
@@ -83,18 +79,10 @@ export function IdleClient({
       ADVENTURE_CAP_TICKS,
       Math.floor(elapsedSec / ADVENTURE_TICK_SECONDS),
     );
-    const osPotential = ticks * hero.idleStage;
-    // Le credit réel est cappé par le reste journalier
-    const osActual = Math.min(osPotential, capRemaining);
-    return {
-      ticks,
-      os: osActual,
-      osPotential,
-      xp: Math.floor((ticks * hero.idleStage) / 4),
-      seconds: elapsedSec,
-      capped: osActual < osPotential,
-    };
-  }, [now, hero.idleUpdatedAt, hero.idleStage, capRemaining]);
+    const os = ticks * osPerTick(hero.idleStage);
+    const xp = ticks * xpPerTick(hero.idleStage);
+    return { ticks, os, xp, seconds: elapsedSec };
+  }, [now, hero.idleUpdatedAt, hero.idleStage]);
 
   // Régen énergie estimée live.
   const liveEnergy = useMemo(() => {
@@ -120,33 +108,22 @@ export function IdleClient({
     }
     const r = data as {
       os_gained: number;
-      os_potential?: number;
       xp_gained: number;
       stage: number;
       ticks: number;
-      daily_cap?: number;
-      earned_today_after?: number;
-      capped?: boolean;
+      os_per_tick?: number;
     };
     if (r.ticks > 0) {
       if (r.os_gained > 0) setGold((g) => g + r.os_gained);
-      if (typeof r.earned_today_after === "number")
-        setEarnedToday(r.earned_today_after);
       setHero((h) => ({
         ...h,
         xp: h.xp + r.xp_gained,
         idleUpdatedAt: Date.now(),
       }));
-      const cappedHint =
-        r.capped && r.os_potential
-          ? ` (cap journalier · ${(
-              r.os_potential - r.os_gained
-            ).toLocaleString("fr-FR")} OS perdus)`
-          : "";
       setOkMsg(
         `+${r.os_gained.toLocaleString("fr-FR")} OS · +${r.xp_gained.toLocaleString(
           "fr-FR",
-        )} XP${cappedHint}`,
+        )} XP (${r.ticks} ticks)`,
       );
     } else {
       setOkMsg("Rien à récolter pour l'instant.");
@@ -241,31 +218,26 @@ export function IdleClient({
               {STAGE_PHASE_LABEL[currentComp.phase]} · {currentComp.label}
             </div>
           </div>
-          {/* Cap journalier OS idle */}
+          {/* Taux actuel */}
           <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.04] p-2 text-right">
             <div className="text-[9px] uppercase tracking-widest text-amber-300">
-              Cap idle aujourd&apos;hui
+              Taux actuel
             </div>
             <div className="text-sm font-bold tabular-nums text-amber-200">
-              {earnedToday.toLocaleString("fr-FR")} /{" "}
-              {dailyCap.toLocaleString("fr-FR")} OS
+              {currentOsPerTick} OS / tick
             </div>
-            <div className="mt-1 h-1 w-32 overflow-hidden rounded-full bg-black/60">
-              <div
-                className={`h-1 rounded-full ${
-                  capPct >= 1
-                    ? "bg-rose-500"
-                    : capPct > 0.8
-                      ? "bg-orange-400"
-                      : "bg-amber-400/80"
-                }`}
-                style={{ width: `${capPct * 100}%` }}
-              />
+            <div className="text-[9px] text-zinc-400">
+              soit {(currentOsPerTick * ADVENTURE_CAP_TICKS).toLocaleString(
+                "fr-FR",
+              )}{" "}
+              OS / 8h max
             </div>
             <div className="mt-1 text-[9px] text-zinc-500">
-              {capRemaining > 0
-                ? `Reste ${capRemaining.toLocaleString("fr-FR")} OS`
-                : "Cap atteint — XP continue"}
+              Prochain palier : stage{" "}
+              {Math.min(
+                ADVENTURE_MAX_STAGE,
+                Math.floor(hero.idleStage / 10) * 10 + 11,
+              )}
             </div>
           </div>
         </div>
@@ -328,11 +300,6 @@ export function IdleClient({
           <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
             <div className="text-xl font-bold tabular-nums text-amber-300">
               +{pending.os.toLocaleString("fr-FR")} OS
-              {pending.capped && pending.osPotential > pending.os && (
-                <span className="ml-2 text-xs font-normal text-zinc-500 line-through">
-                  +{pending.osPotential.toLocaleString("fr-FR")}
-                </span>
-              )}
               <span className="ml-2 text-sm font-normal text-violet-300">
                 +{pending.xp.toLocaleString("fr-FR")} XP
               </span>
@@ -346,8 +313,8 @@ export function IdleClient({
             </button>
           </div>
           <div className="mt-1 text-[10px] text-zinc-500">
-            Tick toutes les 10 min · cap AFK {ADVENTURE_CAP_HOURS}h · 1 OS × stage par
-            tick · cap journalier {dailyCap.toLocaleString("fr-FR")} OS (= stage × 30)
+            Tick toutes les 10 min · cap AFK {ADVENTURE_CAP_HOURS}h · taux augmente
+            tous les 10 niveaux · stage 1000 = 100 OS/tick = 4 800 OS / 8h
           </div>
         </div>
 
