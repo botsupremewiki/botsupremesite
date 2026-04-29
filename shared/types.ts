@@ -2062,13 +2062,16 @@ export function eternumElementMultiplier(
   return 1.0;
 }
 
+/** Niveau max héros (et familier) : endgame ultime atteignable via prestiges. */
+export const ETERNUM_LEVEL_MAX = 1000;
+
 /** Stats calculées d'un héros à un niveau donné (sans équipement). */
 export function eternumHeroStats(
   classId: EternumClassId,
   level: number,
 ): { hp: number; atk: number; def: number; spd: number } {
   const c = ETERNUM_CLASSES[classId];
-  const lv = Math.max(1, Math.min(100, level));
+  const lv = Math.max(1, Math.min(ETERNUM_LEVEL_MAX, level));
   return {
     hp: Math.round(c.baseStats.hp + c.growth.hp * (lv - 1)),
     atk: Math.round(c.baseStats.atk + c.growth.atk * (lv - 1)),
@@ -2077,10 +2080,12 @@ export function eternumHeroStats(
   };
 }
 
-/** Courbe XP : XP requis pour passer du niveau N → N+1.
- *  Formule : 100 * N^1.6 (douce au début, plus raide à haut niveau). */
+/** Courbe XP croissante : XP requis pour passer du niveau N → N+1.
+ *  Formule : 100 × N^1.2 (douce early, raide endgame).
+ *  Cumul level 100 ≈ 3 M XP / cumul level 1000 ≈ 280 M XP.
+ *  Le prestige est conçu comme la solution principale pour atteindre 1000. */
 export function eternumXpForNextLevel(currentLevel: number): number {
-  return Math.round(100 * Math.pow(currentLevel, 1.6));
+  return Math.round(100 * Math.pow(currentLevel, 1.2));
 }
 
 export type EternumHero = {

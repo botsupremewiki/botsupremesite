@@ -207,7 +207,7 @@ export function buildHeroUnit(
   bonusStats?: { hp: number; atk: number; def: number; spd: number },
 ): CombatUnit {
   const cls = ETERNUM_CLASSES[classId];
-  const lv = Math.max(1, Math.min(100, level));
+  const lv = Math.max(1, Math.min(1000, level));
   const base = {
     hp: Math.round(cls.baseStats.hp + cls.growth.hp * (lv - 1)),
     atk: Math.round(cls.baseStats.atk + cls.growth.atk * (lv - 1)),
@@ -250,7 +250,7 @@ export function buildFamilierUnit(
   team: "A" | "B",
   bonusStats?: { hp: number; atk: number; def: number; spd: number },
 ): CombatUnit {
-  const lv = Math.max(1, Math.min(100, level));
+  const lv = Math.max(1, Math.min(1000, level));
   // Croissance familier = 80% de la croissance classe.
   const cls = ETERNUM_CLASSES[classId];
   const grown = {
