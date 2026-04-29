@@ -278,6 +278,26 @@ export function OnePieceBattleClient({
                 />
               )}
 
+            {/* Pending choice (effet de carte) : panel pour le seat concerné. */}
+            {state?.pendingChoice &&
+              state.pendingChoice.seat === state.selfSeat && (
+                <PendingChoicePanel
+                  choice={state.pendingChoice}
+                  state={state}
+                  send={send}
+                />
+              )}
+            {state?.pendingChoice &&
+              state.pendingChoice.seat !== state.selfSeat && (
+                <div className="rounded-md border border-fuchsia-400/40 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
+                  ⏳ L&apos;adversaire résout l&apos;effet de{" "}
+                  <span className="font-semibold">
+                    {state.pendingChoice.sourceCardNumber}
+                  </span>
+                  …
+                </div>
+              )}
+
             {revealedTrigger && (
               <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-200">
                 🎴 Vie révélée : {ONEPIECE_BASE_SET_BY_ID.get(revealedTrigger.cardId)?.name ?? "?"}
@@ -615,6 +635,20 @@ function PlayerPanel({
                   + DON au Leader
                 </button>
               )}
+              {isSelf && canAttachDon && data.leader &&
+                hasKeywordClient(
+                  ONEPIECE_BASE_SET_BY_ID.get(data.leader.cardId)?.effect,
+                  "Activation\\s*:\\s*Principale",
+                ) && (
+                  <button
+                    onClick={() =>
+                      send({ type: "op-activate-main", uid: "leader" })
+                    }
+                    className="self-start rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                  >
+                    ✨ Activer Leader
+                  </button>
+                )}
             </div>
           </div>
 
@@ -695,6 +729,17 @@ function PlayerPanel({
                         ⚔️ Attaquer
                       </button>
                     )}
+                    {isSelf && canAttachDon &&
+                      hasKeywordClient(meta?.effect, "Activation\\s*:\\s*Principale") && (
+                        <button
+                          onClick={() =>
+                            send({ type: "op-activate-main", uid: c.uid })
+                          }
+                          className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-0.5 py-0.5 text-[9px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                        >
+                          ✨ Activer
+                        </button>
+                      )}
                   </div>
                 );
               })}
@@ -880,6 +925,280 @@ function TriggerPanel({
         L&apos;effet n&apos;est pas exécuté par le moteur (descriptif). La carte
         est ajoutée à ta main quoi qu&apos;il arrive.
       </div>
+    </div>
+  );
+}
+
+/** Panel de résolution d'un PendingChoice — ciblage Persos/Leader/main
+ *  selon le `kind` du choix. Envoie `op-resolve-choice` avec la sélection
+ *  ou `skipped: true` si le joueur passe. */
+function PendingChoicePanel({
+  choice,
+  state,
+  send,
+}: {
+  choice: import("@shared/types").OnePiecePendingChoice;
+  state: OnePieceBattleState;
+  send: (msg: import("@shared/types").OnePieceBattleClientMessage) => void;
+}) {
+  const opponent = state.opponent;
+  const self = state.self;
+  const maxCost =
+    typeof choice.params.maxCost === "number" ? choice.params.maxCost : null;
+  const excludeName =
+    typeof choice.params.excludeName === "string"
+      ? choice.params.excludeName
+      : null;
+  const requireTrigger = choice.params.requireTrigger === true;
+  const discardCount =
+    typeof choice.params.count === "number" ? choice.params.count : 1;
+  const allowLeader = choice.params.allowLeader !== false;
+
+  function pickTarget(uid: string) {
+    send({
+      type: "op-resolve-choice",
+      choiceId: choice.id,
+      skipped: false,
+      selection: { targetUid: uid },
+    });
+  }
+  function skip() {
+    send({
+      type: "op-resolve-choice",
+      choiceId: choice.id,
+      skipped: true,
+    });
+  }
+  function answer(yesNo: boolean) {
+    send({
+      type: "op-resolve-choice",
+      choiceId: choice.id,
+      skipped: false,
+      selection: { yesNo },
+    });
+  }
+
+  return (
+    <div className="rounded-md border border-amber-400/60 bg-amber-400/10 p-3 text-xs text-amber-100">
+      <div className="font-semibold">🎯 Effet en cours — choix requis</div>
+      <div className="mt-1">{choice.prompt}</div>
+
+      {/* KO Persos adverse */}
+      {choice.kind === "ko-character" && opponent && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {opponent.characters
+            .filter((c) => {
+              if (maxCost !== null) {
+                const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+                if (!meta || !("cost" in meta)) return false;
+                if (meta.cost > maxCost) return false;
+              }
+              return true;
+            })
+            .map((c) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+              return (
+                <button
+                  key={c.uid}
+                  onClick={() => pickTarget(c.uid)}
+                  className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-rose-100 hover:bg-rose-500/20"
+                >
+                  💥 KO {meta?.name ?? c.cardId}
+                </button>
+              );
+            })}
+        </div>
+      )}
+
+      {/* KO mon propre Persos */}
+      {choice.kind === "ko-character-own" && self && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {self.characters.map((c) => {
+            const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+            return (
+              <button
+                key={c.uid}
+                onClick={() => pickTarget(c.uid)}
+                className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-rose-100 hover:bg-rose-500/20"
+              >
+                💥 KO {meta?.name ?? c.cardId}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Buff un de mes Leader/Persos */}
+      {choice.kind === "buff-target" && self && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {allowLeader && self.leader && (
+            <button
+              onClick={() => pickTarget("leader")}
+              className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-emerald-100 hover:bg-emerald-500/20"
+            >
+              ⬆️ Leader
+            </button>
+          )}
+          {self.characters.map((c) => {
+            const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+            return (
+              <button
+                key={c.uid}
+                onClick={() => pickTarget(c.uid)}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-emerald-100 hover:bg-emerald-500/20"
+              >
+                ⬆️ {meta?.name ?? c.cardId}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sélection cible générique (Leader ou Persos adverse) */}
+      {choice.kind === "select-target" && opponent && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {allowLeader && opponent.leader && (
+            <button
+              onClick={() => pickTarget("leader")}
+              className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-amber-100 hover:bg-amber-500/20"
+            >
+              🎯 Leader adverse
+            </button>
+          )}
+          {opponent.characters.map((c) => {
+            const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+            return (
+              <button
+                key={c.uid}
+                onClick={() => pickTarget(c.uid)}
+                className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-amber-100 hover:bg-amber-500/20"
+              >
+                🎯 {meta?.name ?? c.cardId}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Défausser N cartes de la main */}
+      {choice.kind === "discard-card" && self && (
+        <DiscardCardPicker
+          hand={self.hand}
+          count={discardCount}
+          requireTrigger={requireTrigger}
+          excludeName={excludeName}
+          onConfirm={(handIndices) =>
+            send({
+              type: "op-resolve-choice",
+              choiceId: choice.id,
+              skipped: false,
+              selection: { handIndices },
+            })
+          }
+        />
+      )}
+
+      {/* Yes/No */}
+      {choice.kind === "yes-no" && (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => answer(true)}
+            className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-emerald-100 hover:bg-emerald-500/20"
+          >
+            ✓ Oui
+          </button>
+          <button
+            onClick={() => answer(false)}
+            className="rounded-md border border-zinc-500/50 bg-zinc-500/10 px-3 py-1 text-zinc-100 hover:bg-zinc-500/20"
+          >
+            ✗ Non
+          </button>
+        </div>
+      )}
+
+      {/* Bouton passer (si cancellable) */}
+      {choice.cancellable && (
+        <button
+          onClick={skip}
+          className="mt-2 rounded-md border border-zinc-500/50 bg-zinc-500/10 px-3 py-1 text-zinc-200 hover:bg-zinc-500/20"
+        >
+          ❌ Passer
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DiscardCardPicker({
+  hand,
+  count,
+  requireTrigger,
+  excludeName,
+  onConfirm,
+}: {
+  hand: string[];
+  count: number;
+  requireTrigger: boolean;
+  excludeName: string | null;
+  onConfirm: (handIndices: number[]) => void;
+}) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  function toggle(i: number) {
+    const next = new Set(selected);
+    if (next.has(i)) next.delete(i);
+    else if (next.size < count) next.add(i);
+    setSelected(next);
+  }
+  const eligibleIndices = hand
+    .map((cardId, i) => ({ cardId, i }))
+    .filter(({ cardId }) => {
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+      if (!meta) return false;
+      if (excludeName && meta.name === excludeName) return false;
+      if (requireTrigger && !meta.trigger) return false;
+      return true;
+    });
+
+  return (
+    <div className="mt-2">
+      <div className="mb-1 text-[11px] text-amber-200/80">
+        Sélectionne {count} carte{count > 1 ? "s" : ""}{" "}
+        ({selected.size}/{count}){requireTrigger ? " avec [Déclenchement]" : ""}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {eligibleIndices.map(({ cardId, i }) => {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+          const isSelected = selected.has(i);
+          return (
+            <button
+              key={i}
+              onClick={() => toggle(i)}
+              className={`overflow-hidden rounded border bg-black/40 ${
+                isSelected
+                  ? "border-amber-400 ring-2 ring-amber-400"
+                  : "border-white/10"
+              }`}
+              title={meta?.name ?? cardId}
+            >
+              {meta && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={meta.image}
+                  alt={meta.name}
+                  className="h-20 w-14 object-contain"
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={() => onConfirm(Array.from(selected))}
+        disabled={selected.size !== count}
+        className="mt-2 rounded-md bg-amber-500 px-3 py-1 text-xs font-bold text-amber-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Défausser
+      </button>
     </div>
   );
 }

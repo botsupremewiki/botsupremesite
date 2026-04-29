@@ -24,6 +24,8 @@
 import type {
   OnePieceBattleSeatId,
   OnePieceBattleCardInPlay,
+  OnePiecePendingChoice,
+  OnePiecePendingChoiceKind,
 } from "../../../shared/types";
 import { ONEPIECE_BASE_SET_BY_ID } from "../../../shared/tcg-onepiece-base";
 
@@ -33,7 +35,17 @@ export type EffectHook =
   | "on-ko" // Cette carte est mise KO
   | "on-trigger-revealed" // Vie révélée avec [Déclenchement]
   | "on-turn-start" // Refresh phase de son owner
-  | "on-turn-end"; // End phase de son owner
+  | "on-turn-end" // End phase de son owner
+  | "on-activate-main" // [Activation : Principale] déclenché manuellement
+  | "on-choice-resolved"; // PendingChoice résolu — applique la suite de l'effet
+
+/** Selection passée au handler quand un PendingChoice est résolu. Mappe sur
+ *  le payload du message client `op-resolve-choice`. */
+export type ChoiceSelection = {
+  targetUid?: string;
+  handIndices?: number[];
+  yesNo?: boolean;
+};
 
 /** Référence vers une carte sur le board ou en main. */
 export type CardRef =
@@ -85,6 +97,32 @@ export interface BattleEffectAccess {
     excludeName?: string,
   ): string | null;
 
+  /** Ouvre un PendingChoice côté state. Le handler doit retourner après
+   *  cet appel : la résolution rappellera le handler avec hook
+   *  `on-choice-resolved` et `ctx.choice` rempli. */
+  requestChoice(args: {
+    seat: OnePieceBattleSeatId;
+    sourceCardNumber: string;
+    sourceUid: string;
+    kind: OnePiecePendingChoiceKind;
+    prompt: string;
+    params?: Record<string, number | string | boolean | null>;
+    cancellable?: boolean;
+  }): void;
+
+  /** Met KO un Personnage adverse identifié par son uid. La carte va à la
+   *  défausse, ses DON attachées retournent dans la pool épuisée du
+   *  défenseur. Déclenche le hook on-ko sur la carte KO. Retourne true
+   *  si KO appliqué. */
+  koCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
+
+  /** Défausse les cartes aux indices donnés de la main du seat. Renvoie
+   *  les cardId défaussés. Skip les indices invalides. */
+  discardFromHand(
+    seat: OnePieceBattleSeatId,
+    handIndices: number[],
+  ): string[];
+
   /** Lit l'état d'un seat (read-only). */
   getSeat(seat: OnePieceBattleSeatId): {
     leaderId: string | null;
@@ -106,6 +144,12 @@ export type EffectContext = {
   sourceSeat: OnePieceBattleSeatId;
   /** Accès à l'état + mutations. */
   battle: BattleEffectAccess;
+  /** Présent uniquement quand hook === "on-choice-resolved". Contient le
+   *  payload du choix joueur (skipped + selection). */
+  choice?: {
+    skipped: boolean;
+    selection: ChoiceSelection;
+  };
 };
 
 export type CardEffectHandler = (ctx: EffectContext) => void;
@@ -337,10 +381,54 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     ctx.battle.log("Smoker : effet [Activation : Principale] (TODO système d'activation manuelle).");
   },
 
-  /** OP02-098 Kobby — [Jouée] discard-cost KO target. */
+  /** OP02-098 Kobby
+   *  [Jouée] Vous pouvez défausser 1 carte de votre main : Mettez KO jusqu'à
+   *  1 Personnage adverse ayant un coût de 3 ou moins.
+   *  Flow : on-play → discard-card (cancellable) → on-choice-resolved with
+   *  handIndices → discard + ko-character (cancellable) → on-choice-resolved
+   *  with targetUid → koCharacter. */
   "OP02-098": (ctx) => {
-    if (ctx.hook !== "on-play") return;
-    ctx.battle.log("Kobby : effet [Jouée] descriptif (KO ciblé — TODO PendingChoice).");
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP02-098",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Kobby : défausse 1 carte pour mettre KO un Personnage adverse (coût ≤ 3). Passer pour ignorer.",
+        params: { count: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      // Étape 1 : la défausse a été choisie → exécute + ouvre KO target.
+      if (ctx.choice.selection.handIndices) {
+        ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "OP02-098",
+          sourceUid: ctx.sourceUid,
+          kind: "ko-character",
+          prompt:
+            "Kobby : choisis un Personnage adverse à mettre KO (coût ≤ 3).",
+          params: { maxCost: 3 },
+          cancellable: false,
+        });
+        return;
+      }
+      // Étape 2 : la cible KO a été choisie → exécute KO.
+      if (ctx.choice.selection.targetUid) {
+        const opponentSeat: OnePieceBattleSeatId =
+          ctx.sourceSeat === "p1" ? "p2" : "p1";
+        ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+        ctx.battle.log("Kobby : effet [Jouée] résolu.");
+      }
+    }
   },
 
   /** OP02-106 Tsuru — [Jouée] -2 cost target. */
@@ -380,10 +468,49 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     ctx.battle.log("Katakuri : effet [En attaquant] (TODO PendingChoice — replace Vie).");
   },
 
-  /** OP03-115 Streusen — [Jouée] discard cost KO. */
+  /** OP03-115 Streusen
+   *  [Jouée] Vous pouvez défausser 1 carte de votre main ayant
+   *  [Déclenchement] : Mettez KO jusqu'à 1 Personnage adverse ayant un coût
+   *  de 1 ou moins. */
   "OP03-115": (ctx) => {
-    if (ctx.hook !== "on-play") return;
-    ctx.battle.log("Streusen : effet [Jouée] descriptif (TODO PendingChoice).");
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP03-115",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Streusen : défausse 1 carte avec [Déclenchement] pour mettre KO un Persos adverse (coût ≤ 1).",
+        params: { count: 1, requireTrigger: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      if (ctx.choice.selection.handIndices) {
+        ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "OP03-115",
+          sourceUid: ctx.sourceUid,
+          kind: "ko-character",
+          prompt: "Streusen : choisis un Persos adverse à KO (coût ≤ 1).",
+          params: { maxCost: 1 },
+          cancellable: false,
+        });
+        return;
+      }
+      if (ctx.choice.selection.targetUid) {
+        const opponentSeat: OnePieceBattleSeatId =
+          ctx.sourceSeat === "p1" ? "p2" : "p1";
+        ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+        ctx.battle.log("Streusen : effet [Jouée] résolu.");
+      }
+    }
   },
 
   /** OP03-118 Térébration (Event) — Counter +5000 (déjà géré par counter system). */

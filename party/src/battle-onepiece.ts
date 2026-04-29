@@ -26,6 +26,7 @@ import type {
   OnePieceBattleSelfState,
   OnePieceBattleServerMessage,
   OnePieceBattleState,
+  OnePiecePendingChoice,
   OnePieceTurnPhase,
 } from "../../shared/types";
 import { OP_BATTLE_CONFIG } from "../../shared/types";
@@ -40,7 +41,9 @@ import {
 } from "./lib/supabase";
 import {
   type BattleEffectAccess,
+  CARD_HANDLERS,
   type CardRef,
+  type ChoiceSelection,
   type EffectContext,
   type EffectHook,
   fireCardEffect,
@@ -91,6 +94,9 @@ type SeatState = {
   // Reset à end-turn du seat. Utilisé par les effets type [En attaquant]
   // gagne +X / Persos adverse perd -X.
   tempPowerBuffs: Map<string, number>;
+  // Cartes ayant déjà utilisé leur effet [Activation : Principale] [Une fois
+  // par tour] ce tour. Reset à end-turn. Clé = uid (ou "leader").
+  usedActivationsThisTurn: Set<string>;
 };
 
 function sanitizeName(raw: unknown): string | null {
@@ -114,6 +120,7 @@ export default class OnePieceBattleServer implements Party.Server {
   private uidCounter = 0;
   private pendingAttack: OnePieceBattlePendingAttack | null = null;
   private pendingTrigger: OnePieceBattlePendingTrigger | null = null;
+  private pendingChoice: OnePiecePendingChoice | null = null;
   private botActScheduled = false;
   private questRecorded = false;
   private resultRecorded = false;
@@ -216,6 +223,7 @@ export default class OnePieceBattleServer implements Party.Server {
         donRested: 0,
         mulliganDecided: false,
         tempPowerBuffs: new Map(),
+        usedActivationsThisTurn: new Set(),
       };
       this.connToSeat.set(conn.id, seatId);
 
@@ -303,12 +311,24 @@ export default class OnePieceBattleServer implements Party.Server {
       this.handleTriggerResolve(sender, seatId, data.activate);
       return;
     }
+    if (data.type === "op-resolve-choice") {
+      this.handleResolveChoice(
+        sender,
+        seatId,
+        data.choiceId,
+        data.skipped,
+        data.selection ?? {},
+      );
+      return;
+    }
+    if (data.type === "op-activate-main") {
+      this.handleActivateMain(sender, seatId, data.uid);
+      return;
+    }
     if (data.type === "op-end-turn") {
       this.handleEndTurn(sender, seatId);
       return;
     }
-    // op-activate-main réservé aux effets [Activation : Principale] —
-    // moteur d'effets pas implémenté (les effets restent descriptifs).
     this.sendError(sender, "Action non reconnue.");
   }
 
@@ -610,6 +630,7 @@ export default class OnePieceBattleServer implements Party.Server {
     // Reset des buffs temporaires des deux seats : les effets "pour tout le
     // tour" expirent à la fin du tour de l'attaquant (convention courante).
     seat.tempPowerBuffs.clear();
+    seat.usedActivationsThisTurn.clear();
     const opponentSeat = seatId === "p1" ? "p2" : "p1";
     this.seats[opponentSeat]?.tempPowerBuffs.clear();
     this.pushLog(`${seat.username} termine son tour.`);
@@ -1102,12 +1123,130 @@ export default class OnePieceBattleServer implements Party.Server {
     this.broadcastState();
   }
 
+  /** Active manuellement un effet [Activation : Principale] sur une carte
+   *  en jeu (Leader ou Persos). Si l'effet a [Une fois par tour], on
+   *  marque la carte pour empêcher la ré-activation. */
+  private handleActivateMain(
+    conn: Party.Connection,
+    seatId: OnePieceBattleSeatId,
+    uid: string,
+  ) {
+    if (this.phase !== "playing") {
+      this.sendError(conn, "Pas en phase de jeu.");
+      return;
+    }
+    if (this.activeSeat !== seatId) {
+      this.sendError(conn, "Ce n'est pas ton tour.");
+      return;
+    }
+    if (this.turnPhase !== "main") {
+      this.sendError(conn, "Activation possible seulement en phase principale.");
+      return;
+    }
+    if (this.pendingAttack || this.pendingTrigger || this.pendingChoice) {
+      this.sendError(conn, "Une autre action est en cours.");
+      return;
+    }
+    const seat = this.seats[seatId];
+    if (!seat) return;
+
+    // Identifie le cardId de la cible.
+    let cardId: string | null = null;
+    if (uid === "leader") {
+      cardId = seat.leaderId;
+    } else {
+      const c = seat.characters.find((x) => x.uid === uid);
+      if (c) cardId = c.cardId;
+    }
+    if (!cardId) {
+      this.sendError(conn, "Cible d'activation invalide.");
+      return;
+    }
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+    if (!meta || !meta.effect) {
+      this.sendError(conn, "Cette carte n'a pas d'effet activable.");
+      return;
+    }
+    // Vérifie que l'effet contient [Activation : Principale].
+    if (!/\[Activation\s*:\s*Principale\]/i.test(meta.effect)) {
+      this.sendError(
+        conn,
+        "Cette carte n'a pas [Activation : Principale].",
+      );
+      return;
+    }
+    // Vérifie [Une fois par tour].
+    const oncePerTurn = /\[Une fois par tour\]/i.test(meta.effect);
+    if (oncePerTurn && seat.usedActivationsThisTurn.has(uid)) {
+      this.sendError(conn, "Cet effet a déjà été utilisé ce tour.");
+      return;
+    }
+    // Pour les Persos, vérifier qu'ils ne sont pas épuisés (la plupart des
+    // [Activation] demandent d'épuiser la carte, mais le coût exact est
+    // décrit dans la prose — laissé au handler).
+    seat.usedActivationsThisTurn.add(uid);
+    this.fireEffectFor(cardId, "on-activate-main", uid, seatId);
+    this.broadcastState();
+  }
+
+  /** Résolution d'un PendingChoice : valide le seat, ré-appelle le handler
+   *  de la card source avec hook 'on-choice-resolved'. Si skipped=true,
+   *  l'effet est simplement annulé (rien à faire). */
+  private handleResolveChoice(
+    conn: Party.Connection,
+    seatId: OnePieceBattleSeatId,
+    choiceId: string,
+    skipped: boolean,
+    selection: ChoiceSelection,
+  ) {
+    const pending = this.pendingChoice;
+    if (!pending) {
+      this.sendError(conn, "Aucun choix en attente.");
+      return;
+    }
+    if (pending.id !== choiceId) {
+      this.sendError(conn, "Choix obsolète.");
+      return;
+    }
+    if (pending.seat !== seatId) {
+      this.sendError(conn, "Ce n'est pas à toi de choisir.");
+      return;
+    }
+    // Reset avant d'appeler le handler (pour permettre la réouverture d'un
+    // nouveau choix dans la suite de l'effet).
+    const cardNumber = pending.sourceCardNumber;
+    const sourceUid = pending.sourceUid;
+    const sourceSeat = pending.seat;
+    this.pendingChoice = null;
+
+    if (skipped) {
+      this.pushLog(`Effet ignoré (choix passé).`);
+    }
+
+    const handler = CARD_HANDLERS[cardNumber];
+    if (handler) {
+      try {
+        handler({
+          hook: "on-choice-resolved",
+          sourceUid,
+          sourceSeat,
+          battle: this.getBattleAccess(),
+          choice: { skipped, selection },
+        });
+      } catch (err) {
+        console.warn(`[op-effect] resolve threw for ${cardNumber}:`, err);
+      }
+    }
+    this.broadcastState();
+  }
+
   /** Déclare un vainqueur et termine la partie. Persiste l'historique +
    *  ELO + quête bot via les helpers Supabase partagés avec battle.ts. */
   private declareWinner(winner: OnePieceBattleSeatId, reason: string) {
     this.winner = winner;
     this.phase = "ended";
     this.pendingAttack = null;
+    this.pendingChoice = null;
     this.pendingTrigger = null;
     const loser: OnePieceBattleSeatId = winner === "p1" ? "p2" : "p1";
     this.pushLog(
@@ -1213,6 +1352,7 @@ export default class OnePieceBattleServer implements Party.Server {
       donRested: 0,
       mulliganDecided: false,
       tempPowerBuffs: new Map(),
+      usedActivationsThisTurn: new Set(),
     };
     if (this.phase === "waiting") this.phase = "mulligan";
   }
@@ -1660,6 +1800,7 @@ export default class OnePieceBattleServer implements Party.Server {
       c.attachedDon = 0;
     }
     seat.tempPowerBuffs.clear();
+    seat.usedActivationsThisTurn.clear();
     this.seats.p1?.tempPowerBuffs.clear();
     this.pushLog(`${seat.username} termine son tour.`);
 
@@ -1715,6 +1856,50 @@ export default class OnePieceBattleServer implements Party.Server {
         );
       },
       log: (line) => this.pushLog(line),
+      requestChoice: (args) => {
+        // Crée un PendingChoice — le state est broadcast à la fin du flow
+        // courant (handlePlayCharacter, handleAttack…) qui appelle
+        // broadcastState ensuite.
+        this.pendingChoice = {
+          id: crypto.randomUUID(),
+          seat: args.seat,
+          sourceCardNumber: args.sourceCardNumber,
+          sourceUid: args.sourceUid,
+          kind: args.kind,
+          prompt: args.prompt,
+          params: args.params ?? {},
+          cancellable: args.cancellable ?? true,
+        };
+      },
+      koCharacter: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const idx = s.characters.findIndex((c) => c.uid === uid);
+        if (idx < 0) return false;
+        const ko = s.characters.splice(idx, 1)[0];
+        s.donRested += ko.attachedDon;
+        s.discard.push({ cardId: ko.cardId });
+        const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
+        this.pushLog(`${meta?.name ?? "?"} est mis KO (effet).`);
+        // Hook on-ko sur la carte KO.
+        this.fireEffectFor(ko.cardId, "on-ko", ko.uid, seatId);
+        return true;
+      },
+      discardFromHand: (seatId, handIndices) => {
+        const s = this.seats[seatId];
+        if (!s) return [];
+        // On défausse en partant des indices les plus hauts pour que les
+        // splice ne décalent pas les autres.
+        const sorted = [...handIndices].sort((a, b) => b - a);
+        const discarded: string[] = [];
+        for (const i of sorted) {
+          if (i < 0 || i >= s.hand.length) continue;
+          const card = s.hand.splice(i, 1)[0];
+          s.discard.push(card);
+          discarded.push(card.cardId);
+        }
+        return discarded;
+      },
       takeLifeToHand: (seatId) => {
         const s = this.seats[seatId];
         if (!s || s.life.length === 0) return null;
@@ -1841,6 +2026,7 @@ export default class OnePieceBattleServer implements Party.Server {
         log: this.log,
         pendingAttack: this.pendingAttack,
         pendingTrigger: this.pendingTrigger,
+        pendingChoice: this.pendingChoice,
       };
       this.sendTo(seat.conn, { type: "op-state", state });
       void connId;
