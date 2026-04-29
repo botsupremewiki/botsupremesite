@@ -31,6 +31,7 @@ import {
   pickRandomEnergy,
   shuffle,
 } from "./lib/battle-engine";
+import { parseAttackEffects, type AttackEffect } from "./lib/attack-effects";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -867,42 +868,425 @@ export default class BattleServer implements Party.Server {
     const defenderData = getCardForBattle(opp.active.cardId);
     if (!defenderData) return;
 
-    let damage = attack.damage ?? 0;
-    // Bonus Giovanni / Auguste / etc. — +N dégâts ce tour si actif.
-    if (damage > 0) damage += seat.attackDamageBonus;
+    // ═══ Phase 1 : parse les effets + calcule le damage final ═══════
+    const effects = parseAttackEffects(attack.text ?? null);
+    const baseDamage = attack.damage ?? 0;
+    const dmgResult = this.resolveAttackDamage({
+      seatId,
+      seat,
+      opp,
+      effects,
+      attackerName: attackerData.name,
+      attackerType: attackerData.type,
+      attackName: attack.name,
+      baseDamage,
+      defenderWeakness: defenderData.weakness ?? null,
+    });
 
-    // Pocket : weakness = +20 (pas ×2). Pour MVP on simplifie en +20 fixe
-    // si type matche. Pas de système de résistance dans Pocket.
-    const isWeakness =
-      damage > 0 &&
-      !!defenderData.weakness &&
-      defenderData.weakness === attackerData.type;
-    if (isWeakness) damage += 20;
+    // Si l'attaque a foiré (pile sur "Si pile, l'attaque ne fait rien"),
+    // on log et on avance — pas d'effets secondaires.
+    if (dmgResult.cancelled) {
+      this.pushLog(
+        `${attackerData.name} utilise ${attack.name} → ratée !`,
+      );
+      if (this.phase === "playing") this.advanceTurn();
+      else this.broadcastState();
+      return;
+    }
 
+    const damage = dmgResult.finalDamage;
+    const isWeakness = dmgResult.weaknessApplied;
+
+    // ═══ Phase 2 : applique le damage principal ═════════════════════
     opp.active.damage += damage;
 
-    // Format du log style jeu Pokémon : « Pikachu utilise Éclair → 40 dégâts
-    // à Electhor (super efficace !) → K.O. ! ». Une seule ligne, sans nom
-    // de joueur (le log est commun et le côté est lisible visuellement).
+    // Log unique style jeu Pokémon : « Pikachu utilise Éclair → 40 dégâts
+    // à Electhor (super efficace !) → K.O. ! ».
     const willKo = opp.active.damage >= defenderData.hp;
-    const parts: string[] = [
-      `${attackerData.name} utilise ${attack.name}`,
-    ];
+    const parts: string[] = [`${attackerData.name} utilise ${attack.name}`];
     if (damage > 0) parts.push(`→ ${damage} dégâts à ${defenderData.name}`);
     if (isWeakness) parts.push("(super efficace !)");
     if (willKo) parts.push("→ K.O. !");
     this.pushLog(parts.join(" "));
 
-    // Vérif KO sur le défenseur — knockOut ne pousse plus de log à part.
-    if (willKo) {
+    // ═══ Phase 3 : effets secondaires (status, heal, bench damage…) ══
+    // Appliqués QUE si l'attaque a touché (Pocket : si l'attaque foire,
+    // aucun effet ne déclenche).
+    this.applyAttackSideEffects({
+      seatId,
+      effects,
+      damageDealt: damage,
+      attackerName: attackerData.name,
+    });
+
+    // Vérif KO sur le défenseur (au cas où les effets l'ont KO via status…
+    // après les dégâts principaux). knockOut ne pousse plus de log à part.
+    if (opp.active && opp.active.damage >= defenderData.hp) {
       this.knockOut(seatId, oppId);
     }
 
-    // Une attaque met fin au tour (sauf si KO a déjà déclaré vainqueur).
+    // Une attaque met fin au tour (sauf si KO a déjà déclaré vainqueur,
+    // ou si "self-swap" a été déclenché et change l'Actif).
     if (this.phase === "playing") {
       this.advanceTurn();
     } else {
       this.broadcastState();
+    }
+  }
+
+  /** Calcule le damage final d'une attaque en appliquant les modificateurs
+   *  parsés (multi-coin, conditional bonus, scaling, weakness). Émet les
+   *  coin-flips au passage. */
+  private resolveAttackDamage(input: {
+    seatId: BattleSeatId;
+    seat: SeatState;
+    opp: SeatState;
+    effects: AttackEffect[];
+    attackerName: string;
+    attackerType: PokemonEnergyType;
+    attackName: string;
+    baseDamage: number;
+    defenderWeakness: PokemonEnergyType | null;
+  }): { finalDamage: number; weaknessApplied: boolean; cancelled: boolean } {
+    const { seat, opp, effects, attackerName, attackerType, baseDamage } = input;
+    let damage = baseDamage;
+    let cancelled = false;
+    if (!opp.active) {
+      return { finalDamage: 0, weaknessApplied: false, cancelled: true };
+    }
+
+    // ── Multi-coin per face (suffix=x) : damage = baseDamage × heads ──
+    const multiCoin = effects.find((e) => e.kind === "multi-coin-per-face");
+    if (multiCoin && multiCoin.kind === "multi-coin-per-face") {
+      let heads = 0;
+      for (let i = 0; i < multiCoin.coins; i++) {
+        const isHead = this.coinFlip();
+        if (isHead) heads++;
+        this.emitCoinFlip(
+          `${attackerName} — lancer`,
+          isHead,
+          undefined,
+          i + 1,
+          multiCoin.coins,
+        );
+      }
+      damage = baseDamage * heads;
+    }
+
+    // ── Flip until tails for damage (Léviator « Langue Sans Fin ») ──
+    const flipUntil = effects.find(
+      (e) => e.kind === "flip-until-tails-damage",
+    );
+    if (flipUntil && flipUntil.kind === "flip-until-tails-damage") {
+      let heads = 0;
+      let flips = 0;
+      while (flips < 20) {
+        flips++;
+        const isHead = this.coinFlip();
+        if (isHead) heads++;
+        this.emitCoinFlip(
+          `${attackerName} — lancer`,
+          isHead,
+          isHead ? `+${flipUntil.perFace}` : `Total : ${heads * flipUntil.perFace} dégâts.`,
+          flips,
+        );
+        if (!isHead) break;
+      }
+      damage = flipUntil.perFace * heads;
+    }
+
+    // ── All-coins bonus (suffix=+, "Si toutes face, +N") ──
+    const allCoins = effects.find((e) => e.kind === "all-coins-bonus");
+    if (allCoins && allCoins.kind === "all-coins-bonus") {
+      let allHeads = true;
+      for (let i = 0; i < allCoins.coins; i++) {
+        const isHead = this.coinFlip();
+        if (!isHead) allHeads = false;
+        this.emitCoinFlip(
+          `${attackerName} — lancer`,
+          isHead,
+          undefined,
+          i + 1,
+          allCoins.coins,
+        );
+      }
+      if (allHeads) damage += allCoins.bonus;
+    }
+
+    // ── Single-coin bonus (suffix=+, "Si face, +N") ──
+    const singleBonus = effects.find((e) => e.kind === "single-coin-bonus");
+    if (singleBonus && singleBonus.kind === "single-coin-bonus") {
+      const heads = this.coinFlip();
+      this.emitCoinFlip(
+        `${attackerName} — bonus`,
+        heads,
+        heads ? `+${singleBonus.bonus} dégâts !` : "Pas de bonus.",
+      );
+      if (heads) damage += singleBonus.bonus;
+    }
+
+    // ── Tails-fail (suffix=, "Si pile, ne fait rien") ──
+    const tailsFail = effects.find((e) => e.kind === "tails-fail");
+    if (tailsFail) {
+      const heads = this.coinFlip();
+      this.emitCoinFlip(
+        `${attackerName}`,
+        heads,
+        heads ? "Attaque réussie !" : "L'attaque foire !",
+      );
+      if (!heads) {
+        cancelled = true;
+        damage = 0;
+      }
+    }
+
+    if (cancelled) {
+      return { finalDamage: 0, weaknessApplied: false, cancelled: true };
+    }
+
+    // ── Conditional bonuses (sans coin flip) ──
+    for (const e of effects) {
+      if (e.kind === "bonus-if-opp-hurt" && opp.active.damage > 0) {
+        damage += e.bonus;
+      }
+      if (
+        e.kind === "bonus-if-opp-status" &&
+        opp.active.statuses.includes(e.status)
+      ) {
+        damage += e.bonus;
+      }
+      if (
+        e.kind === "bonus-if-self-hurt" &&
+        seat.active &&
+        seat.active.damage > 0
+      ) {
+        damage += e.bonus;
+      }
+    }
+
+    // ── Scaling (par énergies, par banc, par type, par nom) ──
+    for (const e of effects) {
+      if (e.kind === "scaling-by-opp-energies") {
+        damage += e.per * opp.active.attachedEnergies.length;
+      }
+      if (e.kind === "scaling-by-bench-count") {
+        damage += e.per * seat.bench.length;
+      }
+      if (e.kind === "scaling-by-typed-bench") {
+        const count = seat.bench.filter((c) => {
+          const d = getCardForBattle(c.cardId);
+          return d?.type === e.type;
+        }).length;
+        damage += e.per * count;
+      }
+      if (e.kind === "scaling-by-named-bench") {
+        const count = seat.bench.filter((c) => {
+          const d = getCardForBattle(c.cardId);
+          return d?.name === e.name;
+        }).length;
+        damage += e.per * count;
+      }
+    }
+
+    // ── Bonus global (Giovanni / Auguste) ──
+    if (damage > 0) damage += seat.attackDamageBonus;
+
+    // ── Faiblesse (+20) ──
+    let weaknessApplied = false;
+    if (
+      damage > 0 &&
+      input.defenderWeakness &&
+      input.defenderWeakness === attackerType
+    ) {
+      damage += 20;
+      weaknessApplied = true;
+    }
+
+    return { finalDamage: damage, weaknessApplied, cancelled: false };
+  }
+
+  /** Applique les effets secondaires d'une attaque APRÈS le damage principal :
+   *  status sur l'adversaire, heal/recoil sur l'attaquant, bench damage,
+   *  défausses d'énergies, attaches, draw, search, swap. */
+  private applyAttackSideEffects(input: {
+    seatId: BattleSeatId;
+    effects: AttackEffect[];
+    damageDealt: number;
+    attackerName: string;
+  }) {
+    const { seatId, effects, damageDealt, attackerName } = input;
+    const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
+    const seat = this.seats[seatId];
+    const opp = this.seats[oppId];
+    if (!seat || !opp) return;
+
+    for (const e of effects) {
+      // ── Statuts ──
+      if (e.kind === "inflict-status") {
+        if (!opp.active) continue;
+        if (e.conditional === "coin-flip") {
+          const heads = this.coinFlip();
+          this.emitCoinFlip(
+            `${attackerName} — statut`,
+            heads,
+            heads ? `Adversaire ${e.status} !` : "Pas de statut.",
+          );
+          if (!heads) continue;
+        }
+        if (!opp.active.statuses.includes(e.status)) {
+          opp.active.statuses.push(e.status);
+        }
+      }
+      // ── Heal self ──
+      else if (e.kind === "self-heal" && seat.active) {
+        seat.active.damage = Math.max(0, seat.active.damage - e.amount);
+      }
+      // ── Drain heal (Vampi-Pokémon) ──
+      else if (e.kind === "drain-heal" && seat.active) {
+        seat.active.damage = Math.max(0, seat.active.damage - damageDealt);
+      }
+      // ── Self damage / recoil ──
+      else if (e.kind === "self-damage" && seat.active) {
+        seat.active.damage += e.amount;
+        // Vérifie si on s'est KO soi-même.
+        const sd = getCardForBattle(seat.active.cardId);
+        if (sd && seat.active.damage >= sd.hp) {
+          this.knockOut(oppId, seatId);
+        }
+      }
+      // ── Self bench damage (1 random) ──
+      else if (e.kind === "self-bench-damage" && seat.bench.length > 0) {
+        const idx = Math.floor(Math.random() * seat.bench.length);
+        seat.bench[idx].damage += e.amount;
+      }
+      // ── Bench damage all opp ──
+      else if (e.kind === "bench-damage-all-opp") {
+        for (const c of opp.bench) c.damage += e.amount;
+      }
+      // ── Random hit opp (any pokemon, active + bench) ──
+      else if (e.kind === "random-hit-opp") {
+        const targets = [
+          ...(opp.active ? [opp.active] : []),
+          ...opp.bench,
+        ];
+        if (targets.length > 0) {
+          const t = targets[Math.floor(Math.random() * targets.length)];
+          t.damage += e.amount;
+        }
+      }
+      // ── Random hit opp bench only ──
+      else if (e.kind === "random-hit-opp-bench" && opp.bench.length > 0) {
+        const t = opp.bench[Math.floor(Math.random() * opp.bench.length)];
+        t.damage += e.amount;
+      }
+      // ── Multi random hit (Mewtwo Pulvérize Psy) ──
+      else if (e.kind === "multi-random-hit-opp") {
+        const targets = [
+          ...(opp.active ? [opp.active] : []),
+          ...opp.bench,
+        ];
+        if (targets.length === 0) continue;
+        for (let i = 0; i < e.times; i++) {
+          const t = targets[Math.floor(Math.random() * targets.length)];
+          t.damage += e.amount;
+        }
+      }
+      // ── Discard self energy (typed) ──
+      else if (e.kind === "discard-self-energy" && seat.active) {
+        let removed = 0;
+        seat.active.attachedEnergies = seat.active.attachedEnergies.filter(
+          (en) => {
+            if (en === e.energyType && removed < e.count) {
+              removed++;
+              return false;
+            }
+            return true;
+          },
+        );
+      }
+      // ── Discard self all energies ──
+      else if (e.kind === "discard-self-all-energies" && seat.active) {
+        seat.active.attachedEnergies = [];
+      }
+      // ── Discard opp energy random (avec ou sans coin flip) ──
+      else if (e.kind === "discard-opp-energy-random") {
+        if (e.conditional === "coin-flip") {
+          const heads = this.coinFlip();
+          this.emitCoinFlip(
+            `${attackerName} — défausse`,
+            heads,
+            heads ? "1 énergie défaussée !" : "Pas de défausse.",
+          );
+          if (!heads) continue;
+        }
+        if (opp.active && opp.active.attachedEnergies.length > 0) {
+          const i = Math.floor(
+            Math.random() * opp.active.attachedEnergies.length,
+          );
+          opp.active.attachedEnergies.splice(i, 1);
+        }
+      }
+      // ── Self attach energy ──
+      else if (e.kind === "self-attach-energy" && seat.active) {
+        seat.active.attachedEnergies.push(e.energyType);
+      }
+      // ── Bench attach energy ──
+      else if (e.kind === "bench-attach-energy") {
+        const candidates = seat.bench.filter((c) => {
+          const d = getCardForBattle(c.cardId);
+          return d?.type === e.benchType;
+        });
+        if (candidates.length > 0) {
+          const t = candidates[Math.floor(Math.random() * candidates.length)];
+          t.attachedEnergies.push(e.energyType);
+        }
+      }
+      // ── Draw ──
+      else if (e.kind === "draw") {
+        for (let n = 0; n < e.count; n++) {
+          const top = seat.deck.pop();
+          if (!top) break;
+          seat.hand.push(top);
+        }
+      }
+      // ── Search typed pokemon to hand ──
+      else if (e.kind === "search-typed-to-hand") {
+        const candidates: number[] = [];
+        for (let i = 0; i < seat.deck.length; i++) {
+          const d = getCardForBattle(seat.deck[i].cardId);
+          if (d?.type === e.type && d.stage === "basic") candidates.push(i);
+        }
+        if (candidates.length > 0) {
+          const pick =
+            candidates[Math.floor(Math.random() * candidates.length)];
+          seat.hand.push(seat.deck.splice(pick, 1)[0]);
+        }
+      }
+      // ── Search named pokemon to bench ──
+      else if (e.kind === "search-named-to-bench") {
+        if (seat.bench.length >= MAX_BENCH) continue;
+        const candidates: number[] = [];
+        for (let i = 0; i < seat.deck.length; i++) {
+          const d = getCardForBattle(seat.deck[i].cardId);
+          if (d?.name === e.name && d.stage === "basic") candidates.push(i);
+        }
+        if (candidates.length > 0) {
+          const pick =
+            candidates[Math.floor(Math.random() * candidates.length)];
+          const card = seat.deck.splice(pick, 1)[0];
+          seat.bench.push(this.makeBattleCard(card.cardId));
+        }
+      }
+      // ── Self swap (échange Actif avec un Banc au choix) ──
+      else if (e.kind === "self-swap") {
+        if (seat.active && seat.bench.length > 0) {
+          // MVP : swap automatique avec le 1er Banc (Pocket dit "au choix"
+          // mais on simplifie pour ne pas bloquer le tour).
+          const newActive = seat.bench[0];
+          seat.bench[0] = seat.active;
+          seat.active = newActive;
+        }
+      }
     }
   }
 
