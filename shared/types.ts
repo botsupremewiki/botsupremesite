@@ -1312,6 +1312,25 @@ export const RUNETERRA_BATTLE_CONFIG = {
   maxBench: 6,
 } as const;
 
+// Messages échangés sur le WebSocket de la salle de combat LoR.
+export type RuneterraBattleClientMessage =
+  | { type: "lor-mulligan"; replaceIndices: number[] }
+  | { type: "lor-play-unit"; handIndex: number }
+  | { type: "lor-play-spell"; handIndex: number }
+  | { type: "lor-declare-attack"; attackerUids: string[] }
+  | { type: "lor-assign-blockers"; blockerUids: (string | null)[] }
+  | { type: "lor-pass" }
+  | { type: "lor-concede" };
+
+export type RuneterraBattleServerMessage =
+  | {
+      type: "lor-battle-welcome";
+      selfId: string;
+      selfSeat: RuneterraSeatId | null;
+    }
+  | { type: "lor-battle-state"; state: RuneterraBattleState }
+  | { type: "lor-battle-error"; message: string };
+
 // ─── Boosters Runeterra — 6 packs régions de Set 1 ───────────────────────
 // Riot n'avait pas de système de packs (LoR utilisait des shards/wildcards).
 // On invente un pack par région — pattern similaire à Pokémon TCG Pocket

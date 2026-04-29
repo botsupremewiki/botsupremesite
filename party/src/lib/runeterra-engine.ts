@@ -9,8 +9,11 @@
 
 import type {
   RuneterraBattlePhase,
+  RuneterraBattleState,
   RuneterraBattleUnit,
   RuneterraCardData,
+  RuneterraPlayerPublicState,
+  RuneterraSelfState,
 } from "../../../shared/types";
 import { RUNETERRA_BATTLE_CONFIG } from "../../../shared/types";
 import { RUNETERRA_BASE_SET_BY_CODE } from "../../../shared/tcg-runeterra-base";
@@ -468,6 +471,57 @@ export function drawCards(
 /** Mappe seat-id (0/1) → "p1"/"p2" pour l'envoi client. */
 export function seatToId(seatIdx: 0 | 1): "p1" | "p2" {
   return seatIdx === 0 ? "p1" : "p2";
+}
+
+// ────────────────────── Projection serveur → client ──────────────────────
+
+/** Projette l'état interne complet vers la perspective d'un joueur :
+ *   • self = ton état (avec hand visible)
+ *   • opponent = état adverse (hand cachée, juste le compte)
+ *   • Tronque le log aux 20 derniers évènements
+ */
+export function projectStateForSeat(
+  state: InternalState,
+  viewerSeatIdx: 0 | 1,
+): RuneterraBattleState {
+  const selfPlayer = state.players[viewerSeatIdx];
+  const opponentPlayer = state.players[otherSeat(viewerSeatIdx)];
+  return {
+    roomId: state.roomId,
+    phase: state.phase,
+    self: projectSelf(selfPlayer),
+    opponent: projectPublic(opponentPlayer),
+    selfSeat: seatToId(viewerSeatIdx),
+    activeSeat: seatToId(state.activeSeatIdx),
+    attackTokenSeat: seatToId(state.attackTokenSeatIdx),
+    round: state.round,
+    winner:
+      state.winnerSeatIdx === null ? null : seatToId(state.winnerSeatIdx),
+    log: state.log.slice(-20),
+  };
+}
+
+function projectPublic(p: InternalPlayer): RuneterraPlayerPublicState {
+  return {
+    authId: p.authId,
+    username: p.username,
+    deckSize: p.deck.length,
+    handCount: p.hand.length,
+    bench: p.bench,
+    mana: p.mana,
+    manaMax: p.manaMax,
+    spellMana: p.spellMana,
+    nexusHealth: p.nexusHealth,
+    attackToken: p.attackToken,
+    hasMulliganed: p.hasMulliganed,
+  };
+}
+
+function projectSelf(p: InternalPlayer): RuneterraSelfState {
+  return {
+    ...projectPublic(p),
+    hand: p.hand.map((c) => c.cardCode),
+  };
 }
 
 function otherSeat(seat: 0 | 1): 0 | 1 {
