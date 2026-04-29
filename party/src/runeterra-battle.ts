@@ -28,7 +28,11 @@ import {
   seatToId,
 } from "./lib/runeterra-engine";
 import { botAct } from "./lib/runeterra-bot";
-import { fetchTcgDeckById, fetchTcgDecks } from "./lib/supabase";
+import {
+  fetchTcgDeckById,
+  fetchTcgDecks,
+  recordBattleResult,
+} from "./lib/supabase";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,8 +53,21 @@ export default class LorBattleServer implements Party.Server {
   private botSeatIdx: 0 | 1 | null = null;
   // Anti-réentrée pour scheduleBotAct (setTimeout récursif).
   private botRunning = false;
+  // Phase 3.8f : mode ranked détecté via préfixe room.id "ranked-".
+  // Au endgame, l'ELO est mis à jour via recordBattleResult.
+  private readonly rankedMode: boolean;
+  // Noms de decks par siège (cache pour recordBattleResult).
+  private deckNames: [string | null, string | null] = [null, null];
+  // Authentique authId par siège (pour recordBattleResult — connInfo
+  // peut être nettoyé sur disconnect avant la fin du match).
+  private seatAuthIds: [string | null, string | null] = [null, null];
+  private seatUsernames: [string, string] = ["?", "?"];
+  // Anti-double recordBattleResult.
+  private resultRecorded = false;
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.rankedMode = room.id.startsWith("ranked-");
+  }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url);
@@ -232,6 +249,10 @@ export default class LorBattleServer implements Party.Server {
         })),
       },
     );
+    // Phase 3.8f : cache les infos pour recordBattleResult au endGame.
+    this.deckNames = [p0Deck.name ?? null, p1Deck.name ?? null];
+    this.seatAuthIds = [p0.authId, p1.authId];
+    this.seatUsernames = [p0.username, p1.username];
     this.broadcastState();
   }
 
@@ -324,6 +345,53 @@ export default class LorBattleServer implements Party.Server {
       if (!conn) continue;
       this.sendState(conn, info.seatIdx);
     }
+    // Phase 3.8f : enregistre le résultat de partie quand state.phase
+    // devient "ended". Skip en mode bot (pas de joueur réel à classer).
+    this.maybeRecordResult();
+  }
+
+  private maybeRecordResult() {
+    if (this.state === null) return;
+    if (this.state.phase !== "ended") return;
+    if (this.resultRecorded) return;
+    if (this.botSeatIdx !== null) return; // pas d'ELO en bot mode
+    const winnerIdx = this.state.winnerSeatIdx;
+    if (winnerIdx === null) return; // égalité
+    const loserIdx = (1 - winnerIdx) as 0 | 1;
+    const winnerAuth = this.seatAuthIds[winnerIdx];
+    const loserAuth = this.seatAuthIds[loserIdx];
+    if (!winnerAuth || !loserAuth) return;
+    this.resultRecorded = true;
+    void recordBattleResult(this.room, {
+      gameId: "lol",
+      winnerId: winnerAuth,
+      loserId: loserAuth,
+      winnerUsername: this.seatUsernames[winnerIdx],
+      loserUsername: this.seatUsernames[loserIdx],
+      winnerDeckName: this.deckNames[winnerIdx],
+      loserDeckName: this.deckNames[loserIdx],
+      ranked: this.rankedMode,
+      reason:
+        this.state.players[loserIdx].nexusHealth <= 0 ? "nexus-dead" : "concede",
+    })
+      .then((res) => {
+        if (!res || !this.rankedMode || !this.state) return;
+        this.state = {
+          ...this.state,
+          log: [
+            ...this.state.log,
+            `📊 ELO — ${this.seatUsernames[winnerIdx]} ${res.winner_elo_before}→${res.winner_elo_after} · ${this.seatUsernames[loserIdx]} ${res.loser_elo_before}→${res.loser_elo_after}.`,
+          ],
+        };
+        // Re-broadcast pour afficher l'ELO update aux joueurs.
+        for (const [connId, info] of this.connInfo) {
+          if (info.seatIdx === null) continue;
+          const conn = this.findConn(connId);
+          if (!conn) continue;
+          this.sendState(conn, info.seatIdx);
+        }
+      })
+      .catch(() => {});
   }
 
   private sendState(conn: Party.Connection, seatIdx: 0 | 1) {

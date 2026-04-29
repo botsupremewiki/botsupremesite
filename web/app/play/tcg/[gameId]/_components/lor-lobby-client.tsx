@@ -16,11 +16,18 @@ import { UserPill } from "@/components/user-pill";
 type ConnStatus = "connecting" | "connected" | "disconnected";
 type LobbyState = "idle" | "queued" | "matched";
 
-export function LorLobbyClient({ profile }: { profile: Profile | null }) {
+export function LorLobbyClient({
+  profile,
+  ranked = false,
+}: {
+  profile: Profile | null;
+  ranked?: boolean;
+}) {
   const router = useRouter();
   const game = TCG_GAMES.lol;
   const tcgWsRef = useRef<WebSocket | null>(null);
   const lobbyWsRef = useRef<WebSocket | null>(null);
+  const lobbyRoomId = ranked ? "ranked-main" : "main";
 
   const [tcgStatus, setTcgStatus] = useState<ConnStatus>("connecting");
   const [lobbyStatus, setLobbyStatus] = useState<ConnStatus>("connecting");
@@ -87,7 +94,7 @@ export function LorLobbyClient({ profile }: { profile: Profile | null }) {
     const params = new URLSearchParams();
     params.set("authId", profile.id);
     params.set("name", profile.username);
-    const url = `${scheme}://${partyHost}/parties/lorlobby/main?${params.toString()}`;
+    const url = `${scheme}://${partyHost}/parties/lorlobby/${lobbyRoomId}?${params.toString()}`;
     const ws = new WebSocket(url);
     lobbyWsRef.current = ws;
     ws.addEventListener("open", () => setLobbyStatus("connected"));
@@ -124,7 +131,7 @@ export function LorLobbyClient({ profile }: { profile: Profile | null }) {
       ws.close();
       if (lobbyWsRef.current === ws) lobbyWsRef.current = null;
     };
-  }, [profile, router]);
+  }, [profile, router, lobbyRoomId]);
 
   const queue = useCallback(() => {
     if (!selectedDeckId) {
@@ -171,7 +178,9 @@ export function LorLobbyClient({ profile }: { profile: Profile | null }) {
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
-          <span className="text-xs text-zinc-500">🆚 Combat JcJ</span>
+          <span className="text-xs text-zinc-500">
+            {ranked ? "🏆 Combat JcJ classé" : "🆚 Combat JcJ"}
+          </span>
         </div>
         {profile ? (
           <UserPill profile={profile} variant="play" />
@@ -186,10 +195,12 @@ export function LorLobbyClient({ profile }: { profile: Profile | null }) {
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
           <div className="rounded-xl border border-white/10 bg-black/40 p-4">
             <h1 className="text-2xl font-bold text-zinc-100">
-              🆚 Combat JcJ — Legends of Runeterra
+              {ranked ? "🏆 Combat JcJ classé" : "🆚 Combat JcJ"} — Legends of Runeterra
             </h1>
             <p className="mt-1 text-sm text-zinc-400">
-              Match amical sans classement. Sélectionne un deck valide
+              {ranked
+                ? "Match classé : ton ELO LoR est mis à jour à la fin (formule Elo K=32, départ 1000). Sélectionne un deck valide"
+                : "Match amical sans classement. Sélectionne un deck valide"}{" "}
               ({RUNETERRA_BATTLE_CONFIG.deckSize} cartes), entre en file, et
               tu seras automatiquement matché contre le prochain joueur en
               attente.

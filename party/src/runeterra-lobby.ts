@@ -1,10 +1,13 @@
-// PartyKit lobby de matchmaking LoR (Phase 3.6d).
+// PartyKit lobby de matchmaking LoR (Phase 3.6d + 3.8f ranked).
 //
 // FIFO simple : 2 joueurs en file → match → roomId généré → les 2 reçoivent
 // un message `lor-matched` avec le roomId pour rejoindre `battlelor/{roomId}`.
 //
 // Routes :
-//   /parties/lorlobby/main  → file PvP fun unique (pas de ranked pour l'instant)
+//   /parties/lorlobby/main         → file PvP fun (roomId UUID standard)
+//   /parties/lorlobby/ranked-main  → file ranked (roomId préfixé "ranked-",
+//                                    le serveur battle utilise ce préfixe
+//                                    pour activer l'update ELO en fin de match)
 
 import type * as Party from "partykit/server";
 import type {
@@ -30,8 +33,11 @@ export default class LorLobbyServer implements Party.Server {
     string,
     { authId: string; username: string }
   >();
+  private readonly rankedMode: boolean;
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.rankedMode = room.id.startsWith("ranked-");
+  }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url);
@@ -126,7 +132,8 @@ export default class LorLobbyServer implements Party.Server {
         this.queue.unshift(a);
         return;
       }
-      const roomId = crypto.randomUUID();
+      const baseRoomId = crypto.randomUUID();
+      const roomId = this.rankedMode ? `ranked-${baseRoomId}` : baseRoomId;
       this.sendTo(a.conn, {
         type: "lor-matched",
         roomId,
