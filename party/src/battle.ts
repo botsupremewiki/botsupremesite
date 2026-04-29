@@ -613,12 +613,30 @@ export default class BattleServer implements Party.Server {
     });
   }
 
+  /** Vérifie qu'on peut continuer à jouer ce tour : si l'adversaire est en
+   *  `mustPromoteActive` (typiquement parce qu'on a joué Morgane), il faut
+   *  attendre qu'il choisisse son nouveau Actif avant de continuer. Renvoie
+   *  `true` si l'action peut procéder, `false` sinon (avec erreur envoyée). */
+  private requireOpponentReady(seatId: BattleSeatId): boolean {
+    const oppId: BattleSeatId = seatId === "p1" ? "p2" : "p1";
+    const opp = this.seats[oppId];
+    if (opp?.mustPromoteActive) {
+      this.sendErrorToSeat(
+        seatId,
+        "Attends que l'adversaire choisisse son nouveau Pokémon Actif.",
+      );
+      return false;
+    }
+    return true;
+  }
+
   // ─────────────── playing-phase actions ───────────────
 
   /** Pose un Pokémon de Base de la main au Banc en main phase. */
   private handlePlayBasic(seatId: BattleSeatId, handIndex: number) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     if (seat.bench.length >= MAX_BENCH) {
@@ -640,6 +658,7 @@ export default class BattleServer implements Party.Server {
   private handleAttachEnergy(seatId: BattleSeatId, targetUid: string) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     if (!seat.pendingEnergy) {
@@ -672,6 +691,7 @@ export default class BattleServer implements Party.Server {
   ) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     const handCard = seat.hand[handIndex];
@@ -732,6 +752,7 @@ export default class BattleServer implements Party.Server {
   private handleRetreat(seatId: BattleSeatId, benchIndex: number) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     if (seat.hasRetreatedThisTurn) {
@@ -782,6 +803,7 @@ export default class BattleServer implements Party.Server {
   private handleAttack(seatId: BattleSeatId, attackIndex: number) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     if (!seat.active) return;
@@ -934,6 +956,7 @@ export default class BattleServer implements Party.Server {
   ) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat || seat.mustPromoteActive) return;
     const handCard = seat.hand[handIndex];
@@ -1216,9 +1239,12 @@ export default class BattleServer implements Party.Server {
       case "Morgane": {
         // « Échangez le Pokémon Actif de votre adversaire avec l'un de ses
         // Pokémon de Banc. (Votre adversaire choisit le nouveau Pokémon
-        // Actif.) » — MVP : choix simplifié côté serveur (le Pokémon de Banc
-        // avec le plus de PV restants), pour ne pas bloquer le tour de
-        // l'attaquant en attendant un input adverse.
+        // Actif.) »
+        // → On déplace l'Actif de l'adversaire dans son Banc et on flag
+        //   `mustPromoteActive`. L'adversaire doit cliquer sur un Banc
+        //   pour finaliser le swap. Pendant ce temps, le tour de l'attaquant
+        //   est bloqué (vérifié dans tous les handlers d'action — voir
+        //   `requireOpponentNotPromoting`).
         const opp = this.seats[oppId];
         if (!opp || !opp.active) {
           this.sendErrorToSeat(seatId, "Pas de cible.");
@@ -1231,22 +1257,11 @@ export default class BattleServer implements Party.Server {
           );
           return;
         }
-        let bestIdx = 0;
-        let bestRemaining = -Infinity;
-        for (let i = 0; i < opp.bench.length; i++) {
-          const c = opp.bench[i];
-          const data = getCardForBattle(c.cardId);
-          if (!data) continue;
-          const remaining = data.hp - c.damage;
-          if (remaining > bestRemaining) {
-            bestRemaining = remaining;
-            bestIdx = i;
-          }
-        }
-        const newActive = opp.bench[bestIdx];
-        opp.bench.splice(bestIdx, 1);
+        // L'Actif rejoint le Banc (avec ses dégâts/énergies/statuts), puis
+        // l'adversaire doit choisir un nouveau Actif via handlePromoteActive.
         opp.bench.push(opp.active);
-        opp.active = newActive;
+        opp.active = null;
+        opp.mustPromoteActive = true;
         consumed = true;
         break;
       }
@@ -1488,6 +1503,7 @@ export default class BattleServer implements Party.Server {
   private handleEndTurn(seatId: BattleSeatId) {
     if (this.phase !== "playing") return;
     if (this.activeSeat !== seatId) return;
+    if (!this.requireOpponentReady(seatId)) return;
     const seat = this.seats[seatId];
     if (!seat) return;
     if (seat.mustPromoteActive) {

@@ -421,6 +421,10 @@ function BattleBoard({
     setPendingTrainerIdx(null);
   };
   const promptPromote = state.self?.mustPromoteActive;
+  // L'adversaire est en train de choisir son nouveau Actif (typiquement
+  // suite à Morgane). Pendant ce temps, NOS actions sont bloquées : on
+  // attend qu'il ait choisi pour pouvoir continuer notre tour.
+  const oppPromoting = !!state.opponent?.mustPromoteActive;
   const attachModeHandler = attachEnergyMode
     ? (uid: string) => {
         onAttachEnergy(uid);
@@ -451,6 +455,12 @@ function BattleBoard({
             Ton Pokémon Actif a été mis K.O. Choisis un Pokémon de ton Banc.
           </div>
         )}
+        {oppPromoting && (
+          <div className="flex items-center justify-center gap-2 border-b border-sky-400/40 bg-sky-400/10 p-2 text-center text-sm text-sky-200">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-300" />
+            En attente — l&apos;adversaire choisit son nouveau Pokémon Actif…
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto p-4">
           {/* ── Colonne joueur (gauche) — vertical : info → KO → board → contrôles ── */}
@@ -477,7 +487,8 @@ function BattleBoard({
                   state.phase === "playing" &&
                   isMyTurn &&
                   !state.self.hasRetreatedThisTurn &&
-                  !state.self.mustPromoteActive
+                  !state.self.mustPromoteActive &&
+                  !oppPromoting
                     ? onRetreat
                     : null
                 }
@@ -492,6 +503,7 @@ function BattleBoard({
                 attachEnergyMode={attachEnergyMode}
                 pendingEvolveIdx={pendingEvolveIdx}
                 pendingTrainerIdx={pendingTrainerIdx}
+                oppPromoting={oppPromoting}
                 onActivateAttachMode={() => setAttachEnergyMode(true)}
               />
               {(attachEnergyMode ||
@@ -547,6 +559,7 @@ function BattleBoard({
               state={state}
               cardById={cardById}
               isMyTurn={isMyTurn}
+              oppPromoting={oppPromoting}
               onSetActive={onSetActive}
               onAddBench={onAddBench}
               onRemoveBench={onRemoveBench}
@@ -1164,6 +1177,7 @@ function SelfControls({
   attachEnergyMode,
   pendingEvolveIdx,
   pendingTrainerIdx,
+  oppPromoting,
   onActivateAttachMode,
 }: {
   state: BattleState;
@@ -1175,6 +1189,7 @@ function SelfControls({
   attachEnergyMode: boolean;
   pendingEvolveIdx: number | null;
   pendingTrainerIdx: number | null;
+  oppPromoting: boolean;
   onActivateAttachMode: () => void;
 }) {
   if (state.phase === "setup") {
@@ -1208,6 +1223,7 @@ function SelfControls({
   const blocked =
     !isMyTurn ||
     !!self?.mustPromoteActive ||
+    oppPromoting ||
     (active?.playedThisTurn ?? false);
 
   // L'énergie "pending" est affichée en logo brillant à gauche des attaques :
@@ -1218,7 +1234,8 @@ function SelfControls({
     isMyTurn &&
     !attachEnergyMode &&
     pendingEvolveIdx === null &&
-    pendingTrainerIdx === null;
+    pendingTrainerIdx === null &&
+    !oppPromoting;
   const energyType = self?.pendingEnergy ?? null;
 
   return (
@@ -1312,7 +1329,12 @@ function SelfControls({
       {/* Bouton "Fin du tour" en bas, pleine largeur */}
       <button
         onClick={onEndTurn}
-        disabled={!isMyTurn || !!self?.mustPromoteActive}
+        disabled={!isMyTurn || !!self?.mustPromoteActive || oppPromoting}
+        title={
+          oppPromoting
+            ? "Attends que l'adversaire choisisse son nouveau Actif"
+            : undefined
+        }
         className="rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
         ⏭ Fin du tour
@@ -1455,6 +1477,7 @@ function SelfHand({
   state,
   cardById,
   isMyTurn,
+  oppPromoting,
   onSetActive,
   onAddBench,
   onRemoveBench,
@@ -1467,6 +1490,7 @@ function SelfHand({
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
   isMyTurn: boolean;
+  oppPromoting: boolean;
   onSetActive: (handIndex: number) => void;
   onAddBench: (handIndex: number) => void;
   onRemoveBench: (benchIndex: number) => void;
@@ -1479,8 +1503,15 @@ function SelfHand({
   const self = state.self;
   if (!self) return null;
   const inSetup = state.phase === "setup" && !self.hasSetup;
+  // En main phase si :
+  //  - on est en `playing` et c'est notre tour
+  //  - on n'a pas à promouvoir nous-mêmes
+  //  - l'adversaire n'est pas en train de promouvoir (Morgane)
   const inMain =
-    state.phase === "playing" && isMyTurn && !self.mustPromoteActive;
+    state.phase === "playing" &&
+    isMyTurn &&
+    !self.mustPromoteActive &&
+    !oppPromoting;
   const benchCap = BATTLE_CONFIG.maxBench;
   // Capture pour les closures (TS perd le narrowing de state.self).
   const hasActive = !!self.active;
@@ -1533,9 +1564,11 @@ function SelfHand({
           kind: "blocked",
           reason: mustPromoteActive
             ? "Tu dois d'abord promouvoir un Pokémon de Banc."
-            : !isMyTurn
-              ? "Pas encore ton tour."
-              : "Tu ne peux pas jouer cette carte maintenant.",
+            : oppPromoting
+              ? "Attends que l'adversaire choisisse son nouveau Actif."
+              : !isMyTurn
+                ? "Pas encore ton tour."
+                : "Tu ne peux pas jouer cette carte maintenant.",
         };
       }
 
@@ -1603,7 +1636,11 @@ function SelfHand({
       if (!inMain) {
         return {
           kind: "blocked",
-          reason: !isMyTurn ? "Pas encore ton tour." : "Indisponible.",
+          reason: oppPromoting
+            ? "Attends que l'adversaire choisisse son nouveau Actif."
+            : !isMyTurn
+              ? "Pas encore ton tour."
+              : "Indisponible.",
         };
       }
       if (benchLen >= benchCap) {
