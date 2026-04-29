@@ -27,7 +27,8 @@ import {
   projectStateForSeat,
   seatToId,
 } from "./lib/runeterra-engine";
-import { fetchTcgDecks } from "./lib/supabase";
+import { botAct } from "./lib/runeterra-bot";
+import { fetchTcgDeckById, fetchTcgDecks } from "./lib/supabase";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,6 +44,11 @@ export default class LorBattleServer implements Party.Server {
   private state: InternalState | null = null;
   private connInfo = new Map<string, ConnInfo>();
   private starting = false; // protège startBattle des appels concurrents
+  // Phase 3.8a : si défini, ce siège est joué par l'IA bot (pas de WebSocket).
+  // Activé via ?bot=1 dans l'URL de connexion humaine.
+  private botSeatIdx: 0 | 1 | null = null;
+  // Anti-réentrée pour scheduleBotAct (setTimeout récursif).
+  private botRunning = false;
 
   constructor(readonly room: Party.Room) {}
 
@@ -71,6 +77,14 @@ export default class LorBattleServer implements Party.Server {
       });
       conn.close();
       return;
+    }
+
+    // Phase 3.8a : mode bot solo. Le 1er humain à se connecter avec ?bot=1
+    // déclenche un combat contre l'IA (le bot mirror son deck).
+    const botParam = url.searchParams.get("bot");
+    const requestBot = botParam === "1";
+    if (requestBot && this.botSeatIdx === null && this.state === null) {
+      this.botSeatIdx = 1;
     }
 
     // Détermine le siège libre. Si un siège est déjà occupé par le même
@@ -126,6 +140,25 @@ export default class LorBattleServer implements Party.Server {
       if (info.seatIdx === 0) seatInfos[0] = info;
       else if (info.seatIdx === 1) seatInfos[1] = info;
     }
+
+    // Mode bot : seul le siège 0 est nécessaire ; on synthétise le siège 1.
+    if (this.botSeatIdx === 1 && seatInfos[0] && !seatInfos[1]) {
+      const botInfo: ConnInfo = {
+        authId: seatInfos[0].authId,
+        deckId: seatInfos[0].deckId, // mirror : bot utilise le même deck
+        username: "Bot Suprême",
+        seatIdx: 1,
+      };
+      this.starting = true;
+      try {
+        await this.startBattle(seatInfos[0], botInfo);
+        this.scheduleBotAct();
+      } finally {
+        this.starting = false;
+      }
+      return;
+    }
+
     if (!seatInfos[0] || !seatInfos[1]) return;
     this.starting = true;
     try {
@@ -135,15 +168,44 @@ export default class LorBattleServer implements Party.Server {
     }
   }
 
+  /** Phase 3.8a : si le bot est en mode et qu'il a une action à faire,
+   *  la planifie via setTimeout pour donner un peu de temps de
+   *  visualisation côté client. Récursif (le bot peut enchaîner plusieurs
+   *  actions consécutives — par exemple jouer une unité, puis attaquer). */
+  private scheduleBotAct() {
+    if (this.botSeatIdx === null || this.state === null) return;
+    if (this.botRunning) return;
+    if (this.state.phase === "ended") return;
+    this.botRunning = true;
+    setTimeout(() => {
+      this.botRunning = false;
+      if (this.state === null || this.botSeatIdx === null) return;
+      const result = botAct(this.state, this.botSeatIdx);
+      if (result && result.ok) {
+        this.state = result.state;
+        this.broadcastState();
+        // Récursif : le bot peut avoir encore une action à faire.
+        this.scheduleBotAct();
+      }
+    }, 500);
+  }
+
   private async startBattle(p0: ConnInfo, p1: ConnInfo) {
     if (!p0.authId || !p1.authId || !p0.deckId || !p1.deckId) return;
 
-    const [p0Decks, p1Decks] = await Promise.all([
-      fetchTcgDecks(this.room, p0.authId, "lol"),
-      fetchTcgDecks(this.room, p1.authId, "lol"),
+    // Phase 3.8a : si bot, on charge le deck via fetchTcgDeckById (qui ne
+    // dépend pas de l'authId — le bot mirror le deck humain).
+    const isBot = this.botSeatIdx === 1;
+    const [p0Deck, p1Deck] = await Promise.all([
+      fetchTcgDecks(this.room, p0.authId, "lol").then((decks) =>
+        decks.find((d) => d.id === p0.deckId),
+      ),
+      isBot
+        ? fetchTcgDeckById(this.room, p1.deckId)
+        : fetchTcgDecks(this.room, p1.authId, "lol").then((decks) =>
+            decks.find((d) => d.id === p1.deckId),
+          ),
     ]);
-    const p0Deck = p0Decks.find((d) => d.id === p0.deckId);
-    const p1Deck = p1Decks.find((d) => d.id === p1.deckId);
     if (!p0Deck || !p1Deck) {
       this.broadcastError(
         `Deck introuvable côté ${!p0Deck ? p0.username : p1.username}.`,
@@ -243,6 +305,7 @@ export default class LorBattleServer implements Party.Server {
     }
     this.state = result.state;
     this.broadcastState();
+    this.scheduleBotAct();
   }
 
   onClose(conn: Party.Connection) {
