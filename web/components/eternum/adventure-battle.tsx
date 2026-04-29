@@ -87,8 +87,15 @@ export function AdventureBattle({
   const [autoOn, setAutoOn] = useState(true); // sorts auto par défaut
   const [serverResult, setServerResult] = useState<ServerResult | null>(null);
   const [atbState, setAtbState] = useState<AtbState | null>(null);
-  const [interludeTick, setInterludeTick] = useState(0);
   const lockRef = useRef(false);
+
+  // Ref stable pour onStageChange (sinon les re-renders du parent
+  // — déclenchés toutes les sec par le timer AFK — invalident en boucle
+  // le setTimeout de 2 sec de l'interlude, et on reste bloqué).
+  const onStageChangeRef = useRef(onStageChange);
+  useEffect(() => {
+    onStageChangeRef.current = onStageChange;
+  }, [onStageChange]);
 
   const cls = ETERNUM_CLASSES[hero.classId];
 
@@ -226,10 +233,11 @@ export function AdventureBattle({
     if (!atbState) return;
     if (atbState.status === "running") return;
     setPhase("interlude");
-    setInterludeTick(0);
   }, [phase, atbState]);
 
-  // Phase interlude : compte 2 sec puis avance/retry
+  // Phase interlude : compte 2 sec puis avance/retry.
+  // ⚠️ onStageChange est volontairement EXCLU des deps (passé via ref)
+  // sinon les re-renders du parent reset le setTimeout en boucle.
   useEffect(() => {
     if (phase !== "interlude") return;
     if (!serverResult) return;
@@ -238,7 +246,7 @@ export function AdventureBattle({
       if (serverResult.won && !serverResult.capped) {
         const newStage = serverResult.stage;
         setStage(newStage);
-        onStageChange?.(newStage);
+        onStageChangeRef.current?.(newStage);
       }
       // Reset pour la boucle
       setAtbState(null);
@@ -246,7 +254,7 @@ export function AdventureBattle({
       setPhase("loading");
     }, INTERLUDE_MS);
     return () => clearTimeout(t);
-  }, [phase, serverResult, onStageChange]);
+  }, [phase, serverResult]);
 
   // ─── Render ───────────────────────────────────────────────────────
 
