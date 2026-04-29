@@ -1269,6 +1269,10 @@ export type RuneterraBattleUnit = {
   // sont déjà appliqués sur power/health). Defaults à 0.
   endOfRoundPowerBuff: number;
   endOfRoundHealthBuff: number;
+  // Phase 3.8c : Gel (Frostbite). Quand frozen=true, power = 0 pour le
+  // round (le delta est tracké dans endOfRoundPowerBuff pour restauration
+  // à endRound). L'unité ne peut pas attaquer (power=0 < 1).
+  frozen: boolean;
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de
@@ -1359,17 +1363,46 @@ export type RuneterraBattleServerMessage =
 // résout l'effet via runeterra-engine.applySpellEffect.
 
 export type SpellEffect =
+  // Phase 3.7
   | { type: "buff-ally-round"; power: number; health: number }
   | { type: "grant-keyword-ally"; keyword: string }
-  | { type: "deal-damage-anywhere"; amount: number };
+  | { type: "deal-damage-anywhere"; amount: number }
+  // Phase 3.8c
+  | {
+      type: "buff-ally-permanent";
+      power: number;
+      health: number;
+      requireWounded?: boolean;
+    }
+  | { type: "grant-keyword-ally-round"; keyword: string }
+  | { type: "frostbite-enemy"; maxHealth?: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
-  // Frappe rayonnante (Demacia, coût 1, Burst) :
+  // ── Demacia
+  // Cotte de mailles (1 mana, Burst) : « Octroyez Robuste à un allié. »
+  "01DE013": { type: "grant-keyword-ally", keyword: "Tough" },
+  // Frappe rayonnante (1 mana, Burst) :
   // « Conférez +1|+1 à un allié pour ce round. »
   "01DE018": { type: "buff-ally-round", power: 1, health: 1 },
-  // Cotte de mailles (Demacia, coût 1, Burst) :
-  // « Octroyez Robuste à un allié. »
-  "01DE013": { type: "grant-keyword-ally", keyword: "Tough" },
+  // Barrière prismatique (3 mana, Burst) :
+  // « Conférez Barrière à un allié pour ce round. »
+  "01DE032": { type: "grant-keyword-ally-round", keyword: "Barrier" },
+
+  // ── Freljord
+  // Élixir de fer (1 mana, Burst) :
+  // « Conférez +0|+2 à un allié pour ce round. »
+  "01FR004": { type: "buff-ally-round", power: 0, health: 2 },
+  // Engelure (3 mana, Burst) : « Gelez un ennemi. »
+  "01FR001": { type: "frostbite-enemy" },
+  // Acier cassant (1 mana, Burst) : « Gelez un ennemi ayant 3 PV ou moins. »
+  "01FR030": { type: "frostbite-enemy", maxHealth: 3 },
+  // Courage (3 mana, Burst) : « Octroyez +3|+3 à un allié blessé. »
+  "01FR046": {
+    type: "buff-ally-permanent",
+    power: 3,
+    health: 3,
+    requireWounded: true,
+  },
 };
 
 export type SpellTargetSide = "ally" | "enemy" | "any" | "none";
@@ -1377,10 +1410,14 @@ export type SpellTargetSide = "ally" | "enemy" | "any" | "none";
 export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
   switch (effect.type) {
     case "buff-ally-round":
+    case "buff-ally-permanent":
     case "grant-keyword-ally":
+    case "grant-keyword-ally-round":
       return "ally";
     case "deal-damage-anywhere":
       return "any";
+    case "frostbite-enemy":
+      return "enemy";
   }
 }
 

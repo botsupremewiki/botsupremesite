@@ -153,6 +153,7 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     kills: 0,
     endOfRoundPowerBuff: 0,
     endOfRoundHealthBuff: 0,
+    frozen: false,
   };
 }
 
@@ -452,17 +453,25 @@ function applyRegeneration(player: InternalPlayer): InternalPlayer {
   return { ...player, bench: newBench };
 }
 
-/** Phase 3.7 : annule les buffs round-only à la fin du round. Soustrait
- *  endOfRoundPowerBuff/HealthBuff de power/health, puis reset les deltas. */
+/** Phase 3.7+3.8c : annule les buffs round-only à la fin du round. Soustrait
+ *  endOfRoundPowerBuff/HealthBuff de power/health, puis reset les deltas.
+ *  Reset aussi frozen = false (le Gel expire en fin de round). */
 function expireRoundBuffs(player: InternalPlayer): InternalPlayer {
   const newBench = player.bench.map((u) => {
-    if (u.endOfRoundPowerBuff === 0 && u.endOfRoundHealthBuff === 0) return u;
+    if (
+      u.endOfRoundPowerBuff === 0 &&
+      u.endOfRoundHealthBuff === 0 &&
+      !u.frozen
+    ) {
+      return u;
+    }
     return {
       ...u,
       power: u.power - u.endOfRoundPowerBuff,
       health: u.health - u.endOfRoundHealthBuff,
       endOfRoundPowerBuff: 0,
       endOfRoundHealthBuff: 0,
+      frozen: false,
     };
   });
   return { ...player, bench: newBench };
@@ -773,12 +782,31 @@ function validateSpellTarget(
     if (!allyUnit) {
       return { ok: false, error: "La cible doit être un allié sur ton banc." };
     }
+    // Conditions spécifiques à l'effet (ex Courage : « allié blessé »).
+    if (effect.type === "buff-ally-permanent" && effect.requireWounded) {
+      if (allyUnit.damage <= 0) {
+        return {
+          ok: false,
+          error: "Cible invalide : l'allié doit être blessé (PV manquants).",
+        };
+      }
+    }
     return { ok: true };
   }
   if (side === "enemy") {
     const enemyUnit = opponent.bench.find((u) => u.uid === targetUid);
     if (!enemyUnit) {
       return { ok: false, error: "La cible doit être une unité ennemie." };
+    }
+    // Conditions spécifiques (ex Acier cassant : Gel sur ennemi ≤ 3 PV).
+    if (effect.type === "frostbite-enemy" && effect.maxHealth !== undefined) {
+      const currentHealth = enemyUnit.health - enemyUnit.damage;
+      if (currentHealth > effect.maxHealth) {
+        return {
+          ok: false,
+          error: `Cible invalide : l'ennemi doit avoir ${effect.maxHealth} PV ou moins (${currentHealth} actuels).`,
+        };
+      }
     }
     return { ok: true };
   }
@@ -821,7 +849,26 @@ function applySpellEffect(
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
-    case "grant-keyword-ally": {
+    case "buff-ally-permanent": {
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        // Permanent : modifie power/health directement (pas via endOfRoundBuffs).
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "grant-keyword-ally":
+    case "grant-keyword-ally-round": {
+      // NOTE Phase 3.8c : on traite -round identique à permanent pour
+      // l'instant. Pour Barrier le résultat est le même côté gameplay
+      // (Barrier réinitialise barrierUsed à chaque startRound de toute
+      // façon). Pour d'autres mots-clés, fixer en 3.8c.x.
       const player = newPlayers[casterSeat];
       const newBench = player.bench.map((u) => {
         if (u.uid !== targetUid) return u;
@@ -829,6 +876,27 @@ function applySpellEffect(
         return { ...u, keywords: [...u.keywords, effect.keyword] };
       });
       newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "frostbite-enemy": {
+      // Cherche l'ennemi (côté opposé de caster).
+      const player = newPlayers[oppSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        if (u.frozen) return u; // déjà gelé, no-op
+        // Set power à 0 pour le round, restauré à endRound via
+        // endOfRoundPowerBuff. Math : new endOfRoundPowerBuff = ancien + (-power)
+        // → à endRound : power - newDelta = 0 - (oldDelta - power) = power - oldDelta
+        // = restauration au power d'avant le Gel.
+        const restorePower = u.power;
+        return {
+          ...u,
+          power: 0,
+          frozen: true,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff - restorePower,
+        };
+      });
+      newPlayers[oppSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
     case "deal-damage-anywhere": {
