@@ -1467,17 +1467,79 @@ const LEVEL_UP_REGISTRY: Record<
     check: (state: InternalState, unit: RuneterraBattleUnit, seatIdx: 0 | 1) => boolean;
   }
 > = {
-  // Garen (Demacia) — "J'ai frappé deux fois."
+  // ── Demacia
+  // Garen — « J'ai frappé deux fois. »
   "01DE012": {
     levelUpCardCode: "01DE012T2",
     check: (_s, u) => u.strikes >= 2,
   },
-  // Fiora (Demacia) — "J'ai tué 2 ennemis."
+  // Fiora — « J'ai tué 2 ennemis. »
   "01DE045": {
     levelUpCardCode: "01DE045T2",
     check: (_s, u) => u.kills >= 2,
   },
-  // TODO Phase 3.5.x : Lucian, Lux, Yasuo, Garen-équivalents Noxus/Ionia/PZ/Frelj/SI.
+  // Lucian — « J'ai vu au moins 4 alliés ou 1 Senna alliée mourir. »
+  // Simplification 3.8d : on track uniquement les 4 alliés morts (Senna
+  // check requiert vérif de carte spécifique — futur 3.8d.x).
+  "01DE022": {
+    levelUpCardCode: "01DE022T2",
+    check: (s, _u, seat) => s.players[seat].championCounters.alliesDied >= 4,
+  },
+  // Lux — « Vous avez lancé au moins 6 mana en sorts. »
+  "01DE042": {
+    levelUpCardCode: "01DE042T2",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.spellManaSpent >= 6,
+  },
+
+  // ── Freljord
+  // Anivia — « Vous avez atteint l'Illumination. » (manaMax = 10)
+  "01FR024": {
+    levelUpCardCode: "01FR024T2",
+    check: (s, _u, seat) => s.players[seat].manaMax >= 10,
+  },
+
+  // ── Ionia
+  // Karma — « Vous avez atteint l'Illumination. »
+  "01IO041": {
+    levelUpCardCode: "01IO041T2",
+    check: (s, _u, seat) => s.players[seat].manaMax >= 10,
+  },
+
+  // ── Noxus
+  // Katarina — « J'ai frappé une fois. » (skip recall bonus)
+  "01NX042": {
+    levelUpCardCode: "01NX042T2",
+    check: (_s, u) => u.strikes >= 1,
+  },
+  // Darius — « Je vois que le Nexus ennemi a la moitié de ses PV de base
+  // ou moins. » (initial = 20, donc <= 10).
+  "01NX038": {
+    levelUpCardCode: "01NX038T2",
+    check: (s, _u, seat) => s.players[otherSeat(seat)].nexusHealth <= 10,
+  },
+
+  // ── Piltover & Zaun
+  // Jinx — « Je vois que votre main est vide. »
+  "01PZ040": {
+    levelUpCardCode: "01PZ040T2",
+    check: (s, _u, seat) => s.players[seat].hand.length === 0,
+  },
+
+  // ── Îles obscures
+  // Kalista — « J'ai vu au moins 3 alliés mourir. »
+  "01SI030": {
+    levelUpCardCode: "01SI030T2",
+    check: (s, _u, seat) => s.players[seat].championCounters.alliesDied >= 3,
+  },
+
+  // TODO Phase 3.8d.x — Yasuo (étourdis/rappelés), Zed (Ombre Living strike),
+  // Tryndamere (on-death), Ashe (frostbites stack), Braum (damage survived),
+  // Vladimir (allies survived damage), Ezreal (target count), Teemo (mushroom
+  // tokens), Heimerdinger (Tech allies summoned), Shen (barriers granted),
+  // Hecarim (ephemeral attackers), Elise (spider count at round start),
+  // Thresh (units killed both sides), Vladimir (allies survived), Draven
+  // (spinning axe attacks).
 };
 
 /** Scanne tous les champions niveau 1 sur les bancs et applique le
