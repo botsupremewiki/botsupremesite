@@ -1530,7 +1530,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
 
 export type LastBreathEffect =
   | { type: "draw-cards"; count: number }
-  | { type: "deal-damage-enemy-nexus"; amount: number };
+  | { type: "deal-damage-enemy-nexus"; amount: number }
+  // Phase 3.15 : la mort de l'unité fait apparaître une AUTRE carte à sa
+  // place (ex Anivia → Œuf d'Anivia). Différent de Tryndamere qui
+  // gagne juste un niveau (cf tryReviveOnDeath).
+  | { type: "revive-as-different-card"; replacementCardCode: string };
 
 export const RUNETERRA_LAST_BREATH_EFFECTS: Record<
   string,
@@ -1539,6 +1543,13 @@ export const RUNETERRA_LAST_BREATH_EFFECTS: Record<
   // Guetteur avarosan (Freljord, 1 mana, 1|2) :
   // « Dernier souffle : piochez 1 carte. »
   "01FR003": { type: "draw-cards", count: 1 },
+  // Anivia (Freljord, 6 mana, 4|3) :
+  // « Dernier souffle : ranimez-moi transformée en Œuf d'Anivia. »
+  // Œuf d'Anivia (01FR024T4) est un 0/2 qui prend la place d'Anivia.
+  "01FR024": {
+    type: "revive-as-different-card",
+    replacementCardCode: "01FR024T4",
+  },
 };
 
 export type SpellTargetSide = "ally" | "enemy" | "any" | "none";

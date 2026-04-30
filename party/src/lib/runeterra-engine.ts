@@ -610,6 +610,43 @@ function applyLastBreathEffect(
       }
       return { ...state, players: newPlayers, log };
     }
+    case "revive-as-different-card": {
+      // Phase 3.15 : crée une nouvelle unité (avec un nouvel uid pour
+      // éviter conflit avec d'autres références à l'unité morte) sur le
+      // banc du joueur dont l'unité est morte. Skip si banc plein.
+      const player = state.players[seatIdx];
+      if (player.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench) {
+        return {
+          ...state,
+          log: [
+            ...state.log,
+            `${unitName} (Dernier souffle) — pas de place pour ranimer (banc plein).`,
+          ],
+        };
+      }
+      const replacement = getCard(effect.replacementCardCode);
+      if (!replacement || replacement.type !== "Unit") {
+        return state; // mapping invalide
+      }
+      const newUid = `${dyingUnit.uid}-revived`;
+      const newUnit = createUnit(newUid, effect.replacementCardCode);
+      const newPlayers: [InternalPlayer, InternalPlayer] = [
+        state.players[0],
+        state.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      newPlayers[seatIdx] = {
+        ...player,
+        bench: [...player.bench, newUnit],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${unitName} (Dernier souffle) — ranimé en ${replacement.name}.`,
+        ],
+      };
+    }
   }
 }
 
