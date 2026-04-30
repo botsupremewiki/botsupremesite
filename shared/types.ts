@@ -3976,6 +3976,8 @@ export type OnePieceBattleState = {
   // deadline (anti-AFK).
   deadlineMs: number | null;
 };
+
+export type OnePieceBattleClientMessage =
   // Mulligan : true = refait sa main une fois (1× max).
   | { type: "op-mulligan"; take: boolean }
   // Main phase actions

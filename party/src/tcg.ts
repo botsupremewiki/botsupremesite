@@ -239,22 +239,28 @@ const LOR_REGULAR_LOW_WEIGHTS: Record<RuneterraRarity, number> = {
   Rare: 9,
   Epic: 1,
   Champion: 0,
+  Holographic: 0,
+  Prismatic: 0,
   None: 0,
 };
 
 const LOR_REGULAR_HIGH_WEIGHTS: Record<RuneterraRarity, number> = {
   Common: 0,
-  Rare: 70,
+  Rare: 65,
   Epic: 25,
-  Champion: 5,
+  Champion: 8,
+  Holographic: 2,
+  Prismatic: 0,
   None: 0,
 };
 
 const LOR_RARE_SLOT_WEIGHTS: Record<RuneterraRarity, number> = {
   Common: 0,
-  Rare: 55,
-  Epic: 33,
-  Champion: 12,
+  Rare: 40,
+  Epic: 30,
+  Champion: 18,
+  Holographic: 10,
+  Prismatic: 2,
   None: 0,
 };
 

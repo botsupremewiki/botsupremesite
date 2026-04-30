@@ -13,6 +13,8 @@ export const LOR_RARITY_TIER: Record<RuneterraRarity, number> = {
   Rare: 2,
   Epic: 3,
   Champion: 4,
+  Holographic: 5,
+  Prismatic: 6,
 };
 
 export const LOR_RARITY_LABEL: Record<RuneterraRarity, string> = {
@@ -21,9 +23,13 @@ export const LOR_RARITY_LABEL: Record<RuneterraRarity, string> = {
   Rare: "Rare",
   Epic: "Épique",
   Champion: "Champion",
+  Holographic: "Holographique",
+  Prismatic: "Prismatique",
 };
 
-// Border + glow Tailwind par rareté.
+// Border + glow Tailwind par rareté. Pour Holographic/Prismatic, le rendu
+// final utilise les classes CSS dédiées `.rarity-holographic` / `.rarity-
+// prismatic` (cf. globals.css) qui prennent le pas sur la border simple.
 export const LOR_RARITY_COLOR: Record<RuneterraRarity, string> = {
   None: "border-zinc-600/40 text-zinc-200",
   Common: "border-zinc-400/40 text-zinc-200",
@@ -32,7 +38,17 @@ export const LOR_RARITY_COLOR: Record<RuneterraRarity, string> = {
     "border-fuchsia-400/70 text-fuchsia-100 shadow-[0_0_20px_rgba(232,121,249,0.4)]",
   Champion:
     "border-amber-300/80 text-amber-100 shadow-[0_0_28px_rgba(252,211,77,0.55)]",
+  Holographic: "border-transparent text-fuchsia-100",
+  Prismatic: "border-transparent text-amber-100",
 };
+
+/** Classe CSS d'effet pour les ultra-rares LoL (rainbow shimmer ou
+ *  pulse doré + particules). À appliquer sur le wrapper de la carte. */
+export function lorRarityFx(rarity: RuneterraRarity): string {
+  if (rarity === "Holographic") return "rarity-holographic";
+  if (rarity === "Prismatic") return "rarity-prismatic";
+  return "";
+}
 
 export const LOR_TYPE_LABEL: Record<RuneterraCardType, string> = {
   Unit: "Unité",
@@ -60,12 +76,13 @@ export function LorCardSlot({
   onClick?: () => void;
 }) {
   const owned = count > 0;
+  const fxClass = owned ? lorRarityFx(card.rarity) : "";
   return (
     <div
       onClick={onClick}
       className={`relative flex flex-col gap-1 rounded-xl border bg-black/40 p-2 transition-opacity ${
         owned ? LOR_RARITY_COLOR[card.rarity] : "border-white/5 opacity-30"
-      } ${onClick ? "cursor-pointer" : ""}`}
+      } ${onClick ? "cursor-pointer" : ""} ${fxClass}`}
     >
       <LorCardFace card={card} faded={!owned} />
       {count > 1 && (

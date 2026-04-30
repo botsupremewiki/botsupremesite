@@ -439,8 +439,32 @@ const RUNETERRA_SET1: RuneterraCardData[] = [
   { cardCode: "01SI027T1", name: "Vilemaw", description: "Les autres alliés <link=keyword.Fearsome><sprite name=Fearsome><style=Keyword>redoutables</style></link> ont +1|+0.", descriptionRaw: "Les autres alliés redoutables ont +1|+0.", flavorText: "« Quelle divinité révérez-vous ? Et que peut-elle faire ? Vous laissera-t-elle périr pour protéger son nom ? Ou vous octroiera-t-elle une énergie, une vitalité inédite pour un mortel ? Pourquoi servir un dieu qui ne fait rien pour vous ? » - Elise", artistName: "SIXMOREVODKA", cost: 3, attack: 6, health: 6, type: "Unit", supertype: "None", rarity: "None", regions: ["ShadowIsles"], keywords: ["Redoutable", "Missing Translation"], keywordRefs: ["Fearsome", "AuraVisualFakeKeyword"], subtypes: ["ARAIGNÉE"], collectible: false, set: "Set1", image: "https://dd.b.pvp.net/latest/set1/fr_fr/img/cards/01SI027T1.png", fullArt: "https://dd.b.pvp.net/latest/set1/fr_fr/img/cards/01SI027T1-full.png" },
 ];
 
-export const RUNETERRA_BASE_SET: RuneterraCardData[] = RUNETERRA_SET1;
+// Variantes ultra-rares générées dynamiquement à partir des Champions.
+// Chaque Champion a une version Holographic et une version Prismatic.
+// Le suffixe "h" / "p" sur la cardCode les distingue en collection ;
+// `foilOf` pointe vers la version standard pour réutiliser image/stats.
+const FOIL_VARIANTS: RuneterraCardData[] = RUNETERRA_SET1.flatMap((c) => {
+  if (c.rarity !== "Champion" || !c.collectible) return [];
+  const holo: RuneterraCardData = {
+    ...c,
+    cardCode: `${c.cardCode}h`,
+    rarity: "Holographic",
+    foilOf: c.cardCode,
+  };
+  const prism: RuneterraCardData = {
+    ...c,
+    cardCode: `${c.cardCode}p`,
+    rarity: "Prismatic",
+    foilOf: c.cardCode,
+  };
+  return [holo, prism];
+});
+
+export const RUNETERRA_BASE_SET: RuneterraCardData[] = [
+  ...RUNETERRA_SET1,
+  ...FOIL_VARIANTS,
+];
 
 export const RUNETERRA_BASE_SET_BY_CODE: Map<string, RuneterraCardData> = new Map(
-  RUNETERRA_SET1.map((c) => [c.cardCode, c]),
+  RUNETERRA_BASE_SET.map((c) => [c.cardCode, c]),
 );

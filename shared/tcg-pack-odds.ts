@@ -108,22 +108,28 @@ const LOR_LOW: Record<RuneterraRarity, number> = {
   Rare: 9,
   Epic: 1,
   Champion: 0,
+  Holographic: 0,
+  Prismatic: 0,
   None: 0,
 };
 
 const LOR_HIGH: Record<RuneterraRarity, number> = {
   Common: 0,
-  Rare: 70,
+  Rare: 65,
   Epic: 25,
-  Champion: 5,
+  Champion: 8,
+  Holographic: 2,
+  Prismatic: 0,
   None: 0,
 };
 
 const LOR_RARE: Record<RuneterraRarity, number> = {
   Common: 0,
-  Rare: 55,
-  Epic: 33,
-  Champion: 12,
+  Rare: 40,
+  Epic: 30,
+  Champion: 18,
+  Holographic: 10,
+  Prismatic: 2,
   None: 0,
 };
 
@@ -152,19 +158,19 @@ function packRate<R extends string>(
   return 1 - probNone;
 }
 
-/** Pack rate (0..1) d'une rareté Pokémon TCG dans un booster (5 cartes). */
+/** Pack rate (0..1) d'une rareté Pokémon TCG dans un booster (10 cartes). */
 export function pokemonPackRate(rarity: TcgRarity): number {
-  return packRate(rarity, POKEMON_LOW, POKEMON_HIGH, POKEMON_RARE, 5);
+  return packRate(rarity, POKEMON_LOW, POKEMON_HIGH, POKEMON_RARE, 10);
 }
 
-/** Pack rate (0..1) d'une rareté One Piece TCG dans un booster (6 cartes). */
+/** Pack rate (0..1) d'une rareté One Piece TCG dans un booster (10 cartes). */
 export function onepiecePackRate(rarity: OnePieceRarity): number {
-  return packRate(rarity, ONEPIECE_LOW, ONEPIECE_HIGH, ONEPIECE_RARE, 6);
+  return packRate(rarity, ONEPIECE_LOW, ONEPIECE_HIGH, ONEPIECE_RARE, 10);
 }
 
-/** Pack rate (0..1) d'une rareté Runeterra dans un booster (5 cartes). */
+/** Pack rate (0..1) d'une rareté Runeterra dans un booster (10 cartes). */
 export function runeterraPackRate(rarity: RuneterraRarity): number {
-  return packRate(rarity, LOR_LOW, LOR_HIGH, LOR_RARE, 5);
+  return packRate(rarity, LOR_LOW, LOR_HIGH, LOR_RARE, 10);
 }
 
 /** Format un pack rate (0..1) en chaîne « X% » avec max 2 décimales et
