@@ -1116,6 +1116,7 @@ export function playSpell(
   targetUid?: string | null,
   targetUid2?: string | null,
   targetUid3?: string | null,
+  spellChoice?: number,
 ): EngineResult {
   if (state.phase !== "round") {
     return { ok: false, error: "La partie n'est pas en round." };
@@ -1135,11 +1136,22 @@ export function playSpell(
   if (card.type !== "Spell") {
     return { ok: false, error: `${card.name} n'est pas un sort.` };
   }
+  // Phase 3.54 : cardBuff cost réduction sur les sorts aussi.
+  // Phase 3.71 : 01DE033 réduction dynamique par alliesDiedThisRound.
+  const buffSpell = player.cardBuffs[handCard.uid];
+  let dynamicCostBonus = 0;
+  if (handCard.cardCode === "01DE033") {
+    dynamicCostBonus = -player.alliesDiedThisRound;
+  }
+  const effectiveSpellCost = Math.max(
+    0,
+    card.cost + (buffSpell?.costDelta ?? 0) + dynamicCostBonus,
+  );
   const totalAvailable = player.mana + player.spellMana;
-  if (totalAvailable < card.cost) {
+  if (totalAvailable < effectiveSpellCost) {
     return {
       ok: false,
-      error: `Mana insuffisante (${totalAvailable}/${card.cost}, dont spell mana ${player.spellMana}).`,
+      error: `Mana insuffisante (${totalAvailable}/${effectiveSpellCost}, dont spell mana ${player.spellMana}).`,
     };
   }
 
@@ -1159,8 +1171,10 @@ export function playSpell(
   }
 
   // Mana standard d'abord, spellMana en complément.
-  const fromMana = Math.min(card.cost, player.mana);
-  const fromSpellMana = card.cost - fromMana;
+  // Phase 3.54 + 3.71 : utilise effectiveSpellCost (réduction cardBuff +
+  // dynamique 01DE033) au lieu de card.cost.
+  const fromMana = Math.min(effectiveSpellCost, player.mana);
+  const fromSpellMana = effectiveSpellCost - fromMana;
   const newHand = [
     ...player.hand.slice(0, handIndex),
     ...player.hand.slice(handIndex + 1),
@@ -1177,16 +1191,20 @@ export function playSpell(
   )
     ? player.uniqueCardCodesPlayedThisGame
     : [...player.uniqueCardCodesPlayedThisGame, handCard.cardCode];
+  // Phase 3.71 : nettoie le cardBuff de la spell consommée.
+  const newCardBuffsSpell = { ...player.cardBuffs };
+  delete newCardBuffsSpell[handCard.uid];
   const updatedPlayer: InternalPlayer = {
     ...player,
     hand: newHand,
     mana: player.mana - fromMana,
     spellMana: player.spellMana - fromSpellMana,
     uniqueCardCodesPlayedThisGame: uniqueCodes,
+    cardBuffs: newCardBuffsSpell,
     championCounters: {
       ...player.championCounters,
       spellsCast: player.championCounters.spellsCast + 1,
-      spellManaSpent: player.championCounters.spellManaSpent + card.cost,
+      spellManaSpent: player.championCounters.spellManaSpent + effectiveSpellCost,
       enemyTargetCount:
         player.championCounters.enemyTargetCount +
         (targetIsEnemy && (targetSide === "enemy" || targetSide === "any")
@@ -1214,6 +1232,7 @@ export function playSpell(
       targetUid ?? null,
       targetUid2 ?? null,
       targetUid3 ?? null,
+      spellChoice ?? 0,
     );
     newPlayers = intermediateState.players;
   }
@@ -1670,6 +1689,7 @@ function applySpellEffect(
   targetUid: string | null,
   targetUid2: string | null = null,
   targetUid3: string | null = null,
+  spellChoice: number = 0,
 ): InternalState {
   if (!targetUid) return state;
   const oppSeat = otherSeat(casterSeat);
@@ -2915,6 +2935,24 @@ function applySpellEffect(
       );
       if (stateAfter.phase === "ended") return stateAfter;
       return drawCards(stateAfter, casterSeat, effect.drawCount).state;
+    }
+    case "buff-ally-round-choice": {
+      // Phase 3.71 : 01IO012. Choisit optionA (default) ou optionB selon
+      // spellChoice (0 ou 1). Buff round comme buff-ally-round.
+      const chosen = spellChoice === 1 ? effect.optionB : effect.optionA;
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        return {
+          ...u,
+          power: u.power + chosen.power,
+          health: u.health + chosen.health,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + chosen.power,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + chosen.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
     }
     case "deal-damage-3-targets-any-or-nexus": {
       // Phase 3.70 : 01PZ004 Crépuscule. dmg[0]→t1, dmg[1]→t2, dmg[2]→t3.

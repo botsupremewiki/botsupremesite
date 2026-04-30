@@ -1370,6 +1370,9 @@ export type RuneterraBattleClientMessage =
       // Phase 3.70 : 3e cible (Crépuscule 01PZ004 = 3+2+1 dmg sur 3 cibles
       // distinctes). Doit être distinct de targetUid + targetUid2.
       targetUid3?: string | null;
+      // Phase 3.71 : index du choix pour les sorts à choix (01IO012
+      // Maîtrises jumelles : 0 = +3|+0, 1 = +0|+3). Default 0.
+      spellChoice?: number;
     }
   | {
       type: "lor-declare-attack";
@@ -1826,6 +1829,15 @@ export type SpellEffect =
       type: "deal-damage-3-targets-any-or-nexus";
       damages: [number, number, number];
     }
+  // Phase 3.71 — Choice mechanic.
+  // Cible : allié → buff round avec choix entre optionA et optionB.
+  // spellChoice du protocole détermine lequel (default 0 = optionA).
+  // 01IO012 Maîtrises jumelles (+3|+0 OU +0|+3).
+  | {
+      type: "buff-ally-round-choice";
+      optionA: { power: number; health: number };
+      optionB: { power: number; health: number };
+    }
   // Phase 3.66
   // Sans cible : pioche count cartes. Stub minimal pour 01IO049 Rejet
   // (la mécanique de counter-spell vraie nécessite un spell stack avec
@@ -2175,10 +2187,13 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   "01SI046": { type: "revive-random-dead-ally-this-round" },
 
   // ── Phase 3.52
-  // 01IO012 (Ionia, 2 Burst, Maîtrises jumelles) — bot version : +3|+0
-  // round par défaut (la version « +0|+3 OU +3|+0 » via choix UI sera
-  // ajoutée plus tard si besoin).
-  "01IO012": { type: "buff-ally-round", power: 3, health: 0 },
+  // 01IO012 (Ionia, 2 Burst, Maîtrises jumelles) — Phase 3.71 : choix
+  // entre +3|+0 (option A) et +0|+3 (option B) via spellChoice protocole.
+  "01IO012": {
+    type: "buff-ally-round-choice",
+    optionA: { power: 3, health: 0 },
+    optionB: { power: 0, health: 3 },
+  },
   // 01IO046 (Ionia, 2 Fast, Tempête d'acier) — étourdit un ennemi
   // attaquant (combat-only).
   "01IO046": { type: "stun-attacker-enemy" },
@@ -2475,6 +2490,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-keyword-2-allies-round":
     case "damage-ally-create-copy-in-hand-if-survives":
     case "buff-ally-and-copies-everywhere-permanent":
+    case "buff-ally-round-choice":
       return "ally";
     case "kill-ally-deal-power-to-target-any-or-nexus":
     case "transform-target-into-other-target":

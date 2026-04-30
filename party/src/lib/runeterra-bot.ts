@@ -331,6 +331,26 @@ export function botAct(
           (a, b) => (counts[b.cardCode] ?? 0) - (counts[a.cardCode] ?? 0),
         );
         targetUid = sorted[0].uid;
+      } else if (effect.type === "buff-ally-round-choice") {
+        // Phase 3.71 : 01IO012. Pick option B (+0|+3) si l'allié risque
+        // de mourir aux dmg ennemis ce round, sinon option A (+3|+0)
+        // pour push le damage. Choisit le plus gros allié non-frozen.
+        if (player.bench.length === 0) continue;
+        const target = player.bench.find((u) => !u.frozen) ?? player.bench[0];
+        targetUid = target.uid;
+        const wantsHealth =
+          target.health - target.damage <=
+          opponent.bench.reduce((max, u) => Math.max(max, u.power), 0);
+        const choice = wantsHealth ? 1 : 0;
+        return playSpell(
+          state,
+          seatIdx,
+          i,
+          targetUid,
+          undefined,
+          undefined,
+          choice,
+        );
       } else if (effect.type === "summon-ally-copies") {
         // Phase 3.33 : clone un allié. Préfère cloner la plus grosse
         // menace alliée. Skip si banc vide ou banc plein (max 6).

@@ -294,6 +294,7 @@ export default class LorBattleServer implements Party.Server {
           data.targetUid,
           data.targetUid2,
           data.targetUid3,
+          data.spellChoice,
         );
         break;
       case "lor-declare-attack":

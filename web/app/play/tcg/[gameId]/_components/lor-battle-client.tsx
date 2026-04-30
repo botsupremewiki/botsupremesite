@@ -60,10 +60,11 @@ export function LorBattleClient({
   const [zoomedCard, setZoomedCard] = useState<RuneterraBattleUnit | string | null>(
     null,
   );
-  // Phase 3.7 + 3.39 + 3.70 : sort en attente de cible (null = pas de
-  // targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
+  // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
+  // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
-  // attendant la suivante.
+  // attendant la suivante. spellChoice: 0 ou 1 pour les sorts à choix
+  // (default 0). hasChoice: true si l'effet expose un toggle.
   const [pendingSpell, setPendingSpell] = useState<{
     handIndex: number;
     side: SpellTargetSide;
@@ -71,6 +72,8 @@ export function LorBattleClient({
     targetCount: 1 | 2 | 3;
     firstTargetUid: string | null;
     secondTargetUid: string | null;
+    spellChoice: 0 | 1;
+    hasChoice: boolean;
   } | null>(null);
 
   const send = useCallback((msg: RuneterraBattleClientMessage) => {
@@ -157,6 +160,7 @@ export function LorBattleClient({
         }
         // Mode targeting : attend que le user clique une (ou 2 ou 3) cibles.
         const targetCount = getSpellTargetCount(effect);
+        const hasChoice = effect.type === "buff-ally-round-choice";
         setPendingSpell({
           handIndex,
           side,
@@ -164,6 +168,8 @@ export function LorBattleClient({
           targetCount: targetCount === 0 ? 1 : targetCount,
           firstTargetUid: null,
           secondTargetUid: null,
+          spellChoice: 0,
+          hasChoice,
         });
       }
     },
@@ -205,11 +211,20 @@ export function LorBattleClient({
               ? pendingSpell.secondTargetUid
               : undefined,
         targetUid3: tc === 3 ? targetUid : undefined,
+        spellChoice: pendingSpell.hasChoice ? pendingSpell.spellChoice : undefined,
       });
       setPendingSpell(null);
     },
     [pendingSpell, send],
   );
+
+  const toggleSpellChoice = useCallback(() => {
+    setPendingSpell((prev) =>
+      prev
+        ? { ...prev, spellChoice: prev.spellChoice === 0 ? 1 : 0 }
+        : prev,
+    );
+  }, []);
 
   const cancelSpell = useCallback(() => setPendingSpell(null), []);
 
@@ -302,6 +317,7 @@ export function LorBattleClient({
             pendingSpell={pendingSpell}
             onTargetSpell={targetSpell}
             onCancelSpell={cancelSpell}
+            onToggleSpellChoice={toggleSpellChoice}
             onZoom={(c) => setZoomedCard(c)}
           />
         )}
@@ -411,6 +427,7 @@ function RoundView({
   pendingSpell,
   onTargetSpell,
   onCancelSpell,
+  onToggleSpellChoice,
   onZoom,
 }: {
   state: RuneterraBattleState;
@@ -429,9 +446,12 @@ function RoundView({
     targetCount: 1 | 2 | 3;
     firstTargetUid: string | null;
     secondTargetUid: string | null;
+    spellChoice: 0 | 1;
+    hasChoice: boolean;
   } | null;
   onTargetSpell: (uid: string) => void;
   onCancelSpell: () => void;
+  onToggleSpellChoice: () => void;
   onZoom: (c: RuneterraBattleUnit | string) => void;
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
@@ -632,6 +652,14 @@ function RoundView({
             <span className="text-orange-300">
               🛡 L'adversaire t'attaque — assigne tes bloqueurs
             </span>
+          )}
+          {pendingSpell && pendingSpell.hasChoice && (
+            <button
+              onClick={onToggleSpellChoice}
+              className="rounded-md border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-amber-500/30"
+            >
+              Choix : {pendingSpell.spellChoice === 0 ? "+3|+0" : "+0|+3"} (clic pour switch)
+            </button>
           )}
           {pendingSpell && (
             <span className="text-violet-300">
