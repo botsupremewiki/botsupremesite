@@ -390,21 +390,41 @@ export function OnePieceBattleClient({
                 <div className="flex flex-wrap gap-2">
                   {state.self.hand.map((cardId, i) => {
                     const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
-                    const canPlay =
-                      meta?.kind === "character" &&
+                    const isMyMainPhase =
                       state.phase === "playing" &&
                       state.activeSeat === state.selfSeat &&
-                      state.turnPhase === "main" &&
-                      (state.self?.donActive ?? 0) >= meta.cost &&
-                      (state.self?.characters.length ?? 0) <
-                        ONEPIECE_BASE_SET_BY_ID.size;
+                      state.turnPhase === "main";
+                    const canAfford =
+                      meta && "cost" in meta
+                        ? (state.self?.donActive ?? 0) >= meta.cost
+                        : false;
+                    const isCounterEvent =
+                      meta?.kind === "event" &&
+                      !!meta.effect &&
+                      /\[Contre\]/i.test(meta.effect) &&
+                      !/\[Principale\]/i.test(meta.effect);
+                    // Persos : jouable en main phase si DON suffisantes + terrain pas plein.
+                    const canPlayCharacter =
+                      meta?.kind === "character" &&
+                      isMyMainPhase &&
+                      canAfford &&
+                      (state.self?.characters.length ?? 0) < 7;
+                    // Évent [Principale] : jouable en main phase si DON suffisantes.
+                    const canPlayEvent =
+                      meta?.kind === "event" &&
+                      !isCounterEvent &&
+                      isMyMainPhase &&
+                      canAfford;
+                    // Lieu : jouable en main phase si DON suffisantes.
+                    const canPlayStage =
+                      meta?.kind === "stage" && isMyMainPhase && canAfford;
                     return (
                       <div
                         key={`${cardId}-${i}`}
                         className="flex w-24 flex-col gap-1"
                       >
                         <div
-                          className="overflow-hidden rounded border border-white/10 bg-zinc-950"
+                          className="group relative overflow-hidden rounded border border-white/10 bg-zinc-950"
                           title={meta?.name ?? cardId}
                         >
                           {meta && (
@@ -424,10 +444,10 @@ export function OnePieceBattleClient({
                                 handIndex: i,
                               })
                             }
-                            disabled={!canPlay}
+                            disabled={!canPlayCharacter}
                             className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             title={
-                              canPlay
+                              canPlayCharacter
                                 ? `Jouer (coût ${meta.cost})`
                                 : `Non jouable (coût ${meta.cost})`
                             }
@@ -435,15 +455,55 @@ export function OnePieceBattleClient({
                             ▶ Jouer ({meta.cost})
                           </button>
                         )}
+                        {meta?.kind === "event" && !isCounterEvent && (
+                          <button
+                            onClick={() =>
+                              send({
+                                type: "op-play-event",
+                                handIndex: i,
+                              })
+                            }
+                            disabled={!canPlayEvent}
+                            className="rounded border border-cyan-500/40 bg-cyan-500/10 px-1 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            title={
+                              canPlayEvent
+                                ? `Jouer Évent (coût ${meta.cost})`
+                                : `Non jouable (coût ${meta.cost})`
+                            }
+                          >
+                            ▶ Évent ({meta.cost})
+                          </button>
+                        )}
+                        {meta?.kind === "event" && isCounterEvent && (
+                          <span
+                            className="rounded border border-amber-500/30 bg-amber-500/5 px-1 py-0.5 text-center text-[9px] text-amber-300/80"
+                            title="Évent [Contre] — jouable seulement en défense"
+                          >
+                            ⚔️ Counter
+                          </span>
+                        )}
+                        {meta?.kind === "stage" && (
+                          <button
+                            onClick={() =>
+                              send({
+                                type: "op-play-stage",
+                                handIndex: i,
+                              })
+                            }
+                            disabled={!canPlayStage}
+                            className="rounded border border-purple-500/40 bg-purple-500/10 px-1 py-0.5 text-[10px] text-purple-200 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            title={
+                              canPlayStage
+                                ? `Poser Lieu (coût ${meta.cost})`
+                                : `Non jouable (coût ${meta.cost})`
+                            }
+                          >
+                            ▶ Lieu ({meta.cost})
+                          </button>
+                        )}
                         {meta?.kind === "leader" && (
                           <span className="text-center text-[9px] text-rose-300">
                             Leader
-                          </span>
-                        )}
-                        {(meta?.kind === "event" ||
-                          meta?.kind === "stage") && (
-                          <span className="text-center text-[9px] text-zinc-500">
-                            {meta.kind} (Phase 3c-bis)
                           </span>
                         )}
                       </div>
@@ -810,7 +870,8 @@ function DefensePanel({
         ),
     ) ?? [];
 
-  // Cartes de la main avec Counter > 0.
+  // Cartes de la main avec Counter > 0 (Persos avec valeur counter qu'on
+  // discard pour booster la défense).
   const counterCards = (defenderHand?.hand ?? [])
     .map((id, i) => ({
       id,
@@ -820,6 +881,19 @@ function DefensePanel({
     .filter((x) => {
       const c = x.meta && "counter" in x.meta ? x.meta.counter : null;
       return c != null && c > 0;
+    });
+
+  // Cartes Évent [Contre] dans la main (Counter events sans valeur counter).
+  const counterEvents = (defenderHand?.hand ?? [])
+    .map((id, i) => ({
+      id,
+      i,
+      meta: ONEPIECE_BASE_SET_BY_ID.get(id),
+    }))
+    .filter((x) => {
+      if (x.meta?.kind !== "event") return false;
+      const eff = x.meta.effect ?? "";
+      return /\[Contre\]/i.test(eff);
     });
 
   return (
@@ -881,6 +955,18 @@ function DefensePanel({
               </button>
             );
           })}
+          {counterEvents.map((c) => (
+            <button
+              key={`countevt-${c.i}`}
+              onClick={() =>
+                send({ type: "op-play-counter-event", handIndex: c.i })
+              }
+              className="rounded-md border border-violet-400/50 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100 hover:bg-violet-500/20"
+              title={c.meta?.effect ?? ""}
+            >
+              ⚔️ Évent [Contre] {c.meta?.name}
+            </button>
+          ))}
           <button
             onClick={() => send({ type: "op-pass-defense" })}
             className="rounded-md border border-rose-400/50 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-100 hover:bg-rose-500/20"

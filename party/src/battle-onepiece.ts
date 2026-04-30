@@ -319,6 +319,10 @@ export default class OnePieceBattleServer implements Party.Server {
       this.handlePlayEvent(sender, seatId, data.handIndex);
       return;
     }
+    if (data.type === "op-play-counter-event") {
+      this.handlePlayCounterEvent(sender, seatId, data.handIndex);
+      return;
+    }
     if (data.type === "op-play-stage") {
       this.handlePlayStage(sender, seatId, data.handIndex);
       return;
@@ -489,9 +493,18 @@ export default class OnePieceBattleServer implements Party.Server {
     // en fin de notre tour (= ici, on est en start de tour).
     seat.oppPlayedEffectsCancelledByMe = false;
 
-    // Draw : pioche 1 (sauf 1er tour ever).
+    // Draw : pioche 1 (sauf 1er tour ever). Règle officielle One Piece :
+    // si tu dois piocher en début de tour et ton deck est vide, tu perds
+    // immédiatement la partie (= deck-out / mill loss).
     this.turnPhase = "draw";
-    if (!isFirstTurnEver && seat.deck.length > 0) {
+    if (!isFirstTurnEver) {
+      if (seat.deck.length === 0) {
+        this.declareWinner(
+          seatId === "p1" ? "p2" : "p1",
+          `${seat.username} : deck vide en phase de pioche`,
+        );
+        return;
+      }
       const card = seat.deck.shift()!;
       seat.hand.push(card);
     }
@@ -744,6 +757,14 @@ export default class OnePieceBattleServer implements Party.Server {
       this.sendError(conn, "Cette carte n'est pas un Évènement.");
       return;
     }
+    // [Contre] events ne peuvent être joués qu'en défense (handleCounterEvent).
+    if (meta.effect && /\[Contre\]/i.test(meta.effect) && !/\[Principale\]/i.test(meta.effect)) {
+      this.sendError(
+        conn,
+        "Cet Évènement [Contre] ne peut être joué qu'en défense.",
+      );
+      return;
+    }
     if (seat.donActive < meta.cost) {
       this.sendError(
         conn,
@@ -755,9 +776,58 @@ export default class OnePieceBattleServer implements Party.Server {
     seat.donRested += meta.cost;
     seat.hand.splice(handIndex, 1);
     seat.discard.push(handCard);
+    // Génère un uid unique pour ce trigger d'effet (l'événement va à la
+    // défausse mais le hook on-play a besoin d'un sourceUid).
+    const uid = `e${++this.uidCounter}`;
+    this.pushLog(`${seat.username} joue l'Évènement ${meta.name}.`);
+    this.fireEffectFor(handCard.cardId, "on-play", uid, seatId);
+    this.broadcastState();
+  }
+
+  /** Joue un Évènement [Contre] depuis la main pendant la fenêtre de
+   *  défense. Pas de coût en DON (counter events sont gratuits). La carte
+   *  va à la défausse, l'effet on-play est déclenché. */
+  private handlePlayCounterEvent(
+    conn: Party.Connection,
+    seatId: OnePieceBattleSeatId,
+    handIndex: number,
+  ) {
+    if (!this.pendingAttack) {
+      this.sendError(conn, "Aucune attaque en cours.");
+      return;
+    }
+    if (this.pendingAttack.attackerSeat === seatId) {
+      this.sendError(
+        conn,
+        "Tu ne peux pas jouer un Counter sur ta propre attaque.",
+      );
+      return;
+    }
+    const seat = this.seats[seatId]!;
+    const handCard = seat.hand[handIndex];
+    if (!handCard) {
+      this.sendError(conn, "Carte invalide.");
+      return;
+    }
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(handCard.cardId);
+    if (!meta || meta.kind !== "event") {
+      this.sendError(conn, "Cette carte n'est pas un Évènement.");
+      return;
+    }
+    if (!meta.effect || !/\[Contre\]/i.test(meta.effect)) {
+      this.sendError(
+        conn,
+        "Cet Évènement n'a pas d'effet [Contre].",
+      );
+      return;
+    }
+    seat.hand.splice(handIndex, 1);
+    seat.discard.push(handCard);
+    const uid = `e${++this.uidCounter}`;
     this.pushLog(
-      `${seat.username} joue l'Évènement ${meta.name} (effet descriptif uniquement).`,
+      `${seat.username} joue l'Évènement Counter ${meta.name}.`,
     );
+    this.fireEffectFor(handCard.cardId, "on-play", uid, seatId);
     this.broadcastState();
   }
 
@@ -794,14 +864,17 @@ export default class OnePieceBattleServer implements Party.Server {
     if (seat.stage) {
       seat.discard.push({ cardId: seat.stage.cardId });
     }
-    seat.stage = {
+    const newStage: OnePieceBattleCardInPlay = {
       uid: `s${++this.uidCounter}`,
       cardId: handCard.cardId,
       attachedDon: 0,
       rested: false,
       playedThisTurn: true,
     };
+    seat.stage = newStage;
     this.pushLog(`${seat.username} joue le Lieu ${meta.name}.`);
+    // Hook on-play pour les Lieux qui ont un effet [Jouée].
+    this.fireEffectFor(handCard.cardId, "on-play", newStage.uid, seatId);
     this.broadcastState();
   }
 
