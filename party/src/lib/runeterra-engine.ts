@@ -88,6 +88,9 @@ export type InternalPlayer = {
   // Phase 3.34 : compteur de morts d'alliés DANS ce round (reset à chaque
   // startRound). Sert aux sorts conditionnels « si un allié est mort... ».
   alliesDiedThisRound: number;
+  // Phase 3.51 : liste des alliés morts CE round (uid + cardCode).
+  // Reset à chaque startRound. Sert pour 01SI046 (revive random dead).
+  deadAlliesThisRound: { uid: string; cardCode: string }[];
   // Phase 3.5 + 3.9c + 3.10 : compteurs globaux pour conditions de level-up.
   championCounters: {
     alliesDied: number; // pour Lucian, Hécarim, etc.
@@ -242,6 +245,7 @@ export function createInitialState(
     attackToken: hasToken,
     hasMulliganed: false,
     alliesDiedThisRound: 0,
+    deadAlliesThisRound: [],
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -420,8 +424,9 @@ function refreshPlayerForRound(
     manaMax: newManaMax,
     mana: newManaMax,
     attackToken: hasToken,
-    // Phase 3.34 : reset compteur per-round.
+    // Phase 3.34 + 3.51 : reset compteurs/listes per-round.
     alliesDiedThisRound: 0,
+    deadAlliesThisRound: [],
   };
 }
 
@@ -647,10 +652,25 @@ export function triggerLastBreath(
   dyingUnit: RuneterraBattleUnit,
   dyingUnitSeat: 0 | 1,
 ): InternalState {
-  if (!dyingUnit.keywords.includes("LastBreath")) return state;
+  // Phase 3.51 : enregistre toute mort d'allié dans deadAlliesThisRound
+  // (avant l'effet Last Breath, pour que l'effet voie le dead inclus).
+  const dyingPlayer = state.players[dyingUnitSeat];
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[dyingUnitSeat] = {
+    ...dyingPlayer,
+    deadAlliesThisRound: [
+      ...dyingPlayer.deadAlliesThisRound,
+      { uid: dyingUnit.uid, cardCode: dyingUnit.cardCode },
+    ],
+  };
+  const stateWithDeath: InternalState = { ...state, players: newPlayers };
+  if (!dyingUnit.keywords.includes("LastBreath")) return stateWithDeath;
   const effect = RUNETERRA_LAST_BREATH_EFFECTS[dyingUnit.cardCode];
-  if (!effect) return state;
-  return applyLastBreathEffect(state, dyingUnitSeat, dyingUnit, effect);
+  if (!effect) return stateWithDeath;
+  return applyLastBreathEffect(stateWithDeath, dyingUnitSeat, dyingUnit, effect);
 }
 
 function applyLastBreathEffect(
@@ -1979,6 +1999,36 @@ function applySpellEffect(
         if (newState.phase === "ended") return newState;
       }
       return newState;
+    }
+    case "revive-random-dead-ally-this-round": {
+      // Phase 3.51 : Appel de la brume. Pick un allié au hasard dans
+      // deadAlliesThisRound, le summon avec ses stats de base. No-op si
+      // liste vide ou banc plein.
+      const cfgRev = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      if (player.deadAlliesThisRound.length === 0) return state;
+      if (player.bench.length >= cfgRev.maxBench) return state;
+      const idx = Math.floor(Math.random() * player.deadAlliesThisRound.length);
+      const chosen = player.deadAlliesThisRound[idx];
+      const card = getCard(chosen.cardCode);
+      if (!card || card.type !== "Unit") return state;
+      const newUid = `${casterSeat}-rv-${state.round}-${state.log.length}`;
+      const newUnit = createUnit(newUid, chosen.cardCode);
+      // Retire de deadAlliesThisRound (pas de double-revive du même).
+      const newDeadList = [
+        ...player.deadAlliesThisRound.slice(0, idx),
+        ...player.deadAlliesThisRound.slice(idx + 1),
+      ];
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, newUnit],
+        deadAlliesThisRound: newDeadList,
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [...state.log, `${player.username} ranime ${card.name}.`],
+      };
     }
     case "swap-ephemeral": {
       // Phase 3.49 : Marque de la mort. Retire Ephemeral de target1

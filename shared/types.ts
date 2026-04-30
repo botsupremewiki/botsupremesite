@@ -1600,7 +1600,12 @@ export type SpellEffect =
   // Phase 3.49
   // 2 cibles : target1 = allié AVEC Ephemeral, target2 = ennemi.
   // Retire Ephemeral de target1, l'ajoute à target2. Marque de la mort.
-  | { type: "swap-ephemeral" };
+  | { type: "swap-ephemeral" }
+  // Phase 3.51
+  // Sans cible : pick un allié mort ce round (au hasard) et le ramène
+  // sur le banc avec ses stats de base. Appel de la brume (01SI046).
+  // No-op si deadAlliesThisRound vide ou banc plein.
+  | { type: "revive-random-dead-ally-this-round" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1938,6 +1943,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     count: 2,
     minDeaths: 3,
   },
+
+  // ── Phase 3.51
+  // 01SI046 (ShadowIsles, 3 Fast, Appel de la brume) — pick un allié
+  // mort ce round (au hasard) et le ramène sur le banc.
+  "01SI046": { type: "revive-random-dead-ally-this-round" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2048,6 +2058,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "damage-all-combatants":
     case "summon-tokens-if-ally-died":
     case "kill-power-zero-and-frostbite-all-enemies":
+    case "revive-random-dead-ally-this-round":
       return "none";
   }
   return "none";

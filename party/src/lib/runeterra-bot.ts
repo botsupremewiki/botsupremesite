@@ -156,6 +156,12 @@ export function botAct(
       ) {
         continue; // pas d'ennemi à toucher
       }
+      if (
+        effect.type === "revive-random-dead-ally-this-round" &&
+        (player.deadAlliesThisRound.length === 0 || player.bench.length >= 6)
+      ) {
+        continue; // rien à ranimer ou banc plein
+      }
       targetUid = null;
     } else if (side === "ally") {
       if (effect.type === "buff-ally-permanent" && effect.requireWounded) {
