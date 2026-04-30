@@ -1111,7 +1111,23 @@ function validateSpellTarget(
     }
     return { ok: true };
   }
-  // any
+  // Phase 3.41 : "any-or-nexus" accepte unités OU "nexus-self" / "nexus-enemy".
+  if (side === "any-or-nexus") {
+    if (targetUid === "nexus-self" || targetUid === "nexus-enemy") {
+      return { ok: true };
+    }
+    const foundN =
+      caster.bench.find((u) => u.uid === targetUid) ??
+      opponent.bench.find((u) => u.uid === targetUid);
+    if (!foundN) {
+      return {
+        ok: false,
+        error: "La cible doit être une unité ou un nexus.",
+      };
+    }
+    return { ok: true };
+  }
+  // any (unités seulement)
   const found =
     caster.bench.find((u) => u.uid === targetUid) ??
     opponent.bench.find((u) => u.uid === targetUid);
@@ -1742,6 +1758,93 @@ function applySpellEffect(
       });
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
+    }
+    case "deal-damage-target-any-or-nexus": {
+      // Phase 3.41 : Tir mystique. Inflige amount dmg à une unité OU un
+      // nexus. targetUid spéciaux : "nexus-self" / "nexus-enemy".
+      const cfgN = RUNETERRA_BATTLE_CONFIG;
+      if (targetUid === "nexus-self") {
+        const me = newPlayers[casterSeat];
+        const newNexus = me.nexusHealth - effect.amount;
+        newPlayers[casterSeat] = { ...me, nexusHealth: newNexus };
+        if (newNexus <= 0) {
+          return {
+            ...state,
+            players: newPlayers,
+            phase: "ended",
+            winnerSeatIdx: oppSeat,
+            log: [
+              ...state.log,
+              `${state.players[oppSeat].username} remporte la partie (${me.username} s'est auto-infligé un nexus létal).`,
+            ],
+          };
+        }
+        return { ...state, players: newPlayers };
+      }
+      if (targetUid === "nexus-enemy") {
+        const opp = newPlayers[oppSeat];
+        const newNexus = opp.nexusHealth - effect.amount;
+        newPlayers[oppSeat] = { ...opp, nexusHealth: newNexus };
+        if (newNexus <= 0) {
+          return {
+            ...state,
+            players: newPlayers,
+            phase: "ended",
+            winnerSeatIdx: casterSeat,
+            log: [
+              ...state.log,
+              `${state.players[casterSeat].username} remporte la partie (sort direct au nexus).`,
+            ],
+          };
+        }
+        return { ...state, players: newPlayers };
+      }
+      // Unité : mirror de deal-damage-anywhere mais sans condition.
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else {
+        const oppUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) return state;
+      const targetPlayer = newPlayers[targetSeat];
+      const updatedBench = targetPlayer.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers[targetSeat] = {
+        ...targetPlayer,
+        bench: survivors,
+        alliesDiedThisRound:
+          targetPlayer.alliesDiedThisRound + (deadUnit ? 1 : 0),
+        championCounters: {
+          ...targetPlayer.championCounters,
+          alliesDied:
+            targetPlayer.championCounters.alliesDied + (deadUnit ? 1 : 0),
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (deadUnit) {
+        newState = triggerLastBreath(newState, deadUnit, targetSeat);
+      }
+      // cfgN référencé pour silence ESLint (pas utilisé dans cette branche).
+      void cfgN;
+      return newState;
     }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.

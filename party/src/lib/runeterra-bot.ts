@@ -264,8 +264,7 @@ export function botAct(
           opponent.bench.find((u) => !u.frozen) ?? opponent.bench[0];
         targetUid = target.uid;
       } else continue;
-    } else {
-      // any
+    } else if (side === "any") {
       if (effect.type === "kill-target-any" && effect.maxPower !== undefined) {
         // Phase 3.16 : Abattage. Cherche enemy ≤ maxPower (préféré),
         // sinon ally ≤ maxPower (last resort), sinon skip.
@@ -310,6 +309,29 @@ export function botAct(
         const target = opponent.bench[0] ?? player.bench[0];
         if (!target) continue;
         targetUid = target.uid;
+      }
+    } else if (side === "any-or-nexus") {
+      // Phase 3.41 : Tir mystique. Préfère :
+      // 1. Lethal au nexus ennemi si effect.amount >= nexusHealth
+      // 2. Tuer un ennemi (dmg >= health restant)
+      // 3. Toujours infliger au nexus ennemi (face damage)
+      if (effect.type === "deal-damage-target-any-or-nexus") {
+        const dmg = effect.amount;
+        if (dmg >= opponent.nexusHealth) {
+          targetUid = "nexus-enemy"; // lethal
+        } else {
+          const killable = opponent.bench
+            .filter((u) => u.health - u.damage <= dmg)
+            .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+          if (killable) {
+            targetUid = killable.uid;
+          } else {
+            // Default : face damage à l'ennemi.
+            targetUid = "nexus-enemy";
+          }
+        }
+      } else {
+        targetUid = "nexus-enemy";
       }
     }
     return playSpell(state, seatIdx, i, targetUid, targetUid2);

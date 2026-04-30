@@ -472,7 +472,9 @@ function RoundView({
     }
     if (
       pendingSpell &&
-      (pendingSpell.side === "ally" || pendingSpell.side === "any")
+      (pendingSpell.side === "ally" ||
+        pendingSpell.side === "any" ||
+        pendingSpell.side === "any-or-nexus")
     ) {
       onTargetSpell(unit.uid);
       return;
@@ -483,7 +485,9 @@ function RoundView({
   const handleOpponentBenchClick = (unit: RuneterraBattleUnit) => {
     if (
       pendingSpell &&
-      (pendingSpell.side === "enemy" || pendingSpell.side === "any")
+      (pendingSpell.side === "enemy" ||
+        pendingSpell.side === "any" ||
+        pendingSpell.side === "any-or-nexus")
     ) {
       onTargetSpell(unit.uid);
       return;
@@ -524,13 +528,20 @@ function RoundView({
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-2 overflow-hidden">
       {/* Adversaire */}
-      <PlayerStrip player={state.opponent} isOpponent />
+      <PlayerStrip
+        player={state.opponent}
+        isOpponent
+        nexusTargetable={pendingSpell?.side === "any-or-nexus"}
+        onNexusClick={() => onTargetSpell("nexus-enemy")}
+      />
       <BenchRow
         units={state.opponent.bench}
         onUnitClick={handleOpponentBenchClick}
         highlighted={
           pendingSpell &&
-          (pendingSpell.side === "enemy" || pendingSpell.side === "any")
+          (pendingSpell.side === "enemy" ||
+            pendingSpell.side === "any" ||
+            pendingSpell.side === "any-or-nexus")
             ? new Set(state.opponent.bench.map((u) => u.uid))
             : undefined
         }
@@ -599,7 +610,9 @@ function RoundView({
                 ? "allié"
                 : pendingSpell.side === "enemy"
                   ? "ennemi"
-                  : "n'importe quelle unité"}
+                  : pendingSpell.side === "any-or-nexus"
+                    ? "unité ou nexus"
+                    : "n'importe quelle unité"}
               )
             </span>
           )}
@@ -695,7 +708,9 @@ function RoundView({
           combatMode === "attacker-pick"
             ? pickedAttackers
             : pendingSpell &&
-                (pendingSpell.side === "ally" || pendingSpell.side === "any")
+                (pendingSpell.side === "ally" ||
+                  pendingSpell.side === "any" ||
+                  pendingSpell.side === "any-or-nexus")
               ? new Set(state.self.bench.map((u) => u.uid))
               : undefined
         }
@@ -703,7 +718,12 @@ function RoundView({
         attackerPickMode={combatMode === "attacker-pick"}
         onUnitClick={handleSelfBenchClick}
       />
-      <PlayerStrip player={state.self} isOpponent={false} />
+      <PlayerStrip
+        player={state.self}
+        isOpponent={false}
+        nexusTargetable={pendingSpell?.side === "any-or-nexus"}
+        onNexusClick={() => onTargetSpell("nexus-self")}
+      />
       <HandRow
         self={state.self}
         myTurn={
@@ -732,12 +752,20 @@ function PlayerStrip({
   player,
   isOpponent,
   onZoom,
+  nexusTargetable,
+  onNexusClick,
 }: {
   player: RuneterraPlayerPublicState | RuneterraSelfState;
   isOpponent: boolean;
   onZoom?: (c: RuneterraBattleUnit | string) => void;
+  // Phase 3.41 : nexus comme cible cliquable pour sorts any-or-nexus.
+  nexusTargetable?: boolean;
+  onNexusClick?: () => void;
 }) {
   void onZoom;
+  const nexusClass = nexusTargetable
+    ? "cursor-pointer rounded-md bg-violet-500/20 px-2 py-0.5 text-violet-200 ring-1 ring-violet-300 hover:bg-violet-500/40"
+    : "text-emerald-300";
   return (
     <div className="flex shrink-0 items-center justify-between rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm">
       <div className="flex items-center gap-3">
@@ -757,7 +785,14 @@ function PlayerStrip({
         {player.spellMana > 0 && (
           <span className="text-violet-300">✨ {player.spellMana}</span>
         )}
-        <span className="text-emerald-300">❤️ {player.nexusHealth}</span>
+        <button
+          type="button"
+          disabled={!nexusTargetable}
+          onClick={() => onNexusClick?.()}
+          className={nexusClass}
+        >
+          ❤️ {player.nexusHealth}
+        </button>
       </div>
     </div>
   );

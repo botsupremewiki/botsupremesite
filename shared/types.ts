@@ -1535,7 +1535,14 @@ export type SpellEffect =
       damage: number;
       buffPower: number;
       buffHealth: number;
-    };
+    }
+  // Phase 3.41 — Nexus targeting.
+  // Cible : unité (any side) OU nexus (self/enemy). Convention sur targetUid :
+  // - uid d'unité réel = cible unité
+  // - "nexus-self" = nexus du caster
+  // - "nexus-enemy" = nexus adverse
+  // Tir mystique (01PZ052), Enthousiasme (01PZ039), etc.
+  | { type: "deal-damage-target-any-or-nexus"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1802,6 +1809,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     buffPower: 2,
     buffHealth: 2,
   },
+
+  // ── Phase 3.41 (nexus targeting)
+  // 01PZ052 (PiltoverZaun, 2 Fast, Tir mystique) — 2 dmg à n'importe
+  // quelle cible (unité ou nexus, des 2 côtés).
+  "01PZ052": { type: "deal-damage-target-any-or-nexus", amount: 2 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1846,7 +1858,14 @@ export const RUNETERRA_LAST_BREATH_EFFECTS: Record<
   },
 };
 
-export type SpellTargetSide = "ally" | "enemy" | "any" | "none";
+// Phase 3.41 : "any-or-nexus" inclut unités (2 côtés) ET les 2 nexus.
+// L'UI propose alors aussi des cibles « nexus-self » / « nexus-enemy ».
+export type SpellTargetSide =
+  | "ally"
+  | "enemy"
+  | "any"
+  | "any-or-nexus"
+  | "none";
 
 export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
   switch (effect.type) {
@@ -1872,6 +1891,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "drain-target-any":
     case "deal-damage-anywhere-if-ally-died":
       return "any";
+    case "deal-damage-target-any-or-nexus":
+      return "any-or-nexus";
     case "frostbite-enemy":
     case "stun-enemy":
     case "silence-follower-target":
@@ -3138,6 +3159,7 @@ export type OnePiecePendingChoiceKind =
   | "buff-target" // Choisir un de ses Leader/Persos pour booster
   | "discard-card" // Défausser N carte(s) de sa main (count + filtre)
   | "select-target" // Sélectionner une cible générique (Leader ou Persos)
+  | "play-from-hand" // Choisir 1 Persos de la main à jouer gratuitement (Crocodile, Trafalgar Law, Lim, Baggy, etc.)
   | "yes-no"; // Choix oui/non simple (l'effet est-il activé ?)
 
 export type OnePiecePendingChoice = {
