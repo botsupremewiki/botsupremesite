@@ -1153,6 +1153,15 @@ function validateSpellTarget(
         error: "La 2e cible doit être une unité ennemie.",
       };
     }
+    // Phase 3.49 : Marque de la mort exige que target1 ait Ephemeral.
+    if (effect.type === "swap-ephemeral") {
+      if (!allyUnit.keywords.includes("Ephemeral")) {
+        return {
+          ok: false,
+          error: "L'allié ciblé doit avoir le mot-clé Éphémère.",
+        };
+      }
+    }
     // Phase 3.47 : combat-only constraint pour unit-strike-unit-in-combat.
     if (effect.type === "unit-strike-unit-in-combat") {
       if (!state.attackInProgress) {
@@ -1970,6 +1979,27 @@ function applySpellEffect(
         if (newState.phase === "ended") return newState;
       }
       return newState;
+    }
+    case "swap-ephemeral": {
+      // Phase 3.49 : Marque de la mort. Retire Ephemeral de target1
+      // (ally) et l'ajoute à target2 (enemy). Validation déjà faite.
+      const ally = newPlayers[casterSeat];
+      const newAllyBench = ally.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        return {
+          ...u,
+          keywords: u.keywords.filter((k) => k !== "Ephemeral"),
+        };
+      });
+      newPlayers[casterSeat] = { ...ally, bench: newAllyBench };
+      const opp = newPlayers[oppSeat];
+      const newOppBench = opp.bench.map((u) => {
+        if (u.uid !== targetUid2) return u;
+        if (u.keywords.includes("Ephemeral")) return u;
+        return { ...u, keywords: [...u.keywords, "Ephemeral"] };
+      });
+      newPlayers[oppSeat] = { ...opp, bench: newOppBench };
+      return { ...state, players: newPlayers };
     }
     case "ally-strikes-all-enemies-in-combat": {
       // Phase 3.48 : Jugement. L'allié ciblé frappe tous les ennemis au

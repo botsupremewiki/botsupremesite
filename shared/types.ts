@@ -1594,7 +1594,11 @@ export type SpellEffect =
   // Cible : 1 allié au combat → frappe tous les ennemis au combat (dmg
   // simultanés sur chacun = power de l'allié, l'allié reçoit la somme
   // des power des ennemis touchés). Jugement.
-  | { type: "ally-strikes-all-enemies-in-combat" };
+  | { type: "ally-strikes-all-enemies-in-combat" }
+  // Phase 3.49
+  // 2 cibles : target1 = allié AVEC Ephemeral, target2 = ennemi.
+  // Retire Ephemeral de target1, l'ajoute à target2. Marque de la mort.
+  | { type: "swap-ephemeral" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1917,6 +1921,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01DE007 (Demacia, 8 Fast, Jugement) — un allié au combat frappe
   // tous les ennemis au combat.
   "01DE007": { type: "ally-strikes-all-enemies-in-combat" },
+
+  // ── Phase 3.49
+  // 01IO003 (Ionia, 3 Fast, Marque de la mort) — retire Ephemeral d'un
+  // allié et l'octroie à un ennemi.
+  "01IO003": { type: "swap-ephemeral" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2003,6 +2012,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
       return "any-or-nexus";
     case "unit-strike-unit":
     case "unit-strike-unit-in-combat":
+    case "swap-ephemeral":
       return "ally-and-enemy";
     case "frostbite-enemy":
     case "stun-enemy":
@@ -2042,6 +2052,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "damage-ally-buff-other-ally-round":
     case "unit-strike-unit":
     case "unit-strike-unit-in-combat":
+    case "swap-ephemeral":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;

@@ -416,6 +416,22 @@ export function botAct(
     } else if (side === "ally-and-enemy") {
       // Phase 3.46-3.47 : Combat singulier (unit-strike-unit) ou Volée
       // mortelle (unit-strike-unit-in-combat, combat-only).
+      // Phase 3.49 : Marque de la mort (swap-ephemeral) — exige ally
+      // avec Ephemeral. Choisit le plus fort ennemi à infliger.
+      if (effect.type === "swap-ephemeral") {
+        const ephemeralAlly = player.bench.find((u) =>
+          u.keywords.includes("Ephemeral"),
+        );
+        if (!ephemeralAlly) continue;
+        // Préfère le plus gros ennemi non-Ephemeral.
+        const target = [...opponent.bench]
+          .filter((u) => !u.keywords.includes("Ephemeral"))
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        if (!target) continue;
+        targetUid = ephemeralAlly.uid;
+        targetUid2 = target.uid;
+        return playSpell(state, seatIdx, i, targetUid, targetUid2);
+      }
       if (
         effect.type === "unit-strike-unit-in-combat" &&
         !state.attackInProgress
