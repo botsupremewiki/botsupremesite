@@ -385,22 +385,42 @@ export function botAct(
         targetUid = target.uid;
       }
     } else if (side === "ally-and-enemy") {
-      // Phase 3.46 : Combat singulier. target1=ally + target2=enemy.
-      // Préfère un ally qui survit + tue l'enemy (good trade), sinon
-      // skip si pas de pair valide.
-      if (player.bench.length === 0 || opponent.bench.length === 0) continue;
-      // Cherche le meilleur ally (survit + tue) ou plus gros ally fallback.
+      // Phase 3.46-3.47 : Combat singulier (unit-strike-unit) ou Volée
+      // mortelle (unit-strike-unit-in-combat, combat-only).
+      if (
+        effect.type === "unit-strike-unit-in-combat" &&
+        !state.attackInProgress
+      ) {
+        continue; // pas de combat, sort inutilisable
+      }
+      // Liste de candidats valides : tous les benchs si combat singulier,
+      // sinon uniquement ceux au combat.
+      let allyCandidates = player.bench;
+      let enemyCandidates = opponent.bench;
+      if (
+        effect.type === "unit-strike-unit-in-combat" &&
+        state.attackInProgress
+      ) {
+        const combatants = new Set<string>();
+        for (const lane of state.attackInProgress.lanes) {
+          combatants.add(lane.attackerUid);
+          if (lane.blockerUid) combatants.add(lane.blockerUid);
+        }
+        allyCandidates = allyCandidates.filter((u) => combatants.has(u.uid));
+        enemyCandidates = enemyCandidates.filter((u) => combatants.has(u.uid));
+      }
+      if (allyCandidates.length === 0 || enemyCandidates.length === 0) continue;
+      // Cherche la meilleure paire (kill+survive > kill > survive > nothing).
       let bestPair: { allyUid: string; enemyUid: string } | null = null;
       let bestScore = -Infinity;
-      for (const ally of player.bench) {
+      for (const ally of allyCandidates) {
         if (ally.power <= 0) continue;
-        for (const enemy of opponent.bench) {
+        for (const enemy of enemyCandidates) {
           if (enemy.power <= 0) continue;
           const allyHp = ally.health - ally.damage;
           const enemyHp = enemy.health - enemy.damage;
           const allySurvives = enemy.power < allyHp;
           const enemyDies = ally.power >= enemyHp;
-          // Score : kill+survive > kill > survive > nothing.
           let score = 0;
           if (allySurvives && enemyDies) score = 100 + enemy.power;
           else if (enemyDies) score = 50 + enemy.power;

@@ -1585,7 +1585,11 @@ export type SpellEffect =
   // Phase 3.46
   // 2 cibles : target1 = allié, target2 = ennemi. Les 2 se frappent
   // mutuellement (dégâts simultanés = power de l'autre). Combat singulier.
-  | { type: "unit-strike-unit" };
+  | { type: "unit-strike-unit" }
+  // Phase 3.47
+  // Comme unit-strike-unit mais target1 + target2 doivent être au combat
+  // (uid présent dans state.attackInProgress.lanes). Volée mortelle.
+  | { type: "unit-strike-unit-in-combat" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1898,6 +1902,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01DE026 (Demacia, 2 Fast, Combat singulier) — 1 allié et 1 ennemi
   // se frappent mutuellement (dmg simultanés = power de l'autre).
   "01DE026": { type: "unit-strike-unit" },
+
+  // ── Phase 3.47
+  // 01NX011 (Noxus, 3 Fast, Volée mortelle) — comme Combat singulier
+  // mais target1 + target2 doivent être au combat.
+  "01NX011": { type: "unit-strike-unit-in-combat" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1982,6 +1991,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "deal-damage-target-any-or-nexus":
       return "any-or-nexus";
     case "unit-strike-unit":
+    case "unit-strike-unit-in-combat":
       return "ally-and-enemy";
     case "frostbite-enemy":
     case "stun-enemy":
@@ -2020,6 +2030,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "buff-2-allies-permanent":
     case "damage-ally-buff-other-ally-round":
     case "unit-strike-unit":
+    case "unit-strike-unit-in-combat":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;

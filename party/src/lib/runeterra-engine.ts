@@ -1133,6 +1133,26 @@ function validateSpellTarget(
         error: "La 2e cible doit être une unité ennemie.",
       };
     }
+    // Phase 3.47 : combat-only constraint pour unit-strike-unit-in-combat.
+    if (effect.type === "unit-strike-unit-in-combat") {
+      if (!state.attackInProgress) {
+        return {
+          ok: false,
+          error: "Ce sort ne peut être lancé que pendant un combat.",
+        };
+      }
+      const combatantUids = new Set<string>();
+      for (const lane of state.attackInProgress.lanes) {
+        combatantUids.add(lane.attackerUid);
+        if (lane.blockerUid) combatantUids.add(lane.blockerUid);
+      }
+      if (!combatantUids.has(targetUid) || !combatantUids.has(targetUid2)) {
+        return {
+          ok: false,
+          error: "Les 2 cibles doivent être au combat.",
+        };
+      }
+    }
     return { ok: true };
   }
   // Phase 3.41 : "any-or-nexus" accepte unités OU "nexus-self" / "nexus-enemy".
@@ -1931,7 +1951,8 @@ function applySpellEffect(
       }
       return newState;
     }
-    case "unit-strike-unit": {
+    case "unit-strike-unit":
+    case "unit-strike-unit-in-combat": {
       // Phase 3.46 : Combat singulier. target1=ally, target2=enemy.
       // Les 2 se frappent simultanément (dmg = power de l'autre).
       // Pas de QuickStrike timing : les 2 reçoivent les dégâts.
