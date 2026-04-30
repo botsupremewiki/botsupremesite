@@ -185,6 +185,31 @@ export function botAct(
           opponent.bench.filter((u) => u.power <= effect.maxPower).length;
         if (wouldKill === 0) continue;
       }
+      // Phase 3.54 : sorts hand-buff. Skip si aucune carte cible en main.
+      if (effect.type === "buff-allies-in-hand-permanent") {
+        const hasUnitInHand = player.hand.some((c) => {
+          const cd = getCard(c.cardCode);
+          return cd?.type === "Unit";
+        });
+        if (!hasUnitInHand) continue;
+      }
+      if (effect.type === "reduce-cost-allies-in-hand") {
+        if (player.hand.length === 0) continue;
+      }
+      if (effect.type === "grant-keyword-ally-in-hand-and-draw") {
+        // Toujours utile (au moins le draw, même sans Unit en main).
+      }
+      if (effect.type === "buff-allies-of-subtype-everywhere") {
+        const hasAnySubtype = [
+          ...player.bench,
+          ...player.hand,
+          ...player.deck,
+        ].some((c) => {
+          const cd = getCard(c.cardCode);
+          return cd?.subtypes?.includes(effect.subtype);
+        });
+        if (!hasAnySubtype) continue;
+      }
       targetUid = null;
     } else if (side === "ally") {
       if (effect.type === "buff-ally-permanent" && effect.requireWounded) {

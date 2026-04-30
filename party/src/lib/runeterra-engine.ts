@@ -91,6 +91,20 @@ export type InternalPlayer = {
   // Phase 3.51 : liste des alliés morts CE round (uid + cardCode).
   // Reset à chaque startRound. Sert pour 01SI046 (revive random dead).
   deadAlliesThisRound: { uid: string; cardCode: string }[];
+  // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
+  // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
+  // healthDelta directement sur la nouvelle unité, costDelta sur la mana
+  // requise, addKeywords ajoutés. Persiste tant que la carte est en main
+  // ou en deck. Une carte sans entrée = pas de buff (default 0).
+  cardBuffs: Record<
+    string,
+    {
+      powerDelta: number;
+      healthDelta: number;
+      costDelta: number;
+      addKeywords: string[];
+    }
+  >;
   // Phase 3.5 + 3.9c + 3.10 : compteurs globaux pour conditions de level-up.
   championCounters: {
     alliesDied: number; // pour Lucian, Hécarim, etc.
@@ -246,6 +260,7 @@ export function createInitialState(
     hasMulliganed: false,
     alliesDiedThisRound: 0,
     deadAlliesThisRound: [],
+    cardBuffs: {},
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -810,9 +825,13 @@ function projectPublic(p: InternalPlayer): RuneterraPlayerPublicState {
 }
 
 function projectSelf(p: InternalPlayer): RuneterraSelfState {
+  // Phase 3.54 : ne projette cardBuffs que si non vide (économie de payload).
+  const hasBuffs = Object.keys(p.cardBuffs).length > 0;
   return {
     ...projectPublic(p),
     hand: p.hand.map((c) => c.cardCode),
+    handUids: p.hand.map((c) => c.uid),
+    ...(hasBuffs ? { cardBuffs: p.cardBuffs } : {}),
   };
 }
 
@@ -852,10 +871,13 @@ export function playUnit(
   if (card.type !== "Unit") {
     return { ok: false, error: `${card.name} n'est pas une unité.` };
   }
-  if (player.mana < card.cost) {
+  // Phase 3.54 : cost effectif (printed + costDelta du cardBuff, capé à 0).
+  const buff = player.cardBuffs[handCard.uid];
+  const effectiveCost = Math.max(0, card.cost + (buff?.costDelta ?? 0));
+  if (player.mana < effectiveCost) {
     return {
       ok: false,
-      error: `Mana insuffisante (${player.mana}/${card.cost}).`,
+      error: `Mana insuffisante (${player.mana}/${effectiveCost}).`,
     };
   }
   if (player.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench) {
@@ -867,17 +889,32 @@ export function playUnit(
     ...player.hand.slice(0, handIndex),
     ...player.hand.slice(handIndex + 1),
   ];
-  const newUnit = createUnit(handCard.uid, handCard.cardCode);
+  const baseUnit = createUnit(handCard.uid, handCard.cardCode);
+  // Phase 3.54 : applique le cardBuff (power/health/keywords) si présent.
+  const newUnit: RuneterraBattleUnit = buff
+    ? {
+        ...baseUnit,
+        power: baseUnit.power + buff.powerDelta,
+        health: baseUnit.health + buff.healthDelta,
+        keywords: Array.from(
+          new Set([...baseUnit.keywords, ...buff.addKeywords]),
+        ),
+      }
+    : baseUnit;
   const newBench = [...player.bench, newUnit];
   // Phase 3.12 : techPowerSummoned (Heimerdinger) — incrémenté de la
   // puissance imprimée si l'unité a le subtype TECHNOLOGIE.
   const techPowerDelta =
     card.subtypes?.includes("TECHNOLOGIE") ? (card.attack ?? 0) : 0;
+  // Phase 3.54 : retire le cardBuff de la main (consommé).
+  const newCardBuffs = { ...player.cardBuffs };
+  delete newCardBuffs[handCard.uid];
   const updatedPlayer: InternalPlayer = {
     ...player,
     hand: newHand,
     bench: newBench,
-    mana: player.mana - card.cost,
+    mana: player.mana - effectiveCost,
+    cardBuffs: newCardBuffs,
     championCounters: {
       ...player.championCounters,
       techPowerSummoned:
@@ -2017,6 +2054,150 @@ function applySpellEffect(
         if (newState.phase === "ended") return newState;
       }
       return newState;
+    }
+    case "buff-allies-in-hand-permanent": {
+      // Phase 3.54 : +pwr/+hp permanent à toutes les cartes Unit alliées
+      // de la main via cardBuffs (cumulatif si déjà buffée).
+      const player = newPlayers[casterSeat];
+      const newCardBuffs = { ...player.cardBuffs };
+      for (const handCard of player.hand) {
+        const card = getCard(handCard.cardCode);
+        if (card?.type !== "Unit") continue;
+        const existing = newCardBuffs[handCard.uid] ?? {
+          powerDelta: 0,
+          healthDelta: 0,
+          costDelta: 0,
+          addKeywords: [],
+        };
+        newCardBuffs[handCard.uid] = {
+          ...existing,
+          powerDelta: existing.powerDelta + effect.power,
+          healthDelta: existing.healthDelta + effect.health,
+        };
+      }
+      newPlayers[casterSeat] = { ...player, cardBuffs: newCardBuffs };
+      return { ...state, players: newPlayers };
+    }
+    case "reduce-cost-allies-in-hand": {
+      // Phase 3.54 : -delta cost à toutes les cartes alliées de la main
+      // (Unit + Spell, peu importe). Cumulatif.
+      const player = newPlayers[casterSeat];
+      const newCardBuffs = { ...player.cardBuffs };
+      for (const handCard of player.hand) {
+        const existing = newCardBuffs[handCard.uid] ?? {
+          powerDelta: 0,
+          healthDelta: 0,
+          costDelta: 0,
+          addKeywords: [],
+        };
+        newCardBuffs[handCard.uid] = {
+          ...existing,
+          costDelta: existing.costDelta - effect.delta,
+        };
+      }
+      newPlayers[casterSeat] = { ...player, cardBuffs: newCardBuffs };
+      return { ...state, players: newPlayers };
+    }
+    case "grant-keyword-ally-in-hand-and-draw": {
+      // Phase 3.54 : grant keyword au 1er Unit allié de la main (default
+      // sans target picker) puis pioche drawCount.
+      const player = newPlayers[casterSeat];
+      const firstUnitIdx = player.hand.findIndex((c) => {
+        const cd = getCard(c.cardCode);
+        return cd?.type === "Unit";
+      });
+      if (firstUnitIdx === -1) {
+        // No-op buff, mais on draw quand même.
+        return drawCards({ ...state, players: newPlayers }, casterSeat, effect.drawCount).state;
+      }
+      const targetUidHand = player.hand[firstUnitIdx].uid;
+      const newCardBuffs = { ...player.cardBuffs };
+      const existing = newCardBuffs[targetUidHand] ?? {
+        powerDelta: 0,
+        healthDelta: 0,
+        costDelta: 0,
+        addKeywords: [],
+      };
+      if (!existing.addKeywords.includes(effect.keyword)) {
+        newCardBuffs[targetUidHand] = {
+          ...existing,
+          addKeywords: [...existing.addKeywords, effect.keyword],
+        };
+      }
+      newPlayers[casterSeat] = { ...player, cardBuffs: newCardBuffs };
+      return drawCards({ ...state, players: newPlayers }, casterSeat, effect.drawCount).state;
+    }
+    case "buff-allies-of-subtype-everywhere": {
+      // Phase 3.54 : +pwr/+hp à toutes les unités du subtype dans bench
+      // (direct stat) + hand + deck (cardBuffs cumulatif).
+      const player = newPlayers[casterSeat];
+      // Bench : stat buff direct.
+      const newBench = player.bench.map((u) => {
+        const card = getCard(u.cardCode);
+        if (!card?.subtypes?.includes(effect.subtype)) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+        };
+      });
+      // Hand + deck : cardBuffs.
+      const newCardBuffs = { ...player.cardBuffs };
+      for (const handCard of [...player.hand, ...player.deck]) {
+        const card = getCard(handCard.cardCode);
+        if (!card?.subtypes?.includes(effect.subtype)) continue;
+        const existing = newCardBuffs[handCard.uid] ?? {
+          powerDelta: 0,
+          healthDelta: 0,
+          costDelta: 0,
+          addKeywords: [],
+        };
+        newCardBuffs[handCard.uid] = {
+          ...existing,
+          powerDelta: existing.powerDelta + effect.power,
+          healthDelta: existing.healthDelta + effect.health,
+        };
+      }
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: newBench,
+        cardBuffs: newCardBuffs,
+      };
+      return { ...state, players: newPlayers };
+    }
+    case "draw-and-reduce-cost": {
+      // Phase 3.54 : pioche drawCount + -delta cost aux nouvelles cartes.
+      const player = newPlayers[casterSeat];
+      const handBefore = new Set(player.hand.map((c) => c.uid));
+      const drawResult = drawCards(
+        { ...state, players: newPlayers },
+        casterSeat,
+        effect.drawCount,
+      );
+      const playerAfter = drawResult.state.players[casterSeat];
+      const newDrawnUids = playerAfter.hand
+        .filter((c) => !handBefore.has(c.uid))
+        .map((c) => c.uid);
+      if (newDrawnUids.length === 0) return drawResult.state;
+      const newCardBuffs = { ...playerAfter.cardBuffs };
+      for (const uid of newDrawnUids) {
+        const existing = newCardBuffs[uid] ?? {
+          powerDelta: 0,
+          healthDelta: 0,
+          costDelta: 0,
+          addKeywords: [],
+        };
+        newCardBuffs[uid] = {
+          ...existing,
+          costDelta: existing.costDelta - effect.delta,
+        };
+      }
+      const finalPlayers: [InternalPlayer, InternalPlayer] = [
+        drawResult.state.players[0],
+        drawResult.state.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      finalPlayers[casterSeat] = { ...playerAfter, cardBuffs: newCardBuffs };
+      return { ...drawResult.state, players: finalPlayers };
     }
     case "summon-tokens-and-buff-subtype-allies": {
       // Phase 3.53 : summon count × tokenCardCode puis buff +pwr/+hp

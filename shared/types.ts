@@ -1298,7 +1298,20 @@ export type RuneterraPlayerPublicState = {
 
 // État "self" : public + ta main visible (cardCodes).
 export type RuneterraSelfState = RuneterraPlayerPublicState & {
-  hand: string[]; // cardCodes
+  hand: string[]; // cardCodes (parallèle à handUids)
+  // Phase 3.54 : uids parallèles à hand pour corréler les cardBuffs.
+  handUids?: string[];
+  // Phase 3.54 : buffs persistants attachés aux cartes par uid (hand +
+  // deck). Permet à l'UI d'afficher coûts/stats modifiés.
+  cardBuffs?: Record<
+    string,
+    {
+      powerDelta: number;
+      healthDelta: number;
+      costDelta: number;
+      addKeywords: string[];
+    }
+  >;
 };
 
 export type RuneterraAttackLane = {
@@ -1635,7 +1648,39 @@ export type SpellEffect =
     }
   // 2 cibles allié : grant un mot-clé pour ce round à 2 alliés distincts.
   // 01IO010 Soutien indéfectible (Barrier round à 2 alliés).
-  | { type: "grant-keyword-2-allies-round"; keyword: string };
+  | { type: "grant-keyword-2-allies-round"; keyword: string }
+  // Phase 3.54 — Hand-buff effects.
+  // Sans cible : +pwr/+hp permanent à toutes les unités alliées de la
+  // main (cardBuffs). 01IO029 Graines semées (+1|+0 hand).
+  | { type: "buff-allies-in-hand-permanent"; power: number; health: number }
+  // Sans cible : -delta cost à toutes les cartes alliées de la main.
+  // 01DE019 Mobilisation (-1 hand).
+  | { type: "reduce-cost-allies-in-hand"; delta: number }
+  // Cible : allié de la MAIN → grant keyword (cardBuff) puis pioche
+  // drawCount. 01IO055 Gardien du Ki (Barrier hand + draw 1).
+  // Convention pour cet effet : targetUid est un uid de carte de la
+  // main (pas un uid de banc).
+  | {
+      type: "grant-keyword-ally-in-hand-and-draw";
+      keyword: string;
+      drawCount: number;
+    }
+  // Sans cible : +pwr/+hp permanent à toutes les unités alliées du
+  // subtype donné (bench + hand + deck via cardBuffs). 01FR016 Poro-
+  // Snax (+1|+1 Poros).
+  | {
+      type: "buff-allies-of-subtype-everywhere";
+      subtype: string;
+      power: number;
+      health: number;
+    }
+  // Sans cible : pioche drawCount cartes ET applique -delta cost à ces
+  // cartes (cardBuffs). 01PZ049 Inventeur génial.
+  | {
+      type: "draw-and-reduce-cost";
+      drawCount: number;
+      delta: number;
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2022,6 +2067,32 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01IO010 (Ionia, 6 Burst, Soutien indéfectible) — grant Barrier round
   // à 2 alliés distincts (le « swap » est cosmétique en LoR).
   "01IO010": { type: "grant-keyword-2-allies-round", keyword: "Barrier" },
+
+  // ── Phase 3.54 (hand-buff)
+  // 01IO029 (Ionia, 2 Burst, Graines semées) — +1|+0 à toutes les
+  // unités alliées en main (cardBuffs).
+  "01IO029": { type: "buff-allies-in-hand-permanent", power: 1, health: 0 },
+  // 01DE019 (Demacia, 3 Burst, Mobilisation) — -1 cost à toutes les
+  // cartes alliées en main.
+  "01DE019": { type: "reduce-cost-allies-in-hand", delta: 1 },
+  // 01IO055 (Ionia, 2 Burst, Gardien du Ki) — Barrier à 1 unité de la
+  // main + draw 1. Bot/UI : sans target picker, applique au 1er unit
+  // de la main.
+  "01IO055": {
+    type: "grant-keyword-ally-in-hand-and-draw",
+    keyword: "Barrier",
+    drawCount: 1,
+  },
+  // 01FR016 (Freljord, 3 Burst, Poro-Snax) — +1|+1 à tous les Poros
+  // alliés (bench + hand + deck).
+  "01FR016": {
+    type: "buff-allies-of-subtype-everywhere",
+    subtype: "PORO",
+    power: 1,
+    health: 1,
+  },
+  // 01PZ049 (PiltoverZaun, 8 Burst) — pioche 3 + -1 cost aux 3 nouvelles.
+  "01PZ049": { type: "draw-and-reduce-cost", drawCount: 3, delta: 1 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2138,6 +2209,11 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-ephemeral-all-followers-in-combat":
     case "summon-tokens-and-buff-subtype-allies":
     case "kill-all-units-with-max-power-if-ally-min-power":
+    case "buff-allies-in-hand-permanent":
+    case "reduce-cost-allies-in-hand":
+    case "grant-keyword-ally-in-hand-and-draw":
+    case "buff-allies-of-subtype-everywhere":
+    case "draw-and-reduce-cost":
       return "none";
   }
   return "none";
