@@ -2357,6 +2357,14 @@ function applySpellEffect(
         ],
       };
     }
+    case "draw-cards": {
+      // Phase 3.66 : pioche count cartes pour le caster.
+      return drawCards(
+        { ...state, players: newPlayers },
+        casterSeat,
+        effect.count,
+      ).state;
+    }
     case "summon-first-unit-from-deck": {
       // Phase 3.65 : 01FR023. Pick le 1er Unit dans le deck (top → bottom),
       // summon sur le banc. La portion « recurring chaque round » est TODO.

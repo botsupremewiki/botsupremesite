@@ -1814,7 +1814,12 @@ export type SpellEffect =
     }
   // Sans cible : inflige amount dmg au nexus ennemi (simplifié pour les
   // sorts multi-target qui font face damage). 01PZ004 (3+2+1=6 simpl.).
-  | { type: "deal-damage-enemy-nexus-fixed"; amount: number };
+  | { type: "deal-damage-enemy-nexus-fixed"; amount: number }
+  // Phase 3.66
+  // Sans cible : pioche count cartes. Stub minimal pour 01IO049 Rejet
+  // (la mécanique de counter-spell vraie nécessite un spell stack avec
+  // priorités, hors scope pour l'instant — on donne au moins le draw).
+  | { type: "draw-cards"; count: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2373,6 +2378,12 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // (3+2+1) au nexus ennemi. La version 3-targets distincts attendra
   // le support de targetUid3.
   "01PZ004": { type: "deal-damage-enemy-nexus-fixed", amount: 6 },
+
+  // ── Phase 3.66
+  // 01IO049 (Ionia, 4 Fast, Rejet) — stub : draw 1 carte. La vraie
+  // mécanique de counter-spell nécessite un spell stack avec priorités
+  // (hors scope), donc on donne au moins le bénéfice secondaire.
+  "01IO049": { type: "draw-cards", count: 1 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2518,6 +2529,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "summon-first-unit-from-deck":
     case "insert-tokens-into-enemy-deck":
     case "deal-damage-enemy-nexus-fixed":
+    case "draw-cards":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";
