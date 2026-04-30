@@ -2087,6 +2087,14 @@ export default class OnePieceBattleServer implements Party.Server {
         s.deck.unshift(card);
         return card.cardId;
       },
+      placeHandAtDeckBottom: (seatId, handIndex) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        if (handIndex < 0 || handIndex >= s.hand.length) return null;
+        const card = s.hand.splice(handIndex, 1)[0];
+        s.deck.push(card);
+        return card.cardId;
+      },
       peekTopOfDeck: (seatId) => {
         const s = this.seats[seatId];
         if (!s || s.deck.length === 0) return null;

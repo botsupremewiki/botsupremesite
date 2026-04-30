@@ -1008,6 +1008,9 @@ function PendingChoicePanel({
                 if (power > maxPower) return false;
               }
               if (onlyRested && !c.rested) return false;
+              // requireTrigger : ne montre que les Persos dont le cardId
+              // a une carte trigger != null en base (ex. Ice Block Partisan).
+              if (requireTrigger && !meta.trigger) return false;
               return true;
             })
             .map((c) => {

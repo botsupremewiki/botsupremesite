@@ -246,6 +246,13 @@ export interface BattleEffectAccess {
     handIndex: number,
   ): string | null;
 
+  /** Place une carte de la main au-dessous du deck (bottom). Utilisé par
+   *  Île de Lacrahn-Ri (OP09-060). Retourne le cardId placé ou null. */
+  placeHandAtDeckBottom(
+    seat: OnePieceBattleSeatId,
+    handIndex: number,
+  ): string | null;
+
   /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
    *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
   peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
@@ -3536,6 +3543,251 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
           : { kind: "character", seat: ctx.sourceSeat, uid: target };
       ctx.battle.addPowerBuff(ref, 1000);
       ctx.battle.log("Gum Gum Dawn Whip : +1000 ce tour.");
+    }
+  },
+
+  // ─── BATCH 20 — Stages, counters et events ─────────────────────────────
+
+  /** OP09-099 Ruche (Stage)
+   *  [Activation : Principale] Vous pouvez défausser 1 carte de votre main
+   *  et épuiser ce Lieu : Regardez 3 cartes du dessus de votre deck,
+   *  révélez jusqu'à 1 carte de type {Équipage de Barbe Noire} et
+   *  ajoutez-la à votre main. */
+  "OP09-099": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-099",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt: "Ruche : défausse 1 carte de ta main pour activer.",
+        params: { count: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      const found = ctx.battle.searchDeckTopForType(
+        ctx.sourceSeat,
+        3,
+        "Équipage de Barbe Noire",
+        "bottom",
+      );
+      ctx.battle.log(
+        found
+          ? "Ruche : carte Barbe Noire ajoutée à la main."
+          : "Ruche : aucune carte révélée.",
+      );
+    }
+  },
+
+  /** OP09-060 Île de Lacrahn-Ri (Stage)
+   *  [Activation : Principale] Vous pouvez placer 2 cartes de votre main
+   *  au-dessous de votre deck dans l'ordre de votre choix et épuiser ce
+   *  Lieu : Si votre Leader est de type {Cross Guild}, piochez 2 cartes.
+   *  (Simplification : on demande 2 indices via discard-card et on les
+   *  place sous le deck plutôt qu'à la défausse.) */
+  "OP09-060": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isCG = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("cross guild"),
+      );
+      if (!isCG) {
+        ctx.battle.log("Île de Lacrahn-Ri : Leader pas Cross Guild.");
+        return;
+      }
+      if (!seat || seat.handSize < 2) {
+        ctx.battle.log(
+          "Île de Lacrahn-Ri : besoin de 2 cartes en main, effet annulé.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-060",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Île de Lacrahn-Ri : choisis 2 cartes à placer au-dessous du deck.",
+        params: { count: 2 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      // Place les cartes sous le deck dans l'ordre choisi, en partant des
+      // indices décroissants pour ne pas décaler.
+      const sorted = [...ctx.choice.selection.handIndices].sort(
+        (a, b) => b - a,
+      );
+      let placed = 0;
+      for (const i of sorted) {
+        if (ctx.battle.placeHandAtDeckBottom(ctx.sourceSeat, i)) placed++;
+      }
+      if (placed >= 2) {
+        ctx.battle.drawCards(ctx.sourceSeat, 2);
+        ctx.battle.log(
+          "Île de Lacrahn-Ri : 2 cartes placées sous le deck → +2 cartes piochées.",
+        );
+      } else {
+        ctx.battle.log(
+          `Île de Lacrahn-Ri : seulement ${placed} carte(s) placée(s), effet annulé.`,
+        );
+      }
+    }
+  },
+
+  /** OP09-039 Gum Gum Cuatro Jet Cross Shock Bazooka (Event Counter)
+   *  [Contre] Si votre Leader est de type {ODYSSEY} et que vous avez 2
+   *  Personnages ou plus épuisés, jusqu'à 1 de vos Leaders ou Personnages
+   *  gagne +2000 de puissance pour tout le tour. */
+  "OP09-039": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isOdyssey = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("odyssey"),
+      );
+      const restedCount = seat?.characters.filter((c) => c.rested).length ?? 0;
+      if (!isOdyssey || restedCount < 2) {
+        ctx.battle.log(
+          "Gum Gum Cuatro : conditions ODYSSEY+2 non remplies, effet annulé.",
+        );
+        return;
+      }
+      // Auto-cible le Leader pour rapidité (counter event = défense
+      // d'urgence). Pas de choix joueur dans ce contexte.
+      ctx.battle.addPowerBuff(
+        { kind: "leader", seat: ctx.sourceSeat },
+        2000,
+      );
+      ctx.battle.log("Gum Gum Cuatro : Leader +2000 (Counter ODYSSEY).");
+    }
+  },
+
+  /** OP09-041 Soul Franky Swing Arm Boxing Solid (Event Counter)
+   *  [Contre] Jusqu'à 1 de vos Leaders ou Personnages gagne +2000 de
+   *  puissance pour tout le combat. Puis, si votre Leader est de type
+   *  {ODYSSEY} et que vous avez 2 Personnages ou plus épuisés, redressez
+   *  jusqu'à 2 de vos Personnages.
+   *  (Simplification : on applique seulement le buff +2000 au Leader. Le
+   *  redressement de 2 Persos demande 2 choices — skip pour ce batch.) */
+  "OP09-041": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.addPowerBuff(
+        { kind: "leader", seat: ctx.sourceSeat },
+        2000,
+      );
+      ctx.battle.log("Soul Franky : Leader +2000 (Counter).");
+    }
+  },
+
+  /** OP09-115 Ice Block Partisan (Event)
+   *  [Principale] Mettez KO jusqu'à 1 Personnage adverse ayant un coût de
+   *  3 ou moins et [Déclenchement]. */
+  "OP09-115": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-115",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Ice Block Partisan : KO 1 Persos adverse ≤ 3 coût avec [Déclenchement].",
+        params: { maxCost: 3, requireTrigger: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(oppSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Ice Block Partisan : Persos ≤ 3 coût + trigger KO.");
+    }
+  },
+
+  /** OP09-059 Tour de passe-passe brouillard (Event Counter)
+   *  [Contre] Jusqu'à 1 de vos Leaders ou Personnages gagne +3000 de
+   *  puissance pour tout le combat. Puis, défaussez jusqu'à 2 cartes de
+   *  votre main. Placez dans votre Défausse autant de cartes du dessus
+   *  de votre deck que précédemment défaussées.
+   *  (Simplification : on applique le +3000. La sub-mécanique discard+mill
+   *  demande des choix supplémentaires — skip pour ce batch.) */
+  "OP09-059": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.addPowerBuff(
+        { kind: "leader", seat: ctx.sourceSeat },
+        3000,
+      );
+      ctx.battle.log("Tour de passe-passe brouillard : Leader +3000.");
+    }
+  },
+
+  /** OP09-078 Gum Gum Gigant (Event Counter)
+   *  [Contre] DON!! -2 ; vous pouvez défausser 1 carte de votre main : Si
+   *  votre Leader est de type {Équipage de Chapeau de paille}, jusqu'à 1
+   *  de vos Leaders ou Personnages gagne +4000 de puissance pour tout le
+   *  combat. Puis, piochez 2 cartes. */
+  "OP09-078": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isChapeau = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de chapeau de paille"),
+      );
+      if (!isChapeau) {
+        ctx.battle.log(
+          "Gum Gum Gigant : Leader pas Chapeau de paille, effet réduit.",
+        );
+        return;
+      }
+      const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 2);
+      if (returned < 2) {
+        ctx.battle.log(
+          `Gum Gum Gigant : seulement ${returned} DON renvoyée(s), effet annulé.`,
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-078",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Gum Gum Gigant : défausse 1 carte de ta main pour +4000 et piocher 2.",
+        params: { count: 1 },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      ctx.battle.addPowerBuff(
+        { kind: "leader", seat: ctx.sourceSeat },
+        4000,
+      );
+      ctx.battle.drawCards(ctx.sourceSeat, 2);
+      ctx.battle.log("Gum Gum Gigant : DON-2 + discard 1 → +4000 + draw 2.");
     }
   },
 
