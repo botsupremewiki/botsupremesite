@@ -213,7 +213,7 @@ export function SeasonsClient({
           <h2 className="text-lg font-bold text-zinc-100">
             🗂️ Mes saisons passées
           </h2>
-          <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-white/10">
             <table className="w-full text-sm">
               <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-zinc-400">
                 <tr>
@@ -296,7 +296,7 @@ export function SeasonsClient({
             Aucun joueur classé pour le moment. Sois le premier !
           </div>
         ) : (
-          <div className="mt-3 overflow-hidden rounded-lg border border-white/10">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-white/10">
             <table className="w-full text-sm">
               <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-zinc-400">
                 <tr>

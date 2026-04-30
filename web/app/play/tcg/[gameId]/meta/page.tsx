@@ -146,7 +146,7 @@ export default async function MetaPage({
               <h2 className="text-lg font-bold text-zinc-100">
                 🏆 Top 10 joueurs (ELO actuel)
               </h2>
-              <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+              <div className="mt-3 overflow-x-auto rounded-xl border border-white/10">
                 <table className="w-full text-sm">
                   <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-zinc-400">
                     <tr>
@@ -194,7 +194,7 @@ export default async function MetaPage({
               <h2 className="text-lg font-bold text-zinc-100">
                 🃏 Top archétypes (winrate, min 5 matchs)
               </h2>
-              <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+              <div className="mt-3 overflow-x-auto rounded-xl border border-white/10">
                 <table className="w-full text-sm">
                   <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-zinc-400">
                     <tr>
