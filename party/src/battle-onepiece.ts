@@ -2250,6 +2250,31 @@ export default class OnePieceBattleServer implements Party.Server {
         else if (restGoesTo === "discard") s.discard.push(...top);
         return foundId;
       },
+      searchDeckTopForEvent: (seatId, count, color, restGoesTo) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        const top = s.deck.splice(0, Math.min(count, s.deck.length));
+        const needle = color.toLowerCase();
+        let foundIdx = -1;
+        for (let i = 0; i < top.length; i++) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(top[i].cardId);
+          if (!meta || meta.kind !== "event") continue;
+          if (meta.color.some((c) => c.toLowerCase().includes(needle))) {
+            foundIdx = i;
+            break;
+          }
+        }
+        let foundId: string | null = null;
+        if (foundIdx >= 0) {
+          const found = top.splice(foundIdx, 1)[0];
+          s.hand.push(found);
+          foundId = found.cardId;
+        }
+        if (restGoesTo === "top") s.deck.unshift(...top);
+        else if (restGoesTo === "bottom") s.deck.push(...top);
+        else if (restGoesTo === "discard") s.discard.push(...top);
+        return foundId;
+      },
       searchDeckTopForTrigger: (seatId, count, extractCount, restGoesTo, excludeName) => {
         const s = this.seats[seatId];
         if (!s) return [];

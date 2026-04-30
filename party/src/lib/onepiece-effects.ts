@@ -187,6 +187,16 @@ export interface BattleEffectAccess {
     excludeName?: string,
   ): string[];
 
+  /** Variante qui cherche les cartes Évents de la couleur donnée (utilisé
+   *  par OP09-050 Nami). Retourne le cardId du premier Évent matchant ou
+   *  null. Filtre : meta.kind === "event" ET meta.color inclut `color`. */
+  searchDeckTopForEvent(
+    seat: OnePieceBattleSeatId,
+    count: number,
+    color: string,
+    restGoesTo: SearchRestPlacement,
+  ): string | null;
+
   /** Ouvre un PendingChoice côté state. Le handler doit retourner après
    *  cet appel : la résolution rappellera le handler avec hook
    *  `on-choice-resolved` et `ctx.choice` rempli. */
@@ -4742,6 +4752,103 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     if (ctx.hook !== "on-turn-end") return;
     ctx.battle.untapCharacter(ctx.sourceSeat, ctx.sourceUid);
     ctx.battle.log("Rosinante : redressé en fin de tour (simplifié).");
+  },
+
+  // ─── BATCH 26 — Search Event + ko-self via koCharacter ─────────────────
+
+  /** OP09-050 Nami
+   *  [En attaquant] Regardez 5 cartes du dessus de votre deck, révélez
+   *  jusqu'à 1 Événement bleu et ajoutez-le à votre main. Puis, placez
+   *  les cartes restantes au-dessous de votre deck dans l'ordre de votre
+   *  choix. */
+  "OP09-050": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const found = ctx.battle.searchDeckTopForEvent(
+      ctx.sourceSeat,
+      5,
+      "bleu",
+      "bottom",
+    );
+    ctx.battle.log(
+      found
+        ? "Nami : 1 Événement bleu ajouté à la main."
+        : "Nami : aucun Événement bleu révélé.",
+    );
+  },
+
+  /** OP09-089 Stronger
+   *  [Activation : Principale] Vous pouvez défausser 1 carte de votre main
+   *  et placer ce Personnage dans votre Défausse : Si votre Leader est de
+   *  type {Équipage de Barbe Noire}, piochez 1 carte. Puis, réduisez de
+   *  -2 le coût de jusqu'à 1 Personnage adverse pour tout le tour. */
+  "OP09-089": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.handSize < 1) {
+        ctx.battle.log("Stronger : main vide, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-089",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt: "Stronger : défausse 1 carte (et place ce Persos en Défausse).",
+        params: { count: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      // Étape 1 : discard fait → place soi-même en défausse + draw conditionnel.
+      if (ctx.choice.selection.handIndices && !ctx.choice.selection.targetUid) {
+        ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        // Place ce Persos dans la Défausse via koCharacter (réutilise
+        // l'API existante — la vraie sémantique « place dans la défausse »
+        // est très proche du KO par effet).
+        ctx.battle.koCharacter(ctx.sourceSeat, ctx.sourceUid);
+        const seat = ctx.battle.getSeat(ctx.sourceSeat);
+        const leaderMeta = seat?.leaderId
+          ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+          : null;
+        const isBN = !!leaderMeta?.types.some((t) =>
+          t.toLowerCase().includes("équipage de barbe noire"),
+        );
+        if (isBN) {
+          ctx.battle.drawCards(ctx.sourceSeat, 1);
+          ctx.battle.log("Stronger : Leader BN → +1 carte piochée.");
+        }
+        // Étape 2 : ouvre le -2 cost choice.
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "OP09-089-step2",
+          sourceUid: ctx.sourceUid,
+          kind: "select-target",
+          prompt: "Stronger : choisis 1 Persos adverse pour -2 coût ce tour.",
+          params: { allowLeader: false },
+          cancellable: true,
+        });
+        return;
+      }
+    }
+  },
+  // Step 2 wrapper.
+  "OP09-089-step2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    const targetUid = ctx.choice.selection.targetUid;
+    if (targetUid === "leader") return;
+    ctx.battle.addCostBuff(
+      { kind: "character", seat: oppSeat, uid: targetUid },
+      -2,
+    );
+    ctx.battle.log("Stronger : Persos adverse -2 coût ce tour.");
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───
