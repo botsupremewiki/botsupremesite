@@ -664,15 +664,23 @@ export function drawCards(
   const drawnRaw = player.deck.slice(0, count);
   const newDeck = player.deck.slice(drawnRaw.length);
 
+  // Phase 3.69 : Mushroom (01PZ022) trigger on-draw — 1 dmg au nexus
+  // du joueur qui pioche, ne va PAS en main (consommé). Compté avant
+  // le filtre maxHand.
+  const mushroomCount = drawnRaw.filter((c) => c.cardCode === "01PZ022").length;
+  const nonMushroomDrawn = drawnRaw.filter((c) => c.cardCode !== "01PZ022");
+
   // Sépare ce qui rentre en main vs ce qui dépasse maxHand.
   const room = Math.max(0, cfg.maxHand - player.hand.length);
-  const drawn = drawnRaw.slice(0, room);
-  const discarded = drawnRaw.slice(room);
+  const drawn = nonMushroomDrawn.slice(0, room);
+  const discarded = nonMushroomDrawn.slice(room);
 
+  const newNexusHealth = player.nexusHealth - mushroomCount;
   const updatedPlayer: InternalPlayer = {
     ...player,
     deck: newDeck,
     hand: [...player.hand, ...drawn],
+    nexusHealth: newNexusHealth,
   };
   const newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
     InternalPlayer,
@@ -680,8 +688,34 @@ export function drawCards(
   ];
   newPlayers[seatIdx] = updatedPlayer;
 
+  let newLog = state.log;
+  if (mushroomCount > 0) {
+    newLog = [
+      ...state.log,
+      `${player.username} pioche ${mushroomCount} Champignon(s) vénéneux — ${mushroomCount} dmg nexus.`,
+    ];
+  }
+
+  // Game over si nexus ≤ 0 par les Mushrooms.
+  if (newNexusHealth <= 0) {
+    return {
+      state: {
+        ...state,
+        players: newPlayers,
+        phase: "ended",
+        winnerSeatIdx: otherSeat(seatIdx),
+        log: [
+          ...newLog,
+          `${state.players[otherSeat(seatIdx)].username} remporte la partie (Champignons létaux).`,
+        ],
+      },
+      drawn,
+      discarded,
+    };
+  }
+
   return {
-    state: { ...state, players: newPlayers },
+    state: { ...state, players: newPlayers, log: newLog },
     drawn,
     discarded,
   };
