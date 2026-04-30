@@ -1856,6 +1856,13 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     drainAmount: 1,
     tokenCardCode: "01SI002",
   },
+
+  // ── Phase 3.44
+  // 01DE047 (Demacia, 3 Slow) — summon 1 × token 01DE016 (Détachement
+  // hardi, 3|3).
+  "01DE047": { type: "summon-tokens", cardCode: "01DE016", count: 1 },
+  // 01NX056 (Noxus, 5 Slow, Shunpo) — 2 dmg ennemi + rally.
+  "01NX056": { type: "damage-enemy-and-rally", amount: 2 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────

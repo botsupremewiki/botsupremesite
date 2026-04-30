@@ -278,6 +278,19 @@ export function botAct(
           .sort((a, b) => b.power - a.power)[0];
         if (!target) continue;
         targetUid = target.uid;
+      } else if (effect.type === "damage-enemy-and-rally") {
+        // Phase 3.44 : Shunpo. Préfère un ennemi tuable par dmg, sinon
+        // la plus grosse menace pour réduire son power. Skip si banc
+        // ennemi vide. Toujours utile (rally même si pas de kill).
+        if (opponent.bench.length === 0) continue;
+        const dmg = effect.amount;
+        const killable = opponent.bench
+          .filter((u) => u.health - u.damage <= dmg)
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        const fallback = [...opponent.bench].sort(
+          (a, b) => b.power - a.power,
+        )[0];
+        targetUid = (killable ?? fallback).uid;
       } else if (opponent.bench.length > 0) {
         const target =
           opponent.bench.find((u) => !u.frozen) ?? opponent.bench[0];

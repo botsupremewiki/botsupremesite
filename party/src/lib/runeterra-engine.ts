@@ -1771,6 +1771,34 @@ function applySpellEffect(
       const intermediate: InternalState = { ...state, players: newPlayers };
       return drawCards(intermediate, casterSeat, effect.drawCount).state;
     }
+    case "damage-enemy-and-rally": {
+      // Phase 3.44 : Shunpo. Inflige amount dmg à un ennemi puis caster
+      // gagne (ou regagne) le jeton d'attaque.
+      const opp = newPlayers[oppSeat];
+      const updatedBench = opp.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers[oppSeat] = { ...opp, bench: survivors };
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = { ...caster, attackToken: true };
+      let newState: InternalState = {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${caster.username} regagne le jeton d'attaque (Ralliement).`,
+        ],
+      };
+      if (deadUnit) {
+        newState = triggerLastBreath(newState, deadUnit, oppSeat);
+      }
+      return newState;
+    }
     case "stun-enemy-buff-all-allies-round": {
       // Phase 3.42 : Manœuvre décisive. Stun ennemi cible + +pwr/+hp round
       // à tous les alliés du caster.
