@@ -40,6 +40,7 @@ import {
   recordBotWin,
 } from "./lib/supabase";
 import {
+  applyAllCostMods,
   applyAllPowerMods,
   type BattleEffectAccess,
   CARD_HANDLERS,
@@ -87,6 +88,12 @@ type SeatState = {
   hand: DeckCard[];
   // Cartes Vie face cachée (le contenu ne fuit pas à l'adverse).
   life: DeckCard[];
+  // Indices (dans `life`) des cartes face-visible — visibles aux 2 joueurs.
+  // Utilisé par Katakuri ST20-001 ([Activation] retourner 1 Vie face
+  // visible). Reste face-up jusqu'à ce qu'elle soit prise comme dégât
+  // (auquel cas, Trigger révélé normalement et hand). Reset au refresh ?
+  // Non — face-up persiste tant que la carte est dans la pile de Vie.
+  faceUpLifeIndices: Set<number>;
   // Défausse (publique en count, contenu privé pour l'instant).
   discard: DeckCard[];
   // DON deck séparé (10 au début).
@@ -249,6 +256,7 @@ export default class OnePieceBattleServer implements Party.Server {
         tempPowerBuffs: new Map(),
         usedActivationsThisTurn: new Set(),
         turnFlags: new Set(),
+        faceUpLifeIndices: new Set<number>(),
         cancelledEffectUidsThisTurn: new Set(),
         ownPlayedEffectsCancelledPassive: teachLeader,
         oppPlayedEffectsCancelledByMe: false,
@@ -549,16 +557,28 @@ export default class OnePieceBattleServer implements Party.Server {
       );
       return;
     }
-    if (seat.donActive < meta.cost) {
+    // Calcule le coût effectif avec les passifs (Luffy Leader OP09-061
+    // [DON x1] +1 coût own Persos, etc.).
+    const baseCost = meta.cost;
+    const passiveCostMod = applyAllCostMods(
+      { seat: seatId, cardId: handCard.cardId, uid: `hand:${handIndex}` },
+      this.getBattleAccess(),
+    );
+    const effectiveCost = Math.max(0, baseCost + passiveCostMod);
+    if (seat.donActive < effectiveCost) {
       this.sendError(
         conn,
-        `Coût ${meta.cost} > DON disponibles (${seat.donActive}).`,
+        `Coût ${effectiveCost} (base ${baseCost}${
+          passiveCostMod !== 0
+            ? ` ${passiveCostMod > 0 ? "+" : ""}${passiveCostMod} passif`
+            : ""
+        }) > DON disponibles (${seat.donActive}).`,
       );
       return;
     }
     // Paye le coût : épuise N DON actives.
-    seat.donActive -= meta.cost;
-    seat.donRested += meta.cost;
+    seat.donActive -= effectiveCost;
+    seat.donRested += effectiveCost;
     // Retire de la main.
     seat.hand.splice(handIndex, 1);
     // Ajoute au terrain. Une carte arrive redressée mais ne peut pas attaquer
@@ -572,7 +592,9 @@ export default class OnePieceBattleServer implements Party.Server {
     };
     seat.characters.push(newCard);
     this.pushLog(
-      `${seat.username} joue ${meta.name} (coût ${meta.cost}, ${seat.donActive} DON restantes).`,
+      `${seat.username} joue ${meta.name} (coût ${effectiveCost}${
+        effectiveCost !== baseCost ? ` au lieu de ${baseCost}` : ""
+      }, ${seat.donActive} DON restantes).`,
     );
     // Hook on-play : déclenche l'effet [Jouée] s'il est implémenté.
     this.fireEffectFor(handCard.cardId, "on-play", newCard.uid, seatId);
@@ -1278,6 +1300,12 @@ export default class OnePieceBattleServer implements Party.Server {
         return;
       }
       const lifeCard = defender.life.shift()!;
+      // Décale les indices face-up : index 0 retiré, rebase.
+      const newSet = new Set<number>();
+      for (const idx of defender.faceUpLifeIndices) {
+        if (idx > 0) newSet.add(idx - 1);
+      }
+      defender.faceUpLifeIndices = newSet;
       const meta = ONEPIECE_BASE_SET_BY_ID.get(lifeCard.cardId);
       // [Exil] : la Vie va à la Défausse, pas de Trigger.
       if (exil) {
@@ -1575,6 +1603,7 @@ export default class OnePieceBattleServer implements Party.Server {
       tempPowerBuffs: new Map(),
       usedActivationsThisTurn: new Set(),
       turnFlags: new Set(),
+      faceUpLifeIndices: new Set<number>(),
       cancelledEffectUidsThisTurn: new Set(),
       // Marshall D. Teach Leader OP09-081 : passif "Vos [Jouée] annulés".
       ownPlayedEffectsCancelledPassive: leaderId.startsWith("OP09-081"),
@@ -2471,6 +2500,11 @@ export default class OnePieceBattleServer implements Party.Server {
         if (!cardId) return false;
         // Place au-dessus = position 0 (le dessus de la pile).
         s.life.unshift({ cardId });
+        // Décale les indices face-up : tout +1 (la nouvelle carte n'est
+        // PAS face-up — placée face cachée par convention OP TCG).
+        const newSet = new Set<number>();
+        for (const idx of s.faceUpLifeIndices) newSet.add(idx + 1);
+        s.faceUpLifeIndices = newSet;
         return true;
       },
       discardFromHand: (seatId, handIndices) => {
@@ -2501,6 +2535,12 @@ export default class OnePieceBattleServer implements Party.Server {
         }
         const card = s.life.shift()!;
         s.hand.push(card);
+        // Rebase faceUpLifeIndices.
+        const newSet = new Set<number>();
+        for (const idx of s.faceUpLifeIndices) {
+          if (idx > 0) newSet.add(idx - 1);
+        }
+        s.faceUpLifeIndices = newSet;
         return card.cardId;
       },
       searchDeckTopForType: (seatId, count, typeFilter, restGoesTo, excludeName) => {
@@ -2532,6 +2572,37 @@ export default class OnePieceBattleServer implements Party.Server {
         else if (restGoesTo === "bottom") s.deck.push(...top);
         else if (restGoesTo === "discard") s.discard.push(...top);
         return foundId;
+      },
+      peekTopOfDeckN: (seatId, count) => {
+        const s = this.seats[seatId];
+        if (!s) return [];
+        const n = Math.min(count, s.deck.length);
+        return s.deck.slice(0, n).map((c) => c.cardId);
+      },
+      applyReorderTopDeck: (seatId, reorder) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        // Retire les cartes correspondantes du top du deck (jusqu'à
+        // reorder.length).
+        const peekCount = reorder.length;
+        const taken = s.deck.splice(0, Math.min(peekCount, s.deck.length));
+        // Sépare les cardIds en top vs bottom selon le payload.
+        const topGroup: { cardId: string }[] = [];
+        const bottomGroup: { cardId: string }[] = [];
+        for (const item of reorder) {
+          // Cherche la carte dans `taken` matchant ce cardId (1ère
+          // occurrence, supportant doublons).
+          const idx = taken.findIndex((t) => t.cardId === item.cardId);
+          if (idx < 0) continue;
+          const card = taken.splice(idx, 1)[0];
+          if (item.placement === "top") topGroup.push(card);
+          else bottomGroup.push(card);
+        }
+        // Toute carte restante non-spécifiée → on la met top par défaut.
+        for (const remaining of taken) topGroup.push(remaining);
+        // Reconstruit : top = topGroup (in order), then deck restant, then bottom.
+        s.deck.unshift(...topGroup);
+        s.deck.push(...bottomGroup);
       },
       searchDeckTopForEvent: (seatId, count, color, restGoesTo) => {
         const s = this.seats[seatId];
@@ -2658,7 +2729,22 @@ export default class OnePieceBattleServer implements Party.Server {
         if (!s || s.life.length === 0) return null;
         const card = s.life.shift()!;
         s.discard.push(card);
+        // Décale les indices face-up : index 0 retiré, on rebase.
+        const newSet = new Set<number>();
+        for (const idx of s.faceUpLifeIndices) {
+          if (idx > 0) newSet.add(idx - 1);
+        }
+        s.faceUpLifeIndices = newSet;
         return card.cardId;
+      },
+      flipTopLifeFaceUp: (seatId) => {
+        const s = this.seats[seatId];
+        if (!s || s.life.length === 0) return null;
+        // Si déjà face-up (idx 0 already in set), retourne null pour
+        // signaler "rien à retourner".
+        if (s.faceUpLifeIndices.has(0)) return null;
+        s.faceUpLifeIndices.add(0);
+        return s.life[0].cardId;
       },
       getActiveSeat: () => this.activeSeat,
     };
@@ -2830,6 +2916,9 @@ export default class OnePieceBattleServer implements Party.Server {
       characters: seat.characters,
       stage: seat.stage,
       life: seat.life.length,
+      faceUpLifeCardIds: Array.from(seat.faceUpLifeIndices)
+        .map((idx) => seat.life[idx]?.cardId)
+        .filter((x): x is string => typeof x === "string"),
       donActive: seat.donActive,
       donRested: seat.donRested,
       donDeckSize: seat.donDeck,

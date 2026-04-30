@@ -117,8 +117,15 @@ export type LeaveFieldListener = (ctx: LeaveFieldContext) => void;
  *  le payload du message client `op-resolve-choice`. */
 export type ChoiceSelection = {
   targetUid?: string;
+  // Plusieurs cibles (ko-multi-combined-power : Disparais OP09-018).
+  targetUids?: string[];
   handIndices?: number[];
   yesNo?: boolean;
+  // Réorganisation top deck (Hancock ST17-004) : ordre des cardIds + pour
+  // chaque carte, "top" ou "bottom" du deck.
+  reorderTopDeck?: { cardId: string; placement: "top" | "bottom" }[];
+  // select-option : option choisie (Catarina Devon).
+  selectedOption?: string;
 };
 
 /** Référence vers une carte sur le board ou en main. */
@@ -198,6 +205,20 @@ export interface BattleEffectAccess {
     color: string,
     restGoesTo: SearchRestPlacement,
   ): string | null;
+
+  /** Lit (sans retirer) les N cartes du dessus du deck. Utilisé pour les
+   *  effets type Hancock ST17-004 (regarde 3 cartes + réorganise). */
+  peekTopOfDeckN(seat: OnePieceBattleSeatId, count: number): string[];
+
+  /** Applique une réorganisation post-peek : pour chaque cardId, le place
+   *  soit au-dessus (top, ordre du tableau = index ascendant = top vers
+   *  bas) soit au-dessous (bottom, ordre = ascendant = haut vers bas du
+   *  bottom). Les cartes du dessus restent au-dessus. Retire les cardIds
+   *  de la position courante puis réinsère selon les placements. */
+  applyReorderTopDeck(
+    seat: OnePieceBattleSeatId,
+    reorder: { cardId: string; placement: "top" | "bottom" }[],
+  ): void;
 
   /** Ouvre un PendingChoice côté state. Le handler doit retourner après
    *  cet appel : la résolution rappellera le handler avec hook
@@ -397,6 +418,12 @@ export interface BattleEffectAccess {
    *  sa Défausse 1 carte du dessus de sa Vie»). Retourne le cardId placé
    *  ou null si Vie vide. */
   placeOpponentLifeOnDiscard(seat: OnePieceBattleSeatId): string | null;
+
+  /** Retourne 1 carte du dessus de la Vie face-visible (sans la prendre).
+   *  Utilisé par Katakuri ST20-001. La carte reste dans la pile de Vie
+   *  mais devient publique. Retourne le cardId révélé ou null si vide ou
+   *  déjà retournée. */
+  flipTopLifeFaceUp(seat: OnePieceBattleSeatId): string | null;
 
   /** Retourne le seat dont c'est le tour actuellement (ou null si pas de
    *  partie en cours). Utilisé par les passifs et listeners qui ont des
@@ -4537,68 +4564,102 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  [Jouée] Regardez 3 cartes du dessus de votre deck, réorganisez-les
    *  dans l'ordre de votre choix et placez-les au-dessus ou au-dessous
    *  de votre deck. Puis, donnez jusqu'à 1 carte DON!! épuisée à votre
-   *  Leader ou à 1 de vos Personnages, de type {Sept grands corsaires}.
-   *  (Simplification : on skip la réorganisation top 3 et on donne juste
-   *  le DON ciblé Sept Corsaires.) */
+   *  Leader ou à 1 de vos Personnages, de type {Sept grands corsaires}. */
   "ST17-004": (ctx) => {
     if (ctx.hook === "on-play") {
       const seat = ctx.battle.getSeat(ctx.sourceSeat);
       if (!seat) return;
-      // Vérifie qu'on a au moins une cible Sept Corsaires (Leader ou
-      // Persos).
-      const leaderMeta = seat.leaderId
-        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
-        : null;
-      const leaderIsCorsaire = !!leaderMeta?.types.some((t) =>
-        t.toLowerCase().includes("sept grands corsaires"),
-      );
-      const charsCorsaire = seat.characters.filter((c) => {
-        const m = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
-        return m?.types.some((t) =>
-          t.toLowerCase().includes("sept grands corsaires"),
-        );
-      });
-      if (!leaderIsCorsaire && charsCorsaire.length === 0) {
-        ctx.battle.log(
-          "Boa Hancock : pas de cible Sept Corsaires, effet réduit.",
-        );
+      // Étape 1 : peek 3 cartes du top + ouvre reorder UI.
+      const peeked = ctx.battle.peekTopOfDeckN(ctx.sourceSeat, 3);
+      if (peeked.length === 0) {
+        ctx.battle.log("Boa Hancock : deck vide, étape 1 ignorée.");
+        // Saute direct à étape 2 (DON).
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "ST17-004-don",
+          sourceUid: ctx.sourceUid,
+          kind: "buff-target",
+          prompt:
+            "Boa Hancock : choisis Leader/Persos Sept Corsaires pour 1 DON épuisée.",
+          params: {
+            allowLeader: true,
+            requireType: "Sept grands corsaires",
+          },
+          cancellable: true,
+        });
         return;
       }
       ctx.battle.requestChoice({
         seat: ctx.sourceSeat,
         sourceCardNumber: "ST17-004",
         sourceUid: ctx.sourceUid,
-        kind: "buff-target",
+        kind: "reorder-top-deck",
         prompt:
-          "Boa Hancock : choisis Leader/Persos Sept Corsaires pour 1 DON épuisée.",
-        params: {
-          allowLeader: true,
-          requireType: "Sept grands corsaires",
-        },
-        cancellable: true,
+          "Boa Hancock : réorganise les 3 cartes du top et place top/bottom.",
+        // Sérialise les peeked cardIds en string (params n'accepte pas
+        // d'arrays — on contourne avec une CSV).
+        params: { peeked: peeked.join(",") },
+        cancellable: false,
       });
       return;
     }
     if (ctx.hook === "on-choice-resolved" && ctx.choice) {
-      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
-      const target = ctx.choice.selection.targetUid;
-      const ref: CardRef =
-        target === "leader"
-          ? { kind: "leader", seat: ctx.sourceSeat }
-          : { kind: "character", seat: ctx.sourceSeat, uid: target };
-      const attached = ctx.battle.attachDonToTarget(ref, 1);
-      ctx.battle.log(`Boa Hancock : ${attached} DON attachée(s).`);
+      if (ctx.choice.skipped) return;
+      // Étape 1 résolue : applique reorder + ouvre étape 2 (DON).
+      if (ctx.choice.selection.reorderTopDeck) {
+        ctx.battle.applyReorderTopDeck(
+          ctx.sourceSeat,
+          ctx.choice.selection.reorderTopDeck,
+        );
+        ctx.battle.log("Boa Hancock : top 3 réorganisé.");
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "ST17-004-don",
+          sourceUid: ctx.sourceUid,
+          kind: "buff-target",
+          prompt:
+            "Boa Hancock : choisis Leader/Persos Sept Corsaires pour 1 DON épuisée.",
+          params: {
+            allowLeader: true,
+            requireType: "Sept grands corsaires",
+          },
+          cancellable: true,
+        });
+        return;
+      }
     }
+  },
+  // Wrapper étape 2 : cible DON Sept Corsaires.
+  "ST17-004-don": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    const target = ctx.choice.selection.targetUid;
+    const ref: CardRef =
+      target === "leader"
+        ? { kind: "leader", seat: ctx.sourceSeat }
+        : { kind: "character", seat: ctx.sourceSeat, uid: target };
+    const attached = ctx.battle.attachDonToTarget(ref, 1);
+    ctx.battle.log(`Boa Hancock : ${attached} DON Sept Corsaires attachée(s).`);
   },
 
   /** ST20-001 Charlotte Katakuri
    *  [Activation : Principale] [Une fois par tour] Vous pouvez retourner
    *  1 carte du dessus de votre Vie face visible : Donnez jusqu'à 1 carte
-   *  DON!! épuisée à votre Leader ou à 1 de vos Personnages.
-   *  (Simplification : on skip le mécanisme «face visible» — on donne
-   *  juste le DON sans coût Vie.) */
+   *  DON!! épuisée à votre Leader ou à 1 de vos Personnages. */
   "ST20-001": (ctx) => {
     if (ctx.hook === "on-activate-main") {
+      // Coût : retourne 1 Vie face-up. Si déjà retournée ou pas de Vie,
+      // l'effet est annulé.
+      const flipped = ctx.battle.flipTopLifeFaceUp(ctx.sourceSeat);
+      if (!flipped) {
+        ctx.battle.log(
+          "Katakuri : pas de Vie face cachée à retourner, effet annulé.",
+        );
+        return;
+      }
+      ctx.battle.log(
+        `Katakuri : 1 Vie retournée face visible (${flipped}).`,
+      );
       ctx.battle.requestChoice({
         seat: ctx.sourceSeat,
         sourceCardNumber: "ST20-001",
@@ -4926,29 +4987,32 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 
   /** OP09-018 Disparais (Event)
    *  [Principale] Mettez KO jusqu'à 2 Personnages adverses ayant 4000 ou
-   *  moins de puissance combinée.
-   *  (Simplification : on KO 1 seul Persos ≤ 4000 power au lieu de 2
-   *  combinés, le ciblage 2-cibles avec contrainte combinée demande une
-   *  infra plus élaborée.) */
+   *  moins de puissance combinée. */
   "OP09-018": (ctx) => {
     if (ctx.hook === "on-play") {
       ctx.battle.requestChoice({
         seat: ctx.sourceSeat,
         sourceCardNumber: "OP09-018",
         sourceUid: ctx.sourceUid,
-        kind: "ko-character",
-        prompt: "Disparais : KO 1 Persos adverse ≤ 4000 power (simplifié).",
-        params: { maxPower: 4000 },
+        kind: "ko-multi-combined-power",
+        prompt:
+          "Disparais : KO ≤ 2 Persos adv avec power combiné ≤ 4000.",
+        params: { maxN: 2, maxCombinedPower: 4000 },
         cancellable: true,
       });
       return;
     }
     if (ctx.hook === "on-choice-resolved" && ctx.choice) {
-      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      if (ctx.choice.skipped) return;
+      const uids = ctx.choice.selection.targetUids ?? [];
+      if (uids.length === 0) return;
       const oppSeat: OnePieceBattleSeatId =
         ctx.sourceSeat === "p1" ? "p2" : "p1";
-      ctx.battle.koCharacter(oppSeat, ctx.choice.selection.targetUid);
-      ctx.battle.log("Disparais : Persos adverse ≤ 4000 KO.");
+      let count = 0;
+      for (const uid of uids) {
+        if (ctx.battle.koCharacter(oppSeat, uid)) count++;
+      }
+      ctx.battle.log(`Disparais : ${count} Persos KO (combinés ≤ 4000).`);
     }
   },
 
@@ -4996,14 +5060,40 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 
   /** OP09-062 Nico Robin (Leader)
    *  [Exil] (Quand cette carte inflige des dégâts, la carte cible est
-   *  placée dans la Défausse sans activer Déclenchement.) [En attaquant]
-   *  Vous pouvez défausser 1 carte de votre main ayant [...] (texte
-   *  scrapé tronqué — partie active manquante).
-   *  Note : [Exil] est câblé DIRECTEMENT dans takeLives côté serveur. La
-   *  partie active [En attaquant] reste à câbler quand le texte sera
-   *  complet. */
-  "OP09-062": (_ctx) => {
-    // [Exil] géré par takeLives — pas d'action ici.
+   *  placée dans la Défausse sans activer Déclenchement.)
+   *  [En attaquant] Vous pouvez défausser 1 carte de votre main ayant
+   *  [Déclenchement] : Ajoutez jusqu'à 1 carte DON!! épuisée de votre
+   *  deck DON!!.
+   *  Note : [Exil] est câblé DIRECTEMENT dans takeLives côté serveur. */
+  "OP09-062": (ctx) => {
+    if (ctx.hook === "on-attack") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-062",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Nico Robin Leader : défausse 1 carte avec [Déclenchement] pour +1 DON épuisée.",
+        params: { count: 1, requireTrigger: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const discarded = ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      if (discarded.length === 0) return;
+      // Ajoute 1 DON épuisée du DON deck → giveDonFromDeck (active) +
+      // restDon (active → rested).
+      ctx.battle.giveDonFromDeck(ctx.sourceSeat, 1);
+      ctx.battle.restDon(ctx.sourceSeat, 1);
+      ctx.battle.log(
+        "Nico Robin Leader : 1 carte [Déclenchement] défaussée → +1 DON épuisée.",
+      );
+    }
   },
 
   /** ST15-001 Atmos
@@ -5286,23 +5376,25 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         );
         return;
       }
-      // Yes-no : OUI = Bloqueur / NON = Double attaque.
+      // 3-way : Bloqueur / Double attaque / Exil.
       ctx.battle.requestChoice({
         seat: ctx.sourceSeat,
         sourceCardNumber: "OP09-084",
         sourceUid: ctx.sourceUid,
-        kind: "yes-no",
+        kind: "select-option",
         prompt:
-          "Catarina Devon : OUI = [Bloqueur] / NON = [Double attaque] (jusqu'à fin du prochain tour adverse).",
-        params: {},
+          "Catarina Devon : choisis le mot-clé à gagner jusqu'à fin du prochain tour adverse.",
+        params: {
+          options: "Bloqueur|Double attaque|Exil",
+        },
         cancellable: false,
       });
       return;
     }
     if (ctx.hook === "on-choice-resolved" && ctx.choice) {
       if (ctx.choice.skipped) return;
-      const keyword =
-        ctx.choice.selection.yesNo === true ? "Bloqueur" : "Double attaque";
+      const keyword = ctx.choice.selection.selectedOption;
+      if (!keyword) return;
       ctx.battle.grantTempKeyword(ctx.sourceSeat, ctx.sourceUid, keyword);
       ctx.battle.log(
         `Catarina Devon : gagne [${keyword}] jusqu'à fin du prochain tour adverse.`,
@@ -5414,14 +5506,15 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  1 carte épuisée en plus.
    *
    *  Le passif [DON x1] +1 coût own Persos est implémenté via le registry
-   *  PASSIVE_COST_MODS (cf. plus bas) — il s'applique à la résolution du
-   *  coût quand on joue un Persos ET aux filtres maxCost via costBuff.
-   *  Ici, on traite le trigger DON-return. */
+   *  PASSIVE_COST_MODS (s'applique à la résolution du coût quand on joue
+   *  un Persos depuis la main). Le costBuff sur les Persos déjà en jeu
+   *  pour les filtres maxCost est appliqué au start de chaque tour. */
   "OP09-061": (ctx) => {
     if (ctx.hook === "on-turn-start") {
-      // Applique le costBuff +1 sur les Persos déjà en jeu si le Leader
-      // a 1+ DON attachée (le passif s'applique aussi via PASSIVE_COST_MODS
-      // pour les futurs Persos joués + ciblage maxCost).
+      // Pour les Persos déjà en jeu, applique le costBuff +1 via la
+      // mécanique tempPowerBuffs réutilisée pour le coût (se reset à
+      // end-turn et re-applied au début du tour suivant). Le passif
+      // PASSIVE_COST_MODS gère les nouvelles cartes jouées depuis la main.
       const seat = ctx.battle.getSeat(ctx.sourceSeat);
       if (!seat || seat.leaderAttachedDon < 1) return;
       for (const c of seat.characters) {
@@ -5512,6 +5605,81 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 /** Récupère le cardNumber depuis un cardId (avec ou sans suffixe variante). */
 export function cardNumberOf(cardId: string): string {
   return cardId.replace(/_p\d+$/, "");
+}
+
+// ─── Registre des passifs de coût ─────────────────────────────────────
+// Modificateurs passifs sur le coût d'un Persos (utilisé par Luffy Leader
+// OP09-061 [DON x1] +1 cost own Persos). Évalué au moment où on calcule
+// le coût pour jouer un Persos depuis la main, et aussi pour les filtres
+// maxCost des PendingChoice.
+
+export type PassiveCostContext = {
+  // Cible : Persos en jeu (uid réel) OU carte en main (uid = "hand:<idx>").
+  target: { seat: OnePieceBattleSeatId; cardId: string; uid: string };
+  // Seat propriétaire du modificateur (typiquement = target.seat ; sinon
+  // c'est un effet adverse type Tsuru).
+  modSourceSeat: OnePieceBattleSeatId;
+  modSourceUid: string;
+  battle: BattleEffectAccess;
+};
+
+export type PassiveCostMod = (ctx: PassiveCostContext) => number;
+
+export const PASSIVE_COST_MODS: Record<string, PassiveCostMod> = {
+  /** OP09-061 Luffy Leader : [DON x1] +1 coût à tous vos Persos. */
+  "OP09-061": (ctx) => {
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat || seat.leaderAttachedDon < 1) return 0;
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(ctx.target.cardId);
+    if (!meta || meta.kind !== "character") return 0;
+    return 1;
+  },
+};
+
+/** Évalue tous les passifs de coût pour une cible. Retourne la somme. */
+export function applyAllCostMods(
+  target: { seat: OnePieceBattleSeatId; cardId: string; uid: string },
+  battle: BattleEffectAccess,
+): number {
+  let total = 0;
+  for (const seatId of ["p1", "p2"] as const) {
+    const seat = battle.getSeat(seatId);
+    if (!seat) continue;
+    if (seat.leaderId) {
+      const num = cardNumberOf(seat.leaderId);
+      const mod = PASSIVE_COST_MODS[num];
+      if (mod) {
+        try {
+          total += mod({
+            target,
+            modSourceSeat: seatId,
+            modSourceUid: "leader",
+            battle,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+    for (const c of seat.characters) {
+      const num = cardNumberOf(c.cardId);
+      const mod = PASSIVE_COST_MODS[num];
+      if (mod) {
+        try {
+          total += mod({
+            target,
+            modSourceSeat: seatId,
+            modSourceUid: c.uid,
+            battle,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+  return total;
 }
 
 // ─── Registre des modificateurs de puissance passifs ────────────────────

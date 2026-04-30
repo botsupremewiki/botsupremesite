@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ChatMessage,
+  OnePieceBattleCardInPlay,
   OnePieceBattleClientMessage,
   OnePieceBattleSeatId,
   OnePieceBattleServerMessage,
@@ -1035,6 +1036,49 @@ function PendingChoicePanel({
         </div>
       )}
 
+      {/* Réorganiser top N + placer top/bottom (Hancock) */}
+      {choice.kind === "reorder-top-deck" && (
+        <ReorderTopDeckPicker
+          peeked={(() => {
+            const raw = choice.params.peeked;
+            return typeof raw === "string"
+              ? raw.split(",").filter((x) => x.length > 0)
+              : [];
+          })()}
+          onConfirm={(reorderTopDeck) =>
+            send({
+              type: "op-resolve-choice",
+              choiceId: choice.id,
+              skipped: false,
+              selection: { reorderTopDeck },
+            })
+          }
+        />
+      )}
+
+      {/* KO ≤ N Persos adv avec contrainte power combinée (Disparais) */}
+      {choice.kind === "ko-multi-combined-power" && opponent && (
+        <KoMultiCombinedPowerPicker
+          opponentChars={opponent.characters}
+          maxN={
+            typeof choice.params.maxN === "number" ? choice.params.maxN : 2
+          }
+          maxCombinedPower={
+            typeof choice.params.maxCombinedPower === "number"
+              ? choice.params.maxCombinedPower
+              : 4000
+          }
+          onConfirm={(targetUids) =>
+            send({
+              type: "op-resolve-choice",
+              choiceId: choice.id,
+              skipped: false,
+              selection: { targetUids },
+            })
+          }
+        />
+      )}
+
       {/* KO mon propre Persos */}
       {choice.kind === "ko-character-own" && self && (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -1259,6 +1303,35 @@ function PendingChoicePanel({
         </div>
       )}
 
+      {/* Select-option (Catarina Devon : Bloqueur / Double / Exil) */}
+      {choice.kind === "select-option" && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(() => {
+            const raw = choice.params.options;
+            const options =
+              typeof raw === "string"
+                ? raw.split("|").filter((x) => x.length > 0)
+                : [];
+            return options.map((opt) => (
+              <button
+                key={opt}
+                onClick={() =>
+                  send({
+                    type: "op-resolve-choice",
+                    choiceId: choice.id,
+                    skipped: false,
+                    selection: { selectedOption: opt },
+                  })
+                }
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-emerald-100 hover:bg-emerald-500/20"
+              >
+                {opt}
+              </button>
+            ));
+          })()}
+        </div>
+      )}
+
       {/* Yes/No */}
       {choice.kind === "yes-no" && (
         <div className="mt-2 flex gap-2">
@@ -1286,6 +1359,179 @@ function PendingChoicePanel({
           ❌ Passer
         </button>
       )}
+    </div>
+  );
+}
+
+function ReorderTopDeckPicker({
+  peeked,
+  onConfirm,
+}: {
+  peeked: string[];
+  onConfirm: (
+    reorder: { cardId: string; placement: "top" | "bottom" }[],
+  ) => void;
+}) {
+  const [placements, setPlacements] = useState<
+    Record<string, "top" | "bottom">
+  >(() => Object.fromEntries(peeked.map((c) => [c, "top" as const])));
+  const [order, setOrder] = useState<string[]>(peeked);
+  const allChosen = order.every((c) => !!placements[c]);
+  return (
+    <div className="mt-2">
+      <div className="mb-1 text-[11px] text-amber-200/80">
+        Réorganise dans l'ordre. Pour chaque carte : place au-dessus (top)
+        ou au-dessous (bottom) du deck.
+      </div>
+      <div className="flex flex-col gap-1">
+        {order.map((cardId, i) => {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+          return (
+            <div
+              key={`${cardId}-${i}`}
+              className="flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900/40 px-2 py-1 text-xs"
+            >
+              <span className="flex-1 text-zinc-200">
+                {meta?.name ?? cardId}
+              </span>
+              <button
+                onClick={() => {
+                  if (i === 0) return;
+                  const next = [...order];
+                  [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                  setOrder(next);
+                }}
+                disabled={i === 0}
+                className="rounded border border-zinc-700 px-1 hover:bg-zinc-800 disabled:opacity-30"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => {
+                  if (i === order.length - 1) return;
+                  const next = [...order];
+                  [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                  setOrder(next);
+                }}
+                disabled={i === order.length - 1}
+                className="rounded border border-zinc-700 px-1 hover:bg-zinc-800 disabled:opacity-30"
+              >
+                ↓
+              </button>
+              <button
+                onClick={() =>
+                  setPlacements((p) => ({ ...p, [cardId]: "top" }))
+                }
+                className={`rounded border px-2 py-0.5 ${
+                  placements[cardId] === "top"
+                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-100"
+                    : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                ⬆ Top
+              </button>
+              <button
+                onClick={() =>
+                  setPlacements((p) => ({ ...p, [cardId]: "bottom" }))
+                }
+                className={`rounded border px-2 py-0.5 ${
+                  placements[cardId] === "bottom"
+                    ? "border-amber-500 bg-amber-500/20 text-amber-100"
+                    : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                ⬇ Bottom
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        disabled={!allChosen}
+        onClick={() =>
+          onConfirm(
+            order.map((cardId) => ({
+              cardId,
+              placement: placements[cardId] ?? "top",
+            })),
+          )
+        }
+        className={`mt-2 rounded-md border px-3 py-1 ${
+          allChosen
+            ? "border-emerald-500 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30"
+            : "border-zinc-700 bg-zinc-900/40 text-zinc-500"
+        }`}
+      >
+        ✓ Confirmer
+      </button>
+    </div>
+  );
+}
+
+function KoMultiCombinedPowerPicker({
+  opponentChars,
+  maxN,
+  maxCombinedPower,
+  onConfirm,
+}: {
+  opponentChars: OnePieceBattleCardInPlay[];
+  maxN: number;
+  maxCombinedPower: number;
+  onConfirm: (targetUids: string[]) => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  function toggle(uid: string) {
+    const next = new Set(selected);
+    if (next.has(uid)) next.delete(uid);
+    else if (next.size < maxN) next.add(uid);
+    setSelected(next);
+  }
+  const combinedPower = Array.from(selected).reduce((sum, uid) => {
+    const c = opponentChars.find((x) => x.uid === uid);
+    if (!c) return sum;
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+    if (!meta || !("power" in meta)) return sum;
+    return sum + meta.power + c.attachedDon * 1000;
+  }, 0);
+  const valid = selected.size > 0 && combinedPower <= maxCombinedPower;
+  return (
+    <div className="mt-2">
+      <div className="mb-1 text-[11px] text-amber-200/80">
+        Sélectionne ≤ {maxN} Persos avec power combiné ≤ {maxCombinedPower}{" "}
+        ({selected.size} sélectionné(s), power combiné = {combinedPower}).
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {opponentChars.map((c) => {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+          const power = meta && "power" in meta ? meta.power : 0;
+          const totalPower = power + c.attachedDon * 1000;
+          const isSelected = selected.has(c.uid);
+          return (
+            <button
+              key={c.uid}
+              onClick={() => toggle(c.uid)}
+              className={`rounded border px-2 py-1 text-xs ${
+                isSelected
+                  ? "border-rose-500 bg-rose-500/20 text-rose-100"
+                  : "border-zinc-600 bg-zinc-900/40 text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              {meta?.name ?? c.cardId} ({totalPower})
+            </button>
+          );
+        })}
+      </div>
+      <button
+        disabled={!valid}
+        onClick={() => onConfirm(Array.from(selected))}
+        className={`mt-2 rounded-md border px-3 py-1 ${
+          valid
+            ? "border-rose-500 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30"
+            : "border-zinc-700 bg-zinc-900/40 text-zinc-500"
+        }`}
+      >
+        💥 Confirmer KO ({selected.size} cible{selected.size > 1 ? "s" : ""})
+      </button>
     </div>
   );
 }
