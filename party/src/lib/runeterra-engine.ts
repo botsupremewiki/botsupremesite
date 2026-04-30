@@ -84,6 +84,9 @@ export type InternalPlayer = {
   nexusHealth: number;
   attackToken: boolean;
   hasMulliganed: boolean;
+  // Phase 3.34 : compteur de morts d'alliés DANS ce round (reset à chaque
+  // startRound). Sert aux sorts conditionnels « si un allié est mort... ».
+  alliesDiedThisRound: number;
   // Phase 3.5 + 3.9c + 3.10 : compteurs globaux pour conditions de level-up.
   championCounters: {
     alliesDied: number; // pour Lucian, Hécarim, etc.
@@ -237,6 +240,7 @@ export function createInitialState(
     nexusHealth: cfg.initialNexusHealth,
     attackToken: hasToken,
     hasMulliganed: false,
+    alliesDiedThisRound: 0,
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -415,6 +419,8 @@ function refreshPlayerForRound(
     manaMax: newManaMax,
     mana: newManaMax,
     attackToken: hasToken,
+    // Phase 3.34 : reset compteur per-round.
+    alliesDiedThisRound: 0,
   };
 }
 
@@ -550,6 +556,26 @@ export function drawCards(
 /** Mappe seat-id (0/1) → "p1"/"p2" pour l'envoi client. */
 export function seatToId(seatIdx: 0 | 1): "p1" | "p2" {
   return seatIdx === 0 ? "p1" : "p2";
+}
+
+/** Phase 3.34 : helper qui bumpe alliesDiedThisRound (per-round) ET
+ *  championCounters.alliesDied (per-game cumulé). Sert à tous les sites
+ *  qui retirent une unité alliée du banc. À utiliser après avoir construit
+ *  un nouvel objet player partiellement modifié.
+ *  Si count <= 0, no-op (return as-is). */
+export function bumpAllyDeaths(
+  player: InternalPlayer,
+  count: number,
+): InternalPlayer {
+  if (count <= 0) return player;
+  return {
+    ...player,
+    alliesDiedThisRound: player.alliesDiedThisRound + count,
+    championCounters: {
+      ...player.championCounters,
+      alliesDied: player.championCounters.alliesDied + count,
+    },
+  };
 }
 
 // ────────────────────── Phase 3.22 : Imbue ───────────────────────────────
@@ -1198,14 +1224,16 @@ function applySpellEffect(
         if (idx === -1) continue;
         killedUnit = player.bench[idx];
         killedSeat = seat;
-        newPlayers[seat] = {
-          ...player,
-          bench: [...player.bench.slice(0, idx), ...player.bench.slice(idx + 1)],
-          championCounters: {
-            ...player.championCounters,
-            alliesDied: player.championCounters.alliesDied + 1,
+        newPlayers[seat] = bumpAllyDeaths(
+          {
+            ...player,
+            bench: [
+              ...player.bench.slice(0, idx),
+              ...player.bench.slice(idx + 1),
+            ],
           },
-        };
+          1,
+        );
         break;
       }
       let newState: InternalState = { ...state, players: newPlayers };
@@ -1332,6 +1360,8 @@ function applySpellEffect(
       newPlayers[casterSeat] = {
         ...newPlayers[casterSeat],
         bench: [],
+        alliesDiedThisRound:
+          newPlayers[casterSeat].alliesDiedThisRound + casterDead.length,
         championCounters: {
           ...newPlayers[casterSeat].championCounters,
           alliesDied:
@@ -1346,6 +1376,8 @@ function applySpellEffect(
       newPlayers[oppSeat] = {
         ...newPlayers[oppSeat],
         bench: [],
+        alliesDiedThisRound:
+          newPlayers[oppSeat].alliesDiedThisRound + oppDead.length,
         championCounters: {
           ...newPlayers[oppSeat].championCounters,
           alliesDied:
@@ -1383,6 +1415,8 @@ function applySpellEffect(
       newPlayers[oppSeat] = {
         ...oppPlayer,
         bench: oppSurvivors,
+        alliesDiedThisRound:
+          oppPlayer.alliesDiedThisRound + oppDeadUnits.length,
         championCounters: {
           ...oppPlayer.championCounters,
           alliesDied: oppPlayer.championCounters.alliesDied + oppDeadUnits.length,
@@ -1455,6 +1489,8 @@ function applySpellEffect(
         newPlayers[seat] = {
           ...player,
           bench: survivors,
+          alliesDiedThisRound:
+            player.alliesDiedThisRound + deadUnits.length,
           championCounters: {
             ...player.championCounters,
             alliesDied:
@@ -1637,6 +1673,7 @@ function applySpellEffect(
       newPlayers[casterSeat] = {
         ...player,
         bench: newBench,
+        alliesDiedThisRound: player.alliesDiedThisRound + 1,
         championCounters: {
           ...player.championCounters,
           alliesDied: player.championCounters.alliesDied + 1,
@@ -1685,6 +1722,7 @@ function applySpellEffect(
         newPlayers[seat] = {
           ...player,
           bench: survivors,
+          alliesDiedThisRound: player.alliesDiedThisRound + dead.length,
           championCounters: {
             ...player.championCounters,
             alliesDied: player.championCounters.alliesDied + dead.length,
@@ -1705,6 +1743,88 @@ function applySpellEffect(
       for (const { unit, seat } of allDeadUnits) {
         newState = triggerLastBreath(newState, unit, seat);
         if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "summon-tokens-if-ally-died": {
+      // Phase 3.34 : si alliesDiedThisRound > 0, summon count tokens
+      // (réutilise la logique de summon-tokens). Sinon no-op.
+      const player = newPlayers[casterSeat];
+      if (player.alliesDiedThisRound <= 0) return state;
+      const cfgCond = RUNETERRA_BATTLE_CONFIG;
+      const tokenCard = getCard(effect.cardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return state;
+      const slotsAvailable = cfgCond.maxBench - player.bench.length;
+      if (slotsAvailable <= 0) {
+        return {
+          ...state,
+          log: [
+            ...state.log,
+            `${player.username} : pas de place pour invoquer ${tokenCard.name}.`,
+          ],
+        };
+      }
+      const toSummon = Math.min(effect.count, slotsAvailable);
+      const newUnits: RuneterraBattleUnit[] = [];
+      for (let i = 0; i < toSummon; i++) {
+        const newUid = `${casterSeat}-cd-${state.round}-${state.log.length}-${i}`;
+        newUnits.push(createUnit(newUid, effect.cardCode));
+      }
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, ...newUnits],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${toSummon} × ${tokenCard.name} (allié mort ce round).`,
+        ],
+      };
+    }
+    case "deal-damage-anywhere-if-ally-died": {
+      // Phase 3.34 : si alliesDiedThisRound > 0, inflige amount dmg
+      // à la cible (any side, comme deal-damage-anywhere). Sinon no-op.
+      const caster = newPlayers[casterSeat];
+      if (caster.alliesDiedThisRound <= 0) return state;
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = caster.bench.find((u) => u.uid === targetUid);
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else {
+        const oppUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) return state;
+      const player = newPlayers[targetSeat];
+      const updatedBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers[targetSeat] = {
+        ...player,
+        bench: survivors,
+        alliesDiedThisRound: player.alliesDiedThisRound + (deadUnit ? 1 : 0),
+        championCounters: {
+          ...player.championCounters,
+          alliesDied: player.championCounters.alliesDied + (deadUnit ? 1 : 0),
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (deadUnit) {
+        newState = triggerLastBreath(newState, deadUnit, targetSeat);
       }
       return newState;
     }
@@ -1851,6 +1971,8 @@ function applySpellEffect(
       newPlayers[targetSeat] = {
         ...targetPlayer,
         bench: survivors,
+        alliesDiedThisRound:
+          targetPlayer.alliesDiedThisRound + (deadUnit ? 1 : 0),
         championCounters: {
           ...targetPlayer.championCounters,
           alliesDied:
@@ -2492,6 +2614,8 @@ function resolveCombat(state: InternalState): InternalState {
     ...attackerPlayer,
     bench: newAttackerBench,
     nexusHealth: newAttackerNexus,
+    alliesDiedThisRound:
+      attackerPlayer.alliesDiedThisRound + attackerDied.count,
     championCounters: {
       ...attackerPlayer.championCounters,
       alliesDied:
@@ -2510,6 +2634,8 @@ function resolveCombat(state: InternalState): InternalState {
     ...defenderPlayer,
     bench: newDefenderBench,
     nexusHealth: newDefenderNexus,
+    alliesDiedThisRound:
+      defenderPlayer.alliesDiedThisRound + defenderDied.count,
     championCounters: {
       ...defenderPlayer.championCounters,
       alliesDied:
