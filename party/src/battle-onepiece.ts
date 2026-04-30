@@ -48,6 +48,7 @@ import {
   type EffectContext,
   type EffectHook,
   fireCardEffect,
+  fireKoSubstitutes,
   fireOnLeaveField,
   getGrantedKeywords,
   isKoBlocked,
@@ -101,6 +102,17 @@ type SeatState = {
   // Cartes ayant déjà utilisé leur effet [Activation : Principale] [Une fois
   // par tour] ce tour. Reset à end-turn. Clé = uid (ou "leader").
   usedActivationsThisTurn: Set<string>;
+  // Set d'uid dont les effets [Jouée] sont annulés ce tour ou jusqu'au
+  // prochain end-turn adverse (Marshall D. Teach OP09-093 cible 1 leader
+  // adv pour 1 tour). Clé = "leader" ou uid d'un Persos.
+  cancelledEffectUidsThisTurn: Set<string>;
+  // Si true, tous les effets [Jouée] du seat sont annulés (passif Leader
+  // Teach OP09-081). Activé en setup quand le leader est OP09-081.
+  ownPlayedEffectsCancelledPassive: boolean;
+  // Si true, tous les effets [Jouée] de l'adversaire sont annulés jusqu'à
+  // la fin du prochain tour adverse (Leader Teach active). Reset à
+  // end-turn adverse.
+  oppPlayedEffectsCancelledByMe: boolean;
 };
 
 function sanitizeName(raw: unknown): string | null {
@@ -208,6 +220,9 @@ export default class OnePieceBattleServer implements Party.Server {
       // Pioche initiale (5 cartes).
       const hand: DeckCard[] = deck.splice(0, OP_BATTLE_CONFIG.openingHandSize);
 
+      // Marshall D. Teach Leader OP09-081 : "Vos effets [Jouée] sont
+      // annulés." → activé en passif au setup.
+      const teachLeader = deckRow.leader_id?.startsWith("OP09-081") ?? false;
       this.seats[seatId] = {
         authId,
         username,
@@ -228,6 +243,9 @@ export default class OnePieceBattleServer implements Party.Server {
         mulliganDecided: false,
         tempPowerBuffs: new Map(),
         usedActivationsThisTurn: new Set(),
+        cancelledEffectUidsThisTurn: new Set(),
+        ownPlayedEffectsCancelledPassive: teachLeader,
+        oppPlayedEffectsCancelledByMe: false,
       };
       this.connToSeat.set(conn.id, seatId);
 
@@ -435,6 +453,14 @@ export default class OnePieceBattleServer implements Party.Server {
     for (const c of seat.characters) {
       c.rested = false;
       c.playedThisTurn = false;
+      // Smoker ST19-001 : "ne peut pas attaquer jusqu'à fin du prochain
+      // tour adverse" — au début du tour suivant le sien, le timer est
+      // écoulé.
+      c.cannotAttackUntilNextOppTurnEnd = false;
+      // Catarina Devon OP09-084 : tempKeywords valent "jusqu'à fin du
+      // prochain tour adverse" — au start du tour suivant le sien, ils
+      // expirent.
+      c.tempKeywords = [];
     }
     if (seat.stage) {
       seat.stage.rested = false;
@@ -442,6 +468,12 @@ export default class OnePieceBattleServer implements Party.Server {
     }
     seat.donActive += seat.donRested;
     seat.donRested = 0;
+    // Marshall D. Teach OP09-093 : cancelledEffectUidsThisTurn expire en
+    // fin du tour adverse (= start de notre tour, on est arrivés ici).
+    seat.cancelledEffectUidsThisTurn.clear();
+    // Leader Teach OP09-081 active : oppPlayedEffectsCancelledByMe expire
+    // en fin de notre tour (= ici, on est en start de tour).
+    seat.oppPlayedEffectsCancelledByMe = false;
 
     // Draw : pioche 1 (sauf 1er tour ever).
     this.turnPhase = "draw";
@@ -638,6 +670,10 @@ export default class OnePieceBattleServer implements Party.Server {
     for (const c of seat.characters) {
       c.costBuff = 0;
       c.noBlockerThisTurn = false;
+      // ST21-003 Sanji : "si attaque durant ce tour" — flag this-turn-only.
+      c.nextAttackPreventsBlock = false;
+      // Tracker des substitutions KO 1/turn.
+      c.koSubUsedThisTurn = false;
     }
     const opponentSeat = seatId === "p1" ? "p2" : "p1";
     this.seats[opponentSeat]?.tempPowerBuffs.clear();
@@ -645,6 +681,7 @@ export default class OnePieceBattleServer implements Party.Server {
       for (const c of this.seats[opponentSeat]!.characters) {
         c.costBuff = 0;
         c.noBlockerThisTurn = false;
+        c.nextAttackPreventsBlock = false;
       }
     }
     this.pushLog(`${seat.username} termine son tour.`);
@@ -844,6 +881,15 @@ export default class OnePieceBattleServer implements Party.Server {
         );
         return;
       }
+      // Smoker ST19-001 : "Ne peut pas attaquer jusqu'à fin du prochain
+      // tour adverse."
+      if (c.cannotAttackUntilNextOppTurnEnd) {
+        this.sendError(
+          conn,
+          "Ce Personnage ne peut pas attaquer (Smoker / effet adverse).",
+        );
+        return;
+      }
       attackerPower = meta.power + c.attachedDon * 1000;
       attackerName = meta.name;
     }
@@ -978,6 +1024,21 @@ export default class OnePieceBattleServer implements Party.Server {
       );
       return;
     }
+    // ST21-003 Sanji : si l'attaquant a `nextAttackPreventsBlock`, l'adv
+    // ne peut pas activer [Bloqueur] sur cette attaque.
+    const attackerSeat = this.seats[this.pendingAttack.attackerSeat];
+    if (attackerSeat && this.pendingAttack.attackerUid !== "leader") {
+      const attackerCard = attackerSeat.characters.find(
+        (c) => c.uid === this.pendingAttack!.attackerUid,
+      );
+      if (attackerCard?.nextAttackPreventsBlock) {
+        this.sendError(
+          conn,
+          "L'adversaire ne peut pas activer [Bloqueur] sur cette attaque (Sanji ST21-003).",
+        );
+        return;
+      }
+    }
     if (this.pendingAttack.targetUid === blockerUid) {
       this.sendError(conn, "Ce Bloqueur est déjà la cible.");
       return;
@@ -998,6 +1059,29 @@ export default class OnePieceBattleServer implements Party.Server {
     this.pushLog(
       `${seat.username} bloque avec ${meta.name} (${this.pendingAttack.defenderBasePower}).`,
     );
+    // Roger OP09-118 win condition : "Quand votre adversaire active
+    // [Bloqueur], si vous ou votre adversaire n'avez plus de cartes dans
+    // votre Vie, vous remportez la partie."
+    // Vérifie si l'attaquant est Roger (OP09-118).
+    const attackerSrcSeat = this.pendingAttack.attackerSeat;
+    const attackerSrcSeatObj = this.seats[attackerSrcSeat];
+    const attackerCardId =
+      this.pendingAttack.attackerUid === "leader"
+        ? attackerSrcSeatObj?.leaderId ?? null
+        : attackerSrcSeatObj?.characters.find(
+            (x) => x.uid === this.pendingAttack!.attackerUid,
+          )?.cardId ?? null;
+    if (attackerCardId?.startsWith("OP09-118")) {
+      const attackerLife = attackerSrcSeatObj?.life.length ?? 0;
+      const defenderLife = seat.life.length;
+      if (attackerLife === 0 || defenderLife === 0) {
+        this.declareWinner(
+          attackerSrcSeat,
+          "Gol D. Roger : adversaire active [Bloqueur] avec 0 Vie d'un côté.",
+        );
+        return;
+      }
+    }
     this.broadcastState();
   }
 
@@ -1087,8 +1171,23 @@ export default class OnePieceBattleServer implements Party.Server {
     if (att.targetUid === "leader") {
       // Leader hit → prend des Vies (1 ou 2 si Double Attaque).
       const lifesToTake = att.doubleAttack ? 2 : 1;
+      // [Exil] : si l'attaquant a Exil, les Vies prises vont directement
+      // en Défausse sans déclencher de Trigger (Robin Leader OP09-062).
+      const attackerCardId =
+        att.attackerUid === "leader"
+          ? attackerSeat.leaderId
+          : attackerSeat.characters.find((c) => c.uid === att.attackerUid)
+              ?.cardId ?? null;
+      const attackerHasExil =
+        !!attackerCardId &&
+        this.cardHasKeyword(
+          att.attackerSeat,
+          att.attackerUid,
+          attackerCardId,
+          "Exil",
+        );
       this.pendingAttack = null;
-      this.takeLives(defenderSeatId, lifesToTake);
+      this.takeLives(defenderSeatId, lifesToTake, attackerHasExil);
     } else {
       // Personnage hit → KO (sauf immunité combat).
       const idx = defender.characters.findIndex((c) => c.uid === att.targetUid);
@@ -1099,7 +1198,15 @@ export default class OnePieceBattleServer implements Party.Server {
           "combat",
           this.getBattleAccess(),
         );
-        if (blocked) {
+        // Substitutions KO (Cracker pour combat aussi, Monster non).
+        const substituted = fireKoSubstitutes(
+          { seat: defenderSeatId, uid: target.uid, cardId: target.cardId },
+          "combat",
+          this.getBattleAccess(),
+        );
+        if (substituted) {
+          // KO original annulé.
+        } else if (blocked) {
           const meta = ONEPIECE_BASE_SET_BY_ID.get(target.cardId);
           this.pushLog(
             `${meta?.name ?? "?"} résiste au KO (immunité combat).`,
@@ -1127,8 +1234,14 @@ export default class OnePieceBattleServer implements Party.Server {
 
   /** Le défenseur prend N Vies. Pour chaque Vie, si trigger → pendingTrigger
    *  (résolu par le défenseur via op-trigger-resolve). Sinon va direct à la
-   *  main. Si Vie à 0 et il faut en prendre encore → défaite. */
-  private takeLives(defenderSeatId: OnePieceBattleSeatId, count: number) {
+   *  main. Si Vie à 0 et il faut en prendre encore → défaite.
+   *  Si `exil` est true (attaquant a [Exil]), la Vie va à la Défausse du
+   *  défenseur SANS activer de Trigger. */
+  private takeLives(
+    defenderSeatId: OnePieceBattleSeatId,
+    count: number,
+    exil = false,
+  ) {
     const defender = this.seats[defenderSeatId]!;
     for (let i = 0; i < count; i++) {
       if (defender.life.length === 0) {
@@ -1141,6 +1254,14 @@ export default class OnePieceBattleServer implements Party.Server {
       }
       const lifeCard = defender.life.shift()!;
       const meta = ONEPIECE_BASE_SET_BY_ID.get(lifeCard.cardId);
+      // [Exil] : la Vie va à la Défausse, pas de Trigger.
+      if (exil) {
+        defender.discard.push(lifeCard);
+        this.pushLog(
+          `[Exil] ${defender.username} : Vie ${meta?.name ?? "?"} → Défausse (pas de Trigger).`,
+        );
+        continue;
+      }
       const trigger = meta?.trigger ?? null;
       this.pushLog(
         `${defender.username} prend une Vie (${meta?.name ?? "?"})${trigger ? " — Trigger révélé !" : ""}.`,
@@ -1428,6 +1549,10 @@ export default class OnePieceBattleServer implements Party.Server {
       mulliganDecided: false,
       tempPowerBuffs: new Map(),
       usedActivationsThisTurn: new Set(),
+      cancelledEffectUidsThisTurn: new Set(),
+      // Marshall D. Teach Leader OP09-081 : passif "Vos [Jouée] annulés".
+      ownPlayedEffectsCancelledPassive: leaderId.startsWith("OP09-081"),
+      oppPlayedEffectsCancelledByMe: false,
     };
     if (this.phase === "waiting") this.phase = "mulligan";
   }
@@ -1908,12 +2033,15 @@ export default class OnePieceBattleServer implements Party.Server {
     for (const c of seat.characters) {
       c.costBuff = 0;
       c.noBlockerThisTurn = false;
+      c.nextAttackPreventsBlock = false;
+      c.koSubUsedThisTurn = false;
     }
     this.seats.p1?.tempPowerBuffs.clear();
     if (this.seats.p1) {
       for (const c of this.seats.p1.characters) {
         c.costBuff = 0;
         c.noBlockerThisTurn = false;
+        c.nextAttackPreventsBlock = false;
       }
     }
     this.pushLog(`${seat.username} termine son tour.`);
@@ -2001,6 +2129,16 @@ export default class OnePieceBattleServer implements Party.Server {
         const idx = s.characters.findIndex((c) => c.uid === uid);
         if (idx < 0) return false;
         const target = s.characters[idx];
+        // Vérifie substitutions KO (Cracker, Monster).
+        const substituted = fireKoSubstitutes(
+          { seat: seatId, uid: target.uid, cardId: target.cardId },
+          "effect",
+          this.getBattleAccess(),
+        );
+        if (substituted) {
+          // Substitution appliquée — KO original annulé.
+          return false;
+        }
         // Vérifie immunité KO par effet.
         const blocked = isKoBlocked(
           { seat: seatId, uid: target.uid, cardId: target.cardId },
@@ -2145,6 +2283,78 @@ export default class OnePieceBattleServer implements Party.Server {
         const c = s.characters.find((x) => x.uid === uid);
         if (!c) return false;
         c.noBlockerThisTurn = true;
+        return true;
+      },
+      addCannotAttackUntilNextOppTurnEnd: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (!c) return false;
+        c.cannotAttackUntilNextOppTurnEnd = true;
+        return true;
+      },
+      addNextAttackPreventsBlock: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (!c) return false;
+        c.nextAttackPreventsBlock = true;
+        return true;
+      },
+      grantTempKeyword: (seatId, uid, keyword) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (!c) return false;
+        if (!c.tempKeywords) c.tempKeywords = [];
+        if (!c.tempKeywords.includes(keyword)) c.tempKeywords.push(keyword);
+        return true;
+      },
+      cancelOpponentPlayedEffectsUntilEndOfTurn: (seatId) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        s.oppPlayedEffectsCancelledByMe = true;
+      },
+      cancelEffectsOfTarget: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        s.cancelledEffectUidsThisTurn.add(uid);
+      },
+      declareWinFor: (seatId, reason) => {
+        this.declareWinner(seatId, reason);
+      },
+      markKoSubUsedThisTurn: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (c) c.koSubUsedThisTurn = true;
+      },
+      koCharacterDirect: (seatId, uid) => {
+        // Variante de koCharacter qui SKIP les substitutions (utilisée par
+        // Monster qui veut explicitement KO ce Persos). Toujours soumis
+        // aux KO_GUARDS d'immunité.
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const idx = s.characters.findIndex((c) => c.uid === uid);
+        if (idx < 0) return false;
+        const target = s.characters[idx];
+        const blocked = isKoBlocked(
+          { seat: seatId, uid: target.uid, cardId: target.cardId },
+          "effect",
+          this.getBattleAccess(),
+        );
+        if (blocked) return false;
+        const ko = s.characters.splice(idx, 1)[0];
+        s.donRested += ko.attachedDon;
+        s.discard.push({ cardId: ko.cardId });
+        const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
+        this.pushLog(`${meta?.name ?? "?"} est mis KO (substitution).`);
+        this.fireEffectFor(ko.cardId, "on-ko", ko.uid, seatId);
+        fireOnLeaveField(
+          { seat: seatId, uid: ko.uid, cardId: ko.cardId },
+          "ko-effect",
+          this.getBattleAccess(),
+        );
         return true;
       },
       playCharacterFromDiscard: (seatId, discardIndex, options) => {
@@ -2382,6 +2592,36 @@ export default class OnePieceBattleServer implements Party.Server {
     sourceUid: string,
     sourceSeat: OnePieceBattleSeatId,
   ) {
+    // Annulation d'effets (Marshall D. Teach OP09-093 + Leader Teach
+    // OP09-081). On bloque le hook on-play si :
+    //   • le seat source a `ownPlayedEffectsCancelledPassive` (Leader Teach
+    //     passif "Vos effets [Jouée] sont annulés") — toujours actif.
+    //   • l'adversaire a activé le passif/active "annule effets [Jouée]
+    //     adverses" (Marshall Leader OP09-081 active, OP09-093 cible 1).
+    //   • l'uid source est dans le set `cancelledEffectUidsThisTurn` du
+    //     seat (Marshall D. Teach OP09-093 cible 1 leader/perso).
+    const seat = this.seats[sourceSeat];
+    const oppSeatId: OnePieceBattleSeatId =
+      sourceSeat === "p1" ? "p2" : "p1";
+    const opp = this.seats[oppSeatId];
+    if (hook === "on-play") {
+      if (seat?.ownPlayedEffectsCancelledPassive) {
+        this.pushLog(
+          `Effet [Jouée] annulé (passif Leader Teach).`,
+        );
+        return;
+      }
+      if (opp?.oppPlayedEffectsCancelledByMe) {
+        this.pushLog(
+          `Effet [Jouée] annulé (active Leader Teach adverse).`,
+        );
+        return;
+      }
+    }
+    if (seat?.cancelledEffectUidsThisTurn.has(sourceUid)) {
+      this.pushLog(`Effet annulé (Marshall D. Teach).`);
+      return;
+    }
     const ctx: EffectContext = {
       hook,
       sourceUid,
@@ -2427,6 +2667,12 @@ export default class OnePieceBattleServer implements Party.Server {
   ): boolean {
     const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
     if (hasKeyword(meta?.effect, keyword)) return true;
+    // Mots-clés temporaires accordés par effet (Catarina Devon).
+    if (uid !== "leader") {
+      const seat = this.seats[seatId];
+      const c = seat?.characters.find((x) => x.uid === uid);
+      if (c?.tempKeywords?.includes(keyword)) return true;
+    }
     const granted = getGrantedKeywords(
       { seat: seatId, uid, cardId },
       this.getBattleAccess(),

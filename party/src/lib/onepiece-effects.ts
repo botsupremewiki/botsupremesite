@@ -302,6 +302,53 @@ export interface BattleEffectAccess {
    *  true si appliqué. */
   addNoBlockerThisTurn(seat: OnePieceBattleSeatId, uid: string): boolean;
 
+  /** Empêche un Persos d'attaquer jusqu'à la fin du prochain tour adverse
+   *  (Smoker ST19-001). Retourne true si appliqué. */
+  addCannotAttackUntilNextOppTurnEnd(
+    seat: OnePieceBattleSeatId,
+    uid: string,
+  ): boolean;
+
+  /** Marque un Persos pour que ses prochaines attaques ce tour empêchent
+   *  l'adversaire d'activer [Bloqueur] (ST21-003 Sanji). Retourne true si
+   *  appliqué. */
+  addNextAttackPreventsBlock(
+    seat: OnePieceBattleSeatId,
+    uid: string,
+  ): boolean;
+
+  /** Accorde un mot-clé temporaire à un Persos (Bloqueur, Double attaque,
+   *  Exil) jusqu'à la fin du prochain tour adverse (Catarina Devon
+   *  OP09-084). Retourne true si appliqué. */
+  grantTempKeyword(
+    seat: OnePieceBattleSeatId,
+    uid: string,
+    keyword: string,
+  ): boolean;
+
+  /** Annule les effets [Jouée] de l'adversaire jusqu'à la fin du prochain
+   *  tour adverse (Marshall D. Teach Leader OP09-081 active). */
+  cancelOpponentPlayedEffectsUntilEndOfTurn(seat: OnePieceBattleSeatId): void;
+
+  /** Annule les effets d'une cible Leader/Persos adverse pour ce tour
+   *  (Marshall D. Teach OP09-093). Le seat indique la cible (= adversaire
+   *  de la source). uid = "leader" ou uid d'un Persos. */
+  cancelEffectsOfTarget(seat: OnePieceBattleSeatId, uid: string): void;
+
+  /** Déclare la victoire d'un seat — mute la game à phase=ended et
+   *  désigne ce seat comme winner (Roger OP09-118 condition de victoire). */
+  declareWinFor(seat: OnePieceBattleSeatId, reason: string): void;
+
+  /** Marque la substitution KO comme utilisée ce tour pour un Persos
+   *  (tracker 1/turn — Cracker, futurs autres). */
+  markKoSubUsedThisTurn(seat: OnePieceBattleSeatId, uid: string): void;
+
+  /** Variante interne de koCharacter qui ne consulte PAS le registre
+   *  KO_SUBSTITUTES (évite les boucles infinies dans Monster qui
+   *  veut explicitement KO ce Persos sans déclencher sa propre
+   *  substitution). Toujours soumis aux KO_GUARDS d'immunité. */
+  koCharacterDirect(seat: OnePieceBattleSeatId, uid: string): boolean;
+
   /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
    *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
   peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
@@ -4704,25 +4751,23 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  jouée.) Quand votre adversaire active [Bloqueur], si vous ou votre
    *  adversaire n'avez plus de cartes dans votre Vie, vous remportez la
    *  partie.
-   *  (Simplification : on déclenche la condition de victoire chaque fois
-   *  qu'un Persos de Roger attaque ET que l'un des 2 joueurs a 0 Vie. La
-   *  trigger «adv active Bloqueur» n'a pas de hook dédié — on observe à
-   *  l'attaque pour cette implémentation.) */
-  "OP09-118": (ctx) => {
-    if (ctx.hook !== "on-attack") return;
-    const seat = ctx.battle.getSeat(ctx.sourceSeat);
-    const oppSeat: OnePieceBattleSeatId =
-      ctx.sourceSeat === "p1" ? "p2" : "p1";
-    const opp = ctx.battle.getSeat(oppSeat);
-    if (!seat || !opp) return;
-    if (seat.lifeCount === 0 || opp.lifeCount === 0) {
-      ctx.battle.log(
-        "Gol D. Roger : 0 Vie de l'un des joueurs détecté → victoire (effet partiellement implémenté, attendre que l'attaque touche pour l'effet officiel).",
-      );
-      // Note : implémentation simplifiée (logging seulement) — la
-      // condition de victoire automatique demanderait une mutation du
-      // state qui n'est pas exposée dans BattleEffectAccess.
-    }
+   *  Note : la win condition est câblée DIRECTEMENT dans handleBlock côté
+   *  serveur (pas via fireEffectFor) — cf. battle-onepiece.ts. Ce handler
+   *  reste défini pour documenter la sémantique. */
+  "OP09-118": (_ctx) => {
+    // Win condition triggered by handleBlock — pas d'action ici.
+  },
+
+  /** OP09-062 Nico Robin (Leader)
+   *  [Exil] (Quand cette carte inflige des dégâts, la carte cible est
+   *  placée dans la Défausse sans activer Déclenchement.) [En attaquant]
+   *  Vous pouvez défausser 1 carte de votre main ayant [...] (texte
+   *  scrapé tronqué — partie active manquante).
+   *  Note : [Exil] est câblé DIRECTEMENT dans takeLives côté serveur. La
+   *  partie active [En attaquant] reste à câbler quand le texte sera
+   *  complet. */
+  "OP09-062": (_ctx) => {
+    // [Exil] géré par takeLives — pas d'action ici.
   },
 
   /** ST15-001 Atmos
@@ -4849,6 +4894,344 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       -2,
     );
     ctx.battle.log("Stronger : Persos adverse -2 coût ce tour.");
+  },
+
+  // ─── BATCH 27 — Status flags et Catarina Devon ─────────────────────────
+
+  /** ST19-001 Smoker
+   *  [Jouée] Vous pouvez défausser 1 carte de type {Marine} noire de
+   *  votre main : Jusqu'à 2 Personnages adverses ayant un coût de 4 ou
+   *  moins ne peuvent pas attaquer jusqu'à la fin du prochain tour
+   *  adverse. (Filtre couleur «noire» omis — on filtre uniquement par
+   *  type Marine pour le coût discard.) */
+  "ST19-001": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST19-001",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt: "Smoker : défausse 1 carte Marine de ta main.",
+        params: { count: 1, requireType: "Marine" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      // Étape 1 : discard fait → ouvre 1ère cible.
+      if (ctx.choice.selection.handIndices && !ctx.choice.selection.targetUid) {
+        const discarded = ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        if (discarded.length === 0) {
+          ctx.battle.log(
+            "Smoker : pas de Marine défaussée, effet annulé.",
+          );
+          return;
+        }
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "ST19-001",
+          sourceUid: ctx.sourceUid,
+          kind: "ko-character",
+          prompt:
+            "Smoker : 1ère cible — Persos adverse ≤ 4 coût (cannot attack).",
+          params: { maxCost: 4 },
+          cancellable: true,
+        });
+        return;
+      }
+      // Étape 2 : 1ère cible reçue.
+      if (ctx.choice.selection.targetUid) {
+        const oppSeat: OnePieceBattleSeatId =
+          ctx.sourceSeat === "p1" ? "p2" : "p1";
+        ctx.battle.addCannotAttackUntilNextOppTurnEnd(
+          oppSeat,
+          ctx.choice.selection.targetUid,
+        );
+        ctx.battle.log("Smoker : Persos adverse 1 ne peut pas attaquer.");
+        // Ouvre 2ème cible via wrapper.
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "ST19-001-step2",
+          sourceUid: ctx.sourceUid,
+          kind: "ko-character",
+          prompt:
+            "Smoker : 2ème cible (peut être différente) — Persos adverse ≤ 4 coût.",
+          params: { maxCost: 4 },
+          cancellable: true,
+        });
+      }
+    }
+  },
+  // Step 2 wrapper.
+  "ST19-001-step2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    ctx.battle.addCannotAttackUntilNextOppTurnEnd(
+      oppSeat,
+      ctx.choice.selection.targetUid,
+    );
+    ctx.battle.log("Smoker : Persos adverse 2 ne peut pas attaquer.");
+  },
+
+  /** ST21-003 Sanji
+   *  [Jouée] Choisissez jusqu'à 1 de vos Personnages de type {Équipage de
+   *  Chapeau de paille} ayant 6000 de puissance ou plus. Si le Personnage
+   *  choisi attaque durant ce tour, votre adversaire ne peut pas activer
+   *  [Bloqueur]. */
+  "ST21-003": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-003",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Sanji ST21 : choisis 1 de tes Persos Chapeau ayant 6000+ power.",
+        params: {
+          allowLeader: false,
+          requireType: "Équipage de Chapeau de paille",
+        },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const targetUid = ctx.choice.selection.targetUid;
+      if (targetUid === "leader") return;
+      // Vérifie le power minimum 6000 côté server.
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const c = seat?.characters.find((x) => x.uid === targetUid);
+      if (!c) return;
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+      if (!meta || meta.kind !== "character" || meta.power < 6000) {
+        ctx.battle.log(
+          "Sanji ST21 : Persos < 6000 power, effet annulé.",
+        );
+        return;
+      }
+      ctx.battle.addNextAttackPreventsBlock(ctx.sourceSeat, targetUid);
+      ctx.battle.log(
+        "Sanji ST21 : si ce Persos attaque, l'adv ne peut pas activer [Bloqueur].",
+      );
+    }
+  },
+
+  /** OP09-084 Catarina Devon
+   *  [Activation : Principale] [Une fois par tour] Si votre Leader est
+   *  de type {Équipage de Barbe Noire}, ce Personnage gagne [Double
+   *  attaque], [Exil] ou [Bloqueur] jusqu'à la fin du prochain tour
+   *  adverse.
+   *  (Implémentation : on accorde toujours [Bloqueur] — le plus utile
+   *  défensivement. Une UI de choix viendrait ensuite.) */
+  "OP09-084": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isBN = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe noire"),
+      );
+      if (!isBN) {
+        ctx.battle.log(
+          "Catarina Devon : Leader pas Barbe Noire, effet annulé.",
+        );
+        return;
+      }
+      // Yes-no : OUI = Bloqueur / NON = Double attaque.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-084",
+        sourceUid: ctx.sourceUid,
+        kind: "yes-no",
+        prompt:
+          "Catarina Devon : OUI = [Bloqueur] / NON = [Double attaque] (jusqu'à fin du prochain tour adverse).",
+        params: {},
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const keyword =
+        ctx.choice.selection.yesNo === true ? "Bloqueur" : "Double attaque";
+      ctx.battle.grantTempKeyword(ctx.sourceSeat, ctx.sourceUid, keyword);
+      ctx.battle.log(
+        `Catarina Devon : gagne [${keyword}] jusqu'à fin du prochain tour adverse.`,
+      );
+    }
+  },
+
+  // ─── BATCH 29 — Effect cancellation + Roger ────────────────────────────
+
+  /** OP09-093 Marshall D. Teach (Char)
+   *  [Activation : Principale] [Une fois par tour] Si votre Leader est de
+   *  type {Équipage de Barbe Noire} et que ce Personnage a été joué ce
+   *  tour, annulez les effets de jusqu'à 1 Leader adverse pour tout le
+   *  tour. Puis, annulez les effets de jusqu'à 1 Personnage adverse et
+   *  empêchez-le d'attaquer jusqu'à la fin du prochain tour adverse. */
+  "OP09-093": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isBN = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe noire"),
+      );
+      if (!isBN) {
+        ctx.battle.log(
+          "Marshall D. Teach : Leader pas Barbe Noire, effet annulé.",
+        );
+        return;
+      }
+      // 1ère étape : annule effets du Leader adverse pour ce tour.
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.cancelEffectsOfTarget(oppSeat, "leader");
+      ctx.battle.log(
+        "Marshall D. Teach : effets du Leader adverse annulés ce tour.",
+      );
+      // 2ème étape : choix d'un Persos adverse pour cancel + cannot attack.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-093",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Marshall D. Teach : choisis 1 Persos adverse (effets annulés + cannot attack).",
+        params: {},
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const targetUid = ctx.choice.selection.targetUid;
+      ctx.battle.cancelEffectsOfTarget(oppSeat, targetUid);
+      ctx.battle.addCannotAttackUntilNextOppTurnEnd(oppSeat, targetUid);
+      ctx.battle.log(
+        "Marshall D. Teach : Persos adverse — effets annulés + cannot attack.",
+      );
+    }
+  },
+
+  /** OP09-081 Marshall D. Teach (Leader)
+   *  Vos effets [Jouée] sont annulés. (Passif — câblé en setup via
+   *  ownPlayedEffectsCancelledPassive.)
+   *  [Activation : Principale] Vous pouvez défausser 1 carte de votre main
+   *  : Les effets [Jouée] de votre adversaire sont annulés jusqu'à la fin
+   *  du prochain tour adverse. */
+  "OP09-081": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.handSize < 1) {
+        ctx.battle.log("Leader Teach : main vide, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-081",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Leader Teach : défausse 1 carte de ta main pour annuler les [Jouée] adverses.",
+        params: { count: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      ctx.battle.cancelOpponentPlayedEffectsUntilEndOfTurn(ctx.sourceSeat);
+      ctx.battle.log(
+        "Leader Teach : effets [Jouée] adverses annulés jusqu'à fin du prochain tour adverse.",
+      );
+    }
+  },
+
+  // ─── BATCH 30 — Roger win condition + Luffy Leader cost+1 + Gordon ─────
+
+  /** OP09-061 Monkey D. Luffy (Leader)
+   *  [DON!! x1] Augmentez de +1 le coût de tous vos Personnages.
+   *  (Implémentation simplifiée : passif activé si le Leader a 1+ DON
+   *  attachée. Le hook on-activate-main n'est pas approprié — c'est un
+   *  passif. On évalue à la pose d'un Persos via fireEffectFor on-play —
+   *  NOT, ça ne s'applique qu'à la résolution du coût qui est server-side.
+   *  Ici on utilise plutôt un passif sur tous les calculs de coût.
+   *
+   *  Implémentation pragmatique : à chaque tour, on applique un costBuff
+   *  +1 sur tous les Persos en jeu via on-turn-start. Pas idéal mais
+   *  fonctionnel pour le ciblage de cartes type Tsuru.) */
+  "OP09-061": (ctx) => {
+    if (ctx.hook !== "on-turn-start") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    if (!seat || seat.leaderAttachedDon < 1) return;
+    for (const c of seat.characters) {
+      ctx.battle.addCostBuff(
+        { kind: "character", seat: ctx.sourceSeat, uid: c.uid },
+        1,
+      );
+    }
+    ctx.battle.log(
+      "Luffy Leader : [DON x1] +1 coût appliqué à tes Persos en jeu.",
+    );
+  },
+
+  /** ST16-002 Gordon
+   *  [Attaque adverse] Vous pouvez défausser autant de cartes de type
+   *  {Musique} de votre main que vous le voulez. Pour chaque carte
+   *  défaussée, votre Leader ou 1 de vos Personnages gagne +1000 de
+   *  puissance pour tout le combat.
+   *  (Implémentation simplifiée : on déclenche au moment de la défense
+   *  via le hook on-activate-main du joueur — il décide combien défausser.
+   *  Une intégration vraiment counter-step demanderait un hook on-defense.) */
+  "ST16-002": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST16-002",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Gordon : défausse jusqu'à 3 cartes Musique de ta main pour +1000 chacune.",
+        params: { count: 3, requireType: "Musique" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const discarded = ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      if (discarded.length === 0) {
+        ctx.battle.log("Gordon : aucune Musique défaussée.");
+        return;
+      }
+      const buff = discarded.length * 1000;
+      ctx.battle.addPowerBuff(
+        { kind: "leader", seat: ctx.sourceSeat },
+        buff,
+      );
+      ctx.battle.log(
+        `Gordon : Leader +${buff} (${discarded.length} Musique défaussée(s)).`,
+      );
+    }
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───
@@ -5087,6 +5470,109 @@ export const LEAVE_FIELD_LISTENERS: Record<string, LeaveFieldListener> = {
     );
   },
 };
+
+// ─── Registre des substitutions de KO ───────────────────────────────────
+// Quand un Persos serait KO (par effet ou par combat), le moteur consulte
+// ce registre AVANT d'appliquer le KO. Si une substitution s'applique,
+// elle est exécutée à la place et le KO original est annulé.
+
+export type KoSubstituteContext = {
+  // Cible originelle qui devait être KO.
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string };
+  // Source du KO.
+  source: "combat" | "effect";
+  // Seat propriétaire de la carte qui possède la substitution.
+  modSourceSeat: OnePieceBattleSeatId;
+  // Uid de la carte source dans son seat (peut être la cible elle-même
+  // pour Cracker, ou un autre Persos pour Monster).
+  modSourceUid: string;
+  battle: BattleEffectAccess;
+};
+
+/** Substitution KO. Retourne true si la substitution a été appliquée et
+ *  que le KO original doit être annulé ; false sinon. La substitution
+ *  est responsable d'effectuer ses propres mutations (mill life,
+ *  sacrifier soi-même, etc.). */
+export type KoSubstitute = (ctx: KoSubstituteContext) => boolean;
+
+export const KO_SUBSTITUTES: Record<string, KoSubstitute> = {
+  /** ST20-002 Charlotte Cracker
+   *  [Une fois par tour] Si ce Personnage est mis KO par un effet, vous
+   *  pouvez placer dans votre Défausse 1 carte du dessus de votre Vie à
+   *  la place. */
+  "ST20-002": (ctx) => {
+    if (ctx.source !== "effect") return false;
+    if (ctx.target.uid !== ctx.modSourceUid) return false; // Cracker = la cible
+    if (ctx.target.seat !== ctx.modSourceSeat) return false;
+    // Tracker 1/turn : on consulte le seat actuel pour koSubUsedThisTurn.
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return false;
+    const me = seat.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!me || me.koSubUsedThisTurn) return false;
+    if (seat.lifeCount === 0) return false;
+    // Effectue la substitution : mill 1 vie + marque le tracker.
+    ctx.battle.placeOpponentLifeOnDiscard(ctx.modSourceSeat);
+    ctx.battle.markKoSubUsedThisTurn(ctx.modSourceSeat, ctx.modSourceUid);
+    ctx.battle.log(
+      "Cracker : KO esquivé → 1 Vie placée dans la Défausse à la place.",
+    );
+    return true;
+  },
+
+  /** OP09-012 Monster
+   *  Si un de vos Personnages [Bonk Punch] est mis KO par un effet, vous
+   *  pouvez placer ce Personnage dans votre Défausse à la place.
+   *  → Quand un autre Persos [Bonk Punch] de mon seat est KO par effet,
+   *    ce Monster se sacrifie et le Bonk Punch survit. */
+  "OP09-012": (ctx) => {
+    if (ctx.source !== "effect") return false;
+    if (ctx.target.seat !== ctx.modSourceSeat) return false;
+    if (ctx.target.uid === ctx.modSourceUid) return false; // pas Monster lui-même
+    const targetMeta = ONEPIECE_BASE_SET_BY_ID.get(ctx.target.cardId);
+    if (targetMeta?.name !== "Bonk Punch") return false;
+    // Sacrifice Monster à la place du Bonk Punch.
+    // On utilise koCharacter sur Monster — mais ça re-ouvrirait la
+    // substitution → boucle. On expose une méthode "koCharacterDirect"
+    // qui bypass les substitutes.
+    ctx.battle.koCharacterDirect(ctx.modSourceSeat, ctx.modSourceUid);
+    ctx.battle.log(
+      "Monster : sacrifié pour sauver un Persos [Bonk Punch].",
+    );
+    return true;
+  },
+};
+
+/** Évalue toutes les substitutions de KO. Si une retourne true, la KO
+ *  originale doit être annulée. Vérifie les Persos de l'owner du target
+ *  (auto-substitute) ET les autres Persos du même seat. */
+export function fireKoSubstitutes(
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string },
+  source: "combat" | "effect",
+  battle: BattleEffectAccess,
+): boolean {
+  const seat = battle.getSeat(target.seat);
+  if (!seat) return false;
+  // Itère sur tous les Persos du même seat (incluant la cible elle-même
+  // pour les substitutions auto type Cracker).
+  for (const c of seat.characters) {
+    const num = cardNumberOf(c.cardId);
+    const sub = KO_SUBSTITUTES[num];
+    if (!sub) continue;
+    try {
+      const handled = sub({
+        target,
+        source,
+        modSourceSeat: target.seat,
+        modSourceUid: c.uid,
+        battle,
+      });
+      if (handled) return true;
+    } catch {
+      // ignore
+    }
+  }
+  return false;
+}
 
 /** Évalue tous les listeners on-leave-field pour une carte qui quitte. */
 export function fireOnLeaveField(
