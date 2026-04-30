@@ -23,6 +23,7 @@ import {
   RUNETERRA_DISCARD_EFFECTS,
   RUNETERRA_IMBUE_EFFECTS,
   RUNETERRA_LAST_BREATH_EFFECTS,
+  RUNETERRA_PLAY_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
   getSpellTargetCount,
   getSpellTargetSide,
@@ -741,6 +742,20 @@ export function triggerDiscardEffect(
   return applySpellEffect(state, casterSeat, effect, null);
 }
 
+/** Phase 3.73 : déclenche l'effet on-summon d'un Unit si enregistré.
+ *  triggerSourceUid = uid de la unité fraîchement summonée (sert aux
+ *  effets type "buff-all-other-allies-round" qui doivent skip self). */
+export function triggerOnSummon(
+  state: InternalState,
+  cardCode: string,
+  casterSeat: 0 | 1,
+  summonedUid: string,
+): InternalState {
+  const effect = RUNETERRA_PLAY_EFFECTS[cardCode];
+  if (!effect) return state;
+  return applySpellEffect(state, casterSeat, effect, null, null, null, 0, summonedUid);
+}
+
 /** Phase 3.34 : helper qui bumpe alliesDiedThisRound (per-round) ET
  *  championCounters.alliesDied (per-game cumulé). Sert à tous les sites
  *  qui retirent une unité alliée du banc. À utiliser après avoir construit
@@ -1100,18 +1115,29 @@ export function playUnit(
   ];
   newPlayers[seatIdx] = updatedPlayer;
 
+  // Phase 3.73 : déclenche on-summon (RUNETERRA_PLAY_EFFECTS) si le
+  // cardCode du nouveau unit a une ability registrée. summonedUid permet
+  // aux effets « buff-all-other-allies » de skip self.
+  let stateAfterSummon: InternalState = {
+    ...state,
+    players: newPlayers,
+    activeSeatIdx: otherSeat(seatIdx),
+    consecutivePasses: 0,
+    log: [
+      ...state.log,
+      `${player.username} joue ${card.name} (coût ${card.cost}).`,
+    ],
+  };
+  stateAfterSummon = triggerOnSummon(
+    stateAfterSummon,
+    handCard.cardCode,
+    seatIdx,
+    handCard.uid,
+  );
+
   return {
     ok: true,
-    state: {
-      ...state,
-      players: newPlayers,
-      activeSeatIdx: otherSeat(seatIdx),
-      consecutivePasses: 0,
-      log: [
-        ...state.log,
-        `${player.username} joue ${card.name} (coût ${card.cost}).`,
-      ],
-    },
+    state: stateAfterSummon,
   };
 }
 
@@ -1705,6 +1731,7 @@ function applySpellEffect(
   targetUid2: string | null = null,
   targetUid3: string | null = null,
   spellChoice: number = 0,
+  triggerSourceUid: string | null = null,
 ): InternalState {
   if (!targetUid) return state;
   const oppSeat = otherSeat(casterSeat);
@@ -2950,6 +2977,41 @@ function applySpellEffect(
       );
       if (stateAfter.phase === "ended") return stateAfter;
       return drawCards(stateAfter, casterSeat, effect.drawCount).state;
+    }
+    case "buff-all-other-allies-round": {
+      // Phase 3.73 : +pwr/+hp round à tous les alliés du caster sauf le
+      // triggerSourceUid (la source du on-summon). Garen.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid === triggerSourceUid) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "create-card-in-hand": {
+      // Phase 3.73 : push un nouveau {uid, cardCode} dans la main.
+      // Capé à maxHand (sinon discard direct = no-op pour l'instant).
+      const cfgCH = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      if (player.hand.length >= cfgCH.maxHand) return state;
+      const newUid = `${casterSeat}-ch-${state.round}-${state.log.length}`;
+      newPlayers[casterSeat] = {
+        ...player,
+        hand: [...player.hand, { uid: newUid, cardCode: effect.cardCode }],
+      };
+      const cardName = getCard(effect.cardCode)?.name ?? effect.cardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [...state.log, `${player.username} crée ${cardName} dans sa main.`],
+      };
     }
     case "buff-ally-round-choice": {
       // Phase 3.71 : 01IO012. Choisit optionA (default) ou optionB selon

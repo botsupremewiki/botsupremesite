@@ -941,7 +941,7 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
     name: "Pokémon",
     tagline: "Pokémon TCG Pocket — set Puissance Génétique (266 cartes)",
     packPrice: 10_000,
-    packSize: 5,
+    packSize: 10,
     active: true,
     accent: "text-amber-300",
     border: "border-amber-400/40",
@@ -955,7 +955,7 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
     tagline:
       "One Piece TCG — clone fidèle Bandai. Combat complet (Bot + PvP + Ranked), 166 cartes en français (OP-09 + ST-15 à ST-21).",
     packPrice: 10_000,
-    packSize: 6,
+    packSize: 10,
     active: true,
     accent: "text-rose-300",
     border: "border-rose-400/40",
@@ -968,8 +968,8 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
     name: "League of Legends",
     tagline:
       "Legends of Runeterra — Set 1 « Fondations » (318 cartes FR — collection seulement, combat à venir)",
-    packPrice: 200,
-    packSize: 5,
+    packPrice: 10_000,
+    packSize: 10,
     active: true,
     accent: "text-sky-300",
     border: "border-sky-400/40",
@@ -1188,6 +1188,13 @@ export type RuneterraRarity =
   | "Rare"
   | "Epic"
   | "Champion"
+  // Variantes ultra-rares ajoutées hors-canon Riot pour aligner LoL sur
+  // Pokémon (★★/👑) et One Piece (P/TR). Ces cartes réutilisent l'image
+  // de la version standard avec un effet visuel CSS supplémentaire ;
+  // elles sont distinctes en collection (Yasuo Holographique ≠ Yasuo
+  // standard).
+  | "Holographic" // bordure rainbow shimmer — variante de chaque Champion
+  | "Prismatic" // bordure gold pulse + particules — variante de chaque Champion
   | "None"; // tokens / non-collectibles
 
 export type RuneterraSpellSpeed = "Burst" | "Fast" | "Slow" | "Focus";
@@ -1234,6 +1241,10 @@ export type RuneterraCard = {
   set: string; // "Set1"
   image?: string; // URL CDN Riot — carte avec cadre (gameAbsolutePath)
   fullArt?: string; // URL CDN Riot — illustration sans cadre (fullAbsolutePath)
+  // Pour les variantes Holographique/Prismatique : pointe vers la
+  // cardCode de la version standard. Ces cartes réutilisent l'image et
+  // les stats du parent, et sont rendues avec un effet CSS distinct.
+  foilOf?: string;
 };
 
 export type RuneterraCardData = RuneterraCard;
@@ -1838,6 +1849,14 @@ export type SpellEffect =
       optionA: { power: number; health: number };
       optionB: { power: number; health: number };
     }
+  // Phase 3.73 — On-summon triggers (PLAY).
+  // Sans cible : +pwr/+hp round à tous les alliés sur le banc SAUF la
+  // source du trigger (passée via triggerSourceUid à applySpellEffect).
+  // 01DE012 Garen on-summon.
+  | { type: "buff-all-other-allies-round"; power: number; health: number }
+  // Sans cible : push une carte (uid frais, cardCode donné) dans la
+  // main du caster. Token in hand. 01NX042 Katarina, 01DE006 Sergent.
+  | { type: "create-card-in-hand"; cardCode: string }
   // Phase 3.66
   // Sans cible : pioche count cartes. Stub minimal pour 01IO049 Rejet
   // (la mécanique de counter-spell vraie nécessite un spell stack avec
@@ -2412,6 +2431,34 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // mécanique de counter-spell nécessite un spell stack avec priorités
   // (hors scope), donc on donne au moins le bénéfice secondaire.
   "01IO049": { type: "draw-cards", count: 1 },
+
+  // ── Phase 3.73 (token spells créés par on-summon abilities)
+  // 01NX020T1 (Hache tournoyante, 0 Burst, créée par Draven on-summon
+  // ou Frappe). Effect simplifié : +1|+0 round à un allié (la portion
+  // « défaussez 1 carte » est skip — pas de discard cost system pour les
+  // tokens créés en main).
+  "01NX020T1": { type: "buff-ally-round", power: 1, health: 0 },
+};
+
+// ─── Play effects (Phase 3.73) ───────────────────────────────────────────
+// Effets déclenchés quand un Unit (typiquement un Champion) est invoqué
+// depuis la main. Le helper triggerOnSummon de l'engine est appelé à
+// la fin de playUnit, qui passe triggerSourceUid = uid du nouveau unit
+// pour que les effets puissent l'exclure (ex Garen +1|+1 « aux autres »).
+
+export const RUNETERRA_PLAY_EFFECTS: Record<string, SpellEffect> = {
+  // 01DE012 Garen : « Quand je suis invoqué, conférez +1|+1 aux autres
+  // alliés pour ce round. » → buff-all-other-allies-round (skip self).
+  "01DE012": { type: "buff-all-other-allies-round", power: 1, health: 1 },
+  // 01DE006 Sergent du Détachement : « Quand je suis invoqué, créez 1
+  // Pour Demacia ! dans votre main. »
+  "01DE006": { type: "create-card-in-hand", cardCode: "01DE035" },
+  // 01NX042 Katarina : « Quand je suis invoquée, créez 1 Dague mortelle
+  // fugace dans votre main. » (Fleeting non implémenté, juste push.)
+  "01NX042": { type: "create-card-in-hand", cardCode: "01NX043" },
+  // 01NX020 Draven : « Quand je suis invoqué ou Frappe : créez 1 Hache
+  // tournoyante dans votre main. » Portion on-summon ici, frappe TODO.
+  "01NX020": { type: "create-card-in-hand", cardCode: "01NX020T1" },
 };
 
 // ─── Discard effects (Phase 3.72) ────────────────────────────────────────
@@ -2576,6 +2623,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "insert-tokens-into-enemy-deck":
     case "deal-damage-enemy-nexus-fixed":
     case "draw-cards":
+    case "buff-all-other-allies-round":
+    case "create-card-in-hand":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";
@@ -3731,6 +3780,13 @@ export const OP_BATTLE_CONFIG = {
   maxCharacters: 5,
   /** Lieux max sur le terrain. */
   maxStages: 1,
+  /** Anti-AFK timers (ms). Si dépassés, l'action par défaut est forcée
+   *  côté serveur (auto end-turn / auto pass-defense / auto skip choice). */
+  turnTimeoutMs: 90_000,
+  defenseTimeoutMs: 30_000,
+  triggerTimeoutMs: 15_000,
+  choiceTimeoutMs: 30_000,
+  mulliganTimeoutMs: 30_000,
 } as const;
 
 export type OnePieceBattleSeatId = "p1" | "p2";
@@ -3914,9 +3970,12 @@ export type OnePieceBattleState = {
   // null sauf pendant la résolution d'un effet de carte qui demande un
   // choix au joueur (cible KO, carte à défausser, etc.).
   pendingChoice: OnePiecePendingChoice | null;
+  // Timestamp Unix ms : deadline du timer en cours (mulligan/tour/défense
+  // /trigger/choice). null si pas de timer actif. Le client affiche un
+  // décompte ; le serveur force l'action par défaut au passage de la
+  // deadline (anti-AFK).
+  deadlineMs: number | null;
 };
-
-export type OnePieceBattleClientMessage =
   // Mulligan : true = refait sa main une fois (1× max).
   | { type: "op-mulligan"; take: boolean }
   // Main phase actions
