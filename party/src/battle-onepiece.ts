@@ -634,8 +634,12 @@ export default class OnePieceBattleServer implements Party.Server {
     // tour" expirent à la fin du tour de l'attaquant (convention courante).
     seat.tempPowerBuffs.clear();
     seat.usedActivationsThisTurn.clear();
+    for (const c of seat.characters) c.costBuff = 0;
     const opponentSeat = seatId === "p1" ? "p2" : "p1";
     this.seats[opponentSeat]?.tempPowerBuffs.clear();
+    if (this.seats[opponentSeat]) {
+      for (const c of this.seats[opponentSeat]!.characters) c.costBuff = 0;
+    }
     this.pushLog(`${seat.username} termine son tour.`);
 
     // Passe au joueur suivant.
@@ -1880,7 +1884,11 @@ export default class OnePieceBattleServer implements Party.Server {
     }
     seat.tempPowerBuffs.clear();
     seat.usedActivationsThisTurn.clear();
+    for (const c of seat.characters) c.costBuff = 0;
     this.seats.p1?.tempPowerBuffs.clear();
+    if (this.seats.p1) {
+      for (const c of this.seats.p1.characters) c.costBuff = 0;
+    }
     this.pushLog(`${seat.username} termine son tour.`);
 
     if (this.seats.p1) {
@@ -1933,6 +1941,16 @@ export default class OnePieceBattleServer implements Party.Server {
           key,
           (s.tempPowerBuffs.get(key) ?? 0) + amount,
         );
+      },
+      addCostBuff: (ref: CardRef, amount: number) => {
+        // Le cost buff ne s'applique qu'aux Persos (le Leader n'a pas
+        // de cost). On le stocke dans `costBuff` du CardInPlay.
+        if (ref.kind !== "character") return;
+        const s = this.seats[ref.seat];
+        if (!s) return;
+        const c = s.characters.find((x) => x.uid === ref.uid);
+        if (!c) return;
+        c.costBuff = (c.costBuff ?? 0) + amount;
       },
       log: (line) => this.pushLog(line),
       requestChoice: (args) => {

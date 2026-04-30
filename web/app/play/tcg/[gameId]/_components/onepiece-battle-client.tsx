@@ -997,7 +997,11 @@ function PendingChoicePanel({
             .filter((c) => {
               const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
               if (!meta || !("cost" in meta)) return false;
-              if (maxCost !== null && meta.cost > maxCost) return false;
+              if (
+                maxCost !== null &&
+                meta.cost + (c.costBuff ?? 0) > maxCost
+              )
+                return false;
               if (maxPower !== null) {
                 const power =
                   ("power" in meta ? meta.power : 0) + c.attachedDon * 1000;
@@ -1054,7 +1058,11 @@ function PendingChoicePanel({
             .filter((c) => {
               const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
               if (!meta) return false;
-              if (maxCost !== null && "cost" in meta && meta.cost > maxCost)
+              if (
+                maxCost !== null &&
+                "cost" in meta &&
+                meta.cost + (c.costBuff ?? 0) > maxCost
+              )
                 return false;
               if (
                 onlyOwnType &&
@@ -1099,7 +1107,7 @@ function PendingChoicePanel({
               if (
                 maxCost !== null &&
                 "cost" in meta &&
-                meta.cost > maxCost
+                meta.cost + (c.costBuff ?? 0) > maxCost
               )
                 return false;
               if (maxPower !== null) {

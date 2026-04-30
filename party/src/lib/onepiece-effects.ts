@@ -128,6 +128,12 @@ export interface BattleEffectAccess {
    *  carte sur le board (Leader ou Persos). */
   addPowerBuff(ref: CardRef, amount: number): void;
 
+  /** Ajoute un modificateur de coût temporaire à un Persos (ou Leader,
+   *  ignored) pour ce tour. Utilisé par Tsuru, Hermep, Ice Age, Tashigi,
+   *  Van Auger pour réduire le coût d'un Persos adverse → permet de KO
+   *  ciblés ≤ X coût modifié. */
+  addCostBuff(ref: CardRef, amount: number): void;
+
   /** Pousse une ligne dans le journal du combat. */
   log(line: string): void;
 
@@ -517,22 +523,95 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     }
   },
 
-  /** OP02-106 Tsuru — [Jouée] -2 cost target. */
+  /** OP02-106 Tsuru
+   *  [Jouée] Réduisez de -2 le coût de jusqu'à 1 Personnage adverse pour
+   *  tout le tour. */
   "OP02-106": (ctx) => {
-    if (ctx.hook !== "on-play") return;
-    ctx.battle.log("Tsuru : effet [Jouée] descriptif (-2 cost — TODO PendingChoice).");
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP02-106",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Tsuru : choisis un Persos adverse à -2 coût pour ce tour.",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addCostBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -2,
+      );
+      ctx.battle.log("Tsuru : -2 coût pour ce tour.");
+    }
   },
 
-  /** OP02-113 Hermep — [En attaquant] -2 cost + conditional buff. */
+  /** OP02-113 Hermep
+   *  [En attaquant] Réduisez de -2 le coût de jusqu'à 1 Personnage adverse
+   *  pour tout le tour. (Le bonus +2000 si Persos coût 0 est skip — il
+   *  faudrait un check après le cost buff sur même cible.) */
   "OP02-113": (ctx) => {
-    if (ctx.hook !== "on-attack") return;
-    ctx.battle.log("Hermep : effet [En attaquant] descriptif (TODO PendingChoice).");
+    if (ctx.hook === "on-attack") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP02-113",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Hermep : choisis un Persos adverse à -2 coût pour ce tour.",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addCostBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -2,
+      );
+      ctx.battle.log("Hermep : -2 coût pour ce tour.");
+    }
   },
 
-  /** OP02-117 Ice Age (Event) — -5 cost target. */
+  /** OP02-117 Ice Age (Event)
+   *  [Principale] Réduisez de -5 le coût de jusqu'à 1 Personnage adverse
+   *  pour tout le tour. */
   "OP02-117": (ctx) => {
-    if (ctx.hook !== "on-play") return;
-    ctx.battle.log("Ice Age : effet [Principale] descriptif (TODO PendingChoice).");
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP02-117",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Ice Age : choisis un Persos adverse à -5 coût pour ce tour.",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addCostBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -5,
+      );
+      ctx.battle.log("Ice Age : -5 coût pour ce tour.");
+    }
   },
 
   /** OP03-009 Haruta
@@ -2131,6 +2210,88 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     ctx.battle.log(
       "Baggy : regarde le top 3 du deck (réorganisation manuelle non implémentée).",
     );
+  },
+
+  // ─── BATCH 13 — cost-buffs ──────────────────────────────────────────────
+
+  /** ST19-003 Tashigi
+   *  [Jouée] Si votre Leader est [Smoker], réduisez de -4 le coût de
+   *  jusqu'à 1 Personnage adverse pour tout le tour. */
+  "ST19-003": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      if (leaderMeta?.name !== "Smoker") {
+        ctx.battle.log("Tashigi : Leader pas Smoker, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST19-003",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Tashigi : choisis un Persos adverse à -4 coût pour ce tour.",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addCostBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -4,
+      );
+      ctx.battle.log("Tashigi : -4 coût pour ce tour.");
+    }
+  },
+
+  /** OP09-083 Van Auger
+   *  [Activation : Principale] Vous pouvez épuiser ce Personnage : Si
+   *  votre Leader est de type {Équipage de Barbe Noire}, réduisez de
+   *  -3 le coût de jusqu'à 1 Personnage adverse pour tout le tour. */
+  "OP09-083": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isBN = leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe noire"),
+      );
+      if (!isBN) {
+        ctx.battle.log("Van Auger : Leader pas Barbe Noire, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-083",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Van Auger : choisis un Persos adverse à -3 coût pour ce tour.",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addCostBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -3,
+      );
+      ctx.battle.log("Van Auger : -3 coût pour ce tour.");
+    }
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───

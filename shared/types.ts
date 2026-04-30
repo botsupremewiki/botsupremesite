@@ -2971,6 +2971,11 @@ export type OnePieceBattleCardInPlay = {
   // Vrai si la carte est arrivée ce tour — interdit d'attaquer (sauf
   // [Initiative]/Rush).
   playedThisTurn: boolean;
+  // Modificateur de coût temporaire (pour ce tour). Reset à end-turn.
+  // Utilisé par les filtres maxCost des PendingChoice (Tsuru, Hermep,
+  // Ice Age, etc. réduisent le coût pour permettre des KO ciblés).
+  // Effective cost = meta.cost + (costBuff ?? 0). Peut être négatif.
+  costBuff?: number;
 };
 
 export type OnePieceBattlePlayerPublicState = {
