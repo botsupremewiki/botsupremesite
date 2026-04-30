@@ -3034,14 +3034,28 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  [Contre] Jusqu'à 1 de vos Leaders ou Personnages gagne +2000 de
    *  puissance pour tout le combat. */
   "OP09-116": (ctx) => {
-    if (ctx.hook !== "on-play") return;
-    // Counter Event : auto-buff +2000 sur le défenseur courant. Si pas
-    // d'attaque pendante, le client filtre déjà mais on protège.
-    ctx.battle.addPowerBuff(
-      { kind: "leader", seat: ctx.sourceSeat },
-      2000,
-    );
-    ctx.battle.log("Les miracles : +2000 (Counter).");
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-116",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Les miracles : choisis Leader/Persos pour +2000 ce combat.",
+        params: { allowLeader: true, amount: 2000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      ctx.battle.addPowerBuff(ref, 2000);
+      ctx.battle.log("Les miracles : +2000 (Counter).");
+    }
   },
 
   /** ST16-001 Uta
@@ -3651,9 +3665,9 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 
   /** ST21-016 Gum Gum Dawn Whip (Event)
    *  [Principale] Jusqu'à 1 de vos Leaders ou Personnages gagne +1000 de
-   *  puissance pour tout le tour. (Le second clause «1 char adv ne peut
-   *  activer Bloqueur» nécessite un nouveau status — pour ce batch on
-   *  applique seulement le buff +1000.) */
+   *  puissance pour tout le tour. Puis, jusqu'à 1 Personnage adverse
+   *  ayant 4000 de puissance ou moins ne peut pas activer [Bloqueur] pour
+   *  tout le tour. */
   "ST21-016": (ctx) => {
     if (ctx.hook === "on-play") {
       ctx.battle.requestChoice({
@@ -3668,7 +3682,8 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       return;
     }
     if (ctx.hook === "on-choice-resolved" && ctx.choice) {
-      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      if (ctx.choice.skipped) return;
+      if (!ctx.choice.selection.targetUid) return;
       const target = ctx.choice.selection.targetUid;
       const ref: CardRef =
         target === "leader"
@@ -3676,7 +3691,29 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
           : { kind: "character", seat: ctx.sourceSeat, uid: target };
       ctx.battle.addPowerBuff(ref, 1000);
       ctx.battle.log("Gum Gum Dawn Whip : +1000 ce tour.");
+      // Sub-effet : 1 char adv ≤ 4000 power → noBlocker ce tour.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-016-noblock",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Gum Gum Dawn Whip : choisis 1 char adv ≤ 4000 power pour noBlocker ce tour.",
+        params: { maxPower: 4000 },
+        cancellable: true,
+      });
     }
+  },
+  // Wrapper : applique le noBlocker sur la cible adv.
+  "ST21-016-noblock": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    ctx.battle.addNoBlockerThisTurn(oppSeat, ctx.choice.selection.targetUid);
+    ctx.battle.log(
+      "Gum Gum Dawn Whip : char adv ne peut pas activer [Bloqueur] ce tour.",
+    );
   },
 
   // ─── BATCH 20 — Stages, counters et events ─────────────────────────────
@@ -3800,13 +3837,26 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         );
         return;
       }
-      // Auto-cible le Leader pour rapidité (counter event = défense
-      // d'urgence). Pas de choix joueur dans ce contexte.
-      ctx.battle.addPowerBuff(
-        { kind: "leader", seat: ctx.sourceSeat },
-        2000,
-      );
-      ctx.battle.log("Gum Gum Cuatro : Leader +2000 (Counter ODYSSEY).");
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-039",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Gum Gum Cuatro : choisis Leader/Persos pour +2000 ce tour.",
+        params: { allowLeader: true, amount: 2000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      ctx.battle.addPowerBuff(ref, 2000);
+      ctx.battle.log("Gum Gum Cuatro : +2000 (Counter ODYSSEY).");
     }
   },
 
@@ -3814,17 +3864,78 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  [Contre] Jusqu'à 1 de vos Leaders ou Personnages gagne +2000 de
    *  puissance pour tout le combat. Puis, si votre Leader est de type
    *  {ODYSSEY} et que vous avez 2 Personnages ou plus épuisés, redressez
-   *  jusqu'à 2 de vos Personnages.
-   *  (Simplification : on applique seulement le buff +2000 au Leader. Le
-   *  redressement de 2 Persos demande 2 choices — skip pour ce batch.) */
+   *  jusqu'à 2 de vos Personnages. */
   "OP09-041": (ctx) => {
     if (ctx.hook === "on-play") {
-      ctx.battle.addPowerBuff(
-        { kind: "leader", seat: ctx.sourceSeat },
-        2000,
-      );
-      ctx.battle.log("Soul Franky : Leader +2000 (Counter).");
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-041",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Soul Franky : choisis Leader/Persos pour +2000 ce combat.",
+        params: { allowLeader: true, amount: 2000 },
+        cancellable: true,
+      });
+      return;
     }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      if (!ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      ctx.battle.addPowerBuff(ref, 2000);
+      ctx.battle.log("Soul Franky : +2000 (Counter).");
+      // Sub-effet conditionnel : ODYSSEY + 2 rested → untap 2 Persos.
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isOdyssey = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("odyssey"),
+      );
+      const restedCount = seat?.characters.filter((c) => c.rested).length ?? 0;
+      if (!isOdyssey || restedCount < 2) return;
+      // Ouvre la 1ère cible untap via wrapper distinct pour disambiguer.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-041-untap1",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Soul Franky : choisis 1er Persos épuisé à redresser (1/2).",
+        params: { allowLeader: false, onlyRested: true },
+        cancellable: true,
+      });
+    }
+  },
+  // Step 2 : 1ère cible untap reçue → applique + ouvre 2ème.
+  "OP09-041-untap1": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    if (ctx.choice.selection.targetUid === "leader") return;
+    ctx.battle.untapCharacter(ctx.sourceSeat, ctx.choice.selection.targetUid);
+    ctx.battle.log("Soul Franky : 1er Persos redressé.");
+    ctx.battle.requestChoice({
+      seat: ctx.sourceSeat,
+      sourceCardNumber: "OP09-041-untap2",
+      sourceUid: ctx.sourceUid,
+      kind: "buff-target",
+      prompt:
+        "Soul Franky : choisis 2ème Persos épuisé à redresser (2/2).",
+      params: { allowLeader: false, onlyRested: true },
+      cancellable: true,
+    });
+  },
+  // Step 3 : 2ème cible untap reçue → applique.
+  "OP09-041-untap2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    if (ctx.choice.selection.targetUid === "leader") return;
+    ctx.battle.untapCharacter(ctx.sourceSeat, ctx.choice.selection.targetUid);
+    ctx.battle.log("Soul Franky : 2ème Persos redressé.");
   },
 
   /** OP09-115 Ice Block Partisan (Event)
@@ -3857,17 +3968,67 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  [Contre] Jusqu'à 1 de vos Leaders ou Personnages gagne +3000 de
    *  puissance pour tout le combat. Puis, défaussez jusqu'à 2 cartes de
    *  votre main. Placez dans votre Défausse autant de cartes du dessus
-   *  de votre deck que précédemment défaussées.
-   *  (Simplification : on applique le +3000. La sub-mécanique discard+mill
-   *  demande des choix supplémentaires — skip pour ce batch.) */
+   *  de votre deck que précédemment défaussées. */
   "OP09-059": (ctx) => {
     if (ctx.hook === "on-play") {
-      ctx.battle.addPowerBuff(
-        { kind: "leader", seat: ctx.sourceSeat },
-        3000,
-      );
-      ctx.battle.log("Tour de passe-passe brouillard : Leader +3000.");
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-059",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Tour brouillard : choisis Leader/Persos pour +3000 ce combat.",
+        params: { allowLeader: true, amount: 3000 },
+        cancellable: true,
+      });
+      return;
     }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      if (!ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      ctx.battle.addPowerBuff(ref, 3000);
+      ctx.battle.log("Tour brouillard : +3000.");
+      // Sub-effet : discard jusqu'à 2 + mill X (= N défaussées).
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-059-discard",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Tour brouillard : défausse jusqu'à 2 cartes (l'adv mille N cartes).",
+        params: { count: 2 },
+        cancellable: true,
+      });
+    }
+  },
+  // Wrapper : après discard, mill N de l'adv vers sa propre Défausse.
+  "OP09-059-discard": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped) return;
+    if (!ctx.choice.selection.handIndices) return;
+    const discarded = ctx.battle.discardFromHand(
+      ctx.sourceSeat,
+      ctx.choice.selection.handIndices,
+    );
+    const n = discarded.length;
+    if (n === 0) return;
+    // L'effet officiel : "Placez dans VOTRE Défausse autant de cartes du
+    // dessus de VOTRE deck" — c'est self-mill. Pas l'adv. On mill notre
+    // propre deck.
+    ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      n,
+      "___NEVER_MATCH___", // type filter qui ne matche jamais
+      "discard", // → tout va à la défausse
+    );
+    ctx.battle.log(
+      `Tour brouillard : ${n} carte(s) de la main défaussée(s) + ${n} carte(s) du deck → Défausse.`,
+    );
   },
 
   /** OP09-078 Gum Gum Gigant (Event Counter)
@@ -3910,17 +4071,36 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       return;
     }
     if (ctx.hook === "on-choice-resolved" && ctx.choice) {
-      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
-      ctx.battle.discardFromHand(
-        ctx.sourceSeat,
-        ctx.choice.selection.handIndices,
-      );
-      ctx.battle.addPowerBuff(
-        { kind: "leader", seat: ctx.sourceSeat },
-        4000,
-      );
-      ctx.battle.drawCards(ctx.sourceSeat, 2);
-      ctx.battle.log("Gum Gum Gigant : DON-2 + discard 1 → +4000 + draw 2.");
+      if (ctx.choice.skipped) return;
+      // Étape 1 : discard fait → ouvre buff-target.
+      if (ctx.choice.selection.handIndices && !ctx.choice.selection.targetUid) {
+        ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "OP09-078",
+          sourceUid: ctx.sourceUid,
+          kind: "buff-target",
+          prompt:
+            "Gum Gum Gigant : choisis Leader/Persos pour +4000 ce combat.",
+          params: { allowLeader: true, amount: 4000 },
+          cancellable: false,
+        });
+        return;
+      }
+      // Étape 2 : cible buff reçue → applique + draw 2.
+      if (ctx.choice.selection.targetUid) {
+        const target = ctx.choice.selection.targetUid;
+        const ref: CardRef =
+          target === "leader"
+            ? { kind: "leader", seat: ctx.sourceSeat }
+            : { kind: "character", seat: ctx.sourceSeat, uid: target };
+        ctx.battle.addPowerBuff(ref, 4000);
+        ctx.battle.drawCards(ctx.sourceSeat, 2);
+        ctx.battle.log("Gum Gum Gigant : +4000 + 2 cartes piochées.");
+      }
     }
   },
 
@@ -4250,8 +4430,7 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  [Jouée] DON!! -1 (Vous pouvez renvoyer à votre deck DON!! le nombre
    *  indiqué de cartes DON!! de votre terrain.) : Jouez jusqu'à 1 carte
    *  Personnage de type {Équipage de Chapeau de paille} violette de votre
-   *  main ayant un coût de 5 ou moins. (Filtre couleur violette omis — on
-   *  filtre uniquement par type.) */
+   *  main ayant un coût de 5 ou moins. */
   "ST18-005": (ctx) => {
     if (ctx.hook === "on-play") {
       const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
@@ -4265,10 +4444,11 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         sourceUid: ctx.sourceUid,
         kind: "play-from-hand",
         prompt:
-          "Luffytaro : choisis 1 Persos Chapeau de paille ≤ 5 à jouer.",
+          "Luffytaro : choisis 1 Persos Chapeau de paille violet ≤ 5 à jouer.",
         params: {
           maxCost: 5,
           requireType: "Équipage de Chapeau de paille",
+          requireColor: "violet",
         },
         cancellable: true,
       });
@@ -4497,8 +4677,7 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 
   /** ST19-002 Sengoku
    *  [Jouée] Vous pouvez défausser 2 cartes de type {Marine} noires de
-   *  votre main : Si votre Leader est de type {Marine}, piochez 3 cartes.
-   *  (Filtre couleur «noire» omis — on vérifie juste le type Marine.) */
+   *  votre main : Si votre Leader est de type {Marine}, piochez 3 cartes. */
   "ST19-002": (ctx) => {
     if (ctx.hook === "on-play") {
       const seat = ctx.battle.getSeat(ctx.sourceSeat);
@@ -4518,8 +4697,8 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         sourceUid: ctx.sourceUid,
         kind: "discard-card",
         prompt:
-          "Sengoku : défausse 2 cartes Marine de ta main pour piocher 3.",
-        params: { count: 2, requireType: "Marine" },
+          "Sengoku : défausse 2 cartes Marine noires de ta main pour piocher 3.",
+        params: { count: 2, requireType: "Marine", requireColor: "noir" },
         cancellable: true,
       });
       return;
@@ -4965,8 +5144,7 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
    *  [Jouée] Vous pouvez défausser 1 carte de type {Marine} noire de
    *  votre main : Jusqu'à 2 Personnages adverses ayant un coût de 4 ou
    *  moins ne peuvent pas attaquer jusqu'à la fin du prochain tour
-   *  adverse. (Filtre couleur «noire» omis — on filtre uniquement par
-   *  type Marine pour le coût discard.) */
+   *  adverse. */
   "ST19-001": (ctx) => {
     if (ctx.hook === "on-play") {
       ctx.battle.requestChoice({
@@ -4974,8 +5152,8 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         sourceCardNumber: "ST19-001",
         sourceUid: ctx.sourceUid,
         kind: "discard-card",
-        prompt: "Smoker : défausse 1 carte Marine de ta main.",
-        params: { count: 1, requireType: "Marine" },
+        prompt: "Smoker : défausse 1 carte Marine noire de ta main.",
+        params: { count: 1, requireType: "Marine", requireColor: "noir" },
         cancellable: true,
       });
       return;

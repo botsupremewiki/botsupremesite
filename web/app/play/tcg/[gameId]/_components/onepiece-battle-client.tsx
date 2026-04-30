@@ -957,6 +957,13 @@ function PendingChoicePanel({
       ? choice.params.excludeName
       : null;
   const requireTrigger = choice.params.requireTrigger === true;
+  // Filtre couleur (Sengoku "Marine noire", Smoker "Marine noire",
+  // Luffytaro "Chapeau de paille violette"). Match par sous-string sur
+  // meta.color (ex. "noir", "bleu", "rouge", "vert", "violet", "jaune").
+  const requireColor =
+    typeof choice.params.requireColor === "string"
+      ? choice.params.requireColor
+      : null;
   const discardCount =
     typeof choice.params.count === "number" ? choice.params.count : 1;
   const allowLeader = choice.params.allowLeader !== false;
@@ -1143,6 +1150,7 @@ function PendingChoicePanel({
           count={discardCount}
           requireTrigger={requireTrigger}
           requireType={onlyOwnType}
+          requireColor={requireColor}
           excludeName={excludeName}
           onConfirm={(handIndices) =>
             send({
@@ -1169,6 +1177,13 @@ function PendingChoicePanel({
                 onlyOwnType &&
                 !meta.types.some((t) =>
                   t.toLowerCase().includes(onlyOwnType.toLowerCase()),
+                )
+              )
+                return false;
+              if (
+                requireColor &&
+                !meta.color.some((c) =>
+                  c.toLowerCase().includes(requireColor.toLowerCase()),
                 )
               )
                 return false;
@@ -1210,6 +1225,13 @@ function PendingChoicePanel({
                 onlyOwnType &&
                 !meta.types.some((t) =>
                   t.toLowerCase().includes(onlyOwnType.toLowerCase()),
+                )
+              )
+                return false;
+              if (
+                requireColor &&
+                !meta.color.some((c) =>
+                  c.toLowerCase().includes(requireColor.toLowerCase()),
                 )
               )
                 return false;
@@ -1273,6 +1295,7 @@ function DiscardCardPicker({
   count,
   requireTrigger,
   requireType,
+  requireColor,
   excludeName,
   onConfirm,
 }: {
@@ -1280,6 +1303,7 @@ function DiscardCardPicker({
   count: number;
   requireTrigger: boolean;
   requireType: string | null;
+  requireColor: string | null;
   excludeName: string | null;
   onConfirm: (handIndices: number[]) => void;
 }) {
@@ -1304,6 +1328,16 @@ function DiscardCardPicker({
         )
       )
         return false;
+      if (
+        requireColor &&
+        meta.kind !== "don" &&
+        !meta.color.some((c: string) =>
+          c.toLowerCase().includes(requireColor.toLowerCase()),
+        )
+      )
+        return false;
+      // Skip DON cards si filtre couleur (DON n'a pas de couleur).
+      if (requireColor && meta.kind === "don") return false;
       return true;
     });
 
