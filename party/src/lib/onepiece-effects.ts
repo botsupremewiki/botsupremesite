@@ -4484,6 +4484,176 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     if (uid) ctx.battle.log("Marco : ré-incarne épuisé depuis la Défausse.");
   },
 
+  // ─── BATCH 24 — Forced opp choice + events simplifiés ──────────────────
+
+  /** ST20-005 Charlotte Linlin
+   *  [Jouée] Vous pouvez défausser 1 carte de votre main : Votre adversaire
+   *  effectue l'un des choix suivants :
+   *  • Votre adversaire défausse 2 cartes de sa main.
+   *  • Votre adversaire place dans sa Défausse 1 carte du dessus de sa Vie. */
+  "ST20-005": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.handSize < 1) {
+        ctx.battle.log("Linlin : main vide, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST20-005",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt: "Linlin : défausse 1 carte de ta main pour activer l'effet.",
+        params: { count: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      // Étape 1 : discard fait → ouvre yes-no à l'adversaire.
+      if (ctx.choice.selection.handIndices) {
+        ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        const oppSeat: OnePieceBattleSeatId =
+          ctx.sourceSeat === "p1" ? "p2" : "p1";
+        ctx.battle.requestChoice({
+          seat: oppSeat,
+          sourceCardNumber: "ST20-005-step2",
+          sourceUid: ctx.sourceUid,
+          kind: "yes-no",
+          prompt:
+            "Linlin (forcé) : OUI = défausse 2 cartes / NON = perds 1 Vie.",
+          params: {},
+          cancellable: false,
+        });
+        return;
+      }
+    }
+  },
+  // Step 2 : l'adversaire répond yes-no → on applique selon le choix.
+  "ST20-005-step2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped) return;
+    // ctx.sourceSeat est celui qui a posé Linlin ; ctx.choice est résolu
+    // par l'adversaire (oppSeat). Pour appliquer les mutations à l'adv,
+    // on calcule oppSeat ici.
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    if (ctx.choice.selection.yesNo === true) {
+      // Adversaire défausse 2 (random pour simplification).
+      ctx.battle.discardRandom(oppSeat, 2);
+      ctx.battle.log("Linlin : adversaire défausse 2 cartes.");
+    } else {
+      // Adversaire perd 1 vie (top of life → discard).
+      ctx.battle.placeOpponentLifeOnDiscard(oppSeat);
+      ctx.battle.log("Linlin : adversaire perd 1 Vie (→ Défausse).");
+    }
+  },
+
+  /** OP09-097 Tourbillon noir (Event Counter)
+   *  [Contre] Annulez les effets de jusqu'à 1 Leader ou Personnage adverse
+   *  et faites-lui perdre -4000 de puissance pour tout le tour.
+   *  (Simplification : la cancellation d'effet n'est pas implémentée — on
+   *  applique uniquement le -4000.) */
+  "OP09-097": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-097",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt:
+          "Tourbillon noir : choisis Leader/Persos adverse pour -4000 ce tour.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const targetUid = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        targetUid === "leader"
+          ? { kind: "leader", seat: oppSeat }
+          : { kind: "character", seat: oppSeat, uid: targetUid };
+      ctx.battle.addPowerBuff(ref, -4000);
+      ctx.battle.log("Tourbillon noir : -4000 cible adverse ce tour.");
+    }
+  },
+
+  /** OP09-098 Black Hole (Event)
+   *  [Principale] Si votre Leader est de type {Équipage de Barbe Noire},
+   *  annulez les effets de jusqu'à 1 Personnage adverse pour tout le tour.
+   *  Puis, si ce Personnage a un coût de 4 ou moins, mettez-le KO.
+   *  (Simplification : la cancellation d'effet n'est pas implémentée — on
+   *  applique uniquement le KO si coût ≤ 4.) */
+  "OP09-098": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isBN = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe noire"),
+      );
+      if (!isBN) {
+        ctx.battle.log("Black Hole : Leader pas Barbe Noire, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-098",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Black Hole : choisis 1 Persos adverse à KO si coût ≤ 4 (sinon ignoré).",
+        params: { maxCost: 4 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(oppSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Black Hole : Persos adverse ≤ 4 KO.");
+    }
+  },
+
+  /** OP09-018 Disparais (Event)
+   *  [Principale] Mettez KO jusqu'à 2 Personnages adverses ayant 4000 ou
+   *  moins de puissance combinée.
+   *  (Simplification : on KO 1 seul Persos ≤ 4000 power au lieu de 2
+   *  combinés, le ciblage 2-cibles avec contrainte combinée demande une
+   *  infra plus élaborée.) */
+  "OP09-018": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-018",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Disparais : KO 1 Persos adverse ≤ 4000 power (simplifié).",
+        params: { maxPower: 4000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(oppSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Disparais : Persos adverse ≤ 4000 KO.");
+    }
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
