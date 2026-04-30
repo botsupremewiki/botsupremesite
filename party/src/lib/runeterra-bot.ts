@@ -98,6 +98,8 @@ export function botAct(
     if (!effect) continue;
     const side = getSpellTargetSide(effect);
     let targetUid: string | null = null;
+    // Phase 3.40 : 2e cible pour sorts multi-target.
+    let targetUid2: string | null = null;
 
     if (side === "none") {
       // Phase 3.35 : skip les sorts qui ne servent à rien dans l'état
@@ -195,6 +197,38 @@ export function botAct(
           (a, b) => b.power + b.health - (a.power + a.health),
         )[0];
         targetUid = target.uid;
+      } else if (
+        effect.type === "buff-2-allies-permanent" ||
+        effect.type === "buff-2-allies-round"
+      ) {
+        // Phase 3.40 : 2 alliés distincts. Skip si <2 alliés.
+        if (player.bench.length < 2) continue;
+        // Préfère les 2 plus gros (boost plus impactant).
+        const sorted = [...player.bench].sort(
+          (a, b) => b.power + b.health - (a.power + a.health),
+        );
+        targetUid = sorted[0].uid;
+        targetUid2 = sorted[1].uid;
+      } else if (effect.type === "damage-ally-buff-other-ally-round") {
+        // Phase 3.40 : Transfusion. Sacrifie l'allié le moins puissant
+        // (ou un non-Champion à faible PV) puis buff le plus gros.
+        if (player.bench.length < 2) continue;
+        const nonChamps = player.bench.filter((u) => {
+          const c = getCard(u.cardCode);
+          return c?.supertype !== "Champion";
+        });
+        // Cible 1 (damage) : le plus faible non-Champion qui survit aux dmg.
+        const target1 = nonChamps
+          .filter((u) => u.health - u.damage > effect.damage)
+          .sort((a, b) => a.power - b.power)[0];
+        if (!target1) continue;
+        // Cible 2 (buff) : le plus gros allié distinct de target1.
+        const target2 = [...player.bench]
+          .filter((u) => u.uid !== target1.uid)
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        if (!target2) continue;
+        targetUid = target1.uid;
+        targetUid2 = target2.uid;
       } else if (player.bench.length > 0) {
         // Préfère un allié non-frozen pour ne pas gaspiller un buff
         const target = player.bench.find((u) => !u.frozen) ?? player.bench[0];
@@ -216,6 +250,15 @@ export function botAct(
         });
         if (!valid) continue;
         targetUid = valid.uid;
+      } else if (effect.type === "frostbite-2-enemies") {
+        // Phase 3.40 : Vents mordants. 2 ennemis distincts non gelés.
+        // Préfère les plus gros (impact maximal).
+        const valid = opponent.bench
+          .filter((u) => !u.frozen)
+          .sort((a, b) => b.power - a.power);
+        if (valid.length < 2) continue;
+        targetUid = valid[0].uid;
+        targetUid2 = valid[1].uid;
       } else if (opponent.bench.length > 0) {
         const target =
           opponent.bench.find((u) => !u.frozen) ?? opponent.bench[0];
@@ -269,7 +312,7 @@ export function botAct(
         targetUid = target.uid;
       }
     }
-    return playSpell(state, seatIdx, i, targetUid);
+    return playSpell(state, seatIdx, i, targetUid, targetUid2);
   }
 
   // Attaque si jeton + unités prêtes
