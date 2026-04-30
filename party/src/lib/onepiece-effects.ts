@@ -1454,6 +1454,190 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     }
   },
 
+  // ─── BATCH 7 (cards 181-210 cardNumber) ─────────────────────────────────
+
+  /** ST18-004 Zorojuro
+   *  [Jouée] Regardez 5 cartes du dessus, révélez jusqu'à 1 carte de type
+   *  {Équipage de Chapeau de paille} violette. (filtre couleur skip,
+   *  on prend le 1er Chapeau de paille). */
+  "ST18-004": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      5,
+      "Équipage de Chapeau de paille",
+      "bottom",
+    );
+    ctx.battle.log(
+      found
+        ? "Zorojuro : révèle un Chapeau de paille."
+        : "Zorojuro : aucun Chapeau de paille révélé.",
+    );
+  },
+
+  /** ST21-001 Monkey D. Luffy (Leader)
+   *  [DON!! x1] [Activation : Principale] [Une fois par tour] Donnez
+   *  jusqu'à 2 cartes DON!! épuisées à 1 de vos Personnages. */
+  "ST21-001": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      // Vérifie [DON!! x1] sur le Leader.
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.leaderAttachedDon < 1) {
+        ctx.battle.log("Luffy (Leader) : [DON!! x1] requis.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-001",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Luffy (Leader) : choisis un Persos pour recevoir 2 DON!!.",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      const attached = ctx.battle.attachDonToTarget(
+        { kind: "character", seat: ctx.sourceSeat, uid: target },
+        2,
+      );
+      ctx.battle.log(`Luffy (Leader) : ${attached} DON!! attachée(s).`);
+    }
+  },
+
+  /** ST21-009 Nami
+   *  [Activation : Principale] [Une fois par tour] Donnez jusqu'à 2 cartes
+   *  DON!! épuisées à votre Leader ou à 1 de vos Personnages, de type
+   *  {Équipage de Chapeau de paille}. */
+  "ST21-009": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-009",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Nami : choisis une cible pour recevoir 2 DON!! épuisées.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target) return;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 2);
+      ctx.battle.log(`Nami : ${attached} DON!! attachée(s).`);
+    }
+  },
+
+  /** ST21-012 Brook
+   *  [En attaquant] Donnez jusqu'à 2 cartes DON!! épuisées à votre Leader
+   *  ou à 1 de vos Personnages. */
+  "ST21-012": (ctx) => {
+    if (ctx.hook === "on-attack") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-012",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Brook : choisis une cible pour recevoir 2 DON!! épuisées.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target) return;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 2);
+      ctx.battle.log(`Brook : ${attached} DON!! attachée(s).`);
+    }
+  },
+
+  /** ST21-014 Monkey D. Luffy (Char)
+   *  [Initiative] (déjà géré)
+   *  [En attaquant] Donnez jusqu'à 1 carte DON!! épuisée à votre Leader
+   *  ou à 1 de vos Personnages. */
+  "ST21-014": (ctx) => {
+    if (ctx.hook === "on-attack") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-014",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Luffy : choisis une cible pour recevoir 1 DON!! épuisée.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target) return;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 1);
+      ctx.battle.log(`Luffy (En attaquant) : ${attached} DON!! attachée.`);
+    }
+  },
+
+  /** ST21-017 Gum Gum Taupe Bullet (Event)
+   *  [Principale] Jusqu'à 1 Personnage adverse perd -5000 de puissance
+   *  pour tout le tour. (Le KO conditionnel ≤ 2000 puissance est skip
+   *  car nécessite filtre par puissance.) */
+  "ST21-017": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) {
+        ctx.battle.log(
+          "Gum Gum Taupe Bullet : aucun Persos adverse à débuffer.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-017",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Gum Gum Taupe Bullet : choisis un Persos adverse (-5000).",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -5000,
+      );
+      ctx.battle.log("Gum Gum Taupe Bullet : -5000 puissance pour ce tour.");
+    }
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
