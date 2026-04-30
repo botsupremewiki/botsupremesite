@@ -459,6 +459,63 @@ export async function recordBattleLogs(
   }
 }
 
+/** Persiste un replay (log textuel) du match Pokémon TCG fini dans
+ *  `tcg_replays`. v1 minimaliste : juste le log ligne par ligne, pas de
+ *  snapshots complets. */
+export async function savePokemonReplay(
+  room: Party.Room,
+  args: {
+    gameId: string;
+    winnerId: string;
+    loserId: string;
+    winnerUsername: string;
+    loserUsername: string;
+    winnerDeckName: string | null;
+    loserDeckName: string | null;
+    ranked: boolean;
+    durationSeconds: number;
+    log: string[];
+  },
+): Promise<string | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(`${env.url}/rest/v1/tcg_replays`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        game_id: args.gameId,
+        winner_id: args.winnerId,
+        loser_id: args.loserId,
+        winner_username: args.winnerUsername,
+        loser_username: args.loserUsername,
+        winner_deck_name: args.winnerDeckName,
+        loser_deck_name: args.loserDeckName,
+        ranked: args.ranked,
+        duration_seconds: args.durationSeconds,
+        log: args.log,
+      }),
+    });
+    if (!resp.ok) {
+      console.warn(
+        `[battle] savePokemonReplay failed ${resp.status}:`,
+        await resp.text().catch(() => ""),
+      );
+      return null;
+    }
+    const arr = (await resp.json()) as { id?: string }[];
+    return arr?.[0]?.id ?? null;
+  } catch (err) {
+    console.warn("[battle] savePokemonReplay threw:", err);
+    return null;
+  }
+}
+
 /** Aggrégats nécessaires pour les checks d'achievements. Calculés
  *  côté Supabase (RPC get_user_battle_aggregates). */
 export type BattleAggregates = {

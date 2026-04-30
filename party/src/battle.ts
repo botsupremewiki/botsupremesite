@@ -18,6 +18,7 @@ import {
   fetchTcgDeckById,
   recordBattleResult,
   recordBotWin,
+  savePokemonReplay,
   tryUnlockAchievement,
 } from "./lib/supabase";
 import { TCG_ACHIEVEMENTS } from "../../shared/tcg-achievements";
@@ -106,6 +107,9 @@ export default class BattleServer implements Party.Server {
   private turnNumber = 0;
   private winner: BattleSeatId | null = null;
   private log: string[] = [];
+  // Log complet (non capé) pour la sauvegarde en replay à la fin du match.
+  private replayLog: string[] = [];
+  private startedAt: number = Date.now();
   // Compteur d'instances pour générer des uid de cartes posées sur le board.
   private uidCounter = 0;
   // Bot mode (room id starts with "bot-").
@@ -3043,6 +3047,21 @@ export default class BattleServer implements Party.Server {
           await this.checkAndUnlockAchievements(l.authId, gameId, l.username);
         })
         .catch(() => {});
+      // Persiste le replay (log textuel) — best effort, async.
+      void savePokemonReplay(this.room, {
+        gameId,
+        winnerId: w.authId,
+        loserId: l.authId,
+        winnerUsername: w.username,
+        loserUsername: l.username,
+        winnerDeckName: w.deckName,
+        loserDeckName: l.deckName,
+        ranked,
+        durationSeconds: Math.round(
+          (Date.now() - this.startedAt) / 1000,
+        ),
+        log: this.replayLog,
+      }).catch(() => {});
     }
   }
 
@@ -3094,6 +3113,8 @@ export default class BattleServer implements Party.Server {
   private pushLog(line: string) {
     this.log.push(line);
     if (this.log.length > LOG_KEEP) this.log.shift();
+    // replayLog non capé pour la persistance fin de match.
+    this.replayLog.push(line);
   }
 
   private snapshotPublic(seat: SeatState | null): BattlePlayerPublicState | null {
