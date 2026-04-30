@@ -253,6 +253,18 @@ export interface BattleEffectAccess {
     handIndex: number,
   ): string | null;
 
+  /** Joue un Personnage de la main directement sans payer son coût. Utilisé
+   *  par les effets type Crocodile («Jouez 1 carte Personnage de votre
+   *  main»), Trafalgar Law, Lim, Baggy. La carte est posée sur le terrain
+   *  (rested ou non), playedThisTurn = true (donc ne peut attaquer que
+   *  si Initiative). Le hook on-play est déclenché. Retourne l'uid posé
+   *  ou null si terrain plein / index invalide / pas un Persos. */
+  playCharacterFromHand(
+    seat: OnePieceBattleSeatId,
+    handIndex: number,
+    options?: { rested?: boolean },
+  ): string | null;
+
   /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
    *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
   peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
@@ -3788,6 +3800,365 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       );
       ctx.battle.drawCards(ctx.sourceSeat, 2);
       ctx.battle.log("Gum Gum Gigant : DON-2 + discard 1 → +4000 + draw 2.");
+    }
+  },
+
+  // ─── BATCH 21 — Cartes utilisant play-from-hand ────────────────────────
+
+  /** OP09-046 Crocodile
+   *  [Jouée] Jouez jusqu'à 1 carte Personnage de type {Cross Guild} ou
+   *  incluant «Baroque Works» dans son type se trouvant dans votre main et
+   *  ayant un coût de 5 ou moins. */
+  "OP09-046": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-046",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-hand",
+        prompt:
+          "Crocodile : choisis 1 Persos Cross Guild / Baroque Works ≤ 5 à jouer gratuitement.",
+        params: { maxCost: 5, requireType: "Cross Guild" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+      if (uid) ctx.battle.log("Crocodile : Persos posé gratuitement.");
+    }
+  },
+
+  /** OP09-103 Koala
+   *  [Jouée] Vous pouvez ajouter à votre main 1 carte du dessus ou du
+   *  dessous de votre Vie : Jouez jusqu'à 1 carte Personnage de type
+   *  {Armée révolutionnaire} de votre main ayant un coût de 4 ou moins.
+   *  Si vous l'avez jouée, piochez 1 carte. */
+  "OP09-103": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.lifeCount === 0) {
+        ctx.battle.log("Koala : pas de Vie à prendre, effet annulé.");
+        return;
+      }
+      ctx.battle.takeLifeToHand(ctx.sourceSeat);
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-103",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-hand",
+        prompt:
+          "Koala : choisis 1 Persos Armée révolutionnaire ≤ 4 à jouer gratuitement.",
+        params: { maxCost: 4, requireType: "Armée révolutionnaire" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+      if (uid) {
+        ctx.battle.drawCards(ctx.sourceSeat, 1);
+        ctx.battle.log("Koala : Persos joué + 1 carte piochée.");
+      }
+    }
+  },
+
+  /** OP09-043 Alvida
+   *  [En cas de KO] Si votre Leader est de type {Cross Guild}, jouez
+   *  jusqu'à 1 carte Personnage de votre main ayant un coût de 5 ou moins
+   *  autre que [Alvida]. */
+  "OP09-043": (ctx) => {
+    if (ctx.hook === "on-ko") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isCG = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("cross guild"),
+      );
+      if (!isCG) {
+        ctx.battle.log("Alvida : Leader pas Cross Guild, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-043",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-hand",
+        prompt:
+          "Alvida (en KO) : choisis 1 Persos ≤ 5 (sauf Alvida) à jouer.",
+        params: { maxCost: 5, excludeName: "Alvida" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+      if (uid) ctx.battle.log("Alvida : Persos posé en réaction au KO.");
+    }
+  },
+
+  /** OP09-030 Trafalgar Law
+   *  [Jouée] Vous pouvez renvoyer 1 de vos Personnages à la main de son
+   *  propriétaire : Jouez jusqu'à 1 carte Personnage de type {ODYSSEY} de
+   *  votre main ayant un coût de 3 ou moins autre que [Trafalgar Law]. */
+  "OP09-030": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.characters.length === 0) {
+        ctx.battle.log(
+          "Trafalgar Law : pas de Persos à renvoyer, effet annulé.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-030",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character-own",
+        prompt: "Trafalgar Law : choisis 1 de tes Persos à renvoyer en main.",
+        params: {},
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      // Étape 1 : bounce du choisi.
+      if (ctx.choice.selection.targetUid && !ctx.choice.selection.handIndices) {
+        ctx.battle.bounceCharacter(
+          ctx.sourceSeat,
+          ctx.choice.selection.targetUid,
+        );
+        ctx.battle.log("Trafalgar Law : Persos renvoyé en main.");
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "OP09-030",
+          sourceUid: ctx.sourceUid,
+          kind: "play-from-hand",
+          prompt:
+            "Trafalgar Law : choisis 1 Persos ODYSSEY ≤ 3 (sauf Trafalgar Law) à jouer.",
+          params: {
+            maxCost: 3,
+            requireType: "ODYSSEY",
+            excludeName: "Trafalgar Law",
+          },
+          cancellable: true,
+        });
+        return;
+      }
+      // Étape 2 : play du Persos choisi.
+      if (ctx.choice.selection.handIndices) {
+        const idx = ctx.choice.selection.handIndices[0];
+        if (idx === undefined) return;
+        const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+        if (uid) ctx.battle.log("Trafalgar Law : ODYSSEY ≤ 3 posé.");
+      }
+    }
+  },
+
+  /** ST17-002 Trafalgar Law
+   *  [Jouée] Vous pouvez renvoyer 1 de vos Personnages à la main de son
+   *  propriétaire : Si votre Leader est de type {Sept grands corsaires},
+   *  renvoyez à la main de son propriétaire jusqu'à 1 Personnage ayant
+   *  un coût de 4 ou moins. */
+  "ST17-002": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.characters.length === 0) {
+        ctx.battle.log(
+          "Trafalgar Law (ST17) : pas de Persos à renvoyer, effet annulé.",
+        );
+        return;
+      }
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isCorsaire = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("sept grands corsaires"),
+      );
+      if (!isCorsaire) {
+        ctx.battle.log(
+          "Trafalgar Law (ST17) : Leader pas Sept Corsaires, effet annulé.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST17-002",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character-own",
+        prompt:
+          "Trafalgar Law : choisis 1 de tes Persos à renvoyer en main.",
+        params: {},
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      // Étape 1 : bounce de soi.
+      ctx.battle.bounceCharacter(
+        ctx.sourceSeat,
+        ctx.choice.selection.targetUid,
+      );
+      ctx.battle.log("Trafalgar Law (ST17) : Persos propre renvoyé en main.");
+      // Étape 2 : bounce opponent ≤ 4. On route via un step-2 wrapper
+      // pour éviter la confusion targetUid de la 1ère vs 2ème étape.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST17-002-step2",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Trafalgar Law : choisis 1 Persos adverse ≤ 4 à renvoyer en main.",
+        params: { maxCost: 4 },
+        cancellable: true,
+      });
+    }
+  },
+  // Step 2 wrapper : bounce de l'adversaire après bounce de soi.
+  "ST17-002-step2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    ctx.battle.bounceCharacter(oppSeat, ctx.choice.selection.targetUid);
+    ctx.battle.log("Trafalgar Law (ST17) : Persos adverse ≤ 4 renvoyé en main.");
+  },
+
+  /** OP09-022 Lim (Leader)
+   *  [Activation : Principale] [Une fois par tour] Vous pouvez épuiser 3
+   *  de vos cartes DON!! : Ajoutez jusqu'à 1 carte DON!! épuisée de votre
+   *  deck DON!! et jouez jusqu'à 1 carte Personnage de type {ODYSSEY} de
+   *  votre main ayant un coût de 5 ou moins. */
+  "OP09-022": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.donActive < 3) {
+        ctx.battle.log("Lim : besoin de 3 DON actives, effet annulé.");
+        return;
+      }
+      ctx.battle.restDon(ctx.sourceSeat, 3);
+      ctx.battle.giveDonFromDeck(ctx.sourceSeat, 1);
+      ctx.battle.log("Lim : 3 DON épuisées + 1 DON redressée ajoutée.");
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-022",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-hand",
+        prompt: "Lim : choisis 1 Persos ODYSSEY ≤ 5 à jouer.",
+        params: { maxCost: 5, requireType: "ODYSSEY" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+      if (uid) ctx.battle.log("Lim : ODYSSEY ≤ 5 posé.");
+    }
+  },
+
+  /** OP09-042 Baggy (Leader)
+   *  [Activation : Principale] Vous pouvez épuiser 5 de vos cartes DON!!
+   *  et défausser 1 carte de votre main : Jouez jusqu'à 1 carte Personnage
+   *  de type {Cross Guild} de votre main. */
+  "OP09-042": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.donActive < 5) {
+        ctx.battle.log("Baggy : besoin de 5 DON actives, effet annulé.");
+        return;
+      }
+      ctx.battle.restDon(ctx.sourceSeat, 5);
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-042",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt: "Baggy : défausse 1 carte de ta main.",
+        params: { count: 1 },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      // Étape 1 : discard fait → ouvre play-from-hand.
+      if (ctx.choice.selection.handIndices && !ctx.choice.selection.targetUid) {
+        ctx.battle.discardFromHand(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices,
+        );
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "OP09-042-step2",
+          sourceUid: ctx.sourceUid,
+          kind: "play-from-hand",
+          prompt: "Baggy : choisis 1 Persos Cross Guild à jouer.",
+          params: { requireType: "Cross Guild" },
+          cancellable: true,
+        });
+        return;
+      }
+    }
+  },
+  // Step 2 wrapper : route le play après le discard.
+  "OP09-042-step2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+    const idx = ctx.choice.selection.handIndices[0];
+    if (idx === undefined) return;
+    const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+    if (uid) ctx.battle.log("Baggy : Cross Guild posé.");
+  },
+
+  /** ST18-005 Luffytaro
+   *  [Jouée] DON!! -1 (Vous pouvez renvoyer à votre deck DON!! le nombre
+   *  indiqué de cartes DON!! de votre terrain.) : Jouez jusqu'à 1 carte
+   *  Personnage de type {Équipage de Chapeau de paille} violette de votre
+   *  main ayant un coût de 5 ou moins. (Filtre couleur violette omis — on
+   *  filtre uniquement par type.) */
+  "ST18-005": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+      if (returned === 0) {
+        ctx.battle.log("Luffytaro : pas de DON à renvoyer, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST18-005",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-hand",
+        prompt:
+          "Luffytaro : choisis 1 Persos Chapeau de paille ≤ 5 à jouer.",
+        params: {
+          maxCost: 5,
+          requireType: "Équipage de Chapeau de paille",
+        },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
+      if (uid) ctx.battle.log("Luffytaro : Chapeau ≤ 5 posé.");
     }
   },
 

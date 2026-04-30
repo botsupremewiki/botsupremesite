@@ -2095,6 +2095,30 @@ export default class OnePieceBattleServer implements Party.Server {
         s.deck.push(card);
         return card.cardId;
       },
+      playCharacterFromHand: (seatId, handIndex, options) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        if (handIndex < 0 || handIndex >= s.hand.length) return null;
+        if (s.characters.length >= OP_BATTLE_CONFIG.maxCharacters) return null;
+        const card = s.hand[handIndex];
+        const meta = ONEPIECE_BASE_SET_BY_ID.get(card.cardId);
+        if (!meta || meta.kind !== "character") return null;
+        s.hand.splice(handIndex, 1);
+        const newCard: OnePieceBattleCardInPlay = {
+          uid: `c${++this.uidCounter}`,
+          cardId: card.cardId,
+          attachedDon: 0,
+          rested: options?.rested === true,
+          playedThisTurn: true,
+        };
+        s.characters.push(newCard);
+        this.pushLog(
+          `${s.username} pose ${meta.name} (gratuit, effet de carte).`,
+        );
+        // Hook on-play du Persos posé.
+        this.fireEffectFor(card.cardId, "on-play", newCard.uid, seatId);
+        return newCard.uid;
+      },
       peekTopOfDeck: (seatId) => {
         const s = this.seats[seatId];
         if (!s || s.deck.length === 0) return null;

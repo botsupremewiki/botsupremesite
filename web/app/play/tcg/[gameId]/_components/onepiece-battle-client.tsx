@@ -1155,6 +1155,47 @@ function PendingChoicePanel({
         />
       )}
 
+      {/* Jouer 1 Persos de la main gratuitement (Crocodile, Lim, Baggy…) */}
+      {choice.kind === "play-from-hand" && self && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {self.hand
+            .map((cardId, i) => ({ cardId, i }))
+            .filter(({ cardId }) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+              if (!meta || meta.kind !== "character") return false;
+              if (maxCost !== null && meta.cost > maxCost) return false;
+              if (excludeName && meta.name === excludeName) return false;
+              if (
+                onlyOwnType &&
+                !meta.types.some((t) =>
+                  t.toLowerCase().includes(onlyOwnType.toLowerCase()),
+                )
+              )
+                return false;
+              return true;
+            })
+            .map(({ cardId, i }) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+              return (
+                <button
+                  key={i}
+                  onClick={() =>
+                    send({
+                      type: "op-resolve-choice",
+                      choiceId: choice.id,
+                      skipped: false,
+                      selection: { handIndices: [i] },
+                    })
+                  }
+                  className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-cyan-100 hover:bg-cyan-500/20"
+                >
+                  ▶️ Jouer {meta?.name ?? cardId}
+                </button>
+              );
+            })}
+        </div>
+      )}
+
       {/* Yes/No */}
       {choice.kind === "yes-no" && (
         <div className="mt-2 flex gap-2">
