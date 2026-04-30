@@ -37,6 +37,8 @@ export type EffectHook =
   | "on-turn-start" // Refresh phase de son owner
   | "on-turn-end" // End phase de son owner
   | "on-activate-main" // [Activation : Principale] déclenché manuellement
+  | "on-don-returned" // 1+ carte(s) DON de mon terrain renvoyée(s) au DON deck
+  | "on-being-attacked" // Cette carte est devenue la cible d'une attaque adverse
   | "on-choice-resolved"; // PendingChoice résolu — applique la suite de l'effet
 
 /** Contexte d'évaluation d'un passif de puissance. Le moteur appelle tous
@@ -349,6 +351,24 @@ export interface BattleEffectAccess {
    *  substitution). Toujours soumis aux KO_GUARDS d'immunité. */
   koCharacterDirect(seat: OnePieceBattleSeatId, uid: string): boolean;
 
+  /** Tracker [Une fois par tour] générique pour les triggers automatiques
+   *  (on-don-returned, on-being-attacked, etc.). Retourne true si le
+   *  trigger n'a pas encore été utilisé ce tour, et le marque comme
+   *  utilisé. Retourne false sinon. La clé est libre (ex. "bepo-don" +
+   *  uid). Reset à end-turn. */
+  consumeOncePerTurnTrigger(
+    seat: OnePieceBattleSeatId,
+    key: string,
+  ): boolean;
+
+  /** Pose un flag sur un seat valable jusqu'à la fin de son tour
+   *  (Atmos ST15-001 "no-take-life-by-effect"). Reset à end-turn. */
+  setTurnFlag(seat: OnePieceBattleSeatId, flag: string): void;
+
+  /** Vérifie si un flag est posé sur un seat (utilisé par les API
+   *  internes comme takeLifeToHand pour respecter Atmos). */
+  hasTurnFlag(seat: OnePieceBattleSeatId, flag: string): boolean;
+
   /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
    *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
   peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
@@ -411,6 +431,15 @@ export type EffectContext = {
   choice?: {
     skipped: boolean;
     selection: ChoiceSelection;
+  };
+  /** Présent uniquement quand hook === "on-don-returned". Nombre de cartes
+   *  DON renvoyées dans cette action (1 minimum). */
+  donReturnedCount?: number;
+  /** Présent uniquement quand hook === "on-being-attacked". Uid de
+   *  l'attaquant et de son seat. */
+  attackedBy?: {
+    seat: OnePieceBattleSeatId;
+    uid: string;
   };
 };
 
@@ -3512,14 +3541,22 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     }
   },
 
-  /** OP09-074 Bepo (passif d'observation)
+  /** OP09-074 Bepo
    *  [Votre tour] [Une fois par tour] Quand une carte DON!! de votre
    *  terrain est renvoyée à votre deck DON!!, jusqu'à 1 de vos Leaders ou
-   *  Personnages gagne +1000 de puissance pour tout le tour.
-   *  (Le déclencheur «DON renvoyée» n'a pas encore de hook dédié — pour
-   *  l'instant on offre l'effet via on-activate-main pour usage manuel.) */
+   *  Personnages gagne +1000 de puissance pour tout le tour. */
   "OP09-074": (ctx) => {
-    if (ctx.hook === "on-activate-main") {
+    if (ctx.hook === "on-don-returned") {
+      // Vérifie que c'est mon tour ([Votre tour]).
+      if (ctx.battle.getActiveSeat() !== ctx.sourceSeat) return;
+      // 1/turn tracker.
+      if (
+        !ctx.battle.consumeOncePerTurnTrigger(
+          ctx.sourceSeat,
+          `bepo-${ctx.sourceUid}`,
+        )
+      )
+        return;
       ctx.battle.requestChoice({
         seat: ctx.sourceSeat,
         sourceCardNumber: "OP09-074",
@@ -4617,9 +4654,7 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 
   /** OP09-097 Tourbillon noir (Event Counter)
    *  [Contre] Annulez les effets de jusqu'à 1 Leader ou Personnage adverse
-   *  et faites-lui perdre -4000 de puissance pour tout le tour.
-   *  (Simplification : la cancellation d'effet n'est pas implémentée — on
-   *  applique uniquement le -4000.) */
+   *  et faites-lui perdre -4000 de puissance pour tout le tour. */
   "OP09-097": (ctx) => {
     if (ctx.hook === "on-play") {
       ctx.battle.requestChoice({
@@ -4628,7 +4663,7 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         sourceUid: ctx.sourceUid,
         kind: "select-target",
         prompt:
-          "Tourbillon noir : choisis Leader/Persos adverse pour -4000 ce tour.",
+          "Tourbillon noir : choisis Leader/Persos adverse — annule effets + -4000 ce tour.",
         params: { allowLeader: true },
         cancellable: true,
       });
@@ -4644,16 +4679,18 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
           ? { kind: "leader", seat: oppSeat }
           : { kind: "character", seat: oppSeat, uid: targetUid };
       ctx.battle.addPowerBuff(ref, -4000);
-      ctx.battle.log("Tourbillon noir : -4000 cible adverse ce tour.");
+      // Annule les effets de la cible pour ce tour.
+      ctx.battle.cancelEffectsOfTarget(oppSeat, targetUid);
+      ctx.battle.log(
+        "Tourbillon noir : effets de la cible annulés + -4000 ce tour.",
+      );
     }
   },
 
   /** OP09-098 Black Hole (Event)
    *  [Principale] Si votre Leader est de type {Équipage de Barbe Noire},
    *  annulez les effets de jusqu'à 1 Personnage adverse pour tout le tour.
-   *  Puis, si ce Personnage a un coût de 4 ou moins, mettez-le KO.
-   *  (Simplification : la cancellation d'effet n'est pas implémentée — on
-   *  applique uniquement le KO si coût ≤ 4.) */
+   *  Puis, si ce Personnage a un coût de 4 ou moins, mettez-le KO. */
   "OP09-098": (ctx) => {
     if (ctx.hook === "on-play") {
       const seat = ctx.battle.getSeat(ctx.sourceSeat);
@@ -4667,14 +4704,16 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         ctx.battle.log("Black Hole : Leader pas Barbe Noire, effet annulé.");
         return;
       }
+      // Sélection LIBRE (pas de filtre maxCost) — la cancellation s'applique
+      // à n'importe quel Persos. Le KO ne s'applique qu'aux ≤ 4 cost.
       ctx.battle.requestChoice({
         seat: ctx.sourceSeat,
         sourceCardNumber: "OP09-098",
         sourceUid: ctx.sourceUid,
         kind: "ko-character",
         prompt:
-          "Black Hole : choisis 1 Persos adverse à KO si coût ≤ 4 (sinon ignoré).",
-        params: { maxCost: 4 },
+          "Black Hole : choisis 1 Persos adverse — annule effets ; si coût ≤ 4, KO.",
+        params: {},
         cancellable: true,
       });
       return;
@@ -4683,8 +4722,26 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
       const oppSeat: OnePieceBattleSeatId =
         ctx.sourceSeat === "p1" ? "p2" : "p1";
-      ctx.battle.koCharacter(oppSeat, ctx.choice.selection.targetUid);
-      ctx.battle.log("Black Hole : Persos adverse ≤ 4 KO.");
+      const targetUid = ctx.choice.selection.targetUid;
+      // Annule les effets de la cible pour ce tour.
+      ctx.battle.cancelEffectsOfTarget(oppSeat, targetUid);
+      // Si coût ≤ 4 (avec costBuff), KO.
+      const opp = ctx.battle.getSeat(oppSeat);
+      const target = opp?.characters.find((c) => c.uid === targetUid);
+      if (!target) return;
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(target.cardId);
+      if (!meta || meta.kind !== "character") return;
+      const effectiveCost = meta.cost + (target.costBuff ?? 0);
+      if (effectiveCost <= 4) {
+        ctx.battle.koCharacter(oppSeat, targetUid);
+        ctx.battle.log(
+          `Black Hole : effets annulés + KO (coût ${effectiveCost} ≤ 4).`,
+        );
+      } else {
+        ctx.battle.log(
+          `Black Hole : effets annulés (coût ${effectiveCost} > 4, pas de KO).`,
+        );
+      }
     }
   },
 
@@ -4773,9 +4830,7 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
   /** ST15-001 Atmos
    *  [En attaquant] Si votre Leader est [Edward Newgate], vous ne pouvez
    *  pas ajouter de cartes de votre Vie à votre main grâce à vos effets
-   *  pour tout le tour.
-   *  (Simplification : sans flag turn-level dédié, on log juste pour
-   *  signaler le déclenchement de l'effet ; la prévention reste à câbler.) */
+   *  pour tout le tour. */
   "ST15-001": (ctx) => {
     if (ctx.hook !== "on-attack") return;
     const seat = ctx.battle.getSeat(ctx.sourceSeat);
@@ -4783,20 +4838,28 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
       : null;
     if (leaderMeta?.name !== "Edward Newgate") return;
+    ctx.battle.setTurnFlag(ctx.sourceSeat, "no-take-life-by-effect");
     ctx.battle.log(
-      "Atmos : Vie ne peut être ajoutée à la main par effet ce tour (effet simplifié — log uniquement).",
+      "Atmos : Vie ne peut être ajoutée à la main par effet ce tour.",
     );
   },
 
   /** OP09-032 Don Quijote Rosinante
-   *  [Attaque adverse] [Une fois par tour] Redressez ce Personnage.
-   *  (Simplification : sans hook on-being-attacked, on déclenche au lieu
-   *  via on-turn-end : redresse Rosinante 1 fois automatique. Pas idéal
-   *  mais permet une activation par tour.) */
+   *  [Attaque adverse] [Une fois par tour] Redressez ce Personnage. */
   "OP09-032": (ctx) => {
-    if (ctx.hook !== "on-turn-end") return;
+    if (ctx.hook !== "on-being-attacked") return;
+    // [Attaque adverse] = c'est mon tour adverse qui attaque ; check active.
+    if (ctx.battle.getActiveSeat() === ctx.sourceSeat) return;
+    // [Une fois par tour] tracker.
+    if (
+      !ctx.battle.consumeOncePerTurnTrigger(
+        ctx.sourceSeat,
+        `rosinante-${ctx.sourceUid}`,
+      )
+    )
+      return;
     ctx.battle.untapCharacter(ctx.sourceSeat, ctx.sourceUid);
-    ctx.battle.log("Rosinante : redressé en fin de tour (simplifié).");
+    ctx.battle.log("Rosinante : redressé (Attaque adverse).");
   },
 
   // ─── BATCH 26 — Search Event + ko-self via koCharacter ─────────────────
@@ -5167,28 +5230,57 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 
   /** OP09-061 Monkey D. Luffy (Leader)
    *  [DON!! x1] Augmentez de +1 le coût de tous vos Personnages.
-   *  (Implémentation simplifiée : passif activé si le Leader a 1+ DON
-   *  attachée. Le hook on-activate-main n'est pas approprié — c'est un
-   *  passif. On évalue à la pose d'un Persos via fireEffectFor on-play —
-   *  NOT, ça ne s'applique qu'à la résolution du coût qui est server-side.
-   *  Ici on utilise plutôt un passif sur tous les calculs de coût.
+   *  [Votre tour] [Une fois par tour] Quand 2 cartes DON!! ou plus de
+   *  votre terrain sont renvoyées à votre deck DON!!, ajoutez jusqu'à
+   *  1 carte DON!! redressée de votre deck DON!! et ajoutez jusqu'à
+   *  1 carte épuisée en plus.
    *
-   *  Implémentation pragmatique : à chaque tour, on applique un costBuff
-   *  +1 sur tous les Persos en jeu via on-turn-start. Pas idéal mais
-   *  fonctionnel pour le ciblage de cartes type Tsuru.) */
+   *  Le passif [DON x1] +1 coût own Persos est implémenté via le registry
+   *  PASSIVE_COST_MODS (cf. plus bas) — il s'applique à la résolution du
+   *  coût quand on joue un Persos ET aux filtres maxCost via costBuff.
+   *  Ici, on traite le trigger DON-return. */
   "OP09-061": (ctx) => {
-    if (ctx.hook !== "on-turn-start") return;
-    const seat = ctx.battle.getSeat(ctx.sourceSeat);
-    if (!seat || seat.leaderAttachedDon < 1) return;
-    for (const c of seat.characters) {
-      ctx.battle.addCostBuff(
-        { kind: "character", seat: ctx.sourceSeat, uid: c.uid },
-        1,
+    if (ctx.hook === "on-turn-start") {
+      // Applique le costBuff +1 sur les Persos déjà en jeu si le Leader
+      // a 1+ DON attachée (le passif s'applique aussi via PASSIVE_COST_MODS
+      // pour les futurs Persos joués + ciblage maxCost).
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.leaderAttachedDon < 1) return;
+      for (const c of seat.characters) {
+        ctx.battle.addCostBuff(
+          { kind: "character", seat: ctx.sourceSeat, uid: c.uid },
+          1,
+        );
+      }
+      return;
+    }
+    if (ctx.hook === "on-don-returned") {
+      // [Votre tour] check.
+      if (ctx.battle.getActiveSeat() !== ctx.sourceSeat) return;
+      // [Une fois par tour] tracker.
+      if (
+        !ctx.battle.consumeOncePerTurnTrigger(
+          ctx.sourceSeat,
+          `luffy-leader-don-return`,
+        )
+      )
+        return;
+      // Condition : 2+ DON renvoyées dans cette action.
+      const count = ctx.donReturnedCount ?? 0;
+      if (count < 2) return;
+      // Ajoute 1 DON redressée + 1 épuisée depuis le DON deck.
+      ctx.battle.giveDonFromDeck(ctx.sourceSeat, 1); // active = redressée
+      // 1 épuisée = on prend 1 du DON deck dans donRested directement.
+      const seat2 = ctx.battle.getSeat(ctx.sourceSeat);
+      if (seat2) {
+        // Pas d'API directe — on contourne via giveDonFromDeck puis restDon.
+        ctx.battle.giveDonFromDeck(ctx.sourceSeat, 1);
+        ctx.battle.restDon(ctx.sourceSeat, 1);
+      }
+      ctx.battle.log(
+        "Luffy Leader : 2+ DON renvoyées → +1 DON redressée + 1 DON épuisée du DON deck.",
       );
     }
-    ctx.battle.log(
-      "Luffy Leader : [DON x1] +1 coût appliqué à tes Persos en jeu.",
-    );
   },
 
   /** ST16-002 Gordon
@@ -5912,5 +6004,59 @@ export function fireCardEffect(
   } catch (err) {
     console.warn(`[op-effect] handler ${meta.cardNumber} threw:`, err);
     return false;
+  }
+}
+
+/** Fire le hook on-don-returned sur toutes les cartes du seat (Leader +
+ *  Persos + Stage). Le `donReturnedCount` est passé via le contexte. */
+export function fireOnDonReturned(
+  seat: OnePieceBattleSeatId,
+  count: number,
+  battle: BattleEffectAccess,
+): void {
+  const s = battle.getSeat(seat);
+  if (!s) return;
+  const fire = (cardId: string, uid: string) => {
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+    if (!meta) return;
+    const handler = CARD_HANDLERS[meta.cardNumber];
+    if (!handler) return;
+    try {
+      handler({
+        hook: "on-don-returned",
+        sourceUid: uid,
+        sourceSeat: seat,
+        battle,
+        donReturnedCount: count,
+      });
+    } catch {
+      // ignore
+    }
+  };
+  if (s.leaderId) fire(s.leaderId, "leader");
+  for (const c of s.characters) fire(c.cardId, c.uid);
+  if (s.stage) fire(s.stage.cardId, s.stage.uid);
+}
+
+/** Fire le hook on-being-attacked sur la carte cible d'une attaque. */
+export function fireOnBeingAttacked(
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string },
+  attacker: { seat: OnePieceBattleSeatId; uid: string },
+  battle: BattleEffectAccess,
+): void {
+  const meta = ONEPIECE_BASE_SET_BY_ID.get(target.cardId);
+  if (!meta) return;
+  const handler = CARD_HANDLERS[meta.cardNumber];
+  if (!handler) return;
+  try {
+    handler({
+      hook: "on-being-attacked",
+      sourceUid: target.uid,
+      sourceSeat: target.seat,
+      battle,
+      attackedBy: attacker,
+    });
+  } catch {
+    // ignore
   }
 }

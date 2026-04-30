@@ -49,6 +49,8 @@ import {
   type EffectHook,
   fireCardEffect,
   fireKoSubstitutes,
+  fireOnBeingAttacked,
+  fireOnDonReturned,
   fireOnLeaveField,
   getGrantedKeywords,
   isKoBlocked,
@@ -102,6 +104,9 @@ type SeatState = {
   // Cartes ayant déjà utilisé leur effet [Activation : Principale] [Une fois
   // par tour] ce tour. Reset à end-turn. Clé = uid (ou "leader").
   usedActivationsThisTurn: Set<string>;
+  // Flags de tour génériques (Atmos ST15-001 "no-take-life-by-effect",
+  // etc.). Reset à end-turn de ce seat.
+  turnFlags: Set<string>;
   // Set d'uid dont les effets [Jouée] sont annulés ce tour ou jusqu'au
   // prochain end-turn adverse (Marshall D. Teach OP09-093 cible 1 leader
   // adv pour 1 tour). Clé = "leader" ou uid d'un Persos.
@@ -243,6 +248,7 @@ export default class OnePieceBattleServer implements Party.Server {
         mulliganDecided: false,
         tempPowerBuffs: new Map(),
         usedActivationsThisTurn: new Set(),
+        turnFlags: new Set(),
         cancelledEffectUidsThisTurn: new Set(),
         ownPlayedEffectsCancelledPassive: teachLeader,
         oppPlayedEffectsCancelledByMe: false,
@@ -667,6 +673,7 @@ export default class OnePieceBattleServer implements Party.Server {
     // tour" expirent à la fin du tour de l'attaquant (convention courante).
     seat.tempPowerBuffs.clear();
     seat.usedActivationsThisTurn.clear();
+    seat.turnFlags.clear();
     for (const c of seat.characters) {
       c.costBuff = 0;
       c.noBlockerThisTurn = false;
@@ -964,6 +971,24 @@ export default class OnePieceBattleServer implements Party.Server {
         : { kind: "character", seat: opponentSeatId, uid: targetUid };
     attackerPower += this.applyPassivesTo(attackerRef, "attack");
     defenderBasePower += this.applyPassivesTo(defenderRef, "defend");
+
+    // Hook on-being-attacked sur le défenseur (Rosinante OP09-032 etc.).
+    if (targetUid !== "leader") {
+      const defenderCard = opponent.characters.find(
+        (c) => c.uid === targetUid,
+      );
+      if (defenderCard) {
+        fireOnBeingAttacked(
+          {
+            seat: opponentSeatId,
+            uid: defenderCard.uid,
+            cardId: defenderCard.cardId,
+          },
+          { seat: seatId, uid: attackerUid },
+          this.getBattleAccess(),
+        );
+      }
+    }
 
     // Ouvre la defense window.
     this.pendingAttack = {
@@ -1549,6 +1574,7 @@ export default class OnePieceBattleServer implements Party.Server {
       mulliganDecided: false,
       tempPowerBuffs: new Map(),
       usedActivationsThisTurn: new Set(),
+      turnFlags: new Set(),
       cancelledEffectUidsThisTurn: new Set(),
       // Marshall D. Teach Leader OP09-081 : passif "Vos [Jouée] annulés".
       ownPlayedEffectsCancelledPassive: leaderId.startsWith("OP09-081"),
@@ -1995,6 +2021,24 @@ export default class OnePieceBattleServer implements Party.Server {
     attackerPower += this.applyPassivesTo(attackerRef, "attack");
     defenderBasePower += this.applyPassivesTo(defenderRef, "defend");
 
+    // Hook on-being-attacked sur le défenseur côté p1.
+    if (targetUid !== "leader") {
+      const defenderCard = opponent.characters.find(
+        (c) => c.uid === targetUid,
+      );
+      if (defenderCard) {
+        fireOnBeingAttacked(
+          {
+            seat: "p1",
+            uid: defenderCard.uid,
+            cardId: defenderCard.cardId,
+          },
+          { seat: "p2", uid: attackerUid },
+          this.getBattleAccess(),
+        );
+      }
+    }
+
     this.pendingAttack = {
       attackerSeat: "p2",
       attackerUid,
@@ -2030,6 +2074,7 @@ export default class OnePieceBattleServer implements Party.Server {
     }
     seat.tempPowerBuffs.clear();
     seat.usedActivationsThisTurn.clear();
+    seat.turnFlags.clear();
     for (const c of seat.characters) {
       c.costBuff = 0;
       c.noBlockerThisTurn = false;
@@ -2329,6 +2374,26 @@ export default class OnePieceBattleServer implements Party.Server {
         const c = s.characters.find((x) => x.uid === uid);
         if (c) c.koSubUsedThisTurn = true;
       },
+      consumeOncePerTurnTrigger: (seatId, key) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        // On réutilise usedActivationsThisTurn avec un préfixe "trigger-"
+        // pour éviter les collisions avec les [Activation : Principale].
+        const fullKey = `trigger-${key}`;
+        if (s.usedActivationsThisTurn.has(fullKey)) return false;
+        s.usedActivationsThisTurn.add(fullKey);
+        return true;
+      },
+      setTurnFlag: (seatId, flag) => {
+        const s = this.seats[seatId];
+        if (!s) return;
+        s.turnFlags.add(flag);
+      },
+      hasTurnFlag: (seatId, flag) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        return s.turnFlags.has(flag);
+      },
       koCharacterDirect: (seatId, uid) => {
         // Variante de koCharacter qui SKIP les substitutions (utilisée par
         // Monster qui veut explicitement KO ce Persos). Toujours soumis
@@ -2426,6 +2491,14 @@ export default class OnePieceBattleServer implements Party.Server {
       takeLifeToHand: (seatId) => {
         const s = this.seats[seatId];
         if (!s || s.life.length === 0) return null;
+        // Atmos ST15-001 : "vous ne pouvez pas ajouter de cartes de votre
+        // Vie à votre main grâce à vos effets pour tout le tour".
+        if (s.turnFlags.has("no-take-life-by-effect")) {
+          this.pushLog(
+            `[Atmos] ${s.username} : Vie ne peut être ajoutée à la main par effet ce tour.`,
+          );
+          return null;
+        }
         const card = s.life.shift()!;
         s.hand.push(card);
         return card.cardId;
@@ -2563,6 +2636,12 @@ export default class OnePieceBattleServer implements Party.Server {
             }
             if (returned >= count) break;
           }
+        }
+        // Fire on-don-returned hook si au moins 1 DON renvoyée. Bepo
+        // OP09-074 (1+ DON return → +1000 Leader/Persos), Luffy Leader
+        // OP09-061 (2+ DON return → +1 active + 1 rested DON).
+        if (returned > 0) {
+          fireOnDonReturned(seatId, returned, this.getBattleAccess());
         }
         return returned;
       },
