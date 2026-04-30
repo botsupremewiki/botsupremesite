@@ -1666,6 +1666,24 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI049 (Aperçu de l'au-delà, ShadowIsles, 2 Fast) — sacrifice un
   // allié (Last Breath déclenché) pour piocher 2 cartes.
   "01SI049": { type: "kill-ally-for-draw", drawCount: 2 },
+
+  // ── Phase 3.29 (réutilisation d'effets existants)
+  // 01NX049 (Étourdir, Noxus, 1 Slow) — stun ennemi simple.
+  "01NX049": { type: "stun-enemy" },
+  // 01PZ050 (Statikk, PiltoverZaun, 3 Burst) — combo +4|+0 + QuickStrike.
+  "01PZ050": {
+    type: "combo-buff-keyword-ally-round",
+    power: 4,
+    health: 0,
+    keyword: "QuickStrike",
+  },
+  // 01FR005 (Buff massif, Freljord, 8 Burst) — buff permanent +8|+4.
+  "01FR005": { type: "buff-ally-permanent", power: 8, health: 4 },
+  // 01NX043 (Tir noxien, Noxus, 1 Fast) — 1 dmg n'importe quelle unité.
+  "01NX043": { type: "deal-damage-anywhere", amount: 1 },
+  // 01SI010 (Cavaliers spectraux, ShadowIsles, 2 Slow) — summon 2 ×
+  // token 01SI024 (Cavalier spectral, 2|2 Ephemeral).
+  "01SI010": { type: "summon-tokens", cardCode: "01SI024", count: 2 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
