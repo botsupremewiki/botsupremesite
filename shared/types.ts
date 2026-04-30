@@ -1693,6 +1693,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01DE035 (Demacia, 6 Slow) — +3|+3 à tous les alliés pour ce round
   // (pas de grant keyword, juste le buff stat).
   "01DE035": { type: "buff-all-allies-round", power: 3, health: 3 },
+
+  // ── Phase 3.31
+  // 01PZ014 (PiltoverZaun, 6 Slow) — summon 1 × token 01PZ014T1
+  // (Gadget illégal, 5|5).
+  "01PZ014": { type: "summon-tokens", cardCode: "01PZ014T1", count: 1 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
