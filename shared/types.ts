@@ -1385,7 +1385,9 @@ export type SpellEffect =
   // Sans cible : dégâts directs au nexus ennemi (ex Décimation).
   | { type: "deal-damage-enemy-nexus"; amount: number }
   // Cible : unité de l'un ou l'autre côté, retirée du board (kill).
-  | { type: "kill-target-any" }
+  // maxPower optionnel (Phase 3.16) : ne tue que si la cible a une
+  // puissance ≤ ce seuil (ex Abattage : ≤ 3 puissance).
+  | { type: "kill-target-any"; maxPower?: number }
   // Cible : allié blessé OU son propre nexus → soigne X PV (allié = damage,
   // nexus = nexusHealth + X capé à initial).
   | { type: "heal-ally-or-nexus"; amount: number }
@@ -1420,7 +1422,12 @@ export type SpellEffect =
     }
   // Sans cible : grant un mot-clé pour ce round à TOUS les alliés sur
   // le banc (En garde = Challenger).
-  | { type: "grant-keyword-all-allies-round"; keyword: string };
+  | { type: "grant-keyword-all-allies-round"; keyword: string }
+  // Phase 3.16
+  // Cible : allié → grant plusieurs mots-clés pour ce round (Refuge
+  // spirituel = Barrier + Lifesteal). Évite la combinatoire de variantes
+  // pour chaque combo de keywords.
+  | { type: "grant-keywords-ally-round"; keywords: string[] };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1521,6 +1528,17 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     damageAmount: 1,
     healAmount: 3,
   },
+
+  // ── Phase 3.16
+  // Abattage (Noxus, 3 mana, Slow) :
+  // « Tuez une unité dotée d'une puissance de 3 ou moins. »
+  "01NX004": { type: "kill-target-any", maxPower: 3 },
+  // Refuge spirituel (Ionia, 4 mana, Burst) :
+  // « Conférez Barrière et Vol de vie à un allié pour ce round. »
+  "01IO037": {
+    type: "grant-keywords-ally-round",
+    keywords: ["Barrier", "Lifesteal"],
+  },
 };
 
 // ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
@@ -1563,6 +1581,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "heal-ally-or-nexus":
     case "recall-ally":
     case "combo-buff-keyword-ally-round":
+    case "grant-keywords-ally-round":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":

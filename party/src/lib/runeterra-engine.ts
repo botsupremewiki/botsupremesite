@@ -966,6 +966,15 @@ function validateSpellTarget(
   if (!found) {
     return { ok: false, error: "La cible doit être une unité." };
   }
+  // Conditions spécifiques side=any (ex Abattage : kill ≤ 3 puissance).
+  if (effect.type === "kill-target-any" && effect.maxPower !== undefined) {
+    if (found.power > effect.maxPower) {
+      return {
+        ok: false,
+        error: `Cible invalide : l'unité doit avoir ${effect.maxPower} puissance ou moins (${found.power} actuel).`,
+      };
+    }
+  }
   return { ok: true };
 }
 
@@ -1321,6 +1330,21 @@ function applySpellEffect(
       const newBench = player.bench.map((u) => {
         if (u.keywords.includes(effect.keyword)) return u;
         return { ...u, keywords: [...u.keywords, effect.keyword] };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "grant-keywords-ally-round": {
+      // Phase 3.16 : grant plusieurs keywords à un allié spécifique
+      // (target). Évite duplications.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const additions = effect.keywords.filter(
+          (kw) => !u.keywords.includes(kw),
+        );
+        if (additions.length === 0) return u;
+        return { ...u, keywords: [...u.keywords, ...additions] };
       });
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
