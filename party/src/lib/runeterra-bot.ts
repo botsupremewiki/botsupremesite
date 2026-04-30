@@ -245,6 +245,9 @@ export function botAct(
         );
         if (targetable.length === 0) continue;
       }
+      if (effect.type === "auto-copy-best-hand-card-into-deck") {
+        if (player.hand.length === 0) continue;
+      }
       if (effect.type === "buff-allies-of-subtype-everywhere") {
         const hasAnySubtype = [
           ...player.bench,
@@ -447,6 +450,18 @@ export function botAct(
           .sort((a, b) => b.power - a.power)[0];
         if (!target) continue;
         targetUid = target.uid;
+      } else if (effect.type === "steal-enemy-adept-this-round") {
+        // Phase 3.62 : Possession. Pick le plus gros adepte ennemi non-
+        // Champion. Skip si banc plein ou aucun adepte cible.
+        if (player.bench.length >= 6) continue;
+        const valid = opponent.bench
+          .filter((u) => {
+            const c = getCard(u.cardCode);
+            return c?.supertype !== "Champion";
+          })
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        if (!valid) continue;
+        targetUid = valid.uid;
       } else if (effect.type === "stun-attacker-enemy") {
         // Phase 3.52 : Tempête d'acier. Skip si pas de combat ou pas
         // d'attaquant ennemi.

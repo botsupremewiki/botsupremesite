@@ -100,6 +100,10 @@ export type InternalPlayer = {
   // Phase 3.61 : uids des unités summoned ce round (côté ce joueur).
   // Reset à startRound. Sert à 01SI019 (dmg ennemis summoned ce round).
   summonedUidsThisRound: string[];
+  // Phase 3.62 : uids des unités SUR ce banc qui ont été volées à
+  // l'adversaire ce round (Possession). À startRound suivant elles sont
+  // retirées du banc + restaurées sur le banc d'origine.
+  stolenUidsThisRound: string[];
   // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
   // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
   // healthDelta directement sur la nouvelle unité, costDelta sur la mana
@@ -277,6 +281,7 @@ export function createInitialState(
     uniqueCardCodesPlayedThisGame: [],
     manaSlotsBonus: 0,
     summonedUidsThisRound: [],
+    stolenUidsThisRound: [],
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -397,23 +402,54 @@ export function startRound(state: InternalState): InternalState {
   const newRound = state.round + 1;
   const isFirstRound = state.round === 0; // mulligan terminé, on entre dans round 1
 
+  // Phase 3.62 : restitue les unités volées (Possession) à leur owner
+  // d'origine. Pour chaque seat, retire les uids de stolenUidsThisRound
+  // de son banc et les push sur le banc adverse.
+  let restoredState: InternalState = state;
+  for (const seat of [0, 1] as const) {
+    const player = restoredState.players[seat];
+    if (player.stolenUidsThisRound.length === 0) continue;
+    const stolen = new Set(player.stolenUidsThisRound);
+    const stolenUnits = player.bench.filter((u) => stolen.has(u.uid));
+    const remaining = player.bench.filter((u) => !stolen.has(u.uid));
+    const otherSeatIdx = (1 - seat) as 0 | 1;
+    const otherPlayer = restoredState.players[otherSeatIdx];
+    const newOtherBench =
+      otherPlayer.bench.length + stolenUnits.length <= cfg.maxBench
+        ? [...otherPlayer.bench, ...stolenUnits]
+        : [
+            ...otherPlayer.bench,
+            ...stolenUnits.slice(
+              0,
+              cfg.maxBench - otherPlayer.bench.length,
+            ),
+          ];
+    const newPlayers: [InternalPlayer, InternalPlayer] = [
+      restoredState.players[0],
+      restoredState.players[1],
+    ] as [InternalPlayer, InternalPlayer];
+    newPlayers[seat] = { ...player, bench: remaining };
+    newPlayers[otherSeatIdx] = { ...otherPlayer, bench: newOtherBench };
+    restoredState = { ...restoredState, players: newPlayers };
+  }
+
   // Swap attack token : l'inverse du round précédent. Au tout premier
   // round, on garde celui choisi à createInitialState.
   const newAttackTokenSeat: 0 | 1 = isFirstRound
-    ? state.attackTokenSeatIdx
-    : ((1 - state.attackTokenSeatIdx) as 0 | 1);
+    ? restoredState.attackTokenSeatIdx
+    : ((1 - restoredState.attackTokenSeatIdx) as 0 | 1);
 
   // Phase 3.61 : manaMax inclut manaSlotsBonus per-player (Catalyseur).
   const updatedPlayers: [InternalPlayer, InternalPlayer] = [
     refreshPlayerForRound(
-      state.players[0],
-      Math.min(newRound + state.players[0].manaSlotsBonus, cfg.maxMana),
+      restoredState.players[0],
+      Math.min(newRound + restoredState.players[0].manaSlotsBonus, cfg.maxMana),
       newAttackTokenSeat === 0,
       isFirstRound,
     ),
     refreshPlayerForRound(
-      state.players[1],
-      Math.min(newRound + state.players[1].manaSlotsBonus, cfg.maxMana),
+      restoredState.players[1],
+      Math.min(newRound + restoredState.players[1].manaSlotsBonus, cfg.maxMana),
       newAttackTokenSeat === 1,
       isFirstRound,
     ),
@@ -421,12 +457,12 @@ export function startRound(state: InternalState): InternalState {
   const newManaMax = updatedPlayers[0].manaMax; // pour le log (peu importe quel)
 
   const log = [
-    ...state.log,
+    ...restoredState.log,
     `─── Round ${newRound} (${newManaMax} mana max). ${updatedPlayers[newAttackTokenSeat].username} a le jeton d'attaque.`,
   ];
 
   return {
-    ...state,
+    ...restoredState,
     phase: "round",
     players: updatedPlayers,
     activeSeatIdx: newAttackTokenSeat,
@@ -466,10 +502,11 @@ function refreshPlayerForRound(
     manaMax: newManaMax,
     mana: newManaMax,
     attackToken: hasToken,
-    // Phase 3.34 + 3.51 + 3.61 : reset compteurs/listes per-round.
+    // Phase 3.34 + 3.51 + 3.61 + 3.62 : reset compteurs/listes per-round.
     alliesDiedThisRound: 0,
     deadAlliesThisRound: [],
     summonedUidsThisRound: [],
+    stolenUidsThisRound: [],
   };
 }
 
@@ -1228,6 +1265,23 @@ function validateSpellTarget(
         return {
           ok: false,
           error: `${card.name} est un Champion — Purification ne cible que les adeptes.`,
+        };
+      }
+    }
+    // Phase 3.62 : Possession ne peut voler qu'un adepte ennemi + le
+    // banc du caster doit avoir de la place.
+    if (effect.type === "steal-enemy-adept-this-round") {
+      const card = getCard(enemyUnit.cardCode);
+      if (card?.supertype === "Champion") {
+        return {
+          ok: false,
+          error: `${card.name} est un Champion — Possession ne cible que les adeptes.`,
+        };
+      }
+      if (caster.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench) {
+        return {
+          ok: false,
+          error: "Banc plein — impossible de voler une unité.",
         };
       }
     }
@@ -2278,6 +2332,68 @@ function applySpellEffect(
         log: [
           ...state.log,
           `${caster.username} ajoute une copie éphémère de ${cardName} à sa main.`,
+        ],
+      };
+    }
+    case "auto-copy-best-hand-card-into-deck": {
+      // Phase 3.62 : Contrefaçons. Pick le card de plus haut cost en
+      // main (le sort lui-même est déjà retiré par playSpell). Crée
+      // copyCount copies de son cardCode dans le deck (insertions
+      // aléatoires).
+      const player = newPlayers[casterSeat];
+      if (player.hand.length === 0) return state;
+      const sorted = [...player.hand].sort((a, b) => {
+        const ca = getCard(a.cardCode);
+        const cb = getCard(b.cardCode);
+        return (cb?.cost ?? 0) - (ca?.cost ?? 0);
+      });
+      const chosenCardCode = sorted[0].cardCode;
+      let newDeck = [...player.deck];
+      for (let i = 0; i < effect.copyCount; i++) {
+        const newUid = `${casterSeat}-cf-${state.round}-${state.log.length}-${i}`;
+        const insertIdx = Math.floor(Math.random() * (newDeck.length + 1));
+        newDeck = [
+          ...newDeck.slice(0, insertIdx),
+          { uid: newUid, cardCode: chosenCardCode },
+          ...newDeck.slice(insertIdx),
+        ];
+      }
+      newPlayers[casterSeat] = { ...player, deck: newDeck };
+      const cardName = getCard(chosenCardCode)?.name ?? chosenCardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} ajoute ${effect.copyCount} copies de ${cardName} dans son deck.`,
+        ],
+      };
+    }
+    case "steal-enemy-adept-this-round": {
+      // Phase 3.62 : Possession. Move target enemy adept au banc du
+      // caster + push uid à stolenUidsThisRound. Au prochain startRound
+      // l'unité est restaurée à l'opp (logique dans startRound).
+      const opp = newPlayers[oppSeat];
+      const idx = opp.bench.findIndex((u) => u.uid === targetUid);
+      if (idx === -1) return state;
+      const stolenUnit = opp.bench[idx];
+      newPlayers[oppSeat] = {
+        ...opp,
+        bench: [...opp.bench.slice(0, idx), ...opp.bench.slice(idx + 1)],
+      };
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        bench: [...caster.bench, stolenUnit],
+        stolenUidsThisRound: [...caster.stolenUidsThisRound, stolenUnit.uid],
+      };
+      const cardName = getCard(stolenUnit.cardCode)?.name ?? stolenUnit.cardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${caster.username} vole ${cardName} pour ce round.`,
         ],
       };
     }

@@ -1773,7 +1773,16 @@ export type SpellEffect =
   | { type: "pay-all-mana-deal-damage-target-any" }
   // Sans cible : amount dmg à toutes les unités ennemies summoned ce
   // round (uid présent dans opp.summonedUidsThisRound). 01SI019 La cage.
-  | { type: "damage-summoned-this-round-enemies"; amount: number };
+  | { type: "damage-summoned-this-round-enemies"; amount: number }
+  // Phase 3.62
+  // Sans cible : pick le card de plus haut cost dans la main du caster
+  // (excluant le sort lui-même), crée copyCount copies dans son deck à
+  // des positions aléatoires. 01PZ046 Contrefaçons.
+  | { type: "auto-copy-best-hand-card-into-deck"; copyCount: number }
+  // Cible : adepte ennemi → vole vers le banc du caster jusqu'à fin de
+  // round (restoré au startRound suivant via stolenUidsThisRound).
+  // Injouable si banc plein. 01SI006 Possession.
+  | { type: "steal-enemy-adept-this-round" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2284,6 +2293,14 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI019 (ShadowIsles, 4 Fast, La cage) — 3 dmg à toutes les unités
   // ennemies summoned ce round.
   "01SI019": { type: "damage-summoned-this-round-enemies", amount: 3 },
+
+  // ── Phase 3.62
+  // 01PZ046 (PiltoverZaun, 1 Burst, Contrefaçons) — auto-pick le card
+  // de plus haut cost en main (excl. self) et crée 4 copies dans le deck.
+  "01PZ046": { type: "auto-copy-best-hand-card-into-deck", copyCount: 4 },
+  // 01SI006 (ShadowIsles, 5 Slow, Possession) — vole un adepte ennemi
+  // jusqu'à fin de round (restoré au startRound suivant).
+  "01SI006": { type: "steal-enemy-adept-this-round" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2389,6 +2406,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "damage-enemy-and-rally":
     case "damage-or-frostbite-by-power-zero":
     case "stun-attacker-enemy":
+    case "steal-enemy-adept-this-round":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":
@@ -2422,6 +2440,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "revive-n-most-powerful-dead-allies-this-game-as-ephemeral":
     case "gain-mana-slot-and-heal-nexus":
     case "damage-summoned-this-round-enemies":
+    case "auto-copy-best-hand-card-into-deck":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";
