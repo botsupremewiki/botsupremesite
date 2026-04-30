@@ -48,6 +48,7 @@ import {
   type EffectContext,
   type EffectHook,
   fireCardEffect,
+  getGrantedKeywords,
   isKoBlocked,
 } from "./lib/onepiece-effects";
 
@@ -792,7 +793,12 @@ export default class OnePieceBattleServer implements Party.Server {
       }
       attackerPower = meta.power + seat.leaderAttachedDon * 1000;
       attackerName = meta.name;
-      attackerHasDoubleAttack = hasKeyword(meta.effect, "Double Attaque");
+      attackerHasDoubleAttack = this.cardHasKeyword(
+        seatId,
+        "leader",
+        seat.leaderId!,
+        "Double Attaque",
+      );
     } else {
       const c = seat.characters.find((x) => x.uid === attackerUid);
       if (!c) {
@@ -808,8 +814,18 @@ export default class OnePieceBattleServer implements Party.Server {
         this.sendError(conn, "Personnage invalide.");
         return;
       }
-      attackerHasInitiative = hasKeyword(meta.effect, "Initiative");
-      attackerHasDoubleAttack = hasKeyword(meta.effect, "Double Attaque");
+      attackerHasInitiative = this.cardHasKeyword(
+        seatId,
+        c.uid,
+        c.cardId,
+        "Initiative",
+      );
+      attackerHasDoubleAttack = this.cardHasKeyword(
+        seatId,
+        c.uid,
+        c.cardId,
+        "Double Attaque",
+      );
       if (c.playedThisTurn && !attackerHasInitiative) {
         this.sendError(
           conn,
@@ -932,7 +948,10 @@ export default class OnePieceBattleServer implements Party.Server {
       return;
     }
     const meta = ONEPIECE_BASE_SET_BY_ID.get(blocker.cardId);
-    if (!meta || !hasKeyword(meta.effect, "Bloqueur")) {
+    if (
+      !meta ||
+      !this.cardHasKeyword(seatId, blocker.uid, blocker.cardId, "Bloqueur")
+    ) {
       this.sendError(conn, "Ce Personnage n'a pas [Bloqueur].");
       return;
     }
@@ -1485,16 +1504,13 @@ export default class OnePieceBattleServer implements Party.Server {
       return;
     }
 
-    // Cherche un Bloqueur disponible (Persos avec [Bloqueur], rested=false,
-    // pas la cible actuelle).
+    // Cherche un Bloqueur disponible (Persos avec [Bloqueur] — text ou
+    // grant dynamique —, rested=false, pas la cible actuelle).
     const blocker = bot.characters.find(
       (c) =>
         !c.rested &&
         c.uid !== att.targetUid &&
-        hasKeyword(
-          ONEPIECE_BASE_SET_BY_ID.get(c.cardId)?.effect,
-          "Bloqueur",
-        ),
+        this.cardHasKeyword("p2", c.uid, c.cardId, "Bloqueur"),
     );
     if (blocker) {
       // Bloque
@@ -1627,7 +1643,12 @@ export default class OnePieceBattleServer implements Party.Server {
         if (c.rested) continue;
         const cm = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
         if (!cm || cm.kind !== "character") continue;
-        const hasInit = hasKeyword(cm.effect, "Initiative");
+        const hasInit = this.cardHasKeyword(
+          "p2",
+          c.uid,
+          c.cardId,
+          "Initiative",
+        );
         if (c.playedThisTurn && !hasInit) continue;
         attackers.push({
           uid: c.uid,
@@ -1761,18 +1782,33 @@ export default class OnePieceBattleServer implements Party.Server {
       if (!meta || meta.kind !== "leader") return;
       attackerPower = meta.power + seat.leaderAttachedDon * 1000;
       attackerName = meta.name;
-      attackerHasDoubleAttack = hasKeyword(meta.effect, "Double Attaque");
+      attackerHasDoubleAttack = this.cardHasKeyword(
+        "p2",
+        "leader",
+        seat.leaderId,
+        "Double Attaque",
+      );
       seat.leaderRested = true;
     } else {
       const c = seat.characters.find((x) => x.uid === attackerUid);
       if (!c || c.rested) return;
       const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
       if (!meta || meta.kind !== "character") return;
-      const hasInit = hasKeyword(meta.effect, "Initiative");
+      const hasInit = this.cardHasKeyword(
+        "p2",
+        c.uid,
+        c.cardId,
+        "Initiative",
+      );
       if (c.playedThisTurn && !hasInit) return;
       attackerPower = meta.power + c.attachedDon * 1000;
       attackerName = meta.name;
-      attackerHasDoubleAttack = hasKeyword(meta.effect, "Double Attaque");
+      attackerHasDoubleAttack = this.cardHasKeyword(
+        "p2",
+        c.uid,
+        c.cardId,
+        "Double Attaque",
+      );
       c.rested = true;
     }
 
@@ -2112,6 +2148,25 @@ export default class OnePieceBattleServer implements Party.Server {
       this.getBattleAccess(),
       this.activeSeat,
     );
+  }
+
+  /** Vérifie si une carte (Persos en jeu) a un mot-clé donné, en
+   *  combinant la prose de la carte (regex via hasKeyword) avec les
+   *  grants dynamiques accordés par les passifs (KEYWORD_GRANTS). */
+  private cardHasKeyword(
+    seatId: OnePieceBattleSeatId,
+    uid: string,
+    cardId: string,
+    keyword: string,
+  ): boolean {
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+    if (hasKeyword(meta?.effect, keyword)) return true;
+    const granted = getGrantedKeywords(
+      { seat: seatId, uid, cardId },
+      this.getBattleAccess(),
+      this.activeSeat,
+    );
+    return granted.has(keyword);
   }
 
   /** Helper : valide que c'est mon tour en main phase. */

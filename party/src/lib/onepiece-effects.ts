@@ -78,6 +78,21 @@ export type KoGuardContext = {
 /** Guard d'immunité KO. Retourne true pour bloquer le KO. */
 export type KoGuard = (ctx: KoGuardContext) => boolean;
 
+/** Contexte d'évaluation d'un grant de mots-clés dynamiques (Initiative,
+ *  Bloqueur, Double Attaque) accordés par effet conditionnel. */
+export type KeywordGrantContext = {
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string };
+  modSourceSeat: OnePieceBattleSeatId;
+  modSourceUid: string;
+  activeSeat: OnePieceBattleSeatId | null;
+  battle: BattleEffectAccess;
+};
+
+/** Grant de mots-clés dynamiques. Retourne la liste des mots-clés accordés
+ *  à la cible (vide si aucun). Cumulé avec les mots-clés bracketés écrits
+ *  sur la carte dans son effet. */
+export type KeywordGrant = (ctx: KeywordGrantContext) => string[];
+
 /** Selection passée au handler quand un PendingChoice est résolu. Mappe sur
  *  le payload du message client `op-resolve-choice`. */
 export type ChoiceSelection = {
@@ -2326,6 +2341,152 @@ export const KO_GUARDS: Record<string, KoGuard> = {
     });
   },
 };
+
+// ─── Registre des grants de mots-clés dynamiques ─────────────────────────
+
+export const KEYWORD_GRANTS: Record<string, KeywordGrant> = {
+  /** OP02-008 Joz — "[DON!! x1] Si vous avez 2 cartes ou moins dans votre
+   *  Vie et que votre Leader inclut «Équipage de Barbe Blanche» dans son
+   *  type, ce Personnage gagne [Initiative]." */
+  "OP02-008": (ctx) => {
+    if (ctx.target.uid !== ctx.modSourceUid) return [];
+    if (ctx.target.seat !== ctx.modSourceSeat) return [];
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return [];
+    if (seat.lifeCount > 2) return [];
+    if (!seat.leaderId) return [];
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    if (
+      !leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe blanche"),
+      )
+    )
+      return [];
+    const me = seat.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!me || me.attachedDon < 1) return [];
+    return ["Initiative"];
+  },
+
+  /** OP05-070 Fransuké — "[DON!! x1] Si vous avez 8 cartes DON!! ou plus
+   *  sur votre terrain, ce Personnage gagne [Initiative]." */
+  "OP05-070": (ctx) => {
+    if (ctx.target.uid !== ctx.modSourceUid) return [];
+    if (ctx.target.seat !== ctx.modSourceSeat) return [];
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return [];
+    const me = seat.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!me || me.attachedDon < 1) return [];
+    const totalDon =
+      seat.donActive +
+      seat.donRested +
+      seat.leaderAttachedDon +
+      seat.characters.reduce((s, c) => s + c.attachedDon, 0);
+    return totalDon >= 8 ? ["Initiative"] : [];
+  },
+
+  /** OP09-017 Wire — "[DON!! x1] Si votre Leader est de type {Équipage
+   *  de Kidd} et a 7000 de puissance ou plus, ce Personnage gagne
+   *  [Initiative]." */
+  "OP09-017": (ctx) => {
+    if (ctx.target.uid !== ctx.modSourceUid) return [];
+    if (ctx.target.seat !== ctx.modSourceSeat) return [];
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat?.leaderId) return [];
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    if (
+      !leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de kidd"),
+      )
+    )
+      return [];
+    if (leaderMeta.kind !== "leader") return [];
+    const leaderPower = leaderMeta.power + seat.leaderAttachedDon * 1000;
+    if (leaderPower < 7000) return [];
+    const me = seat.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!me || me.attachedDon < 1) return [];
+    return ["Initiative"];
+  },
+
+  /** ST15-005 Portgas D. Ace — "Si votre Leader inclut «Équipage de
+   *  Barbe Blanche» dans son type, ce Personnage gagne [Initiative]." */
+  "ST15-005": (ctx) => {
+    if (ctx.target.uid !== ctx.modSourceUid) return [];
+    if (ctx.target.seat !== ctx.modSourceSeat) return [];
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat?.leaderId) return [];
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    if (
+      !leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe blanche"),
+      )
+    )
+      return [];
+    return ["Initiative"];
+  },
+
+  /** ST21-015 Roronoa Zoro — "[DON!! x2] Ce Personnage gagne [Initiative]." */
+  "ST21-015": (ctx) => {
+    if (ctx.target.uid !== ctx.modSourceUid) return [];
+    if (ctx.target.seat !== ctx.modSourceSeat) return [];
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    const me = seat?.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!me || me.attachedDon < 2) return [];
+    return ["Initiative"];
+  },
+};
+
+/** Évalue tous les grants de mots-clés pour une cible. Retourne le set de
+ *  mots-clés accordés par les passifs des cartes en jeu. */
+export function getGrantedKeywords(
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string },
+  battle: BattleEffectAccess,
+  activeSeat: OnePieceBattleSeatId | null,
+): Set<string> {
+  const set = new Set<string>();
+  for (const seatId of ["p1", "p2"] as const) {
+    const seat = battle.getSeat(seatId);
+    if (!seat) continue;
+    if (seat.leaderId) {
+      const num = cardNumberOf(seat.leaderId);
+      const grant = KEYWORD_GRANTS[num];
+      if (grant) {
+        try {
+          for (const kw of grant({
+            target,
+            modSourceSeat: seatId,
+            modSourceUid: "leader",
+            activeSeat,
+            battle,
+          })) {
+            set.add(kw);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    for (const c of seat.characters) {
+      const num = cardNumberOf(c.cardId);
+      const grant = KEYWORD_GRANTS[num];
+      if (grant) {
+        try {
+          for (const kw of grant({
+            target,
+            modSourceSeat: seatId,
+            modSourceUid: c.uid,
+            activeSeat,
+            battle,
+          })) {
+            set.add(kw);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+  return set;
+}
 
 /** Évalue toutes les guards d'immunité KO pour une cible. Retourne true si
  *  au moins un guard bloque le KO. */
