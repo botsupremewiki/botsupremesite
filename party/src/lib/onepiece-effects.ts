@@ -1035,6 +1035,148 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     }
   },
 
+  // ─── BATCH 4 (cards 91-120 cardNumber) ──────────────────────────────────
+
+  /** OP09-053 Morge
+   *  [Jouée] Regardez 5 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  [Richie] et ajoutez-le à votre main. Puis... (effet "jouer Richie"
+   *  est skip, on récupère juste la carte en main). */
+  "OP09-053": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      5,
+      "Richie",
+      "bottom",
+    );
+    ctx.battle.log(
+      found
+        ? "Morge : révèle Richie et l'ajoute à la main."
+        : "Morge : aucun Richie révélé.",
+    );
+  },
+
+  /** OP09-056 Mr 3 (Galdino)
+   *  [Jouée] Regardez 4 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {Cross Guild} ou incluant «Baroque Works» dans son
+   *  type autre que [Mr 3 (Galdino)] et ajoutez-la à votre main. Puis,
+   *  placez les cartes restantes au-dessous de votre deck. */
+  "OP09-056": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    // Cherche d'abord Cross Guild, fallback Baroque Works.
+    let found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      4,
+      "Cross Guild",
+      "bottom",
+      "Mr 3 (Galdino)",
+    );
+    if (!found) {
+      found = ctx.battle.searchDeckTopForType(
+        ctx.sourceSeat,
+        0,
+        "Baroque Works",
+        "bottom",
+        "Mr 3 (Galdino)",
+      );
+    }
+    ctx.battle.log(
+      found
+        ? "Mr 3 (Galdino) : révèle une carte Cross Guild / Baroque Works."
+        : "Mr 3 (Galdino) : aucune carte révélée.",
+    );
+  },
+
+  /** OP09-057 Cross Guild (Event)
+   *  [Principale] Regardez 4 cartes du dessus de votre deck, révélez
+   *  jusqu'à 1 carte de type {Cross Guild} et ajoutez-la à votre main.
+   *  Puis, placez les cartes restantes au-dessous de votre deck. */
+  "OP09-057": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      4,
+      "Cross Guild",
+      "bottom",
+    );
+    ctx.battle.log(
+      found
+        ? "Cross Guild : révèle une carte Cross Guild."
+        : "Cross Guild : aucune carte Cross Guild révélée.",
+    );
+  },
+
+  /** OP09-066 Jean Bart
+   *  [Jouée] Si votre adversaire a plus de cartes DON!! sur son terrain
+   *  que vous n'en avez sur le vôtre, mettez KO jusqu'à 1 Personnage
+   *  adverse ayant un coût de 3 ou moins. */
+  "OP09-066": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!seat || !opp) return;
+      const myDon = seat.donActive;
+      // Don sur le terrain adverse = donActive (sa pool dispo). On ne compte
+      // pas les rested/attached pour rester proche de la prose officielle :
+      // "cartes DON!! sur son terrain" = la pool active.
+      const oppDon = opp.donActive;
+      if (oppDon <= myDon) {
+        ctx.battle.log(
+          "Jean Bart : pas plus de DON adverses, effet annulé.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-066",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Jean Bart : choisis un Persos adverse à KO (coût ≤ 3).",
+        params: { maxCost: 3 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Jean Bart : KO réussi.");
+    }
+  },
+
+  /** OP09-069 Trafalgar Law (Char)
+   *  [Jouée] Regardez 4 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {Équipage de Chapeau de paille} ou {Équipage du Heart}
+   *  ayant un coût de 2 ou plus et ajoutez-la à votre main. Puis, placez
+   *  les cartes restantes au-dessous. (filtre cost ≥ 2 simplifié — on
+   *  prend le premier match). */
+  "OP09-069": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    let found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      4,
+      "Équipage de Chapeau de paille",
+      "bottom",
+    );
+    if (!found) {
+      found = ctx.battle.searchDeckTopForType(
+        ctx.sourceSeat,
+        0,
+        "Équipage du Heart",
+        "bottom",
+      );
+    }
+    ctx.battle.log(
+      found
+        ? "Trafalgar Law : révèle une carte Chapeau de paille / Heart."
+        : "Trafalgar Law : aucune carte révélée.",
+    );
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
