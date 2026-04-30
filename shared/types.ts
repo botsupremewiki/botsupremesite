@@ -1304,6 +1304,9 @@ export type RuneterraSelfState = RuneterraPlayerPublicState & {
 export type RuneterraAttackLane = {
   attackerUid: string;
   blockerUid: string | null;
+  // Phase 3.18 : Challenger — l'attaquant force quelle unité ennemie peut
+  // bloquer cette lane. null = pas de force (le défenseur choisit librement).
+  forcedBlockerUid?: string | null;
 };
 
 export type RuneterraBattleState = {
@@ -1348,7 +1351,14 @@ export type RuneterraBattleClientMessage =
       // null pour les sorts sans cible. Phase 3.7+ ajoutera nexus targets.
       targetUid?: string | null;
     }
-  | { type: "lor-declare-attack"; attackerUids: string[] }
+  | {
+      type: "lor-declare-attack";
+      attackerUids: string[];
+      // Phase 3.18 : tableau parallèle aux attackerUids. Pour les unités
+      // avec Challenger, l'attaquant peut désigner quelle unité ennemie
+      // doit bloquer (null sinon).
+      forcedBlockerUids?: (string | null)[];
+    }
   | { type: "lor-assign-blockers"; blockerUids: (string | null)[] }
   | { type: "lor-pass" }
   | { type: "lor-concede" };

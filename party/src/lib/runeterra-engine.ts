@@ -32,10 +32,12 @@ export type DeckCard = {
   cardCode: string;
 };
 
-/** Une lane d'attaque : 1 attaquant + 0 ou 1 bloqueur. */
+/** Une lane d'attaque : 1 attaquant + 0 ou 1 bloqueur. Phase 3.18 :
+ *  forcedBlockerUid optionnel (Challenger force un bloqueur spécifique). */
 export type AttackLane = {
   attackerUid: string;
   blockerUid: string | null;
+  forcedBlockerUid?: string | null;
 };
 
 /** État interne complet (serveur). Le serveur projette ensuite vers
@@ -1517,6 +1519,7 @@ export function declareAttack(
   state: InternalState,
   seatIdx: 0 | 1,
   attackerUids: string[],
+  forcedBlockerUids?: (string | null)[],
 ): EngineResult {
   if (state.phase !== "round") {
     return { ok: false, error: "La partie n'est pas en round." };
@@ -1564,10 +1567,44 @@ export function declareAttack(
     }
   }
 
-  // Construit les lanes (sans bloqueurs).
-  const lanes: AttackLane[] = attackerUids.map((uid) => ({
+  // Phase 3.18 : valide les forcedBlockers (Challenger).
+  if (forcedBlockerUids !== undefined) {
+    if (forcedBlockerUids.length !== attackerUids.length) {
+      return {
+        ok: false,
+        error: `forcedBlockerUids doit être de même longueur que attackerUids (${forcedBlockerUids.length} vs ${attackerUids.length}).`,
+      };
+    }
+    const opponent = state.players[otherSeat(seatIdx)];
+    for (let i = 0; i < attackerUids.length; i++) {
+      const forced = forcedBlockerUids[i];
+      if (forced === null || forced === undefined) continue;
+      // L'attaquant doit avoir Challenger pour forcer un bloqueur.
+      const attackerUnit = player.bench.find(
+        (u) => u.uid === attackerUids[i],
+      );
+      if (!attackerUnit || !hasKeyword(attackerUnit, "Challenger")) {
+        return {
+          ok: false,
+          error: `Seul un attaquant avec Challenger peut désigner un bloqueur forcé (lane ${i + 1}).`,
+        };
+      }
+      // La cible doit être une unité ennemie sur le banc.
+      const forcedUnit = opponent.bench.find((u) => u.uid === forced);
+      if (!forcedUnit) {
+        return {
+          ok: false,
+          error: `Bloqueur forcé introuvable côté ennemi : ${forced}.`,
+        };
+      }
+    }
+  }
+
+  // Construit les lanes avec forcedBlockerUid si fourni.
+  const lanes: AttackLane[] = attackerUids.map((uid, i) => ({
     attackerUid: uid,
     blockerUid: null,
+    forcedBlockerUid: forcedBlockerUids?.[i] ?? null,
   }));
 
   // Consomme le jeton d'attaque.
@@ -1689,6 +1726,20 @@ export function assignBlockers(
     const attackerName =
       getCard(attackerUnit.cardCode)?.name ?? attackerUnit.cardCode;
     const blockerName = getCard(unit.cardCode)?.name ?? unit.cardCode;
+    // Phase 3.18 : Challenger — si la lane a un bloqueur forcé, le
+    // défenseur ne peut assigner QUE ce bloqueur (ou null = pas de
+    // bloqueur, dégâts au nexus).
+    if (lane.forcedBlockerUid && lane.forcedBlockerUid !== b) {
+      return {
+        ok: false,
+        error: `${attackerName} (Challenger) force le blocage par ${
+          getCard(
+            attacker.bench.find((u) => u.uid === lane.forcedBlockerUid!)
+              ?.cardCode ?? "",
+          )?.name ?? lane.forcedBlockerUid
+        } — tu dois assigner ce bloqueur ou aucun (lane ${i + 1}).`,
+      };
+    }
     if (
       hasKeyword(attackerUnit, "Elusive") &&
       !hasKeyword(unit, "Elusive") &&

@@ -290,7 +290,12 @@ export default class LorBattleServer implements Party.Server {
         result = playSpell(this.state, seat, data.handIndex, data.targetUid);
         break;
       case "lor-declare-attack":
-        result = declareAttack(this.state, seat, data.attackerUids);
+        result = declareAttack(
+          this.state,
+          seat,
+          data.attackerUids,
+          data.forcedBlockerUids,
+        );
         break;
       case "lor-assign-blockers":
         result = assignBlockers(this.state, seat, data.blockerUids);
