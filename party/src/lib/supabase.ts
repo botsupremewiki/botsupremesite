@@ -340,6 +340,9 @@ export async function recordBattleResult(
   winner_elo_after: number;
   loser_elo_before: number;
   loser_elo_after: number;
+  winner_gold_reward?: number;
+  loser_gold_reward?: number;
+  winner_pack_reward?: number;
 } | null> {
   const env = getSupabaseEnv(room);
   if (!env) return null;
@@ -499,7 +502,11 @@ export async function recordBotWin(
   room: Party.Room,
   authId: string,
   gameId: string,
-): Promise<{ bot_wins: number; granted: boolean } | null> {
+): Promise<{
+  bot_wins: number;
+  granted: boolean;
+  gold_reward: number;
+} | null> {
   const env = getSupabaseEnv(room);
   if (!env) return null;
   try {
@@ -522,10 +529,12 @@ export async function recordBotWin(
     const data = (await resp.json()) as {
       bot_wins?: number;
       granted?: boolean;
+      gold_reward?: number;
     };
     return {
       bot_wins: data?.bot_wins ?? 0,
       granted: !!data?.granted,
+      gold_reward: data?.gold_reward ?? 0,
     };
   } catch (err) {
     console.warn("[tcg] record_tcg_bot_win threw:", err);

@@ -1,7 +1,9 @@
 "use client";
 
-// Phase 3a : client minimaliste pour la connexion + affichage d'état brut.
-// L'UI riche (board, hand, attaques, animations) viendra en 3b-3e.
+// Client de combat One Piece TCG (clone fidèle Bandai).
+// Connecte au serveur PartyKit, affiche le board, la main, le log, le
+// chat ; gère mulligan, attaques, défense (Bloqueur / Counter / Évent
+// [Contre]), résolution de Trigger, PendingChoice, timer anti-AFK.
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -137,9 +139,6 @@ export function OnePieceBattleClient({
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
           <span className="text-xs text-zinc-500">⚔️ Combat</span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-300">
-            Phase 3a — squelette
-          </span>
         </div>
         {profile ? (
           <UserPill profile={profile} variant="play" />
@@ -172,6 +171,15 @@ export function OnePieceBattleClient({
                     🏁 Fin de tour
                   </button>
                 )}
+              <a
+                href="/play/tcg/onepiece/regles"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-amber-200 hover:bg-amber-400/20"
+                title="Ouvre les règles dans un nouvel onglet"
+              >
+                📖 Règles
+              </a>
               <button
                 onClick={concede}
                 className={
@@ -560,10 +568,6 @@ export function OnePieceBattleClient({
               </div>
             </div>
 
-            <div className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-[11px] text-amber-200">
-              ⚠️ Combat en cours d&apos;implémentation — Phase 3a (squelette).
-              Setup, mulligan, tours et combat arrivent en Phase 3b-3e.
-            </div>
           </>
         )}
       </main>

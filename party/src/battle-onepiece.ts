@@ -1603,12 +1603,17 @@ export default class OnePieceBattleServer implements Party.Server {
               }),
             );
           }
+          if (res.gold_reward > 0) {
+            this.pushLog(
+              `💰 ${this.seats.p1?.username} : +${res.gold_reward} OS (victoire bot).`,
+            );
+          }
           if (res.granted) {
             this.pushLog(
               `🎁 Quête remplie ! ${this.seats.p1?.username} reçoit 1 booster gratuit.`,
             );
-            this.broadcastState();
           }
+          this.broadcastState();
         })
         .catch(() => {});
     }
@@ -1636,10 +1641,26 @@ export default class OnePieceBattleServer implements Party.Server {
         reason,
       })
         .then((res) => {
-          if (!res || !ranked) return;
-          this.pushLog(
-            `📊 ELO — ${w.username} ${res.winner_elo_before}→${res.winner_elo_after} · ${l.username} ${res.loser_elo_before}→${res.loser_elo_after}.`,
-          );
+          if (!res) return;
+          // Notifie le gain de gold + pack aux 2 joueurs.
+          const wGold = res.winner_gold_reward ?? 0;
+          const lGold = res.loser_gold_reward ?? 0;
+          const wPack = res.winner_pack_reward ?? 0;
+          if (wGold > 0 || wPack > 0) {
+            this.pushLog(
+              `🏆 ${w.username} : +${wGold} OS${
+                wPack > 0 ? ` + ${wPack} booster gratuit` : ""
+              }.`,
+            );
+          }
+          if (lGold > 0) {
+            this.pushLog(`💔 ${l.username} : +${lGold} OS (consolation).`);
+          }
+          if (ranked) {
+            this.pushLog(
+              `📊 ELO — ${w.username} ${res.winner_elo_before}→${res.winner_elo_after} · ${l.username} ${res.loser_elo_before}→${res.loser_elo_after}.`,
+            );
+          }
           this.broadcastState();
         })
         .catch(() => {});

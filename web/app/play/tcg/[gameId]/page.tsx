@@ -203,6 +203,17 @@ export default async function TcgGameHub({
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
               comingSoon={gameId === "lol"}
             />
+            {gameId === "onepiece" && (
+              <MenuButton
+                href={`/play/tcg/${gameId}/regles`}
+                icon="📖"
+                title="Règles & Tutoriel"
+                description="Phases, mots-clés, combat, récompenses, tutoriel pas-à-pas"
+                accent="text-amber-200"
+                border="border-amber-400/40"
+                gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.10),transparent_70%)]"
+              />
+            )}
           </div>
         </div>
       </main>
