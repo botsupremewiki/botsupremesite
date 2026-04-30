@@ -100,6 +100,54 @@ export function botAct(
     let targetUid: string | null = null;
 
     if (side === "none") {
+      // Phase 3.35 : skip les sorts qui ne servent à rien dans l'état
+      // courant (sinon mana gaspillée).
+      if (
+        effect.type === "damage-all-combatants" &&
+        !state.attackInProgress
+      ) {
+        continue; // pas de combat → no-op
+      }
+      if (
+        effect.type === "summon-tokens-if-ally-died" &&
+        player.alliesDiedThisRound <= 0
+      ) {
+        continue; // condition non remplie
+      }
+      if (
+        effect.type === "summon-tokens" &&
+        player.bench.length >= 6
+      ) {
+        continue; // banc plein → no-op
+      }
+      if (effect.type === "draw-champion") {
+        const hasChampInDeck = player.deck.some((c) => {
+          const card = getCard(c.cardCode);
+          return card?.supertype === "Champion";
+        });
+        if (!hasChampInDeck) continue;
+      }
+      if (effect.type === "buff-all-allies-round" && player.bench.length === 0) {
+        continue; // pas d'unités → buff gaspillé
+      }
+      if (
+        effect.type === "combo-buff-keyword-all-allies-round" &&
+        player.bench.length === 0
+      ) {
+        continue;
+      }
+      if (
+        effect.type === "grant-keyword-all-allies-round" &&
+        player.bench.length === 0
+      ) {
+        continue;
+      }
+      if (
+        effect.type === "stun-all-enemies-max-power" &&
+        opponent.bench.every((u) => u.power > effect.maxPower)
+      ) {
+        continue; // aucun ennemi dans la fenêtre maxPower
+      }
       targetUid = null;
     } else if (side === "ally") {
       if (effect.type === "buff-ally-permanent" && effect.requireWounded) {
@@ -138,6 +186,15 @@ export function botAct(
           .sort((a, b) => a.power - b.power);
         if (sacrificable.length === 0) continue;
         targetUid = sacrificable[0].uid;
+      } else if (effect.type === "summon-ally-copies") {
+        // Phase 3.33 : clone un allié. Préfère cloner la plus grosse
+        // menace alliée. Skip si banc vide ou banc plein (max 6).
+        if (player.bench.length === 0) continue;
+        if (player.bench.length >= 6) continue;
+        const target = [...player.bench].sort(
+          (a, b) => b.power + b.health - (a.power + a.health),
+        )[0];
+        targetUid = target.uid;
       } else if (player.bench.length > 0) {
         // Préfère un allié non-frozen pour ne pas gaspiller un buff
         const target = player.bench.find((u) => !u.frozen) ?? player.bench[0];
@@ -195,6 +252,15 @@ export function botAct(
             (a, b) => a.power - b.power,
           );
           targetUid = sacrificable[0].uid;
+        } else continue;
+      } else if (effect.type === "deal-damage-anywhere-if-ally-died") {
+        // Phase 3.34 : conditional damage. Skip si condition non remplie
+        // (alliesDiedThisRound = 0) ou pas de cible.
+        if (player.alliesDiedThisRound <= 0) continue;
+        if (opponent.bench.length > 0) {
+          targetUid = opponent.bench[0].uid;
+        } else if (player.bench.length > 0) {
+          targetUid = player.bench[0].uid;
         } else continue;
       } else {
         // deal-damage-anywhere, recall-any : préfère ennemi puis ally.
