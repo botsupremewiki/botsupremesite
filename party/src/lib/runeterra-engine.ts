@@ -24,6 +24,7 @@ import {
   RUNETERRA_DISCARD_EFFECTS,
   RUNETERRA_IMBUE_EFFECTS,
   RUNETERRA_LAST_BREATH_EFFECTS,
+  RUNETERRA_NEXUS_STRIKE_EFFECTS,
   RUNETERRA_PLAY_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
   getSpellTargetCount,
@@ -218,6 +219,7 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     endOfRoundHealthBuff: 0,
     frozen: false,
     stunned: false,
+    survivedDamageOnce: false,
   };
 }
 
@@ -767,6 +769,19 @@ export function triggerOnAttack(
   attackerUid: string,
 ): InternalState {
   const effect = RUNETERRA_ATTACK_EFFECTS[cardCode];
+  if (!effect) return state;
+  return applySpellEffect(state, attackerSeat, effect, null, null, null, 0, attackerUid);
+}
+
+/** Phase 3.75 : déclenche l'effet on-nexus-strike d'un Champion si
+ *  enregistré. Appelé par resolveCombat pour chaque strike au nexus. */
+export function triggerOnNexusStrike(
+  state: InternalState,
+  cardCode: string,
+  attackerSeat: 0 | 1,
+  attackerUid: string,
+): InternalState {
+  const effect = RUNETERRA_NEXUS_STRIKE_EFFECTS[cardCode];
   if (!effect) return state;
   return applySpellEffect(state, attackerSeat, effect, null, null, null, 0, attackerUid);
 }
@@ -5149,6 +5164,9 @@ function resolveCombat(state: InternalState): InternalState {
   let nexusDamageTotal = 0;
   let attackerNexusHeal = 0; // Lifesteal de l'attaquant
   let teemoNexusStrikes = 0; // Phase 3.13 : compteur frappes Teemo (01PZ008)
+  // Phase 3.75 : tracking par cardCode des nexus strikes pour fire les
+  // RUNETERRA_NEXUS_STRIKE_EFFECTS après postCombatState.
+  const nexusStrikersByCode = new Map<string, number>();
   const events: string[] = [];
 
   // Indexe les unités pour mutation locale.
@@ -5272,6 +5290,12 @@ function resolveCombat(state: InternalState): InternalState {
       if (attacker.cardCode === "01PZ008") {
         teemoNexusStrikes += strikesThisLane;
       }
+      // Phase 3.75 : track les nexus strikers pour les triggers (Teemo,
+      // Ezreal). Key par cardCode (un seul effet par cardCode).
+      nexusStrikersByCode.set(
+        attacker.cardCode,
+        (nexusStrikersByCode.get(attacker.cardCode) ?? 0) + strikesThisLane,
+      );
       events.push(`${attackerName} frappe le nexus pour ${attacker.power}.`);
     }
   }
@@ -5460,6 +5484,74 @@ function resolveCombat(state: InternalState): InternalState {
   for (const dead of defenderDeadUnits) {
     postCombatState = triggerLastBreath(postCombatState, dead, defenderSeat);
     if (postCombatState.phase === "ended") return postCombatState;
+  }
+
+  // Phase 3.75 : déclenche on-nexus-strike pour chaque attaquant ayant
+  // frappé le nexus (Teemo plante 5 Mushrooms par strike, Ezreal crée
+  // un Tir mystique par strike). Une fois par strike (DoubleStrike =
+  // 2 fires).
+  for (const [cardCode, strikeCount] of nexusStrikersByCode) {
+    for (let i = 0; i < strikeCount; i++) {
+      // attackerUid not strictly needed (registry effects don't use
+      // triggerSourceUid yet pour nexus strikes), pass empty string.
+      postCombatState = triggerOnNexusStrike(
+        postCombatState,
+        cardCode,
+        attackerSeat,
+        "",
+      );
+      if (postCombatState.phase === "ended") return postCombatState;
+    }
+  }
+
+  // Phase 3.75 : Braum (01FR009) — « la 1re fois que je survis à des
+  // dégâts, summon Poro puissant. » Scan les 2 benches pour Braums
+  // ayant damageTaken > 0 et !survivedDamageOnce. Set le flag et summon
+  // 01FR053 sur le banc du Braum (capé à maxBench).
+  for (const seat of [0, 1] as const) {
+    const p = postCombatState.players[seat];
+    const braums = p.bench.filter(
+      (u) =>
+        u.cardCode === "01FR009" &&
+        u.damageTaken > 0 &&
+        !u.survivedDamageOnce,
+    );
+    if (braums.length === 0) continue;
+    if (p.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench) {
+      // Pas de slot, mais on flag quand même pour ne pas re-trigger.
+      const newBench = p.bench.map((u) =>
+        braums.includes(u) ? { ...u, survivedDamageOnce: true } : u,
+      );
+      const psA: [InternalPlayer, InternalPlayer] = [
+        postCombatState.players[0],
+        postCombatState.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      psA[seat] = { ...p, bench: newBench };
+      postCombatState = { ...postCombatState, players: psA };
+      continue;
+    }
+    let updatedBench = p.bench.map((u) =>
+      braums.includes(u) ? { ...u, survivedDamageOnce: true } : u,
+    );
+    const slotsAvailable = RUNETERRA_BATTLE_CONFIG.maxBench - updatedBench.length;
+    const toSummon = Math.min(braums.length, slotsAvailable);
+    for (let i = 0; i < toSummon; i++) {
+      const newUid = `${seat}-bp-${postCombatState.round}-${postCombatState.log.length}-${i}`;
+      updatedBench = [...updatedBench, createUnit(newUid, "01FR053")];
+    }
+    const psB: [InternalPlayer, InternalPlayer] = [
+      postCombatState.players[0],
+      postCombatState.players[1],
+    ] as [InternalPlayer, InternalPlayer];
+    psB[seat] = { ...p, bench: updatedBench };
+    postCombatState = {
+      ...postCombatState,
+      players: psB,
+      log: [
+        ...postCombatState.log,
+        `${p.username} : Braum invoque ${toSummon} × Poro puissant (a survécu).`,
+      ],
+    };
   }
 
   return checkLevelUps(postCombatState);

@@ -1289,6 +1289,10 @@ export type RuneterraBattleUnit = {
   // Phase 3.11 : Étourdissement (Stun). Retire l'unité du combat pour
   // ce round (ne peut pas attaquer ni bloquer). Reset à endRound.
   stunned: boolean;
+  // Phase 3.75 : flag once-per-game pour Braum (01FR009) « la première
+  // fois que je survis à des dégâts, summon Poro puissant ». Default
+  // false. Set à true après le 1er survive. Aucun reset.
+  survivedDamageOnce: boolean;
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de
@@ -2491,6 +2495,23 @@ export const RUNETERRA_ATTACK_EFFECTS: Record<string, SpellEffect> = {
   "01SI042": { type: "summon-tokens", cardCode: "01SI024", count: 2 },
   // 01SI053 Elise : « Attaque : invoquez 1 Jeune araignée. »
   "01SI053": { type: "summon-tokens", cardCode: "01SI002", count: 1 },
+};
+
+// ─── Nexus-strike effects (Phase 3.75) ───────────────────────────────────
+// Effets déclenchés quand un Champion frappe le nexus ennemi pendant
+// resolveCombat. L'engine appelle triggerOnNexusStrike par strike (donc
+// 2× pour DoubleStrike).
+
+export const RUNETERRA_NEXUS_STRIKE_EFFECTS: Record<string, SpellEffect> = {
+  // 01PZ008 Teemo : « Frappe du Nexus : plantez 5 Champignons vénéneux. »
+  "01PZ008": {
+    type: "insert-tokens-into-enemy-deck",
+    tokenCardCode: "01PZ022",
+    insertCount: 5,
+  },
+  // 01PZ036 Ezreal : « Frappe du Nexus : créez 1 Tir mystique fugace
+  // dans votre main. » (Fleeting non implémenté, juste push.)
+  "01PZ036": { type: "create-card-in-hand", cardCode: "01PZ052" },
 };
 
 // ─── Discard effects (Phase 3.72) ────────────────────────────────────────
