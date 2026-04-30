@@ -230,6 +230,12 @@ export function botAct(
         });
         if (hasSubtype && player.bench.length >= 6) continue;
       }
+      if (
+        effect.type === "revive-n-most-powerful-dead-allies-this-game-as-ephemeral"
+      ) {
+        if (player.deadAlliesThisGame.length === 0) continue;
+        if (player.bench.length >= 6) continue;
+      }
       if (effect.type === "buff-allies-of-subtype-everywhere") {
         const hasAnySubtype = [
           ...player.bench,

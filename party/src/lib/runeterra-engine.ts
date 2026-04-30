@@ -91,6 +91,9 @@ export type InternalPlayer = {
   // Phase 3.51 : liste des alliés morts CE round (uid + cardCode).
   // Reset à chaque startRound. Sert pour 01SI046 (revive random dead).
   deadAlliesThisRound: { uid: string; cardCode: string }[];
+  // Phase 3.60 : liste des alliés morts CETTE PARTIE (cumulé, never reset).
+  // Sert pour 01SI003 (revive 6 plus puissants morts cette partie).
+  deadAlliesThisGame: { uid: string; cardCode: string }[];
   // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
   // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
   // healthDelta directement sur la nouvelle unité, costDelta sur la mana
@@ -263,6 +266,7 @@ export function createInitialState(
     hasMulliganed: false,
     alliesDiedThisRound: 0,
     deadAlliesThisRound: [],
+    deadAlliesThisGame: [],
     cardBuffs: {},
     uniqueCardCodesPlayedThisGame: [],
     championCounters: {
@@ -671,19 +675,20 @@ export function triggerLastBreath(
   dyingUnit: RuneterraBattleUnit,
   dyingUnitSeat: 0 | 1,
 ): InternalState {
-  // Phase 3.51 : enregistre toute mort d'allié dans deadAlliesThisRound
-  // (avant l'effet Last Breath, pour que l'effet voie le dead inclus).
+  // Phase 3.51 + 3.60 : enregistre toute mort d'allié dans
+  // deadAlliesThisRound (reset à startRound) ET deadAlliesThisGame
+  // (cumulé toute la partie). Avant l'effet Last Breath pour que les
+  // sorts puissent voir la mort actuelle dans la liste.
   const dyingPlayer = state.players[dyingUnitSeat];
   const newPlayers: [InternalPlayer, InternalPlayer] = [
     state.players[0],
     state.players[1],
   ] as [InternalPlayer, InternalPlayer];
+  const deathEntry = { uid: dyingUnit.uid, cardCode: dyingUnit.cardCode };
   newPlayers[dyingUnitSeat] = {
     ...dyingPlayer,
-    deadAlliesThisRound: [
-      ...dyingPlayer.deadAlliesThisRound,
-      { uid: dyingUnit.uid, cardCode: dyingUnit.cardCode },
-    ],
+    deadAlliesThisRound: [...dyingPlayer.deadAlliesThisRound, deathEntry],
+    deadAlliesThisGame: [...dyingPlayer.deadAlliesThisGame, deathEntry],
   };
   const stateWithDeath: InternalState = { ...state, players: newPlayers };
   if (!dyingUnit.keywords.includes("LastBreath")) return stateWithDeath;
@@ -2251,6 +2256,48 @@ function applySpellEffect(
         log: [
           ...state.log,
           `${caster.username} ajoute une copie éphémère de ${cardName} à sa main.`,
+        ],
+      };
+    }
+    case "revive-n-most-powerful-dead-allies-this-game-as-ephemeral": {
+      // Phase 3.60 : pick les count cardCodes morts les plus puissants
+      // (par card.attack) dans deadAlliesThisGame, summon chacun avec
+      // Ephemeral. Capé à maxBench. Les uids consommés sont retirés.
+      const cfgRN = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const sorted = [...player.deadAlliesThisGame].sort((a, b) => {
+        const ca = getCard(a.cardCode);
+        const cb = getCard(b.cardCode);
+        return (cb?.attack ?? 0) - (ca?.attack ?? 0);
+      });
+      const slotsAvailable = cfgRN.maxBench - player.bench.length;
+      const toRevive = Math.min(effect.count, sorted.length, slotsAvailable);
+      if (toRevive === 0) return state;
+      const chosen = sorted.slice(0, toRevive);
+      const chosenUids = new Set(chosen.map((c) => c.uid));
+      const newUnits: RuneterraBattleUnit[] = [];
+      for (let i = 0; i < chosen.length; i++) {
+        const newUid = `${casterSeat}-rn-${state.round}-${state.log.length}-${i}`;
+        const baseUnit = createUnit(newUid, chosen[i].cardCode);
+        newUnits.push({
+          ...baseUnit,
+          keywords: Array.from(new Set([...baseUnit.keywords, "Ephemeral"])),
+        });
+      }
+      const newDeadList = player.deadAlliesThisGame.filter(
+        (d) => !chosenUids.has(d.uid),
+      );
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, ...newUnits],
+        deadAlliesThisGame: newDeadList,
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} ranime ${toRevive} allié${toRevive > 1 ? "s" : ""} (Ephemeral).`,
         ],
       };
     }

@@ -1755,6 +1755,14 @@ export type SpellEffect =
       type: "buff-ally-and-copies-everywhere-permanent";
       power: number;
       health: number;
+    }
+  // Phase 3.60
+  // Sans cible : pick les count cardCodes les plus puissants dans
+  // deadAlliesThisGame (par card.attack), summon chacun avec keyword
+  // Ephemeral. Capé à maxBench. 01SI003 La Nuit de l'horreur (count=6).
+  | {
+      type: "revive-n-most-powerful-dead-allies-this-game-as-ephemeral";
+      count: number;
     };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
@@ -2247,6 +2255,14 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     power: 2,
     health: 2,
   },
+
+  // ── Phase 3.60
+  // 01SI003 (ShadowIsles, 10 Slow, La Nuit de l'horreur) — ranime les
+  // 6 alliés les plus puissants morts cette partie + Ephemeral.
+  "01SI003": {
+    type: "revive-n-most-powerful-dead-allies-this-game-as-ephemeral",
+    count: 6,
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2381,6 +2397,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "summon-random-adept-from-region-cost":
     case "summon-token-if-unique-cards-played-min":
     case "summon-token-or-add-to-deck-if-no-subtype-ally":
+    case "revive-n-most-powerful-dead-allies-this-game-as-ephemeral":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";
