@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { ReportButton } from "@/components/report-button";
 import { ACHIEVEMENTS } from "@shared/achievements";
 import { TCG_ACHIEVEMENTS, tierAccent } from "@shared/tcg-achievements";
 import { TCG_GAMES } from "@shared/types";
@@ -154,10 +155,18 @@ export default async function PublicProfilePage({
                 <Stat label="Streak daily" value={`${streak}/30`} />
                 <Stat label="Statut" value="Joueur actif" />
               </div>
-              <div className="mt-5 text-[11px] text-zinc-500">
-                Plus de détails (gold, inventaire) sont privés. Pour
-                interagir avec ce joueur, utilise les actions sur son pseudo
-                dans le chat.
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <div className="text-[11px] text-zinc-500">
+                  Plus de détails (gold, inventaire) sont privés. Pour
+                  interagir avec ce joueur, utilise les actions sur son
+                  pseudo dans le chat.
+                </div>
+                {me && me.id !== target.id ? (
+                  <ReportButton
+                    targetId={target.id}
+                    targetUsername={target.username}
+                  />
+                ) : null}
               </div>
             </div>
 
