@@ -3167,6 +3167,10 @@ export type OnePieceBattleCardInPlay = {
   // Ice Age, etc. réduisent le coût pour permettre des KO ciblés).
   // Effective cost = meta.cost + (costBuff ?? 0). Peut être négatif.
   costBuff?: number;
+  // Si true, ce Persos ne peut pas activer [Bloqueur] pour le reste du
+  // tour (Limejuice OP09-014, Dawn Whip ST21-016 sub-effet). Reset
+  // à end-turn.
+  noBlockerThisTurn?: boolean;
 };
 
 export type OnePieceBattlePlayerPublicState = {

@@ -635,11 +635,17 @@ export default class OnePieceBattleServer implements Party.Server {
     // tour" expirent à la fin du tour de l'attaquant (convention courante).
     seat.tempPowerBuffs.clear();
     seat.usedActivationsThisTurn.clear();
-    for (const c of seat.characters) c.costBuff = 0;
+    for (const c of seat.characters) {
+      c.costBuff = 0;
+      c.noBlockerThisTurn = false;
+    }
     const opponentSeat = seatId === "p1" ? "p2" : "p1";
     this.seats[opponentSeat]?.tempPowerBuffs.clear();
     if (this.seats[opponentSeat]) {
-      for (const c of this.seats[opponentSeat]!.characters) c.costBuff = 0;
+      for (const c of this.seats[opponentSeat]!.characters) {
+        c.costBuff = 0;
+        c.noBlockerThisTurn = false;
+      }
     }
     this.pushLog(`${seat.username} termine son tour.`);
 
@@ -962,6 +968,14 @@ export default class OnePieceBattleServer implements Party.Server {
     }
     if (blocker.rested) {
       this.sendError(conn, "Ce Bloqueur est déjà épuisé.");
+      return;
+    }
+    // Limejuice / Dawn Whip secondary : bloqueur annulé pour ce tour.
+    if (blocker.noBlockerThisTurn) {
+      this.sendError(
+        conn,
+        "Ce Personnage ne peut pas activer [Bloqueur] ce tour (effet adverse).",
+      );
       return;
     }
     if (this.pendingAttack.targetUid === blockerUid) {
@@ -1891,10 +1905,16 @@ export default class OnePieceBattleServer implements Party.Server {
     }
     seat.tempPowerBuffs.clear();
     seat.usedActivationsThisTurn.clear();
-    for (const c of seat.characters) c.costBuff = 0;
+    for (const c of seat.characters) {
+      c.costBuff = 0;
+      c.noBlockerThisTurn = false;
+    }
     this.seats.p1?.tempPowerBuffs.clear();
     if (this.seats.p1) {
-      for (const c of this.seats.p1.characters) c.costBuff = 0;
+      for (const c of this.seats.p1.characters) {
+        c.costBuff = 0;
+        c.noBlockerThisTurn = false;
+      }
     }
     this.pushLog(`${seat.username} termine son tour.`);
 
@@ -2118,6 +2138,14 @@ export default class OnePieceBattleServer implements Party.Server {
         // Hook on-play du Persos posé.
         this.fireEffectFor(card.cardId, "on-play", newCard.uid, seatId);
         return newCard.uid;
+      },
+      addNoBlockerThisTurn: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (!c) return false;
+        c.noBlockerThisTurn = true;
+        return true;
       },
       playCharacterFromDiscard: (seatId, discardIndex, options) => {
         const s = this.seats[seatId];

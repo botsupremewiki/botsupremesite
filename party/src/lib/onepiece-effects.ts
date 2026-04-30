@@ -287,6 +287,11 @@ export interface BattleEffectAccess {
     options?: { rested?: boolean },
   ): string | null;
 
+  /** Empêche un Persos d'activer [Bloqueur] pour le reste du tour. Utilisé
+   *  par Limejuice (OP09-014) et Dawn Whip secondary (ST21-016). Retourne
+   *  true si appliqué. */
+  addNoBlockerThisTurn(seat: OnePieceBattleSeatId, uid: string): boolean;
+
   /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
    *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
   peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
@@ -4652,6 +4657,91 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       ctx.battle.koCharacter(oppSeat, ctx.choice.selection.targetUid);
       ctx.battle.log("Disparais : Persos adverse ≤ 4000 KO.");
     }
+  },
+
+  // ─── BATCH 25 — noBlockerThisTurn + restants ───────────────────────────
+
+  /** OP09-014 Limejuice
+   *  [Jouée] Jusqu'à 1 Personnage adverse ayant 4000 de puissance ou moins
+   *  ne peut pas activer [Bloqueur] pour tout le tour. */
+  "OP09-014": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-014",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Limejuice : choisis 1 Persos adverse ≤ 4000 power à priver de [Bloqueur] ce tour.",
+        params: { maxPower: 4000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addNoBlockerThisTurn(oppSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log(
+        "Limejuice : Persos adverse ≤ 4000 sans [Bloqueur] ce tour.",
+      );
+    }
+  },
+
+  /** OP09-118 Gol D. Roger (Leader)
+   *  [Initiative] (Cette carte peut attaquer durant le tour où elle est
+   *  jouée.) Quand votre adversaire active [Bloqueur], si vous ou votre
+   *  adversaire n'avez plus de cartes dans votre Vie, vous remportez la
+   *  partie.
+   *  (Simplification : on déclenche la condition de victoire chaque fois
+   *  qu'un Persos de Roger attaque ET que l'un des 2 joueurs a 0 Vie. La
+   *  trigger «adv active Bloqueur» n'a pas de hook dédié — on observe à
+   *  l'attaque pour cette implémentation.) */
+  "OP09-118": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    const opp = ctx.battle.getSeat(oppSeat);
+    if (!seat || !opp) return;
+    if (seat.lifeCount === 0 || opp.lifeCount === 0) {
+      ctx.battle.log(
+        "Gol D. Roger : 0 Vie de l'un des joueurs détecté → victoire (effet partiellement implémenté, attendre que l'attaque touche pour l'effet officiel).",
+      );
+      // Note : implémentation simplifiée (logging seulement) — la
+      // condition de victoire automatique demanderait une mutation du
+      // state qui n'est pas exposée dans BattleEffectAccess.
+    }
+  },
+
+  /** ST15-001 Atmos
+   *  [En attaquant] Si votre Leader est [Edward Newgate], vous ne pouvez
+   *  pas ajouter de cartes de votre Vie à votre main grâce à vos effets
+   *  pour tout le tour.
+   *  (Simplification : sans flag turn-level dédié, on log juste pour
+   *  signaler le déclenchement de l'effet ; la prévention reste à câbler.) */
+  "ST15-001": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const leaderMeta = seat?.leaderId
+      ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+      : null;
+    if (leaderMeta?.name !== "Edward Newgate") return;
+    ctx.battle.log(
+      "Atmos : Vie ne peut être ajoutée à la main par effet ce tour (effet simplifié — log uniquement).",
+    );
+  },
+
+  /** OP09-032 Don Quijote Rosinante
+   *  [Attaque adverse] [Une fois par tour] Redressez ce Personnage.
+   *  (Simplification : sans hook on-being-attacked, on déclenche au lieu
+   *  via on-turn-end : redresse Rosinante 1 fois automatique. Pas idéal
+   *  mais permet une activation par tour.) */
+  "OP09-032": (ctx) => {
+    if (ctx.hook !== "on-turn-end") return;
+    ctx.battle.untapCharacter(ctx.sourceSeat, ctx.sourceUid);
+    ctx.battle.log("Rosinante : redressé en fin de tour (simplifié).");
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───
