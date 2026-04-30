@@ -1583,6 +1583,60 @@ function applySpellEffect(
       newPlayers[targetSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "draw-champion": {
+      // Phase 3.25 : Haro. Cherche le 1er champion dans le deck du caster
+      // (top → bottom) et le pioche. Si aucun champion → no-op silencieux.
+      const player = newPlayers[casterSeat];
+      const idx = player.deck.findIndex((c) => {
+        const card = getCard(c.cardCode);
+        return card?.supertype === "Champion";
+      });
+      if (idx === -1) return state;
+      const drawn = player.deck[idx];
+      const newDeck = [
+        ...player.deck.slice(0, idx),
+        ...player.deck.slice(idx + 1),
+      ];
+      const cardName = getCard(drawn.cardCode)?.name ?? drawn.cardCode;
+      newPlayers[casterSeat] = {
+        ...player,
+        deck: newDeck,
+        hand: [...player.hand, drawn],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} pioche ${cardName} (champion).`,
+        ],
+      };
+    }
+    case "stun-all-enemies-max-power": {
+      // Phase 3.25 : Rugissement intimidant. Étourdit tous les ennemis
+      // dont la puissance est ≤ maxPower. enemyStunned bumpé pour chaque
+      // cible (compte vers Yasuo level-up).
+      const opp = newPlayers[oppSeat];
+      let stunCount = 0;
+      const newBench = opp.bench.map((u) => {
+        if (u.power > effect.maxPower) return u;
+        if (u.stunned) return u;
+        stunCount++;
+        return { ...u, stunned: true };
+      });
+      newPlayers[oppSeat] = { ...opp, bench: newBench };
+      if (stunCount > 0) {
+        const caster = newPlayers[casterSeat];
+        newPlayers[casterSeat] = {
+          ...caster,
+          championCounters: {
+            ...caster.championCounters,
+            enemyStunned: caster.championCounters.enemyStunned + stunCount,
+          },
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
     case "drain-target-any":
     case "drain-ally": {
       // Phase 3.24 : drain — inflige X dégâts à la cible et soigne le

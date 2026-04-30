@@ -1470,7 +1470,14 @@ export type SpellEffect =
   // drain-target-any → any side (Poigne de l'immortel).
   // drain-ally       → ally side seulement (Absorbe-âme).
   | { type: "drain-target-any"; amount: number }
-  | { type: "drain-ally"; amount: number };
+  | { type: "drain-ally"; amount: number }
+  // Phase 3.25
+  // Sans cible : pioche le 1er champion trouvé dans le deck du caster
+  // (Haro). Si aucun champion → no-op silencieux.
+  | { type: "draw-champion" }
+  // Sans cible : étourdit tous les ennemis dont la puissance est ≤ N
+  // (Rugissement intimidant : ≤ 4). enemyStunned bumpé pour chaque cible.
+  | { type: "stun-all-enemies-max-power"; maxPower: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1631,6 +1638,13 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // Absorbe-âme (ShadowIsles, 1 mana, Fast) :
   // « Drainez 4 PV d'un allié. »
   "01SI045": { type: "drain-ally", amount: 4 },
+
+  // ── Phase 3.25
+  // Haro (Freljord, 2 mana, Burst) : « Piochez un champion. »
+  "01FR029": { type: "draw-champion" },
+  // Rugissement intimidant (Noxus, 5 mana, Slow) :
+  // « Étourdissez tous les ennemis avec une puissance de 4 ou moins. »
+  "01NX054": { type: "stun-all-enemies-max-power", maxPower: 4 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1706,6 +1720,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "damage-all-units":
     case "gain-attack-token-self":
     case "combo-buff-keyword-all-allies-round":
+    case "draw-champion":
+    case "stun-all-enemies-max-power":
       return "none";
   }
 }
