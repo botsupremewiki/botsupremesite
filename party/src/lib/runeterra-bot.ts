@@ -451,11 +451,13 @@ export function botAct(
         if (!target) continue;
         targetUid = target.uid;
       } else if (effect.type === "steal-enemy-adept-this-round") {
-        // Phase 3.62 : Possession. Pick le plus gros adepte ennemi non-
-        // Champion. Skip si banc plein ou aucun adepte cible.
+        // Phase 3.62 + 3.63 : Possession (adepte) ou Capture
+        // (allowChampion=true, n'importe quelle unité). Pick la plus
+        // grosse menace cible. Skip si banc plein.
         if (player.bench.length >= 6) continue;
         const valid = opponent.bench
           .filter((u) => {
+            if (effect.allowChampion) return true;
             const c = getCard(u.cardCode);
             return c?.supertype !== "Champion";
           })
@@ -688,6 +690,24 @@ export function botAct(
       // Phase 3.59 : Atrocité. Sacrifice plus gros allié non-Champion +
       // dmg = sa power au nexus ennemi (lethal si possible) sinon plus
       // grosse menace ennemie.
+      // Phase 3.63 : Transformer. target1 = ally faible, target2 = ennemi
+      // gros (steal stats). Skip si pas de pair.
+      if (effect.type === "transform-target-into-other-target") {
+        const weakAlly = [...player.bench].sort(
+          (a, b) => a.power + a.health - (b.power + b.health),
+        )[0];
+        const bigEnemy = [...opponent.bench].sort(
+          (a, b) => b.power + b.health - (a.power + a.health),
+        )[0];
+        if (!weakAlly || !bigEnemy) continue;
+        // Skip si target ennemi pas réellement plus fort.
+        const allyVal = weakAlly.power + weakAlly.health;
+        const enemyVal = bigEnemy.power + bigEnemy.health;
+        if (enemyVal <= allyVal) continue;
+        targetUid = weakAlly.uid;
+        targetUid2 = bigEnemy.uid;
+        return playSpell(state, seatIdx, i, targetUid, targetUid2);
+      }
       if (effect.type !== "kill-ally-deal-power-to-target-any-or-nexus") {
         continue;
       }

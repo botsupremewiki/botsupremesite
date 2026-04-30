@@ -1781,8 +1781,16 @@ export type SpellEffect =
   | { type: "auto-copy-best-hand-card-into-deck"; copyCount: number }
   // Cible : adepte ennemi → vole vers le banc du caster jusqu'à fin de
   // round (restoré au startRound suivant via stolenUidsThisRound).
-  // Injouable si banc plein. 01SI006 Possession.
-  | { type: "steal-enemy-adept-this-round" };
+  // Injouable si banc plein. 01SI006 Possession (allowChampion=false).
+  // Phase 3.63 : 01DE025 Capture (allowChampion=true) — pareil sans
+  // restriction Champion.
+  | { type: "steal-enemy-adept-this-round"; allowChampion?: boolean }
+  // Phase 3.63
+  // 2 cibles : target1 = allié, target2 = unité (ally ou enemy, pas
+  // nexus). Remplace target1 par une copie exacte de target2 (cardCode
+  // + stats reset au card de base, keywords du nouveau cardCode).
+  // 01PZ005 Transformer.
+  | { type: "transform-target-into-other-target" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2301,6 +2309,17 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI006 (ShadowIsles, 5 Slow, Possession) — vole un adepte ennemi
   // jusqu'à fin de round (restoré au startRound suivant).
   "01SI006": { type: "steal-enemy-adept-this-round" },
+
+  // ── Phase 3.63
+  // 01DE025 (Demacia, 5 Fast, Capture) — vole une unité ennemie
+  // (Champion autorisé, contrairement à Possession) jusqu'à fin de round.
+  "01DE025": {
+    type: "steal-enemy-adept-this-round",
+    allowChampion: true,
+  },
+  // 01PZ005 (PiltoverZaun, 6 Fast, Transformer) — remplace target1 (allié)
+  // par une copie exacte de target2 (unité quelconque, pas nexus).
+  "01PZ005": { type: "transform-target-into-other-target" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2381,6 +2400,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "buff-ally-and-copies-everywhere-permanent":
       return "ally";
     case "kill-ally-deal-power-to-target-any-or-nexus":
+    case "transform-target-into-other-target":
       return "ally-and-any-or-nexus";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -2462,6 +2482,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "swap-ephemeral":
     case "grant-keyword-2-allies-round":
     case "kill-ally-deal-power-to-target-any-or-nexus":
+    case "transform-target-into-other-target":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;

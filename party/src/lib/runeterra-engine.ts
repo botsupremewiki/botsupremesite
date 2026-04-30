@@ -1268,15 +1268,16 @@ function validateSpellTarget(
         };
       }
     }
-    // Phase 3.62 : Possession ne peut voler qu'un adepte ennemi + le
-    // banc du caster doit avoir de la place.
+    // Phase 3.62 + 3.63 : Possession (adepte only) / Capture (any unit).
     if (effect.type === "steal-enemy-adept-this-round") {
-      const card = getCard(enemyUnit.cardCode);
-      if (card?.supertype === "Champion") {
-        return {
-          ok: false,
-          error: `${card.name} est un Champion — Possession ne cible que les adeptes.`,
-        };
+      if (!effect.allowChampion) {
+        const card = getCard(enemyUnit.cardCode);
+        if (card?.supertype === "Champion") {
+          return {
+            ok: false,
+            error: `${card.name} est un Champion — Possession ne cible que les adeptes.`,
+          };
+        }
       }
       if (caster.bench.length >= RUNETERRA_BATTLE_CONFIG.maxBench) {
         return {
@@ -1335,6 +1336,13 @@ function validateSpellTarget(
       return { ok: false, error: "Les 2 cibles doivent être distinctes." };
     }
     const isNexus = targetUid2 === "nexus-self" || targetUid2 === "nexus-enemy";
+    // Phase 3.63 : Transformer ne peut pas cibler un nexus.
+    if (effect.type === "transform-target-into-other-target" && isNexus) {
+      return {
+        ok: false,
+        error: "Transformer ne peut pas cibler un nexus.",
+      };
+    }
     if (!isNexus) {
       const found =
         caster.bench.find((u) => u.uid === targetUid2) ??
@@ -2561,6 +2569,41 @@ function applySpellEffect(
         log: [
           ...state.log,
           `${player.username} ranime ${toRevive} allié${toRevive > 1 ? "s" : ""} (Ephemeral).`,
+        ],
+      };
+    }
+    case "transform-target-into-other-target": {
+      // Phase 3.63 : Transformer. Remplace target1 (ally) par une copie
+      // exacte de target2 (any unit). Stats reset au card de base de
+      // target2, keywords du nouveau cardCode. uid de target1 conservé.
+      const player = newPlayers[casterSeat];
+      const ally = player.bench.find((u) => u.uid === targetUid);
+      if (!ally) return state;
+      let templateUnit: RuneterraBattleUnit | undefined;
+      const casterTemplate = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid2,
+      );
+      if (casterTemplate) templateUnit = casterTemplate;
+      else
+        templateUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid2,
+        );
+      if (!templateUnit) return state;
+      // Crée la nouvelle unité avec stats du template (via createUnit qui
+      // lit card.attack/health) mais keep target1.uid pour cohérence.
+      const transformed = createUnit(ally.uid, templateUnit.cardCode);
+      const newBench = player.bench.map((u) =>
+        u.uid === ally.uid ? transformed : u,
+      );
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      const targetName = getCard(templateUnit.cardCode)?.name ?? templateUnit.cardCode;
+      const allyName = getCard(ally.cardCode)?.name ?? ally.cardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} transforme ${allyName} en ${targetName}.`,
         ],
       };
     }
