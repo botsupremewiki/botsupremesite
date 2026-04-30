@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../_lib/supabase-helpers";
 import { SocialClient } from "./social-client";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 
 export const dynamic = "force-dynamic";
 
@@ -55,14 +59,19 @@ export default async function SocialPage() {
     team_slot: number | null;
   };
   let myFamiliers: FamilierForLend[] = [];
+  let items: OwnedEquippedItem[] = [];
 
   if (supabase) {
-    const famRes = await supabase
-      .from("eternum_familiers_owned")
-      .select("id,familier_id,element_id,level,star,team_slot")
-      .eq("user_id", profile.id)
-      .order("level", { ascending: false });
+    const [famRes, itemsRes] = await Promise.all([
+      supabase
+        .from("eternum_familiers_owned")
+        .select("id,familier_id,element_id,level,star,team_slot")
+        .eq("user_id", profile.id)
+        .order("level", { ascending: false }),
+      fetchEternumEquippedItems(profile.id),
+    ]);
     myFamiliers = (famRes.data ?? []) as FamilierForLend[];
+    items = itemsRes;
 
     const memRes = await supabase
       .from("eternum_guild_members")
@@ -123,6 +132,7 @@ export default async function SocialPage() {
           friends={friends}
           requests={requests}
           hero={hero!}
+          items={items}
           myFamiliers={myFamiliers}
         />
       </main>

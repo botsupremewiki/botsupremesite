@@ -6,14 +6,14 @@ import {
   ETERNUM_WORLD_BOSS,
 } from "@shared/eternum-content";
 import {
-  ETERNUM_FAMILIERS_BY_ID,
-  familierDisplayName,
-} from "@shared/eternum-familiers";
-import {
   buildFamilierUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
-import type { EternumElementId } from "@shared/types";
+import type { EternumHero } from "@shared/types";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
@@ -29,12 +29,16 @@ type FightSession = {
 };
 
 export function WorldBossClient({
+  hero,
   team,
+  items,
   leaderboard,
   attemptsToday,
   selfId,
 }: {
+  hero: EternumHero;
   team: OwnedFamilier[];
+  items: OwnedEquippedItem[];
   leaderboard: LeaderboardRow[];
   attemptsToday: number;
   selfId: string;
@@ -45,25 +49,15 @@ export function WorldBossClient({
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
+  // World boss = familiers only (héros pas en combat). Helper donne hero+team,
+  // on slice(1) pour ne garder que les familiers avec leurs items équipés.
+  const playerLoadout = useMemo(
+    () => buildPlayerCombatLoadout(hero, team, items),
+    [hero, team, items],
+  );
+
   function buildPlayerTeam(): CombatUnit[] {
-    const units: CombatUnit[] = [];
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (!base) continue;
-      const elt = f.element_id as EternumElementId;
-      units.push(
-        buildFamilierUnit(
-          `fam-${f.id}`,
-          familierDisplayName(base, elt),
-          base.classId,
-          elt,
-          f.level,
-          base.baseStats,
-          "A",
-        ),
-      );
-    }
-    return units;
+    return playerLoadout.units.slice(1); // skip hero
   }
 
   function buildBoss(): CombatUnit[] {
@@ -109,16 +103,6 @@ export function WorldBossClient({
 
     setAttempts(r.attempts_used);
 
-    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {};
-    const glyphs: Record<string, string> = {};
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (base) {
-        rarities[`fam-${f.id}`] = base.rarity;
-        glyphs[`fam-${f.id}`] = base.glyph;
-      }
-    }
-
     // Le boss "gagne" toujours côté narratif (HP énorme), on inflige juste
     // un score de dégâts côté serveur.
     setSession({
@@ -126,8 +110,8 @@ export function WorldBossClient({
       teamB: buildBoss(),
       damage: r.damage,
       osGained: r.os_gained,
-      unitRarities: rarities,
-      unitDisplayGlyphs: glyphs,
+      unitRarities: playerLoadout.rarities,
+      unitDisplayGlyphs: playerLoadout.glyphs,
     });
   }
 

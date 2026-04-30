@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../../_lib/supabase-helpers";
 import { TowerClient } from "./tower-client";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +27,9 @@ export default async function TowerPage() {
   const supabase = await createClient();
   let bestFloor = 0;
   let leaderboard: { user_id: string; best_floor: number }[] = [];
+  let items: OwnedEquippedItem[] = [];
   if (supabase) {
-    const [meRes, lbRes] = await Promise.all([
+    const [meRes, lbRes, itemsRes] = await Promise.all([
       supabase
         .from("eternum_tower_progress")
         .select("best_floor")
@@ -35,9 +40,11 @@ export default async function TowerPage() {
         .select("user_id,best_floor")
         .order("best_floor", { ascending: false })
         .limit(20),
+      fetchEternumEquippedItems(profile.id),
     ]);
     bestFloor = (meRes.data?.best_floor as number) ?? 0;
     leaderboard = (lbRes.data ?? []) as typeof leaderboard;
+    items = itemsRes;
   }
 
   return (
@@ -55,6 +62,7 @@ export default async function TowerPage() {
       <main className="flex flex-1 flex-col overflow-hidden p-6">
         <TowerClient
           hero={hero!}
+          items={items}
           startFloor={bestFloor + 1}
           leaderboard={leaderboard}
           selfId={profile.id}

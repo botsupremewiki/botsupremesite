@@ -2,7 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../../_lib/supabase-helpers";
 import { RaidsClient } from "./raids-client";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +21,8 @@ export default async function RaidsPage() {
   }
   const hero = await fetchEternumHero(profile.id);
   if (!hero) redirect("/play/rpg/personnage");
+  const items = await fetchEternumEquippedItems(profile.id);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
@@ -31,7 +36,7 @@ export default async function RaidsPage() {
         <UserPill profile={profile} variant="play" />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden p-6">
-        <RaidsClient hero={hero!} />
+        <RaidsClient hero={hero!} items={items} />
       </main>
     </div>
   );

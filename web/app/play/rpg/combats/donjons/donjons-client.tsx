@@ -2,24 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ETERNUM_CLASSES,
-  type EternumElementId,
-  type EternumHero,
-} from "@shared/types";
-import {
-  ETERNUM_FAMILIERS_BY_ID,
-  familierDisplayName,
-} from "@shared/eternum-familiers";
+import { type EternumHero } from "@shared/types";
 import {
   ETERNUM_DUNGEONS,
   type DungeonConfig,
 } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
-  buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
@@ -37,10 +32,12 @@ type FightSession = {
 export function DonjonsClient({
   hero,
   team,
+  items,
   progress,
 }: {
   hero: EternumHero;
   team: OwnedFamilier[];
+  items: OwnedEquippedItem[];
   progress: { dungeon_id: string; best_floor: number }[];
 }) {
   const router = useRouter();
@@ -54,36 +51,11 @@ export function DonjonsClient({
     return m;
   }, [progress]);
 
-  function buildPlayerTeam(): CombatUnit[] {
-    const units: CombatUnit[] = [];
-    units.push(
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    );
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (!base) continue;
-      const elt = f.element_id as EternumElementId;
-      units.push(
-        buildFamilierUnit(
-          `fam-${f.id}`,
-          familierDisplayName(base, elt), // "Loup-Alpha igné", "Tigron glacial", etc.
-          base.classId,
-          elt,
-          f.level,
-          base.baseStats,
-          "A",
-        ),
-      );
-    }
-    return units;
-  }
+  // Loadout joueur (héros + familiers + items équipés agrégés en bonusStats)
+  const playerLoadout = useMemo(
+    () => buildPlayerCombatLoadout(hero, team, items),
+    [hero, team, items],
+  );
 
   function buildEnemyTeam(d: DungeonConfig): CombatUnit[] {
     return d.enemies.map((e, i) =>
@@ -130,27 +102,14 @@ export function DonjonsClient({
       return;
     }
 
-    // Map id → rareté pour cadres précis + glyph familier custom
-    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
-      hero: "legendary",
-    };
-    const glyphs: Record<string, string> = {};
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (base) {
-        rarities[`fam-${f.id}`] = base.rarity;
-        glyphs[`fam-${f.id}`] = base.glyph; // 🐺 🐉 🦁 ... unique par familier_id
-      }
-    }
-
     // Lance le combat ATB tactique avec le résultat serveur en input.
     setSession({
       dungeon: d,
-      teamA: buildPlayerTeam(),
+      teamA: playerLoadout.units,
       teamB: buildEnemyTeam(d),
       forcedWinner: r.won ? "A" : "B",
-      unitRarities: rarities,
-      unitDisplayGlyphs: glyphs,
+      unitRarities: playerLoadout.rarities,
+      unitDisplayGlyphs: playerLoadout.glyphs,
       rewards: r.won
         ? {
             os: r.os_gained ?? 0,

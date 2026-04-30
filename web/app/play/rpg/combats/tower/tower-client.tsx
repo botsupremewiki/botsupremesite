@@ -3,15 +3,17 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ETERNUM_CLASSES,
   type EternumElementId,
   type EternumHero,
 } from "@shared/types";
 import {
   buildFamilierUnit,
-  buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 
@@ -27,11 +29,13 @@ type FightSession = {
 
 export function TowerClient({
   hero,
+  items,
   startFloor,
   leaderboard,
   selfId,
 }: {
   hero: EternumHero;
+  items: OwnedEquippedItem[];
   startFloor: number;
   leaderboard: { user_id: string; best_floor: number }[];
   selfId: string;
@@ -94,16 +98,10 @@ export function TowerClient({
       return;
     }
 
-    const teamA: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
+    // Tower = héros only. On utilise le helper centralisé en passant un team
+    // vide → seul le héros est dans units (avec ses items équipés appliqués).
+    const playerLoadout = buildPlayerCombatLoadout(hero, [], items);
+    const teamA: CombatUnit[] = playerLoadout.units;
     setSession({
       floor,
       teamA,

@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../_lib/supabase-helpers";
 import { IdleClient } from "./idle-client";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 
 export const dynamic = "force-dynamic";
 
@@ -39,17 +43,23 @@ export default async function AventurePage() {
     redirect("/play/rpg/personnage");
   }
 
-  // Charge l'équipe active (jusqu'à 5 familiers en team_slot non-null)
+  // Charge l'équipe active (jusqu'à 5 familiers en team_slot non-null) +
+  // les items équipés (sur héros et familiers).
   let team: TeamMember[] = [];
+  let items: OwnedEquippedItem[] = [];
   const supabase = await createClient();
   if (supabase) {
-    const { data } = await supabase
-      .from("eternum_familiers_owned")
-      .select("id,familier_id,element_id,level,team_slot")
-      .eq("user_id", profile.id)
-      .not("team_slot", "is", null)
-      .order("team_slot", { ascending: true });
-    team = (data ?? []) as TeamMember[];
+    const [teamRes, itemsRes] = await Promise.all([
+      supabase
+        .from("eternum_familiers_owned")
+        .select("id,familier_id,element_id,level,team_slot")
+        .eq("user_id", profile.id)
+        .not("team_slot", "is", null)
+        .order("team_slot", { ascending: true }),
+      fetchEternumEquippedItems(profile.id),
+    ]);
+    team = (teamRes.data ?? []) as TeamMember[];
+    items = itemsRes;
   }
 
   return (
@@ -70,6 +80,7 @@ export default async function AventurePage() {
           initialHero={hero!}
           initialGold={profile.gold}
           team={team}
+          items={items}
           userId={profile.id}
         />
       </main>

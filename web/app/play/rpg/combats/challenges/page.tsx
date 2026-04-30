@@ -3,9 +3,13 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../../_lib/supabase-helpers";
 import { ChallengesClient } from "./challenges-client";
 import type { OwnedFamilier } from "../../familiers/page";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +22,9 @@ export default async function ChallengesPage() {
   const supabase = await createClient();
   let team: OwnedFamilier[] = [];
   let done: { challenge_id: string }[] = [];
+  let items: OwnedEquippedItem[] = [];
   if (supabase) {
-    const [tRes, dRes] = await Promise.all([
+    const [tRes, dRes, iRes] = await Promise.all([
       supabase
         .from("eternum_familiers_owned")
         .select("id,familier_id,element_id,level,xp,star,team_slot,in_auberge,acquired_at")
@@ -30,9 +35,11 @@ export default async function ChallengesPage() {
         .from("eternum_weekly_challenges_done")
         .select("challenge_id")
         .eq("user_id", profile.id),
+      fetchEternumEquippedItems(profile.id),
     ]);
     team = (tRes.data ?? []) as OwnedFamilier[];
     done = (dRes.data ?? []) as { challenge_id: string }[];
+    items = iRes;
   }
 
   return (
@@ -48,7 +55,12 @@ export default async function ChallengesPage() {
         <UserPill profile={profile} variant="play" />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden p-6">
-        <ChallengesClient hero={hero!} team={team} doneIds={done.map((d) => d.challenge_id)} />
+        <ChallengesClient
+          hero={hero!}
+          team={team}
+          items={items}
+          doneIds={done.map((d) => d.challenge_id)}
+        />
       </main>
     </div>
   );

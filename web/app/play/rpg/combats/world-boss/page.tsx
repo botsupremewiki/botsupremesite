@@ -3,9 +3,13 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../../_lib/supabase-helpers";
 import { WorldBossClient } from "./world-boss-client";
 import type { OwnedFamilier } from "../../familiers/page";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +42,10 @@ export default async function WorldBossPage() {
   let team: OwnedFamilier[] = [];
   let leaderboard: LeaderboardRow[] = [];
   let attemptsToday = 0;
+  let items: OwnedEquippedItem[] = [];
   if (supabase) {
     const today = new Date().toISOString().slice(0, 10);
-    const [teamRes, lbRes, attRes] = await Promise.all([
+    const [teamRes, lbRes, attRes, itemsRes] = await Promise.all([
       supabase
         .from("eternum_familiers_owned")
         .select("id,familier_id,element_id,level,xp,star,team_slot,in_auberge,acquired_at")
@@ -58,10 +63,12 @@ export default async function WorldBossPage() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", profile.id)
         .eq("attempt_date", today),
+      fetchEternumEquippedItems(profile.id),
     ]);
     team = (teamRes.data ?? []) as OwnedFamilier[];
     leaderboard = (lbRes.data ?? []) as LeaderboardRow[];
     attemptsToday = attRes.count ?? 0;
+    items = itemsRes;
   }
 
   return (
@@ -78,7 +85,9 @@ export default async function WorldBossPage() {
       </header>
       <main className="flex flex-1 flex-col overflow-hidden p-6">
         <WorldBossClient
+          hero={hero!}
           team={team}
+          items={items}
           leaderboard={leaderboard}
           attemptsToday={attemptsToday}
           selfId={profile.id}

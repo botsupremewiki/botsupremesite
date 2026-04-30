@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../../_lib/supabase-helpers";
 import { PvpClient } from "./pvp-client";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +36,7 @@ export default async function PvpPage() {
       .limit(20);
     opponents = (data ?? []) as typeof opponents;
   }
+  const items = await fetchEternumEquippedItems(profile.id);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -47,7 +51,12 @@ export default async function PvpPage() {
         <UserPill profile={profile} variant="play" />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden p-6">
-        <PvpClient hero={hero!} opponents={opponents} selfId={profile.id} />
+        <PvpClient
+          hero={hero!}
+          items={items}
+          opponents={opponents}
+          selfId={profile.id}
+        />
       </main>
     </div>
   );

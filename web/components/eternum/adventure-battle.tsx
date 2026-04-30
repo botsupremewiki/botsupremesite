@@ -40,8 +40,11 @@ import {
   ETERNUM_FAMILIERS,
   ETERNUM_FAMILIERS_BY_ID,
   elementTintFilter,
-  familierDisplayName,
 } from "@shared/eternum-familiers";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import {
   ADVENTURE_MAX_STAGE,
   STAGE_PHASE_ACCENT,
@@ -74,12 +77,14 @@ type AdventureTeamMember = {
 export function AdventureBattle({
   hero,
   team,
+  items,
   initialStage,
   userId,
   onStageChange,
 }: {
   hero: EternumHero;
   team: AdventureTeamMember[];
+  items: OwnedEquippedItem[];
   initialStage: number;
   userId: string;
   onStageChange?: (newStage: number) => void;
@@ -103,34 +108,15 @@ export function AdventureBattle({
 
   const cls = ETERNUM_CLASSES[hero.classId];
 
+  // Loadout joueur (héros + familiers + items équipés agrégés)
+  const playerLoadout = useMemo(
+    () => buildPlayerCombatLoadout(hero, team, items),
+    [hero, team, items],
+  );
+
   // Build teams pour le stage actuel
   const teams = useMemo(() => {
-    const teamA: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        cls.name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (!base) continue;
-      const elt = f.element_id as EternumElementId;
-      teamA.push(
-        buildFamilierUnit(
-          `fam-${f.id}`,
-          familierDisplayName(base, elt),
-          base.classId,
-          elt,
-          f.level,
-          base.baseStats,
-          "A",
-        ),
-      );
-    }
+    const teamA: CombatUnit[] = playerLoadout.units;
 
     // Composition d'ennemis : on pioche un familier random du catalogue
     // pour chaque slot selon la rareté demandée (cosmétique pour le glyph/nom).
@@ -157,21 +143,10 @@ export function AdventureBattle({
       );
     });
     return { teamA, teamB };
-  }, [stage, hero, team, cls.name]);
+  }, [stage, playerLoadout]);
 
-  // Glyphs map pour l'affichage (familier glyph custom)
-  const unitGlyphs = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const u of teams.teamA) {
-      if (u.id === "hero") continue;
-      const famId = u.id.replace("fam-", "");
-      const owned = team.find((f) => f.id === famId);
-      if (!owned) continue;
-      const base = ETERNUM_FAMILIERS_BY_ID.get(owned.familier_id);
-      if (base) m[u.id] = base.glyph;
-    }
-    return m;
-  }, [teams.teamA, team]);
+  // Glyphs map pour l'affichage (familier glyph custom — déjà dans loadout)
+  const unitGlyphs = playerLoadout.glyphs;
 
   // ─── Flow management ──────────────────────────────────────────────
 

@@ -2,16 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ETERNUM_CLASSES,
-  type EternumHero,
-} from "@shared/types";
+import { type EternumHero } from "@shared/types";
 import { ETERNUM_RAIDS, type RaidConfig } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
-  buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 
@@ -27,7 +27,13 @@ type FightSession = {
   rewards?: { os: number; xp: number };
 };
 
-export function RaidsClient({ hero }: { hero: EternumHero }) {
+export function RaidsClient({
+  hero,
+  items,
+}: {
+  hero: EternumHero;
+  items: OwnedEquippedItem[];
+}) {
   const router = useRouter();
   const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,16 +60,9 @@ export function RaidsClient({ hero }: { hero: EternumHero }) {
       return;
     }
 
-    const teamA: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
+    // Raid = héros only. Helper retourne juste le héros avec ses items.
+    const playerLoadout = buildPlayerCombatLoadout(hero, [], items);
+    const teamA: CombatUnit[] = playerLoadout.units;
     const teamB: CombatUnit[] = [
       buildFamilierUnit(
         "boss",

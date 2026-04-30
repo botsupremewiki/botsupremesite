@@ -3,9 +3,13 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
-import { fetchEternumHero } from "../../_lib/supabase-helpers";
+import {
+  fetchEternumEquippedItems,
+  fetchEternumHero,
+} from "../../_lib/supabase-helpers";
 import { DonjonsClient } from "./donjons-client";
 import type { OwnedFamilier } from "../../familiers/page";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +34,10 @@ export default async function DonjonsPage() {
 
   const supabase = await createClient();
   let team: OwnedFamilier[] = [];
+  let items: OwnedEquippedItem[] = [];
   let progress: { dungeon_id: string; best_floor: number }[] = [];
   if (supabase) {
-    const [teamRes, progRes] = await Promise.all([
+    const [teamRes, progRes, itemsRes] = await Promise.all([
       supabase
         .from("eternum_familiers_owned")
         .select(
@@ -45,9 +50,11 @@ export default async function DonjonsPage() {
         .from("eternum_dungeon_progress")
         .select("dungeon_id,best_floor")
         .eq("user_id", profile.id),
+      fetchEternumEquippedItems(profile.id),
     ]);
     team = (teamRes.data ?? []) as OwnedFamilier[];
     progress = (progRes.data ?? []) as typeof progress;
+    items = itemsRes;
   }
 
   return (
@@ -63,7 +70,12 @@ export default async function DonjonsPage() {
         <UserPill profile={profile} variant="play" />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden p-6">
-        <DonjonsClient hero={hero!} team={team} progress={progress} />
+        <DonjonsClient
+          hero={hero!}
+          team={team}
+          items={items}
+          progress={progress}
+        />
       </main>
     </div>
   );

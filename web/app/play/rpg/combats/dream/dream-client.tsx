@@ -2,21 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ETERNUM_CLASSES,
-  type EternumElementId,
-  type EternumHero,
-} from "@shared/types";
+import { type EternumHero } from "@shared/types";
 import {
   ETERNUM_FAMILIERS_BY_ID,
-  familierDisplayName,
 } from "@shared/eternum-familiers";
 import { ETERNUM_DREAMS, type DreamConfig } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
-  buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
@@ -34,44 +32,22 @@ type FightSession = {
 export function DreamClient({
   hero,
   team,
+  items,
 }: {
   hero: EternumHero;
   team: OwnedFamilier[];
+  items: OwnedEquippedItem[];
 }) {
   const router = useRouter();
   const [session, setSession] = useState<FightSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
-  function buildPlayerTeam(): CombatUnit[] {
-    const units: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (!base) continue;
-      const elt = f.element_id as EternumElementId;
-      units.push(
-        buildFamilierUnit(
-          `fam-${f.id}`,
-          familierDisplayName(base, elt),
-          base.classId,
-          elt,
-          f.level,
-          base.baseStats,
-          "A",
-        ),
-      );
-    }
-    return units;
-  }
+  // Loadout joueur avec items équipés
+  const playerLoadout = useMemo(
+    () => buildPlayerCombatLoadout(hero, team, items),
+    [hero, team, items],
+  );
 
   function buildEnemy(d: DreamConfig): CombatUnit[] {
     // Boss + 2 minions, scale par recommendedLevel.
@@ -109,25 +85,13 @@ export function DreamClient({
       return;
     }
 
-    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
-      hero: "legendary",
-    };
-    const glyphs: Record<string, string> = {};
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (base) {
-        rarities[`fam-${f.id}`] = base.rarity;
-        glyphs[`fam-${f.id}`] = base.glyph;
-      }
-    }
-
     setSession({
       dream: d,
-      teamA: buildPlayerTeam(),
+      teamA: playerLoadout.units,
       teamB: buildEnemy(d),
       forcedWinner: r.won ? "A" : "B",
-      unitRarities: rarities,
-      unitDisplayGlyphs: glyphs,
+      unitRarities: playerLoadout.rarities,
+      unitDisplayGlyphs: playerLoadout.glyphs,
       shards: r.won ? r.shards ?? [] : undefined,
     });
   }

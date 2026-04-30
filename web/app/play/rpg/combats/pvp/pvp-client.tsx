@@ -13,6 +13,10 @@ import {
   buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 
@@ -35,10 +39,12 @@ type FightSession = {
 
 export function PvpClient({
   hero,
+  items,
   opponents,
   selfId,
 }: {
   hero: EternumHero;
+  items: OwnedEquippedItem[];
   opponents: Opponent[];
   selfId: string;
 }) {
@@ -74,16 +80,9 @@ export function PvpClient({
       return;
     }
 
-    const teamA: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
+    // PvP = héros vs héros. Helper applique les items équipés sur héros.
+    const playerLoadout = buildPlayerCombatLoadout(hero, [], items);
+    const teamA: CombatUnit[] = playerLoadout.units;
     const teamB: CombatUnit[] = [
       buildHeroUnit(
         `opp-${opp.user_id}`,

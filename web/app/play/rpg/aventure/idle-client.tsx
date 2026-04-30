@@ -15,6 +15,7 @@ import {
   osPerTick,
   xpPerTick,
 } from "@shared/eternum-adventure";
+import type { OwnedEquippedItem } from "@shared/eternum-loadout";
 import { createClient } from "@/lib/supabase/client";
 import { AdventureBattle } from "@/components/eternum/adventure-battle";
 
@@ -29,11 +30,13 @@ export function IdleClient({
   initialHero,
   initialGold,
   team,
+  items,
   userId,
 }: {
   initialHero: EternumHero;
   initialGold: number;
   team: TeamMember[];
+  items: OwnedEquippedItem[];
   userId: string;
 }) {
   const router = useRouter();
@@ -168,6 +171,7 @@ export function IdleClient({
       <AdventureBattle
         hero={hero}
         team={team}
+        items={items}
         initialStage={hero.idleStage}
         userId={userId}
         onStageChange={handleStageChange}

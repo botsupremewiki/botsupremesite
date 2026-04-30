@@ -1,6 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { EternumHero } from "@shared/types";
+import type {
+  OwnedEquippedItem,
+  OwnedTeamFamilier,
+} from "@shared/eternum-loadout";
 
 export type EternumHeroRow = {
   user_id: string;
@@ -76,4 +80,47 @@ function rowToHero(row: EternumHeroRow): EternumHero {
     idleStage: row.idle_stage,
     idleUpdatedAt: Date.parse(row.idle_updated_at) || Date.now(),
   };
+}
+
+/** Charge les familiers actifs du joueur (team_slot non-null) triés par slot. */
+export async function fetchEternumTeam(
+  userId: string,
+): Promise<OwnedTeamFamilier[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("eternum_familiers_owned")
+    .select("id,familier_id,element_id,level,team_slot")
+    .eq("user_id", userId)
+    .not("team_slot", "is", null)
+    .order("team_slot", { ascending: true });
+  return (data ?? []) as OwnedTeamFamilier[];
+}
+
+/** Charge tous les items équipés du joueur (sur héros ou familier). */
+export async function fetchEternumEquippedItems(
+  userId: string,
+): Promise<OwnedEquippedItem[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("eternum_items_owned")
+    .select("id,item_id,equipped_on_hero,equipped_on_familier")
+    .eq("user_id", userId)
+    .or("equipped_on_hero.eq.true,equipped_on_familier.not.is.null");
+  return (data ?? []) as OwnedEquippedItem[];
+}
+
+/** Charge tout ce qu'il faut pour un combat : héros + team + items. */
+export async function fetchEternumCombatBundle(userId: string): Promise<{
+  hero: EternumHero | null;
+  team: OwnedTeamFamilier[];
+  items: OwnedEquippedItem[];
+}> {
+  const [hero, team, items] = await Promise.all([
+    fetchEternumHero(userId),
+    fetchEternumTeam(userId),
+    fetchEternumEquippedItems(userId),
+  ]);
+  return { hero, team, items };
 }

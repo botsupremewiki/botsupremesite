@@ -2,24 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ETERNUM_CLASSES,
-  type EternumElementId,
-  type EternumHero,
-} from "@shared/types";
-import {
-  ETERNUM_FAMILIERS_BY_ID,
-  familierDisplayName,
-} from "@shared/eternum-familiers";
+import { type EternumHero } from "@shared/types";
+import { ETERNUM_FAMILIERS_BY_ID } from "@shared/eternum-familiers";
 import {
   ETERNUM_WEEKLY_CHALLENGES,
   type ChallengeConfig,
 } from "@shared/eternum-content";
 import {
   buildFamilierUnit,
-  buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnedFamilier } from "../../familiers/page";
@@ -37,10 +33,12 @@ type FightSession = {
 export function ChallengesClient({
   hero,
   team,
+  items,
   doneIds,
 }: {
   hero: EternumHero;
   team: OwnedFamilier[];
+  items: OwnedEquippedItem[];
   doneIds: string[];
 }) {
   const router = useRouter();
@@ -49,65 +47,36 @@ export function ChallengesClient({
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
-  function buildPlayerTeam(c: ChallengeConfig): {
-    units: CombatUnit[];
-    error?: string;
-  } {
-    // Pour solo-element : tous les familiers même élément.
+  // Loadout joueur (héros + familiers + items équipés agrégés)
+  const playerLoadout = useMemo(
+    () => buildPlayerCombatLoadout(hero, team, items),
+    [hero, team, items],
+  );
+
+  /** Vérifie les restrictions du challenge ; renvoie l'erreur ou null. */
+  function checkRestrictions(c: ChallengeConfig): string | null {
     if (c.id === "solo-element" && team.length > 0) {
       const elt = team[0]?.element_id;
       const ok = team.every((f) => f.element_id === elt);
-      if (!ok)
-        return {
-          units: [],
-          error: "Restriction violée : tous tes familiers doivent partager le même élément.",
-        };
+      if (!ok) {
+        return "Restriction violée : tous tes familiers doivent partager le même élément.";
+      }
     }
-
-    const units: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name,
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
-
-    // no-heal : interdit Vampire/Paladin (ils heal en passive).
     if (c.id === "no-heal") {
       if (hero.classId === "vampire" || hero.classId === "paladin") {
-        return {
-          units: [],
-          error: "Restriction : pas de classe avec heal (Vampire / Paladin).",
-        };
+        return "Restriction : pas de classe avec heal (Vampire / Paladin).";
+      }
+      for (const f of team) {
+        const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
+        if (
+          base &&
+          (base.classId === "vampire" || base.classId === "paladin")
+        ) {
+          return "Restriction : pas de familier avec heal (Vampire / Paladin).";
+        }
       }
     }
-
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (!base) continue;
-      if (c.id === "no-heal" && (base.classId === "vampire" || base.classId === "paladin")) {
-        return {
-          units: [],
-          error: "Restriction : pas de familier avec heal (Vampire / Paladin).",
-        };
-      }
-      const elt = f.element_id as EternumElementId;
-      units.push(
-        buildFamilierUnit(
-          `fam-${f.id}`,
-          familierDisplayName(base, elt),
-          base.classId,
-          elt,
-          f.level,
-          base.baseStats,
-          "A",
-        ),
-      );
-    }
-    return { units };
+    return null;
   }
 
   function buildEnemy(): CombatUnit[] {
@@ -129,9 +98,9 @@ export function ChallengesClient({
     setSession(null);
     if (!supabase) return;
 
-    const built = buildPlayerTeam(c);
-    if (built.error) {
-      setError(built.error);
+    const restrictionError = checkRestrictions(c);
+    if (restrictionError) {
+      setError(restrictionError);
       return;
     }
 
@@ -159,25 +128,13 @@ export function ChallengesClient({
 
     if (r.won) setDone([...done, c.id]);
 
-    const rarities: Record<string, "common" | "rare" | "epic" | "legendary" | "prismatic"> = {
-      hero: "legendary",
-    };
-    const glyphs: Record<string, string> = {};
-    for (const f of team) {
-      const base = ETERNUM_FAMILIERS_BY_ID.get(f.familier_id);
-      if (base) {
-        rarities[`fam-${f.id}`] = base.rarity;
-        glyphs[`fam-${f.id}`] = base.glyph;
-      }
-    }
-
     setSession({
       challenge: c,
-      teamA: built.units,
+      teamA: playerLoadout.units,
       teamB: buildEnemy(),
       forcedWinner: r.won ? "A" : "B",
-      unitRarities: rarities,
-      unitDisplayGlyphs: glyphs,
+      unitRarities: playerLoadout.rarities,
+      unitDisplayGlyphs: playerLoadout.glyphs,
       rewards: r.won
         ? {
             os: r.os_gained ?? c.rewardOs,

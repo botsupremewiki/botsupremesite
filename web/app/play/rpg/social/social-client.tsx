@@ -13,6 +13,10 @@ import {
   buildHeroUnit,
   type CombatUnit,
 } from "@shared/eternum-combat";
+import {
+  buildPlayerCombatLoadout,
+  type OwnedEquippedItem,
+} from "@shared/eternum-loadout";
 import { AtbBattleModal } from "@/components/eternum/atb-battle";
 import {
   ETERNUM_FAMILIERS_BY_ID,
@@ -40,6 +44,7 @@ export function SocialClient({
   friends,
   requests,
   hero,
+  items,
   myFamiliers,
 }: {
   myGuild: Guild | null;
@@ -49,6 +54,7 @@ export function SocialClient({
   friends: Friend[];
   requests: FriendRequest[];
   hero: EternumHero;
+  items: OwnedEquippedItem[];
   myFamiliers: FamilierForLend[];
 }) {
   const router = useRouter();
@@ -93,6 +99,7 @@ export function SocialClient({
             hasGuild={hasGuild}
             guildBoss={guildBoss}
             hero={hero}
+            items={items}
             supabase={supabase}
             setError={setError}
             setOkMsg={setOkMsg}
@@ -146,6 +153,7 @@ function GuildView({
   hasGuild,
   guildBoss,
   hero,
+  items,
   supabase,
   setError,
   setOkMsg,
@@ -156,6 +164,7 @@ function GuildView({
   hasGuild: boolean;
   guildBoss: GuildBoss | null;
   hero: EternumHero;
+  items: OwnedEquippedItem[];
   supabase: ReturnType<typeof createClient>;
   setError: (s: string | null) => void;
   setOkMsg: (s: string | null) => void;
@@ -223,16 +232,9 @@ function GuildView({
     }
 
     const tier = r.tier;
-    const teamA: CombatUnit[] = [
-      buildHeroUnit(
-        "hero",
-        ETERNUM_CLASSES[hero.classId].name + " (Toi)",
-        hero.classId,
-        hero.elementId,
-        hero.level,
-        "A",
-      ),
-    ];
+    // Boss de guilde = héros only avec items équipés.
+    const playerLoadout = buildPlayerCombatLoadout(hero, [], items);
+    const teamA: CombatUnit[] = playerLoadout.units;
     const teamB: CombatUnit[] = [
       {
         id: "guild-boss",
