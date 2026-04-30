@@ -53,6 +53,14 @@ export function LorBattleClient({
   const socketRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Phase 3.85 : toast quête bot (3 wins → 1 booster gratuit). On reçoit
+  // `lor-battle-quest-reward` à chaque victoire vs bot, on affiche le
+  // compteur et un toast doré quand `granted` passe à true.
+  const [questToast, setQuestToast] = useState<{
+    botWins: number;
+    granted: boolean;
+    goldReward: number;
+  } | null>(null);
   const [state, setState] = useState<RuneterraBattleState | null>(null);
   const [mulliganSelection, setMulliganSelection] = useState<Set<number>>(
     new Set(),
@@ -123,6 +131,13 @@ export function LorBattleClient({
         case "lor-battle-error":
           setErrorMsg(msg.message);
           break;
+        case "lor-battle-quest-reward":
+          setQuestToast({
+            botWins: msg.botWins,
+            granted: msg.granted,
+            goldReward: msg.goldReward,
+          });
+          break;
       }
     });
     return () => {
@@ -131,6 +146,14 @@ export function LorBattleClient({
       if (socketRef.current === ws) socketRef.current = null;
     };
   }, [profile, roomId, deckId]);
+
+  // Phase 3.85 : auto-dismiss du toast quête après 8s. Si une nouvelle
+  // victoire arrive avant l'expiration, on reset le timer.
+  useEffect(() => {
+    if (!questToast) return;
+    const id = setTimeout(() => setQuestToast(null), 8000);
+    return () => clearTimeout(id);
+  }, [questToast]);
 
   // Click sur carte main : unit → joue ; sort avec effet ciblé → entre en
   // targeting mode ; sort sans effet → joue sans cible (mana déduite).
@@ -328,6 +351,38 @@ export function LorBattleClient({
             <button
               onClick={() => setErrorMsg(null)}
               className="ml-3 text-rose-300 hover:text-rose-100"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Phase 3.85 : toast quête bot wins. Le compteur s'affiche dès
+            la 1ère victoire ; quand granted=true, le toast brille en doré. */}
+        {questToast && (
+          <div
+            className={`absolute right-4 top-4 z-20 flex items-center gap-2 rounded-md border px-3 py-2 text-xs shadow-lg backdrop-blur-sm ${
+              questToast.granted
+                ? "animate-pulse border-amber-300/70 bg-amber-400/20 text-amber-100 shadow-amber-500/30"
+                : "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+            }`}
+          >
+            {questToast.granted ? (
+              <span>
+                🎁 Quête remplie ! +1 booster gratuit
+                {questToast.goldReward > 0
+                  ? ` + ${questToast.goldReward.toLocaleString("fr-FR")} OS`
+                  : ""}
+              </span>
+            ) : (
+              <span>
+                🤖 Victoire vs bot ! Compteur : {questToast.botWins}/3
+              </span>
+            )}
+            <button
+              onClick={() => setQuestToast(null)}
+              className="ml-1 text-current/70 hover:text-current"
+              aria-label="Fermer"
             >
               ✕
             </button>

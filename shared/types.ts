@@ -1412,7 +1412,17 @@ export type RuneterraBattleServerMessage =
       selfSeat: RuneterraSeatId | null;
     }
   | { type: "lor-battle-state"; state: RuneterraBattleState }
-  | { type: "lor-battle-error"; message: string };
+  | { type: "lor-battle-error"; message: string }
+  // Phase 3.85 : récompense quête bot wins (3 victoires → 1 booster gratuit).
+  // Émis uniquement en mode bot quand le joueur humain (p1) gagne. Le
+  // client incrémente un compteur visuel et affiche un toast quand `granted`
+  // passe à true (le pack a été crédité côté serveur).
+  | {
+      type: "lor-battle-quest-reward";
+      botWins: number;
+      granted: boolean;
+      goldReward: number;
+    };
 
 // ─── Effets de sorts LoR (Phase 3.7) ─────────────────────────────────────
 // Registry partagé serveur+client : le client connaît les effets pour

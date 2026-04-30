@@ -32,6 +32,7 @@ import {
   fetchTcgDeckById,
   fetchTcgDecks,
   recordBattleResult,
+  recordBotWin,
 } from "./lib/supabase";
 
 const UUID_RE =
@@ -64,6 +65,8 @@ export default class LorBattleServer implements Party.Server {
   private seatUsernames: [string, string] = ["?", "?"];
   // Anti-double recordBattleResult.
   private resultRecorded = false;
+  // Phase 3.85 : anti-double recordBotWin (mode bot uniquement).
+  private questRecorded = false;
 
   constructor(readonly room: Party.Room) {
     this.rankedMode = room.id.startsWith("ranked-");
@@ -366,8 +369,14 @@ export default class LorBattleServer implements Party.Server {
   private maybeRecordResult() {
     if (this.state === null) return;
     if (this.state.phase !== "ended") return;
+    // Mode bot : on enregistre la victoire pour la quête journalière (3 wins
+    // → 1 booster gratuit). Le bot occupe toujours le siège 1, le joueur
+    // humain le siège 0 — donc seule une victoire de p1 compte.
+    if (this.botSeatIdx !== null) {
+      this.maybeRecordBotWin();
+      return;
+    }
     if (this.resultRecorded) return;
-    if (this.botSeatIdx !== null) return; // pas d'ELO en bot mode
     const winnerIdx = this.state.winnerSeatIdx;
     if (winnerIdx === null) return; // égalité
     const loserIdx = (1 - winnerIdx) as 0 | 1;
@@ -402,6 +411,52 @@ export default class LorBattleServer implements Party.Server {
           const conn = this.findConn(connId);
           if (!conn) continue;
           this.sendState(conn, info.seatIdx);
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Phase 3.85 : enregistre une victoire vs bot pour la quête journalière.
+  // Crédite 1 booster gratuit dès la 3ème victoire (toutes 24h) et reset le
+  // compteur. Le client reçoit `lor-battle-quest-reward` pour afficher le
+  // toast et incrémenter son compteur visuel.
+  private maybeRecordBotWin() {
+    if (this.questRecorded) return;
+    if (this.state === null) return;
+    if (this.state.winnerSeatIdx !== 0) return; // seul p1 humain compte
+    const humanAuth = this.seatAuthIds[0];
+    if (!humanAuth) return;
+    this.questRecorded = true;
+    void recordBotWin(this.room, humanAuth, "lol")
+      .then((res) => {
+        if (!res) return;
+        // Notifier le client humain.
+        for (const [connId, info] of this.connInfo) {
+          if (info.seatIdx !== 0) continue;
+          const conn = this.findConn(connId);
+          if (!conn) continue;
+          this.send(conn, {
+            type: "lor-battle-quest-reward",
+            botWins: res.bot_wins,
+            granted: res.granted,
+            goldReward: res.gold_reward,
+          });
+        }
+        // Log textuel quand la quête est validée.
+        if (res.granted && this.state) {
+          this.state = {
+            ...this.state,
+            log: [
+              ...this.state.log,
+              `🎁 Quête remplie ! ${this.seatUsernames[0]} reçoit 1 booster gratuit + ${res.gold_reward} OS.`,
+            ],
+          };
+          for (const [connId, info] of this.connInfo) {
+            if (info.seatIdx === null) continue;
+            const conn = this.findConn(connId);
+            if (!conn) continue;
+            this.sendState(conn, info.seatIdx);
+          }
         }
       })
       .catch(() => {});

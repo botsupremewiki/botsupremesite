@@ -12,8 +12,12 @@ type ConnStatus = "connecting" | "connected" | "disconnected";
 
 export function LorBotLauncherClient({
   profile,
+  questState,
 }: {
   profile: Profile | null;
+  // Phase 3.85 : compteur de quête bot wins du jour, lu côté serveur.
+  // null = pas encore initialisé (anonyme ou supabase down).
+  questState?: { bot_wins: number; rewarded: boolean } | null;
 }) {
   const router = useRouter();
   const game = TCG_GAMES.lol;
@@ -116,6 +120,53 @@ export function LorBotLauncherClient({
               apprendre les mécaniques.
             </p>
           </div>
+
+          {/* Phase 3.85 : progression quête bot wins du jour. */}
+          {profile && questState && (
+            <div
+              className={`rounded-xl border p-4 ${
+                questState.rewarded
+                  ? "border-amber-300/40 bg-amber-400/10"
+                  : "border-emerald-400/30 bg-emerald-500/5"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-widest text-zinc-400">
+                    Quête journalière
+                  </div>
+                  <div className="mt-0.5 text-sm font-semibold text-zinc-100">
+                    {questState.rewarded
+                      ? "🎁 Quête remplie ! Reviens demain."
+                      : `Bat le bot 3× pour 1 booster gratuit + 100 OS / win`}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold tabular-nums text-emerald-300">
+                    {Math.min(questState.bot_wins, 3)}
+                    <span className="text-zinc-500">/3</span>
+                  </div>
+                </div>
+              </div>
+              {/* Barre de progression */}
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-black/40">
+                <div
+                  className={`h-full transition-all ${
+                    questState.rewarded
+                      ? "bg-amber-400"
+                      : "bg-gradient-to-r from-emerald-500 to-emerald-300"
+                  }`}
+                  style={{
+                    width: `${(Math.min(questState.bot_wins, 3) / 3) * 100}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-1 text-[10px] text-zinc-500">
+                Reset à minuit · bonus +100 OS appliqué automatiquement à
+                chaque victoire vs bot.
+              </div>
+            </div>
+          )}
 
           {!profile ? (
             <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
