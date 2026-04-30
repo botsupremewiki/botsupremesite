@@ -1605,7 +1605,14 @@ export type SpellEffect =
   // Sans cible : pick un allié mort ce round (au hasard) et le ramène
   // sur le banc avec ses stats de base. Appel de la brume (01SI046).
   // No-op si deadAlliesThisRound vide ou banc plein.
-  | { type: "revive-random-dead-ally-this-round" };
+  | { type: "revive-random-dead-ally-this-round" }
+  // Phase 3.52
+  // Cible : ennemi → stun, MAIS uniquement s'il est attaquant (uid dans
+  // attackInProgress.lanes côté attacker). Tempête d'acier (01IO046).
+  | { type: "stun-attacker-enemy" }
+  // Sans cible : grant Ephemeral à TOUS les adeptes (non-Champion) au
+  // combat (les 2 côtés). Obscure lueur (01IO047).
+  | { type: "grant-ephemeral-all-followers-in-combat" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1948,6 +1955,18 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI046 (ShadowIsles, 3 Fast, Appel de la brume) — pick un allié
   // mort ce round (au hasard) et le ramène sur le banc.
   "01SI046": { type: "revive-random-dead-ally-this-round" },
+
+  // ── Phase 3.52
+  // 01IO012 (Ionia, 2 Burst, Maîtrises jumelles) — bot version : +3|+0
+  // round par défaut (la version « +0|+3 OU +3|+0 » via choix UI sera
+  // ajoutée plus tard si besoin).
+  "01IO012": { type: "buff-ally-round", power: 3, health: 0 },
+  // 01IO046 (Ionia, 2 Fast, Tempête d'acier) — étourdit un ennemi
+  // attaquant (combat-only).
+  "01IO046": { type: "stun-attacker-enemy" },
+  // 01IO047 (Ionia, 6 Fast, Obscure lueur) — Ephemeral à TOUS les
+  // adeptes au combat (les 2 côtés).
+  "01IO047": { type: "grant-ephemeral-all-followers-in-combat" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2043,6 +2062,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "stun-enemy-buff-all-allies-round":
     case "damage-enemy-and-rally":
     case "damage-or-frostbite-by-power-zero":
+    case "stun-attacker-enemy":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":
@@ -2059,6 +2079,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "summon-tokens-if-ally-died":
     case "kill-power-zero-and-frostbite-all-enemies":
     case "revive-random-dead-ally-this-round":
+    case "grant-ephemeral-all-followers-in-combat":
       return "none";
   }
   return "none";

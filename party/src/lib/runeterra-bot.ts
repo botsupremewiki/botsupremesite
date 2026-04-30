@@ -162,6 +162,12 @@ export function botAct(
       ) {
         continue; // rien à ranimer ou banc plein
       }
+      if (
+        effect.type === "grant-ephemeral-all-followers-in-combat" &&
+        !state.attackInProgress
+      ) {
+        continue; // pas de combat → no-op
+      }
       targetUid = null;
     } else if (side === "ally") {
       if (effect.type === "buff-ally-permanent" && effect.requireWounded) {
@@ -327,6 +333,21 @@ export function botAct(
           .filter((u) => !u.stunned)
           .sort((a, b) => b.power - a.power)[0];
         if (!target) continue;
+        targetUid = target.uid;
+      } else if (effect.type === "stun-attacker-enemy") {
+        // Phase 3.52 : Tempête d'acier. Skip si pas de combat ou pas
+        // d'attaquant ennemi.
+        if (!state.attackInProgress) continue;
+        const enemyAttackers = state.attackInProgress.lanes
+          .map((l) => l.attackerUid)
+          .filter((uid) =>
+            opponent.bench.some((u) => u.uid === uid && !u.stunned),
+          );
+        if (enemyAttackers.length === 0) continue;
+        // Stun le plus gros attaquant.
+        const target = opponent.bench
+          .filter((u) => enemyAttackers.includes(u.uid))
+          .sort((a, b) => b.power - a.power)[0];
         targetUid = target.uid;
       } else if (effect.type === "damage-or-frostbite-by-power-zero") {
         // Phase 3.45 : Acier glacial. Préfère un ennemi power=0 (kill),

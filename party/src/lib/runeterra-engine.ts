@@ -1139,6 +1139,24 @@ function validateSpellTarget(
         };
       }
     }
+    // Phase 3.52 : Tempête d'acier exige que la cible soit un attaquant.
+    if (effect.type === "stun-attacker-enemy") {
+      if (!state.attackInProgress) {
+        return {
+          ok: false,
+          error: "Ce sort ne peut être lancé que pendant un combat.",
+        };
+      }
+      const isAttacker = state.attackInProgress.lanes.some(
+        (lane) => lane.attackerUid === targetUid,
+      );
+      if (!isAttacker) {
+        return {
+          ok: false,
+          error: "La cible doit être un assaillant ennemi.",
+        };
+      }
+    }
     // Phase 3.37 : 2e cible doit aussi être un ennemi.
     if (targetCount === 2 && targetUid2) {
       const enemy2 = opponent.bench.find((u) => u.uid === targetUid2);
@@ -1999,6 +2017,51 @@ function applySpellEffect(
         if (newState.phase === "ended") return newState;
       }
       return newState;
+    }
+    case "stun-attacker-enemy": {
+      // Phase 3.52 : stun ennemi attaquant. Validation déjà faite.
+      const opp = newPlayers[oppSeat];
+      let stunned = false;
+      const newBench = opp.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        if (u.stunned) return u;
+        stunned = true;
+        return { ...u, stunned: true };
+      });
+      newPlayers[oppSeat] = { ...opp, bench: newBench };
+      if (stunned) {
+        const caster = newPlayers[casterSeat];
+        newPlayers[casterSeat] = {
+          ...caster,
+          championCounters: {
+            ...caster.championCounters,
+            enemyStunned: caster.championCounters.enemyStunned + 1,
+          },
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
+    case "grant-ephemeral-all-followers-in-combat": {
+      // Phase 3.52 : grant Ephemeral à tous les adeptes (non-Champion)
+      // au combat (les 2 côtés). No-op hors combat.
+      if (!state.attackInProgress) return state;
+      const combatants = new Set<string>();
+      for (const lane of state.attackInProgress.lanes) {
+        combatants.add(lane.attackerUid);
+        if (lane.blockerUid) combatants.add(lane.blockerUid);
+      }
+      for (const seat of [0, 1] as const) {
+        const player = newPlayers[seat];
+        const newBench = player.bench.map((u) => {
+          if (!combatants.has(u.uid)) return u;
+          const card = getCard(u.cardCode);
+          if (card?.supertype === "Champion") return u;
+          if (u.keywords.includes("Ephemeral")) return u;
+          return { ...u, keywords: [...u.keywords, "Ephemeral"] };
+        });
+        newPlayers[seat] = { ...player, bench: newBench };
+      }
+      return { ...state, players: newPlayers };
     }
     case "revive-random-dead-ally-this-round": {
       // Phase 3.51 : Appel de la brume. Pick un allié au hasard dans
