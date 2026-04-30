@@ -1234,6 +1234,39 @@ function validateSpellTarget(
     }
     return { ok: true };
   }
+  // Phase 3.59 : "ally-and-any-or-nexus" — target1=ally, target2=any unit
+  // or nexus (ally side, enemy side, ou "nexus-self"/"nexus-enemy").
+  if (side === "ally-and-any-or-nexus") {
+    const allyUnit = caster.bench.find((u) => u.uid === targetUid);
+    if (!allyUnit) {
+      return {
+        ok: false,
+        error: "La 1re cible doit être un allié à sacrifier.",
+      };
+    }
+    if (!targetUid2) {
+      return {
+        ok: false,
+        error: "Ce sort nécessite 2 cibles (1 allié + 1 cible).",
+      };
+    }
+    if (targetUid === targetUid2) {
+      return { ok: false, error: "Les 2 cibles doivent être distinctes." };
+    }
+    const isNexus = targetUid2 === "nexus-self" || targetUid2 === "nexus-enemy";
+    if (!isNexus) {
+      const found =
+        caster.bench.find((u) => u.uid === targetUid2) ??
+        opponent.bench.find((u) => u.uid === targetUid2);
+      if (!found) {
+        return {
+          ok: false,
+          error: "La 2e cible doit être une unité ou un nexus.",
+        };
+      }
+    }
+    return { ok: true };
+  }
   // Phase 3.46 : "ally-and-enemy" — target1 doit être ally, target2 enemy.
   if (side === "ally-and-enemy") {
     const allyUnit = caster.bench.find((u) => u.uid === targetUid);
@@ -2220,6 +2253,143 @@ function applySpellEffect(
           `${caster.username} ajoute une copie éphémère de ${cardName} à sa main.`,
         ],
       };
+    }
+    case "kill-ally-deal-power-to-target-any-or-nexus": {
+      // Phase 3.59 : Atrocité. Sacrifice target1 (allié) puis dmg =
+      // target1.power à target2 (unité ou nexus).
+      const player = newPlayers[casterSeat];
+      const sacrificed = player.bench.find((u) => u.uid === targetUid);
+      if (!sacrificed) return state;
+      const dmg = sacrificed.power;
+      // Retire l'allié sacrifié.
+      const newBenchAlly = player.bench.filter((u) => u.uid !== targetUid);
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: newBenchAlly,
+        alliesDiedThisRound: player.alliesDiedThisRound + 1,
+        championCounters: {
+          ...player.championCounters,
+          alliesDied: player.championCounters.alliesDied + 1,
+          unitsDied: player.championCounters.unitsDied + 1,
+        },
+      };
+      newPlayers[oppSeat] = {
+        ...newPlayers[oppSeat],
+        championCounters: {
+          ...newPlayers[oppSeat].championCounters,
+          unitsDied: newPlayers[oppSeat].championCounters.unitsDied + 1,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      newState = triggerLastBreath(newState, sacrificed, casterSeat);
+      if (newState.phase === "ended") return newState;
+      // Apply dmg à target2.
+      const newPlayers2: [InternalPlayer, InternalPlayer] = [
+        newState.players[0],
+        newState.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      if (targetUid2 === "nexus-self") {
+        const me = newPlayers2[casterSeat];
+        const newNexus = me.nexusHealth - dmg;
+        newPlayers2[casterSeat] = { ...me, nexusHealth: newNexus };
+        if (newNexus <= 0) {
+          return {
+            ...newState,
+            players: newPlayers2,
+            phase: "ended",
+            winnerSeatIdx: oppSeat,
+          };
+        }
+        return { ...newState, players: newPlayers2 };
+      }
+      if (targetUid2 === "nexus-enemy") {
+        const opp = newPlayers2[oppSeat];
+        const newNexus = opp.nexusHealth - dmg;
+        newPlayers2[oppSeat] = { ...opp, nexusHealth: newNexus };
+        if (newNexus <= 0) {
+          return {
+            ...newState,
+            players: newPlayers2,
+            phase: "ended",
+            winnerSeatIdx: casterSeat,
+            log: [
+              ...newState.log,
+              `${newState.players[casterSeat].username} remporte la partie (Atrocité au nexus).`,
+            ],
+          };
+        }
+        return { ...newState, players: newPlayers2 };
+      }
+      // Unité (any side).
+      let target2Seat: 0 | 1 | null = null;
+      if (newPlayers2[casterSeat].bench.find((u) => u.uid === targetUid2))
+        target2Seat = casterSeat;
+      else if (newPlayers2[oppSeat].bench.find((u) => u.uid === targetUid2))
+        target2Seat = oppSeat;
+      if (target2Seat === null) return newState;
+      const target2Player = newPlayers2[target2Seat];
+      const updatedBench = target2Player.bench.map((u) => {
+        if (u.uid !== targetUid2) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, dmg);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const dead2 = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers2[target2Seat] = {
+        ...target2Player,
+        bench: survivors,
+        alliesDiedThisRound:
+          target2Player.alliesDiedThisRound + (dead2 ? 1 : 0),
+        championCounters: {
+          ...target2Player.championCounters,
+          alliesDied:
+            target2Player.championCounters.alliesDied + (dead2 ? 1 : 0),
+        },
+      };
+      let final: InternalState = { ...newState, players: newPlayers2 };
+      if (dead2) final = triggerLastBreath(final, dead2, target2Seat);
+      return final;
+    }
+    case "buff-ally-and-copies-everywhere-permanent": {
+      // Phase 3.59 : buff l'ally ciblé ET toutes ses copies (même
+      // cardCode) sur le banc (direct), dans la main et dans le deck
+      // (cardBuffs cumulatif).
+      const player = newPlayers[casterSeat];
+      const target = player.bench.find((u) => u.uid === targetUid);
+      if (!target) return state;
+      const targetCardCode = target.cardCode;
+      // Bench : direct stat buff.
+      const newBench = player.bench.map((u) => {
+        if (u.cardCode !== targetCardCode) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+        };
+      });
+      // Hand + deck : cardBuffs.
+      const newCardBuffs = { ...player.cardBuffs };
+      for (const c of [...player.hand, ...player.deck]) {
+        if (c.cardCode !== targetCardCode) continue;
+        const existing = newCardBuffs[c.uid] ?? {
+          powerDelta: 0,
+          healthDelta: 0,
+          costDelta: 0,
+          addKeywords: [],
+        };
+        newCardBuffs[c.uid] = {
+          ...existing,
+          powerDelta: existing.powerDelta + effect.power,
+          healthDelta: existing.healthDelta + effect.health,
+        };
+      }
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: newBench,
+        cardBuffs: newCardBuffs,
+      };
+      return { ...state, players: newPlayers };
     }
     case "summon-random-adept-from-region-cost": {
       // Phase 3.58 : pick un adepte (non-Champion) collectible aléatoire

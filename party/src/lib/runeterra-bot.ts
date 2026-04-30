@@ -291,6 +291,18 @@ export function botAct(
           .sort((a, b) => a.power - b.power);
         if (sacrificable.length === 0) continue;
         targetUid = sacrificable[0].uid;
+      } else if (effect.type === "buff-ally-and-copies-everywhere-permanent") {
+        // Phase 3.59 : préfère un cardCode ayant beaucoup de copies en
+        // hand+deck+bench pour maximiser la valeur. Skip si banc vide.
+        if (player.bench.length === 0) continue;
+        const counts: Record<string, number> = {};
+        for (const c of [...player.bench, ...player.hand, ...player.deck]) {
+          counts[c.cardCode] = (counts[c.cardCode] ?? 0) + 1;
+        }
+        const sorted = [...player.bench].sort(
+          (a, b) => (counts[b.cardCode] ?? 0) - (counts[a.cardCode] ?? 0),
+        );
+        targetUid = sorted[0].uid;
       } else if (effect.type === "summon-ally-copies") {
         // Phase 3.33 : clone un allié. Préfère cloner la plus grosse
         // menace alliée. Skip si banc vide ou banc plein (max 6).
@@ -627,6 +639,39 @@ export function botAct(
       if (!bestPair || bestScore < 0) continue;
       targetUid = bestPair.allyUid;
       targetUid2 = bestPair.enemyUid;
+    } else if (side === "ally-and-any-or-nexus") {
+      // Phase 3.59 : Atrocité. Sacrifice plus gros allié non-Champion +
+      // dmg = sa power au nexus ennemi (lethal si possible) sinon plus
+      // grosse menace ennemie.
+      if (effect.type !== "kill-ally-deal-power-to-target-any-or-nexus") {
+        continue;
+      }
+      const sacrificable = [...player.bench]
+        .filter((u) => {
+          const c = getCard(u.cardCode);
+          return c?.supertype !== "Champion" && u.power > 0;
+        })
+        .sort((a, b) => b.power - a.power)[0];
+      if (!sacrificable) continue;
+      const dmg = sacrificable.power;
+      // Préfère lethal au nexus ennemi.
+      if (dmg >= opponent.nexusHealth) {
+        targetUid = sacrificable.uid;
+        targetUid2 = "nexus-enemy";
+      } else {
+        // Cible un ennemi tuable.
+        const killable = opponent.bench
+          .filter((u) => u.health - u.damage <= dmg)
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        if (killable) {
+          targetUid = sacrificable.uid;
+          targetUid2 = killable.uid;
+        } else {
+          // Default : face damage.
+          targetUid = sacrificable.uid;
+          targetUid2 = "nexus-enemy";
+        }
+      }
     } else if (side === "any-or-nexus") {
       // Phase 3.41 : Tir mystique. Préfère :
       // 1. Lethal au nexus ennemi si effect.amount >= nexusHealth

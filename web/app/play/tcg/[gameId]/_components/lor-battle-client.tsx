@@ -477,7 +477,11 @@ function RoundView({
         pendingSpell.side === "any-or-nexus" ||
         // Phase 3.46 : ally-and-enemy → 1re cible doit être ally.
         (pendingSpell.side === "ally-and-enemy" &&
-          pendingSpell.firstTargetUid === null))
+          pendingSpell.firstTargetUid === null) ||
+        // Phase 3.59 : ally-and-any-or-nexus →
+        //  - 1re cible ally (sacrifice).
+        //  - 2e cible any (incluant ally pour 01SI025).
+        pendingSpell.side === "ally-and-any-or-nexus")
     ) {
       onTargetSpell(unit.uid);
       return;
@@ -493,6 +497,9 @@ function RoundView({
         pendingSpell.side === "any-or-nexus" ||
         // Phase 3.46 : ally-and-enemy → 2e cible doit être enemy.
         (pendingSpell.side === "ally-and-enemy" &&
+          pendingSpell.firstTargetUid !== null) ||
+        // Phase 3.59 : ally-and-any-or-nexus → 2e cible any.
+        (pendingSpell.side === "ally-and-any-or-nexus" &&
           pendingSpell.firstTargetUid !== null))
     ) {
       onTargetSpell(unit.uid);
@@ -537,7 +544,11 @@ function RoundView({
       <PlayerStrip
         player={state.opponent}
         isOpponent
-        nexusTargetable={pendingSpell?.side === "any-or-nexus"}
+        nexusTargetable={
+          pendingSpell?.side === "any-or-nexus" ||
+          (pendingSpell?.side === "ally-and-any-or-nexus" &&
+            pendingSpell.firstTargetUid !== null)
+        }
         onNexusClick={() => onTargetSpell("nexus-enemy")}
       />
       <BenchRow
@@ -549,6 +560,8 @@ function RoundView({
             pendingSpell.side === "any" ||
             pendingSpell.side === "any-or-nexus" ||
             (pendingSpell.side === "ally-and-enemy" &&
+              pendingSpell.firstTargetUid !== null) ||
+            (pendingSpell.side === "ally-and-any-or-nexus" &&
               pendingSpell.firstTargetUid !== null))
             ? new Set(state.opponent.bench.map((u) => u.uid))
             : undefined
@@ -624,7 +637,11 @@ function RoundView({
                       ? pendingSpell.firstTargetUid === null
                         ? "1er = allié"
                         : "2e = ennemi"
-                      : "n'importe quelle unité"}
+                      : pendingSpell.side === "ally-and-any-or-nexus"
+                        ? pendingSpell.firstTargetUid === null
+                          ? "1er = allié à sacrifier"
+                          : "2e = unité ou nexus"
+                        : "n'importe quelle unité"}
               )
             </span>
           )}
@@ -724,7 +741,8 @@ function RoundView({
                   pendingSpell.side === "any" ||
                   pendingSpell.side === "any-or-nexus" ||
                   (pendingSpell.side === "ally-and-enemy" &&
-                    pendingSpell.firstTargetUid === null))
+                    pendingSpell.firstTargetUid === null) ||
+                  pendingSpell.side === "ally-and-any-or-nexus")
               ? new Set(state.self.bench.map((u) => u.uid))
               : undefined
         }
@@ -735,7 +753,11 @@ function RoundView({
       <PlayerStrip
         player={state.self}
         isOpponent={false}
-        nexusTargetable={pendingSpell?.side === "any-or-nexus"}
+        nexusTargetable={
+          pendingSpell?.side === "any-or-nexus" ||
+          (pendingSpell?.side === "ally-and-any-or-nexus" &&
+            pendingSpell.firstTargetUid !== null)
+        }
         onNexusClick={() => onTargetSpell("nexus-self")}
       />
       <HandRow

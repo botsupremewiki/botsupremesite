@@ -1743,6 +1743,18 @@ export type SpellEffect =
       type: "summon-token-or-add-to-deck-if-no-subtype-ally";
       tokenCardCode: string;
       subtype: string;
+    }
+  // Phase 3.59
+  // 2 cibles : target1 = allié à sacrifier, target2 = unité ou nexus.
+  // Tue target1 puis inflige dmg = target1.power à target2. Atrocité.
+  | { type: "kill-ally-deal-power-to-target-any-or-nexus" }
+  // Cible : allié → buff +pwr/+hp permanent à la cible ET à toutes ses
+  // copies (même cardCode) sur le banc, dans la main et dans le deck.
+  // 01FR006 (+2|+2 ally + copies).
+  | {
+      type: "buff-ally-and-copies-everywhere-permanent";
+      power: number;
+      health: number;
     };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
@@ -2223,6 +2235,18 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     tokenCardCode: "01FR028",
     subtype: "YÉTI",
   },
+
+  // ── Phase 3.59
+  // 01SI025 (ShadowIsles, 7 Fast, Atrocité) — sacrifie un allié pour
+  // infliger des dmg = power à n'importe quelle cible (unité ou nexus).
+  "01SI025": { type: "kill-ally-deal-power-to-target-any-or-nexus" },
+  // 01FR006 (Freljord, 5 Burst) — +2|+2 permanent à l'allié ciblé ET
+  // toutes ses copies (même cardCode) où qu'elles soient.
+  "01FR006": {
+    type: "buff-ally-and-copies-everywhere-permanent",
+    power: 2,
+    health: 2,
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2275,6 +2299,7 @@ export type SpellTargetSide =
   | "any"
   | "any-or-nexus"
   | "ally-and-enemy"
+  | "ally-and-any-or-nexus"
   | "none";
 
 export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
@@ -2299,7 +2324,10 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "ally-strikes-all-enemies-in-combat":
     case "grant-keyword-2-allies-round":
     case "damage-ally-create-copy-in-hand-if-survives":
+    case "buff-ally-and-copies-everywhere-permanent":
       return "ally";
+    case "kill-ally-deal-power-to-target-any-or-nexus":
+      return "ally-and-any-or-nexus";
     case "deal-damage-anywhere":
     case "kill-target-any":
     case "recall-any":
@@ -2373,6 +2401,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "unit-strike-unit-in-combat":
     case "swap-ephemeral":
     case "grant-keyword-2-allies-round":
+    case "kill-ally-deal-power-to-target-any-or-nexus":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;
@@ -3573,6 +3602,10 @@ export type OnePieceBattlePlayerPublicState = {
   // Vies restantes (le Leader prend une carte Vie quand il subit une attaque
   // — cette carte va dans la main du joueur, avec possibilité de Trigger).
   life: number;
+  // Vies face-visibles (Katakuri ST20-001 retourne 1 Vie face visible).
+  // Liste de cardIds visibles publiquement aux 2 joueurs. Position dans
+  // la pile inconnue du client (juste les contenus révélés).
+  faceUpLifeCardIds: string[];
   // DON area : redressées (utilisables) vs épuisées (déjà utilisées ce tour).
   donActive: number;
   donRested: number;
@@ -3636,6 +3669,7 @@ export type OnePiecePendingChoiceKind =
   | "play-from-discard" // Choisir 1 Persos de la défausse à jouer (épuisé) gratuitement (Gecko Moria, Sanji)
   | "ko-multi-combined-power" // KO ≤ N Persos adv avec contrainte power combinée (Disparais OP09-018)
   | "reorder-top-deck" // Regarder N cartes top deck + réorganiser top/bottom (Hancock ST17-004)
+  | "select-option" // Choix multi-options arbitraires (Catarina Devon : Bloqueur / Double / Exil)
   | "yes-no"; // Choix oui/non simple (l'effet est-il activé ?)
 
 export type OnePiecePendingChoice = {
@@ -3713,6 +3747,8 @@ export type OnePieceBattleClientMessage =
         yesNo?: boolean; // yes-no
         // reorder-top-deck : ordre + placement de chaque carte révélée.
         reorderTopDeck?: { cardId: string; placement: "top" | "bottom" }[];
+        // select-option : option choisie (Catarina Devon : keyword name).
+        selectedOption?: string;
       };
     }
   | { type: "op-end-turn" }
