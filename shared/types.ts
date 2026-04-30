@@ -1564,7 +1564,11 @@ export type SpellEffect =
       type: "drain-target-summon-token";
       drainAmount: number;
       tokenCardCode: string;
-    };
+    }
+  // Phase 3.44
+  // Cible : ennemi → inflige amount dmg puis rally (gain attack token).
+  // Shunpo (01NX056 : 2 dmg + rally).
+  | { type: "damage-enemy-and-rally"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1938,6 +1942,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "silence-follower-target":
     case "frostbite-2-enemies":
     case "stun-enemy-buff-all-allies-round":
+    case "damage-enemy-and-rally":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":
@@ -3156,6 +3161,10 @@ export type OnePieceBattlePlayerPublicState = {
   handCount: number;
   // Défausse (count public).
   discardSize: number;
+  // Contenu de la défausse (info publique en One Piece TCG — visible des
+  // 2 joueurs). Utilisé par les effets «jouez 1 Persos de votre Défausse»
+  // (Gecko Moria, Sanji on-ko, etc.). Liste de cardIds.
+  discard: string[];
   // True si le mulligan a été décidé (oui/non) en setup.
   mulliganDecided: boolean;
 };
@@ -3201,6 +3210,7 @@ export type OnePiecePendingChoiceKind =
   | "discard-card" // Défausser N carte(s) de sa main (count + filtre)
   | "select-target" // Sélectionner une cible générique (Leader ou Persos)
   | "play-from-hand" // Choisir 1 Persos de la main à jouer gratuitement (Crocodile, Trafalgar Law, Lim, Baggy, etc.)
+  | "play-from-discard" // Choisir 1 Persos de la défausse à jouer (épuisé) gratuitement (Gecko Moria, Sanji)
   | "yes-no"; // Choix oui/non simple (l'effet est-il activé ?)
 
 export type OnePiecePendingChoice = {

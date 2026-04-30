@@ -265,6 +265,16 @@ export interface BattleEffectAccess {
     options?: { rested?: boolean },
   ): string | null;
 
+  /** Joue un Personnage de la défausse directement sans payer son coût.
+   *  Utilisé par les effets type Gecko Moria, Sanji on-ko. La carte est
+   *  posée sur le terrain (rested par défaut, peut être inversé), le hook
+   *  on-play est déclenché. Retourne l'uid posé ou null. */
+  playCharacterFromDiscard(
+    seat: OnePieceBattleSeatId,
+    discardIndex: number,
+    options?: { rested?: boolean },
+  ): string | null;
+
   /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
    *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
   peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
@@ -4159,6 +4169,166 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       if (idx === undefined) return;
       const uid = ctx.battle.playCharacterFromHand(ctx.sourceSeat, idx);
       if (uid) ctx.battle.log("Luffytaro : Chapeau ≤ 5 posé.");
+    }
+  },
+
+  // ─── BATCH 22 — Cartes utilisant play-from-discard ─────────────────────
+
+  /** OP09-085 Gecko Moria
+   *  [Jouée] Jouez jusqu'à 1 carte Personnage de type {Équipage de
+   *  Thriller Bark} épuisée de votre Défausse ayant un coût de 2 ou moins. */
+  "OP09-085": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-085",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-discard",
+        prompt:
+          "Gecko Moria : choisis 1 Persos Thriller Bark ≤ 2 dans ta Défausse.",
+        params: { maxCost: 2, requireType: "Équipage de Thriller Bark" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromDiscard(ctx.sourceSeat, idx, {
+        rested: true,
+      });
+      if (uid)
+        ctx.battle.log("Gecko Moria : Persos Thriller Bark posé épuisé.");
+    }
+  },
+
+  /** OP09-028 Sanji
+   *  [En cas de KO] Vous pouvez ajouter à votre main 1 carte du dessus ou
+   *  du dessous de votre Vie : Jouez jusqu'à 1 carte Personnage de type
+   *  {ODYSSEY} ou {Équipage de Chapeau de paille} épuisée de votre
+   *  Défausse ayant un coût de 4 ou moins. */
+  "OP09-028": (ctx) => {
+    if (ctx.hook === "on-ko") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.lifeCount === 0) {
+        ctx.battle.log("Sanji on-ko : pas de Vie à prendre, effet annulé.");
+        return;
+      }
+      ctx.battle.takeLifeToHand(ctx.sourceSeat);
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-028",
+        sourceUid: ctx.sourceUid,
+        kind: "play-from-discard",
+        prompt:
+          "Sanji (en KO) : choisis 1 Persos ODYSSEY/Chapeau ≤ 4 dans la Défausse.",
+        // Note : on filtre uniquement par 1er type ; les Persos ODYSSEY ET
+        // Chapeau sont rares mais le filtre OR n'est pas exposé. On ouvre
+        // sur Chapeau (le plus courant) — joueur peut passer sinon.
+        params: { maxCost: 4, requireType: "Équipage de Chapeau de paille" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const idx = ctx.choice.selection.handIndices[0];
+      if (idx === undefined) return;
+      const uid = ctx.battle.playCharacterFromDiscard(ctx.sourceSeat, idx, {
+        rested: true,
+      });
+      if (uid) ctx.battle.log("Sanji on-ko : Persos posé épuisé.");
+    }
+  },
+
+  /** ST17-004 Boa Hancock
+   *  [Jouée] Regardez 3 cartes du dessus de votre deck, réorganisez-les
+   *  dans l'ordre de votre choix et placez-les au-dessus ou au-dessous
+   *  de votre deck. Puis, donnez jusqu'à 1 carte DON!! épuisée à votre
+   *  Leader ou à 1 de vos Personnages, de type {Sept grands corsaires}.
+   *  (Simplification : on skip la réorganisation top 3 et on donne juste
+   *  le DON ciblé Sept Corsaires.) */
+  "ST17-004": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat) return;
+      // Vérifie qu'on a au moins une cible Sept Corsaires (Leader ou
+      // Persos).
+      const leaderMeta = seat.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const leaderIsCorsaire = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("sept grands corsaires"),
+      );
+      const charsCorsaire = seat.characters.filter((c) => {
+        const m = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+        return m?.types.some((t) =>
+          t.toLowerCase().includes("sept grands corsaires"),
+        );
+      });
+      if (!leaderIsCorsaire && charsCorsaire.length === 0) {
+        ctx.battle.log(
+          "Boa Hancock : pas de cible Sept Corsaires, effet réduit.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST17-004",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Boa Hancock : choisis Leader/Persos Sept Corsaires pour 1 DON épuisée.",
+        params: {
+          allowLeader: true,
+          requireType: "Sept grands corsaires",
+        },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 1);
+      ctx.battle.log(`Boa Hancock : ${attached} DON attachée(s).`);
+    }
+  },
+
+  /** ST20-001 Charlotte Katakuri
+   *  [Activation : Principale] [Une fois par tour] Vous pouvez retourner
+   *  1 carte du dessus de votre Vie face visible : Donnez jusqu'à 1 carte
+   *  DON!! épuisée à votre Leader ou à 1 de vos Personnages.
+   *  (Simplification : on skip le mécanisme «face visible» — on donne
+   *  juste le DON sans coût Vie.) */
+  "ST20-001": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST20-001",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Katakuri : choisis ton Leader ou un Persos pour 1 DON épuisée.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 1);
+      ctx.battle.log(`Katakuri : ${attached} DON attachée(s).`);
     }
   },
 

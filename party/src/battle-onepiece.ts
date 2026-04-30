@@ -2119,6 +2119,29 @@ export default class OnePieceBattleServer implements Party.Server {
         this.fireEffectFor(card.cardId, "on-play", newCard.uid, seatId);
         return newCard.uid;
       },
+      playCharacterFromDiscard: (seatId, discardIndex, options) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        if (discardIndex < 0 || discardIndex >= s.discard.length) return null;
+        if (s.characters.length >= OP_BATTLE_CONFIG.maxCharacters) return null;
+        const card = s.discard[discardIndex];
+        const meta = ONEPIECE_BASE_SET_BY_ID.get(card.cardId);
+        if (!meta || meta.kind !== "character") return null;
+        s.discard.splice(discardIndex, 1);
+        const newCard: OnePieceBattleCardInPlay = {
+          uid: `c${++this.uidCounter}`,
+          cardId: card.cardId,
+          attachedDon: 0,
+          rested: options?.rested !== false, // par défaut rested = true (la prose dit «épuisée»)
+          playedThisTurn: true,
+        };
+        s.characters.push(newCard);
+        this.pushLog(
+          `${s.username} pose ${meta.name} depuis la Défausse (effet de carte).`,
+        );
+        this.fireEffectFor(card.cardId, "on-play", newCard.uid, seatId);
+        return newCard.uid;
+      },
       peekTopOfDeck: (seatId) => {
         const s = this.seats[seatId];
         if (!s || s.deck.length === 0) return null;
@@ -2409,6 +2432,7 @@ export default class OnePieceBattleServer implements Party.Server {
       deckSize: seat.deck.length,
       handCount: seat.hand.length,
       discardSize: seat.discard.length,
+      discard: seat.discard.map((c) => c.cardId),
       mulliganDecided: seat.mulliganDecided,
     };
   }
