@@ -104,6 +104,9 @@ export type InternalPlayer = {
   // l'adversaire ce round (Possession). À startRound suivant elles sont
   // retirées du banc + restaurées sur le banc d'origine.
   stolenUidsThisRound: string[];
+  // Phase 3.68 : flag pour 01FR023 (Appel de la chef de guerre). Une
+  // fois activé, summon le 1er Unit du deck à chaque startRound.
+  hasRecurringTopDeckSummon: boolean;
   // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
   // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
   // healthDelta directement sur la nouvelle unité, costDelta sur la mana
@@ -282,6 +285,7 @@ export function createInitialState(
     manaSlotsBonus: 0,
     summonedUidsThisRound: [],
     stolenUidsThisRound: [],
+    hasRecurringTopDeckSummon: false,
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -461,10 +465,54 @@ export function startRound(state: InternalState): InternalState {
     `─── Round ${newRound} (${newManaMax} mana max). ${updatedPlayers[newAttackTokenSeat].username} a le jeton d'attaque.`,
   ];
 
+  // Phase 3.68 : recurring top-deck summon (01FR023). Pour chaque joueur
+  // avec hasRecurringTopDeckSummon, summon le 1er Unit du deck (cap maxBench).
+  let withSummons: [InternalPlayer, InternalPlayer] = [
+    updatedPlayers[0],
+    updatedPlayers[1],
+  ];
+  for (const seat of [0, 1] as const) {
+    const p = withSummons[seat];
+    if (!p.hasRecurringTopDeckSummon) continue;
+    if (p.bench.length >= cfg.maxBench) continue;
+    const idx = p.deck.findIndex((c) => {
+      const card = getCard(c.cardCode);
+      return card?.type === "Unit";
+    });
+    if (idx === -1) continue;
+    const drawn = p.deck[idx];
+    const newDeck = [...p.deck.slice(0, idx), ...p.deck.slice(idx + 1)];
+    const baseUnit = createUnit(drawn.uid, drawn.cardCode);
+    const buff = p.cardBuffs[drawn.uid];
+    const newUnit: RuneterraBattleUnit = buff
+      ? {
+          ...baseUnit,
+          power: baseUnit.power + buff.powerDelta,
+          health: baseUnit.health + buff.healthDelta,
+          keywords: Array.from(
+            new Set([...baseUnit.keywords, ...buff.addKeywords]),
+          ),
+        }
+      : baseUnit;
+    const newCardBuffs = { ...p.cardBuffs };
+    delete newCardBuffs[drawn.uid];
+    withSummons[seat] = {
+      ...p,
+      deck: newDeck,
+      bench: [...p.bench, newUnit],
+      cardBuffs: newCardBuffs,
+      summonedUidsThisRound: [...p.summonedUidsThisRound, newUnit.uid],
+    };
+    const cardName = getCard(drawn.cardCode)?.name ?? drawn.cardCode;
+    log.push(
+      `${p.username} invoque ${cardName} (Appel de la chef de guerre).`,
+    );
+  }
+
   return {
     ...restoredState,
     phase: "round",
-    players: updatedPlayers,
+    players: withSummons,
     activeSeatIdx: newAttackTokenSeat,
     attackTokenSeatIdx: newAttackTokenSeat,
     round: newRound,
@@ -2366,50 +2414,70 @@ function applySpellEffect(
       ).state;
     }
     case "summon-first-unit-from-deck": {
-      // Phase 3.65 : 01FR023. Pick le 1er Unit dans le deck (top → bottom),
-      // summon sur le banc. La portion « recurring chaque round » est TODO.
+      // Phase 3.65 + 3.68 : 01FR023. Summon le 1er Unit du deck NOW +
+      // active hasRecurringTopDeckSummon pour répéter à chaque startRound.
       const cfgFU = RUNETERRA_BATTLE_CONFIG;
       const player = newPlayers[casterSeat];
-      if (player.bench.length >= cfgFU.maxBench) return state;
-      const idx = player.deck.findIndex((c) => {
-        const card = getCard(c.cardCode);
-        return card?.type === "Unit";
-      });
-      if (idx === -1) return state;
-      const drawn = player.deck[idx];
-      const newDeck = [
-        ...player.deck.slice(0, idx),
-        ...player.deck.slice(idx + 1),
-      ];
-      const baseUnit = createUnit(drawn.uid, drawn.cardCode);
-      // Applique cardBuff si présent.
-      const buff = player.cardBuffs[drawn.uid];
-      const newUnit: RuneterraBattleUnit = buff
-        ? {
-            ...baseUnit,
-            power: baseUnit.power + buff.powerDelta,
-            health: baseUnit.health + buff.healthDelta,
-            keywords: Array.from(
-              new Set([...baseUnit.keywords, ...buff.addKeywords]),
-            ),
-          }
-        : baseUnit;
-      const newCardBuffs = { ...player.cardBuffs };
-      delete newCardBuffs[drawn.uid];
-      newPlayers[casterSeat] = {
+      // Active le flag même si banc plein ou pas d'Unit (recurring
+      // future).
+      let updated: InternalPlayer = {
         ...player,
-        deck: newDeck,
-        bench: [...player.bench, newUnit],
-        cardBuffs: newCardBuffs,
-        summonedUidsThisRound: [...player.summonedUidsThisRound, newUnit.uid],
+        hasRecurringTopDeckSummon: true,
       };
-      const cardName = getCard(drawn.cardCode)?.name ?? drawn.cardCode;
+      if (player.bench.length < cfgFU.maxBench) {
+        const idx = player.deck.findIndex((c) => {
+          const card = getCard(c.cardCode);
+          return card?.type === "Unit";
+        });
+        if (idx !== -1) {
+          const drawn = player.deck[idx];
+          const newDeck = [
+            ...player.deck.slice(0, idx),
+            ...player.deck.slice(idx + 1),
+          ];
+          const baseUnit = createUnit(drawn.uid, drawn.cardCode);
+          const buff = player.cardBuffs[drawn.uid];
+          const newUnit: RuneterraBattleUnit = buff
+            ? {
+                ...baseUnit,
+                power: baseUnit.power + buff.powerDelta,
+                health: baseUnit.health + buff.healthDelta,
+                keywords: Array.from(
+                  new Set([...baseUnit.keywords, ...buff.addKeywords]),
+                ),
+              }
+            : baseUnit;
+          const newCardBuffs = { ...player.cardBuffs };
+          delete newCardBuffs[drawn.uid];
+          updated = {
+            ...updated,
+            deck: newDeck,
+            bench: [...player.bench, newUnit],
+            cardBuffs: newCardBuffs,
+            summonedUidsThisRound: [
+              ...player.summonedUidsThisRound,
+              newUnit.uid,
+            ],
+          };
+          newPlayers[casterSeat] = updated;
+          const cardName = getCard(drawn.cardCode)?.name ?? drawn.cardCode;
+          return {
+            ...state,
+            players: newPlayers,
+            log: [
+              ...state.log,
+              `${player.username} invoque ${cardName} (et chaque round désormais).`,
+            ],
+          };
+        }
+      }
+      newPlayers[casterSeat] = updated;
       return {
         ...state,
         players: newPlayers,
         log: [
           ...state.log,
-          `${player.username} invoque ${cardName} depuis son deck.`,
+          `${player.username} active Appel de la chef de guerre (summon chaque round).`,
         ],
       };
     }
