@@ -1397,7 +1397,30 @@ export type SpellEffect =
   | { type: "recall-any" }
   // Cible : unité ennemie → étourdie pour le round (ne peut pas attaquer
   // ni bloquer). Compteur enemyStunned (Yasuo) incrémenté.
-  | { type: "stun-enemy" };
+  | { type: "stun-enemy" }
+  // Phase 3.14
+  // Cible : allié → +power/+health pour ce round + grant un mot-clé pour
+  // ce round (Rush = +1/+0 QuickStrike, Riposte = +3/+0 Barrier, Marque
+  // des Îles = +2/+2 Ephemeral).
+  | {
+      type: "combo-buff-keyword-ally-round";
+      power: number;
+      health: number;
+      keyword: string;
+    }
+  // Sans cible : tue toutes les unités des 2 côtés (Last Breath déclenché
+  // pour chaque). « La Ruine » board wipe.
+  | { type: "kill-all-units" }
+  // Sans cible : inflige X dégâts à toutes les unités ennemies + heal le
+  // nexus du caster (Faible gémissement). Cumule plusieurs effets.
+  | {
+      type: "damage-all-enemies-heal-nexus";
+      damageAmount: number;
+      healAmount: number;
+    }
+  // Sans cible : grant un mot-clé pour ce round à TOUS les alliés sur
+  // le banc (En garde = Challenger).
+  | { type: "grant-keyword-all-allies-round"; keyword: string };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1456,6 +1479,48 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   "01IO011": { type: "recall-ally" },
   // Volonté d'Ionia (4 mana, Burst) : « Rappelez une unité. »
   "01IO002": { type: "recall-any" },
+
+  // ── Phase 3.14 : combos + AOE
+  // Rush (Ionia, 1 mana, Burst) :
+  // « Conférez +1|+0 et Frappe rapide à un allié pour ce round. »
+  "01IO018": {
+    type: "combo-buff-keyword-ally-round",
+    power: 1,
+    health: 0,
+    keyword: "QuickStrike",
+  },
+  // Riposte (Demacia, 4 mana, Burst) :
+  // « Conférez +3|+0 et Barrière à un allié pour ce round. »
+  "01DE037": {
+    type: "combo-buff-keyword-ally-round",
+    power: 3,
+    health: 0,
+    keyword: "Barrier",
+  },
+  // Marque des Îles (SI, 1 mana, Burst) :
+  // « Octroyez +2|+2 et Éphémère à un allié. »
+  "01SI022": {
+    type: "combo-buff-keyword-ally-round",
+    power: 2,
+    health: 2,
+    keyword: "Ephemeral",
+  },
+  // La Ruine (SI, 9 mana, Slow) : « Tuez TOUTES les unités. »
+  "01SI015": { type: "kill-all-units" },
+  // En garde (Demacia, 2 mana, Burst) :
+  // « Conférez Challenger aux alliés pour ce round. »
+  "01DE027": {
+    type: "grant-keyword-all-allies-round",
+    keyword: "Challenger",
+  },
+  // Faible gémissement (SI, 4 mana, Slow) :
+  // « Infligez 1 pt(s) de dégâts à tous les ennemis. Soignez votre
+  //   Nexus de 3 PV. »
+  "01SI029": {
+    type: "damage-all-enemies-heal-nexus",
+    damageAmount: 1,
+    healAmount: 3,
+  },
 };
 
 // ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
@@ -1486,6 +1551,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-keyword-ally-round":
     case "heal-ally-or-nexus":
     case "recall-ally":
+    case "combo-buff-keyword-ally-round":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -1495,6 +1561,9 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "stun-enemy":
       return "enemy";
     case "deal-damage-enemy-nexus":
+    case "kill-all-units":
+    case "damage-all-enemies-heal-nexus":
+    case "grant-keyword-all-allies-round":
       return "none";
   }
 }

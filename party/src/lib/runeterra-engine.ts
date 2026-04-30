@@ -1170,6 +1170,124 @@ function applySpellEffect(
       }
       return { ...state, players: newPlayers };
     }
+    case "combo-buff-keyword-ally-round": {
+      // +power/+health round + grant keyword (round-only via convention,
+      // pour Phase 3.14 : keyword traité comme permanent — meme limitation
+      // que grant-keyword-ally-round, OK pour la plupart des keywords).
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const newKw = u.keywords.includes(effect.keyword)
+          ? u.keywords
+          : [...u.keywords, effect.keyword];
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+          keywords: newKw,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "kill-all-units": {
+      // Tue toutes les unités des 2 côtés. Last Breath déclenché pour
+      // chacune (séquentiel : caster d'abord puis adversaire).
+      const casterDead = [...newPlayers[casterSeat].bench];
+      const oppDead = [...newPlayers[oppSeat].bench];
+      newPlayers[casterSeat] = {
+        ...newPlayers[casterSeat],
+        bench: [],
+        championCounters: {
+          ...newPlayers[casterSeat].championCounters,
+          alliesDied:
+            newPlayers[casterSeat].championCounters.alliesDied +
+            casterDead.length,
+          unitsDied:
+            newPlayers[casterSeat].championCounters.unitsDied +
+            casterDead.length +
+            oppDead.length,
+        },
+      };
+      newPlayers[oppSeat] = {
+        ...newPlayers[oppSeat],
+        bench: [],
+        championCounters: {
+          ...newPlayers[oppSeat].championCounters,
+          alliesDied:
+            newPlayers[oppSeat].championCounters.alliesDied + oppDead.length,
+          unitsDied:
+            newPlayers[oppSeat].championCounters.unitsDied +
+            casterDead.length +
+            oppDead.length,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const dead of casterDead) {
+        newState = triggerLastBreath(newState, dead, casterSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      for (const dead of oppDead) {
+        newState = triggerLastBreath(newState, dead, oppSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "damage-all-enemies-heal-nexus": {
+      // Inflige X dégâts à tous les ennemis (gère Barrier/Tough via
+      // applyDamageToUnit) + heal nexus du caster de Y (cap initial).
+      const cfg = RUNETERRA_BATTLE_CONFIG;
+      const oppPlayer = newPlayers[oppSeat];
+      const newOppBench = oppPlayer.bench.map((u) => {
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.damageAmount);
+        return copy;
+      });
+      // Filtre morts + Last Breath
+      const oppDeadUnits = newOppBench.filter((u) => u.damage >= u.health);
+      const oppSurvivors = newOppBench.filter((u) => u.damage < u.health);
+      newPlayers[oppSeat] = {
+        ...oppPlayer,
+        bench: oppSurvivors,
+        championCounters: {
+          ...oppPlayer.championCounters,
+          alliesDied: oppPlayer.championCounters.alliesDied + oppDeadUnits.length,
+          unitsDied: oppPlayer.championCounters.unitsDied + oppDeadUnits.length,
+        },
+      };
+      // Heal du nexus caster (cap initial).
+      const casterPl = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...casterPl,
+        nexusHealth: Math.min(
+          cfg.initialNexusHealth,
+          casterPl.nexusHealth + effect.healAmount,
+        ),
+        championCounters: {
+          ...casterPl.championCounters,
+          unitsDied: casterPl.championCounters.unitsDied + oppDeadUnits.length,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const dead of oppDeadUnits) {
+        newState = triggerLastBreath(newState, dead, oppSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "grant-keyword-all-allies-round": {
+      // Grant le keyword à tous les alliés sur le banc (round-only par
+      // convention — comme grant-keyword-ally-round).
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.keywords.includes(effect.keyword)) return u;
+        return { ...u, keywords: [...u.keywords, effect.keyword] };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.
       let target: RuneterraBattleUnit | undefined;
