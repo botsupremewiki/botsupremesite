@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -9,6 +10,7 @@ import {
   useState,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import type {
   PokemonCardData,
   PokemonEnergyType,
@@ -380,32 +382,42 @@ export function DecksClient({
               return (
                 <div
                   key={deck.id}
-                  className={`group flex items-center justify-between gap-1 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                  className={`group flex flex-col gap-1 rounded-md px-2 py-1.5 text-xs transition-colors ${
                     isActive
                       ? "bg-amber-400/15 text-amber-200"
                       : "bg-white/[0.02] text-zinc-200 hover:bg-white/5"
                   }`}
                 >
-                  <button
-                    onClick={() => loadDraftFromDeck(deck)}
-                    className="flex flex-1 flex-col items-start"
-                  >
-                    <span className="truncate font-semibold">{deck.name}</span>
-                    <span className="text-[10px] text-zinc-500">
-                      {cardSum}/{DECK_TARGET} cartes
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => deleteDeck(deck.id)}
-                    className="rounded p-1 text-zinc-500 opacity-0 transition-opacity hover:bg-rose-500/20 hover:text-rose-300 group-hover:opacity-100"
-                    title="Supprimer"
-                  >
-                    🗑
-                  </button>
+                  <div className="flex items-center justify-between gap-1">
+                    <button
+                      onClick={() => loadDraftFromDeck(deck)}
+                      className="flex flex-1 flex-col items-start"
+                    >
+                      <span className="truncate font-semibold">{deck.name}</span>
+                      <span className="text-[10px] text-zinc-500">
+                        {cardSum}/{DECK_TARGET} cartes
+                        {deck.isPublic && deck.shareCode && (
+                          <span className="ml-1 text-emerald-400">
+                            · 🔗 {deck.shareCode}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => deleteDeck(deck.id)}
+                      className="rounded p-1 text-zinc-500 opacity-0 transition-opacity hover:bg-rose-500/20 hover:text-rose-300 group-hover:opacity-100"
+                      title="Supprimer"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                  {/* Bouton Partager / Privé : visible au hover ou si actif */}
+                  <ShareDeckRow deck={deck} />
                 </div>
               );
             })}
           </div>
+          <ImportDeckSection />
         </aside>
 
         {/* Main editor */}
@@ -1071,6 +1083,169 @@ function DeckRow({
         </button>
       </div>
     </motion.div>
+  );
+}
+
+/** Bouton de partage de deck inline dans la sidebar : visible au hover.
+ *  Si le deck est privé → bouton « 📤 Partager » qui appelle publish_deck.
+ *  Si le deck est public → bouton « 📋 Copier » + « 🔒 Privé » pour
+ *  re-privatiser. */
+function ShareDeckRow({ deck }: { deck: TcgDeck }) {
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  const onPublish = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const supabase = createBrowserClient();
+      if (!supabase) {
+        setError("Supabase indisponible");
+        return;
+      }
+      const { error: e } = await supabase.rpc("publish_deck", {
+        p_deck_id: deck.id,
+      });
+      if (e) setError(e.message);
+      else router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onUnpublish = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const supabase = createBrowserClient();
+      if (!supabase) return;
+      const { error: e } = await supabase.rpc("unpublish_deck", {
+        p_deck_id: deck.id,
+      });
+      if (e) setError(e.message);
+      else router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCopyCode = async () => {
+    if (!deck.shareCode) return;
+    try {
+      await navigator.clipboard.writeText(deck.shareCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      {!deck.isPublic ? (
+        <button
+          onClick={onPublish}
+          disabled={busy}
+          className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-40"
+          title="Rendre ce deck public et obtenir un code de partage"
+        >
+          📤 Partager
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={onCopyCode}
+            className="rounded border border-emerald-400/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
+            title="Copier le code dans le presse-papier"
+          >
+            {copied ? "✓ Copié" : "📋 Copier"}
+          </button>
+          <button
+            onClick={onUnpublish}
+            disabled={busy}
+            className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-white/10 disabled:opacity-40"
+            title="Repasser le deck en privé"
+          >
+            🔒 Privé
+          </button>
+        </>
+      )}
+      {error && (
+        <span className="w-full text-[9px] text-rose-300">{error}</span>
+      )}
+    </div>
+  );
+}
+
+/** Section « Importer un deck par code » placée en bas de la sidebar.
+ *  L'utilisateur tape un code (6 caractères), on appelle import_deck_by_code
+ *  qui crée une copie chez lui (« Copie de … »). */
+function ImportDeckSection() {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const router = useRouter();
+
+  const onImport = async () => {
+    if (!code.trim()) return;
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const supabase = createBrowserClient();
+      if (!supabase) {
+        setError("Supabase indisponible");
+        return;
+      }
+      const { error: e } = await supabase.rpc("import_deck_by_code", {
+        p_code: code.trim().toUpperCase(),
+      });
+      if (e) {
+        setError(e.message);
+      } else {
+        setSuccess("Deck importé !");
+        setCode("");
+        router.refresh();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 shrink-0 rounded-md border border-white/5 bg-black/20 p-2">
+      <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+        🔗 Importer un deck
+      </div>
+      <div className="mt-1 flex gap-1">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) =>
+            setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+          }
+          placeholder="ABC123"
+          maxLength={6}
+          className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-400/50 focus:outline-none"
+        />
+        <button
+          onClick={onImport}
+          disabled={busy || code.length !== 6}
+          className="rounded bg-emerald-500 px-2 py-1 text-xs font-bold text-emerald-950 hover:bg-emerald-400 disabled:opacity-40"
+        >
+          ↓
+        </button>
+      </div>
+      {error && (
+        <div className="mt-1 text-[9px] text-rose-300">{error}</div>
+      )}
+      {success && (
+        <div className="mt-1 text-[9px] text-emerald-300">{success}</div>
+      )}
+    </div>
   );
 }
 

@@ -2877,6 +2877,12 @@ export type TcgDeck = {
   // Pokémon/OnePiece. Toutes les cartes du deck doivent partager au moins
   // une région avec celles-ci.
   regions: string[];
+  /** Le deck est-il publié (visible par les autres joueurs via son code) ? */
+  isPublic?: boolean;
+  /** Code court (6 caractères) pour partager le deck. Set quand le deck
+   *  est rendu public au moins une fois. Reste assigné même si re-privé
+   *  (le code reste réservé au propriétaire). */
+  shareCode?: string | null;
   updatedAt: number;
 };
 

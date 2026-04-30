@@ -183,6 +183,9 @@ export type TcgDeckRow = {
   // One Piece : id du Leader (carte hors deck, requise pour ce game_id).
   // Pour Pokémon : null.
   leader_id?: string | null;
+  // Sharing (cf. supabase/tcg-deck-sharing.sql).
+  is_public?: boolean | null;
+  share_code?: string | null;
   updated_at: string;
 };
 
@@ -196,7 +199,7 @@ export async function fetchTcgDecks(
   if (!env) return [];
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,game_id,name,cards,energy_types,leader_id,regions,updated_at&order=updated_at.desc`,
+      `${env.url}/rest/v1/tcg_decks?user_id=eq.${authId}&game_id=eq.${gameId}&select=id,game_id,name,cards,energy_types,leader_id,regions,is_public,share_code,updated_at&order=updated_at.desc`,
       {
         headers: {
           apikey: env.key,
@@ -222,7 +225,7 @@ export async function fetchTcgDeckById(
   if (!env) return null;
   try {
     const resp = await fetch(
-      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,game_id,name,cards,energy_types,leader_id,regions,updated_at`,
+      `${env.url}/rest/v1/tcg_decks?id=eq.${deckId}&select=id,game_id,name,cards,energy_types,leader_id,regions,is_public,share_code,updated_at`,
       {
         headers: {
           apikey: env.key,

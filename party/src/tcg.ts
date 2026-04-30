@@ -353,6 +353,8 @@ export default class TcgServer implements Party.Server {
         energyTypes: (d.energy_types ?? []) as PokemonEnergyType[],
         leaderId: d.leader_id ?? null,
         regions: (d.regions ?? []) as string[],
+        isPublic: d.is_public ?? false,
+        shareCode: d.share_code ?? null,
         updatedAt: Date.parse(d.updated_at) || Date.now(),
       }));
     } else {
