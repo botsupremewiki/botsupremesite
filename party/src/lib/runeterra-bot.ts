@@ -197,6 +197,15 @@ export function botAct(
           (a, b) => b.power + b.health - (a.power + a.health),
         )[0];
         targetUid = target.uid;
+      } else if (effect.type === "heal-ally-and-draw") {
+        // Phase 3.42 : Rituel du renouveau. Préfère le plus blessé,
+        // sinon n'importe quel allié (le draw 1 reste utile).
+        if (player.bench.length === 0) continue;
+        const wounded = [...player.bench]
+          .filter((u) => u.damage > 0)
+          .sort((a, b) => b.damage - a.damage);
+        const target = wounded[0] ?? player.bench[0];
+        targetUid = target.uid;
       } else if (
         effect.type === "buff-2-allies-permanent" ||
         effect.type === "buff-2-allies-round"
@@ -259,6 +268,16 @@ export function botAct(
         if (valid.length < 2) continue;
         targetUid = valid[0].uid;
         targetUid2 = valid[1].uid;
+      } else if (effect.type === "stun-enemy-buff-all-allies-round") {
+        // Phase 3.42 : Manœuvre décisive. Stun la plus grosse menace,
+        // skip si pas d'allié à buff (ou ennemi à stun).
+        if (opponent.bench.length === 0) continue;
+        if (player.bench.length === 0) continue;
+        const target = [...opponent.bench]
+          .filter((u) => !u.stunned)
+          .sort((a, b) => b.power - a.power)[0];
+        if (!target) continue;
+        targetUid = target.uid;
       } else if (opponent.bench.length > 0) {
         const target =
           opponent.bench.find((u) => !u.frozen) ?? opponent.bench[0];
@@ -303,6 +322,18 @@ export function botAct(
           targetUid = opponent.bench[0].uid;
         } else if (player.bench.length > 0) {
           targetUid = player.bench[0].uid;
+        } else continue;
+      } else if (effect.type === "drain-target-summon-token") {
+        // Phase 3.42 : Vil festin. Préfère un ennemi (heal nexus + summon)
+        // sinon un allié faible. Skip si banc plein (token gaspillé).
+        if (player.bench.length >= 6) continue;
+        if (opponent.bench.length > 0) {
+          targetUid = opponent.bench[0].uid;
+        } else if (player.bench.length > 0) {
+          const sacrificable = [...player.bench].sort(
+            (a, b) => a.power - b.power,
+          );
+          targetUid = sacrificable[0].uid;
         } else continue;
       } else {
         // deal-damage-anywhere, recall-any : préfère ennemi puis ally.
