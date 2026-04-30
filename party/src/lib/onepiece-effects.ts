@@ -1177,6 +1177,121 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     );
   },
 
+  // ─── BATCH 5 (cards 121-150 cardNumber) ─────────────────────────────────
+
+  /** OP09-090 Doc Q
+   *  [Activation : Principale] Vous pouvez épuiser ce Personnage : Si votre
+   *  Leader est de type {Équipage de Barbe Noire}, mettez KO jusqu'à 1
+   *  Personnage adverse ayant un coût de 1 ou moins. */
+  "OP09-090": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isBN = leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe noire"),
+      );
+      if (!isBN) {
+        ctx.battle.log("Doc Q : Leader pas Barbe Noire, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-090",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Doc Q : choisis un Persos adverse à KO (coût ≤ 1).",
+        params: { maxCost: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Doc Q : KO réussi.");
+    }
+  },
+
+  /** OP09-092 Marshall D. Teach (Char)
+   *  [Activation : Principale] Vous pouvez épuiser ce Personnage : Si votre
+   *  main comporte au moins 3 cartes de moins que celle de votre adversaire,
+   *  piochez 2 cartes et défaussez 1 carte de votre main. */
+  "OP09-092": (ctx) => {
+    if (ctx.hook !== "on-activate-main") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const opponentSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    const opp = ctx.battle.getSeat(opponentSeat);
+    if (!seat || !opp) return;
+    if (opp.handSize - seat.handSize < 3) {
+      ctx.battle.log(
+        "Marshall D. Teach : différence main < 3 cartes, effet annulé.",
+      );
+      return;
+    }
+    ctx.battle.drawCards(ctx.sourceSeat, 2);
+    ctx.battle.discardRandom(ctx.sourceSeat, 1);
+    ctx.battle.log("Marshall D. Teach : pioche 2 et défausse 1.");
+  },
+
+  /** OP09-096 L'avènement de mon règne !! (Event)
+   *  [Principale] Regardez 3 cartes du dessus de votre deck, révélez
+   *  jusqu'à 1 carte de type {Équipage de Barbe Noire} autre que
+   *  [L'avènement de mon règne !!] et ajoutez-la à votre main. Puis,
+   *  placez les cartes restantes au-dessous. */
+  "OP09-096": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      3,
+      "Équipage de Barbe Noire",
+      "bottom",
+      "L'avènement de mon règne !!",
+    );
+    ctx.battle.log(
+      found
+        ? "L'avènement... : révèle un Équipage de Barbe Noire."
+        : "L'avènement... : aucun Équipage de Barbe Noire révélé.",
+    );
+  },
+
+  /** OP09-106 Nico Olvia
+   *  [Jouée] Jusqu'à 1 de vos Leaders [Nico Robin] gagne +3000 de
+   *  puissance pour tout le tour. (Auto-target Leader si name === Robin) */
+  "OP09-106": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    if (!seat?.leaderId) return;
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    if (leaderMeta?.name !== "Nico Robin") {
+      ctx.battle.log("Nico Olvia : Leader pas Nico Robin, effet annulé.");
+      return;
+    }
+    ctx.battle.addPowerBuff(
+      { kind: "leader", seat: ctx.sourceSeat },
+      3000,
+    );
+    ctx.battle.log("Nico Olvia : Leader Nico Robin gagne +3000 puissance.");
+  },
+
+  /** OP09-112 Belo Betty
+   *  [Jouée] Si vous avez 2 cartes ou moins dans votre Vie, piochez 1 carte. */
+  "OP09-112": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    if (!seat) return;
+    if (seat.lifeCount > 2) {
+      ctx.battle.log("Belo Betty : plus de 2 Vies, effet annulé.");
+      return;
+    }
+    ctx.battle.drawCards(ctx.sourceSeat, 1);
+    ctx.battle.log("Belo Betty : pioche 1 carte.");
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
