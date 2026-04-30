@@ -1857,6 +1857,15 @@ export type SpellEffect =
   // Sans cible : push une carte (uid frais, cardCode donné) dans la
   // main du caster. Token in hand. 01NX042 Katarina, 01DE006 Sergent.
   | { type: "create-card-in-hand"; cardCode: string }
+  // Phase 3.74 — On-attack triggers.
+  // Sans cible : amount dmg à tous les ennemis ET au nexus ennemi.
+  // Anivia attack ability.
+  | { type: "damage-all-enemies-and-nexus"; amount: number }
+  // Sans cible : frostbite l'ennemi avec la plus haute power. Ashe attack.
+  | { type: "frostbite-strongest-enemy" }
+  // Sans cible : summon 1 × tokenCardCode avec stats copiées de la
+  // source du trigger (triggerSourceUid). Zed attack (Ombre vivante).
+  | { type: "summon-token-copy-self-stats"; tokenCardCode: string }
   // Phase 3.66
   // Sans cible : pioche count cartes. Stub minimal pour 01IO049 Rejet
   // (la mécanique de counter-spell vraie nécessite un spell stack avec
@@ -2461,6 +2470,29 @@ export const RUNETERRA_PLAY_EFFECTS: Record<string, SpellEffect> = {
   "01NX020": { type: "create-card-in-hand", cardCode: "01NX020T1" },
 };
 
+// ─── Attack effects (Phase 3.74) ─────────────────────────────────────────
+// Effets déclenchés quand un Champion (ou autre Unit) est désigné comme
+// attaquant via declareAttack. L'engine appelle triggerOnAttack pour
+// chaque attaquant. triggerSourceUid = uid de l'attaquant (sert pour
+// summon-token-copy-self-stats).
+
+export const RUNETERRA_ATTACK_EFFECTS: Record<string, SpellEffect> = {
+  // 01FR024 Anivia : « Attaque : 1 dmg à tous les ennemis + nexus ennemi. »
+  "01FR024": { type: "damage-all-enemies-and-nexus", amount: 1 },
+  // 01FR038 Ashe : « Attaque : gelez l'ennemi le plus fort. »
+  "01FR038": { type: "frostbite-strongest-enemy" },
+  // 01IO009 Zed : « Attaque : invoquez 1 Ombre vivante avec mes stats. »
+  // Simplification : la token est summon sur le banc (pas « in attack »).
+  "01IO009": {
+    type: "summon-token-copy-self-stats",
+    tokenCardCode: "01IO009T1",
+  },
+  // 01SI042 Hecarim : « Attaque : invoquez 2 Cavaliers spectraux. »
+  "01SI042": { type: "summon-tokens", cardCode: "01SI024", count: 2 },
+  // 01SI053 Elise : « Attaque : invoquez 1 Jeune araignée. »
+  "01SI053": { type: "summon-tokens", cardCode: "01SI002", count: 1 },
+};
+
 // ─── Discard effects (Phase 3.72) ────────────────────────────────────────
 // Effets déclenchés quand un sort spécifique est défaussé (auto-discard
 // par 01PZ001 Fouillis ou 01PZ039 Enthousiasme). 01NX039 et 01PZ028 ont
@@ -2625,6 +2657,9 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "draw-cards":
     case "buff-all-other-allies-round":
     case "create-card-in-hand":
+    case "damage-all-enemies-and-nexus":
+    case "frostbite-strongest-enemy":
+    case "summon-token-copy-self-stats":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";
