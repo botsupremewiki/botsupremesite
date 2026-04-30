@@ -116,6 +116,20 @@ export interface BattleEffectAccess {
    *  si KO appliqué. */
   koCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
 
+  /** Attache N DON!! depuis la pool du seat (priorité aux rested) sur une
+   *  cible (Leader ou Persos). Utilisé par les effets type "Donnez 1 DON
+   *  épuisée à votre Leader / Persos". Retourne le nombre effectivement
+   *  attaché (peut être < count si pas assez de DON disponibles). */
+  attachDonToTarget(target: CardRef, count: number): number;
+
+  /** Retire un Personnage du board et le place au-dessous du deck du
+   *  propriétaire (les DON attachées retournent en pool épuisée). Utilisé
+   *  par les effets type Building Snake. Retourne true si appliqué. */
+  placeCharacterAtDeckBottom(
+    seat: OnePieceBattleSeatId,
+    uid: string,
+  ): boolean;
+
   /** Défausse les cartes aux indices donnés de la main du seat. Renvoie
    *  les cardId défaussés. Skip les indices invalides. */
   discardFromHand(
@@ -449,10 +463,38 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     ctx.battle.log("Ice Age : effet [Principale] descriptif (TODO PendingChoice).");
   },
 
-  /** OP03-009 Haruta — [Activation : Principale] [Une fois par tour] +1 DON. */
+  /** OP03-009 Haruta
+   *  [Activation : Principale] [Une fois par tour] Donnez jusqu'à 1 carte
+   *  DON!! épuisée à votre Leader ou à 1 de vos Personnages.
+   *  Flow : on-activate-main → buff-target (cancellable) → on-choice-resolved
+   *  avec targetUid → attachDonToTarget. */
   "OP03-009": (ctx) => {
-    if (ctx.hook !== "on-play") return;
-    ctx.battle.log("Haruta : effet [Activation : Principale] (TODO activation + PendingChoice).");
+    if (ctx.hook === "on-activate-main") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP03-009",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Haruta : choisis une cible pour recevoir 1 DON!! épuisée (Leader ou un de tes Personnages).",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target) return;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 1);
+      ctx.battle.log(
+        `Haruta : ${attached} DON!! attachée à la cible.`,
+      );
+    }
   },
 
   /** OP03-079 Vergo — [DON!! x1] passif "ne peut pas être KO en combat". */
@@ -538,6 +580,289 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
   "OP05-061": (ctx) => {
     if (ctx.hook !== "on-attack") return;
     ctx.battle.log("Usohachi : effet [En attaquant] conditionnel (TODO).");
+  },
+
+  // ─── BATCH 2 (cards 31-60 cardNumber) ────────────────────────────────────
+
+  /** OP07-015 Monkey D. Dragon
+   *  [Initiative] (déjà géré par hasKeyword)
+   *  [Jouée] Donnez jusqu'à 2 cartes DON!! épuisées à votre Leader ou à 1
+   *  de vos Personnages. */
+  "OP07-015": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP07-015",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Monkey D. Dragon : choisis une cible pour recevoir 2 DON!! épuisées.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target) return;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 2);
+      ctx.battle.log(
+        `Monkey D. Dragon : ${attached} DON!! attachée(s) à la cible.`,
+      );
+    }
+  },
+
+  /** OP09-002 Uta
+   *  [Jouée] Regardez 5 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {Équipage du Roux} et ajoutez-la à votre main. Puis,
+   *  placez les cartes restantes au-dessous de votre deck dans l'ordre de
+   *  votre choix. */
+  "OP09-002": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      5,
+      "Équipage du Roux",
+      "bottom",
+    );
+    if (found) {
+      ctx.battle.log("Uta : révèle un Équipage du Roux et l'ajoute à la main.");
+    } else {
+      ctx.battle.log("Uta : aucun Équipage du Roux révélé.");
+    }
+  },
+
+  /** OP09-003 Shachi et Pingouin
+   *  [En attaquant] Jusqu'à 1 Personnage adverse perd -2000 de puissance
+   *  pour tout le tour. */
+  "OP09-003": (ctx) => {
+    if (ctx.hook === "on-attack") {
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) {
+        ctx.battle.log(
+          "Shachi et Pingouin : aucun Personnage adverse à débuffer.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-003",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt:
+          "Shachi et Pingouin : choisis un Personnage adverse à débuffer (-2000 puissance).",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -2000,
+      );
+      ctx.battle.log("Shachi et Pingouin : -2000 puissance pour ce tour.");
+    }
+  },
+
+  /** OP09-008 Building Snake
+   *  [Activation : Principale] Vous pouvez placer ce Personnage au-dessous
+   *  du deck de son propriétaire : Jusqu'à 1 Personnage adverse perd
+   *  -3000 de puissance pour tout le tour. */
+  "OP09-008": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      // Cherche un Persos adverse à débuff. Si aucun, on peut quand même
+      // placer la carte au bottom — ici on demande juste la cible. Si le
+      // joueur skip, on ne fait rien.
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) {
+        ctx.battle.log("Building Snake : aucun Personnage adverse à débuffer.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-008",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt:
+          "Building Snake : choisis un Personnage adverse à débuffer (-3000). Le Persos retourne sous le deck.",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      // Place Building Snake au bottom du deck.
+      ctx.battle.placeCharacterAtDeckBottom(ctx.sourceSeat, ctx.sourceUid);
+      // Débuff la cible adverse.
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -3000,
+      );
+      ctx.battle.log(
+        "Building Snake : -3000 puissance pour ce tour, Persos retourné au deck.",
+      );
+    }
+  },
+
+  /** OP09-011 Hongo
+   *  [Activation : Principale] Vous pouvez épuiser ce Personnage : Si votre
+   *  Leader est de type {Équipage du Roux}, jusqu'à 1 Personnage adverse
+   *  perd -2000 de puissance pour tout le tour. */
+  "OP09-011": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderId = seat?.leaderId;
+      const leaderMeta = leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(leaderId)
+        : null;
+      const isRoux = leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage du roux"),
+      );
+      if (!isRoux) {
+        ctx.battle.log("Hongo : Leader pas Équipage du Roux, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-011",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Hongo : choisis un Personnage adverse à débuffer (-2000).",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -2000,
+      );
+      ctx.battle.log("Hongo : -2000 puissance pour ce tour.");
+    }
+  },
+
+  /** OP09-013 Yasopp
+   *  [Jouée] Jusqu'à 1 de vos Leaders gagne +1000 de puissance jusqu'à la
+   *  fin du prochain tour adverse. — Auto self leader (1 seul Leader).
+   *  [DON!! x1] [En attaquant] Jusqu'à 1 Personnage adverse perd -1000 de
+   *  puissance pour tout le tour. */
+  "OP09-013": (ctx) => {
+    if (ctx.hook === "on-play") {
+      // Auto-buff Leader (toujours 1).
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (seat?.leaderId) {
+        ctx.battle.addPowerBuff(
+          { kind: "leader", seat: ctx.sourceSeat },
+          1000,
+        );
+        ctx.battle.log("Yasopp : Leader gagne +1000 puissance.");
+      }
+      return;
+    }
+    if (ctx.hook === "on-attack") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const c = seat?.characters.find((x) => x.uid === ctx.sourceUid);
+      if (!c || c.attachedDon < 1) return; // [DON!! x1] requirement
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) return;
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-013",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Yasopp : choisis un Persos adverse à débuffer (-1000).",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -1000,
+      );
+      ctx.battle.log("Yasopp : -1000 puissance pour ce tour.");
+    }
+  },
+
+  /** OP09-019 Sous aucun prétexte je ne pardonnerai... (Event)
+   *  [Principale] Si votre Leader est de type {Équipage du Roux}, jusqu'à
+   *  1 Personnage adverse perd -3000 de puissance pour tout le tour. */
+  "OP09-019": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isRoux = leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage du roux"),
+      );
+      if (!isRoux) {
+        ctx.battle.log(
+          "Sous aucun prétexte : Leader pas Équipage du Roux, effet annulé.",
+        );
+        return;
+      }
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) return;
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-019",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Choisis un Persos adverse à débuffer (-3000 puissance).",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target || target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: opponentSeat, uid: target },
+        -3000,
+      );
+      ctx.battle.log("-3000 puissance pour ce tour.");
+    }
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───

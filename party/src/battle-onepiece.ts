@@ -1885,6 +1885,37 @@ export default class OnePieceBattleServer implements Party.Server {
         this.fireEffectFor(ko.cardId, "on-ko", ko.uid, seatId);
         return true;
       },
+      attachDonToTarget: (target, count) => {
+        const s = this.seats[target.seat];
+        if (!s) return 0;
+        // Priorise les DON épuisées (sens littéral de "DON!! épuisée"), sinon
+        // bascule sur les actives.
+        let taken = 0;
+        while (taken < count && s.donRested > 0) {
+          s.donRested--;
+          taken++;
+        }
+        while (taken < count && s.donActive > 0) {
+          s.donActive--;
+          taken++;
+        }
+        if (target.kind === "leader") s.leaderAttachedDon += taken;
+        else if (target.kind === "character") {
+          const c = s.characters.find((x) => x.uid === target.uid);
+          if (c) c.attachedDon += taken;
+        }
+        return taken;
+      },
+      placeCharacterAtDeckBottom: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const idx = s.characters.findIndex((c) => c.uid === uid);
+        if (idx < 0) return false;
+        const removed = s.characters.splice(idx, 1)[0];
+        s.donRested += removed.attachedDon;
+        s.deck.push({ cardId: removed.cardId });
+        return true;
+      },
       discardFromHand: (seatId, handIndices) => {
         const s = this.seats[seatId];
         if (!s) return [];
