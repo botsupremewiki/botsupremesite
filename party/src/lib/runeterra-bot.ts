@@ -84,7 +84,11 @@ export function botAct(
     return playUnit(state, seatIdx, playableUnits[0].handIndex);
   }
 
-  // Phase 3.8e : essaie de jouer un sort avec une cible valide
+  // Phase 3.8e + 3.28 : essaie de jouer un sort avec une cible valide.
+  // On itère sur toute la main et on tente le 1er sort dont l'effet est
+  // applicable. Validation explicite par type d'effet pour éviter d'envoyer
+  // au serveur une combinaison sort+cible qui retournera une erreur (ce qui
+  // bloquerait le bot — le scheduleBotAct s'arrête sur ok:false).
   const opponent = state.players[otherSeat(seatIdx)];
   for (let i = 0; i < player.hand.length; i++) {
     const card = getCard(player.hand[i].cardCode);
@@ -102,6 +106,38 @@ export function botAct(
         const wounded = player.bench.find((u) => u.damage > 0);
         if (!wounded) continue;
         targetUid = wounded.uid;
+      } else if (
+        effect.type === "buff-ally-permanent" &&
+        effect.requireExactBenchSize !== undefined
+      ) {
+        if (player.bench.length !== effect.requireExactBenchSize) continue;
+        targetUid = player.bench[0].uid;
+      } else if (effect.type === "kill-ally-for-draw") {
+        // Phase 3.27 : sacrifie l'allié le moins puissant. Saute si le banc
+        // est vide ou ne contient qu'un champion (mauvais trade).
+        if (player.bench.length === 0) continue;
+        const sortedByPower = [...player.bench].sort((a, b) => a.power - b.power);
+        targetUid = sortedByPower[0].uid;
+      } else if (effect.type === "heal-ally-full") {
+        // Phase 3.23 : Regain de courage. Cible l'allié le plus blessé,
+        // skip si aucun allié n'est blessé (sort gaspillé).
+        const wounded = player.bench
+          .filter((u) => u.damage > 0)
+          .sort((a, b) => b.damage - a.damage);
+        if (wounded.length === 0) continue;
+        targetUid = wounded[0].uid;
+      } else if (effect.type === "drain-ally") {
+        // Phase 3.24 : Absorbe-âme. Préfère un allié dont la mort serait
+        // OK (low health restant) ou skip si banc vide / champion only.
+        if (player.bench.length === 0) continue;
+        const sacrificable = [...player.bench]
+          .filter((u) => {
+            const c = getCard(u.cardCode);
+            return c?.supertype !== "Champion";
+          })
+          .sort((a, b) => a.power - b.power);
+        if (sacrificable.length === 0) continue;
+        targetUid = sacrificable[0].uid;
       } else if (player.bench.length > 0) {
         // Préfère un allié non-frozen pour ne pas gaspiller un buff
         const target = player.bench.find((u) => !u.frozen) ?? player.bench[0];
@@ -115,6 +151,14 @@ export function botAct(
         );
         if (!valid) continue;
         targetUid = valid.uid;
+      } else if (effect.type === "silence-follower-target") {
+        // Phase 3.20 : Purification. Skip Champions.
+        const valid = opponent.bench.find((u) => {
+          const c = getCard(u.cardCode);
+          return c?.supertype !== "Champion";
+        });
+        if (!valid) continue;
+        targetUid = valid.uid;
       } else if (opponent.bench.length > 0) {
         const target =
           opponent.bench.find((u) => !u.frozen) ?? opponent.bench[0];
@@ -122,10 +166,42 @@ export function botAct(
       } else continue;
     } else {
       // any
-      const target =
-        player.bench[0] ?? opponent.bench[0];
-      if (!target) continue;
-      targetUid = target.uid;
+      if (effect.type === "kill-target-any" && effect.maxPower !== undefined) {
+        // Phase 3.16 : Abattage. Cherche enemy ≤ maxPower (préféré),
+        // sinon ally ≤ maxPower (last resort), sinon skip.
+        const enemyValid = opponent.bench
+          .filter((u) => u.power <= (effect.maxPower ?? Infinity))
+          .sort((a, b) => b.power - a.power);
+        const allyValid = player.bench
+          .filter((u) => u.power <= (effect.maxPower ?? Infinity))
+          .sort((a, b) => a.power - b.power);
+        if (enemyValid.length > 0) targetUid = enemyValid[0].uid;
+        else if (allyValid.length > 0) targetUid = allyValid[0].uid;
+        else continue;
+      } else if (effect.type === "kill-target-any") {
+        // Cible la plus grosse menace ennemie, sinon skip.
+        if (opponent.bench.length === 0) continue;
+        const target = [...opponent.bench].sort(
+          (a, b) => b.power + b.health - (a.power + a.health),
+        )[0];
+        targetUid = target.uid;
+      } else if (effect.type === "drain-target-any") {
+        // Phase 3.24 : Poigne de l'immortel. Préfère ennemi (heal +
+        // damage) sinon cible ally faible.
+        if (opponent.bench.length > 0) {
+          targetUid = opponent.bench[0].uid;
+        } else if (player.bench.length > 0) {
+          const sacrificable = [...player.bench].sort(
+            (a, b) => a.power - b.power,
+          );
+          targetUid = sacrificable[0].uid;
+        } else continue;
+      } else {
+        // deal-damage-anywhere, recall-any : préfère ennemi puis ally.
+        const target = opponent.bench[0] ?? player.bench[0];
+        if (!target) continue;
+        targetUid = target.uid;
+      }
     }
     return playSpell(state, seatIdx, i, targetUid);
   }
