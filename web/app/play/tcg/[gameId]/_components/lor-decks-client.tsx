@@ -527,16 +527,45 @@ function DeckEditor({
   onZoomCard: (c: RuneterraCardData) => void;
 }) {
   const [search, setSearch] = useState("");
+  // Phase 3.83 : filtres additionnels (type + cost).
+  const [typeFilter, setTypeFilter] = useState<
+    "all" | "unit" | "spell" | "champion"
+  >("all");
+  const [costFilter, setCostFilter] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return eligibleCards;
     return eligibleCards.filter((c) => {
-      const hay = (c.name + " " + c.cardCode + " " + (c.subtypes ?? []).join(" "))
-        .toLowerCase();
-      return hay.includes(q);
+      // Type filter
+      if (typeFilter === "unit" && c.type !== "Unit") return false;
+      if (typeFilter === "spell" && c.type !== "Spell") return false;
+      if (typeFilter === "champion" && c.supertype !== "Champion") return false;
+      // Cost filter (≥7 = 7+)
+      if (costFilter !== null) {
+        if (costFilter === 7 ? c.cost < 7 : c.cost !== costFilter) return false;
+      }
+      // Search
+      if (q) {
+        const hay =
+          (c.name + " " + c.cardCode + " " + (c.subtypes ?? []).join(" "))
+            .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
     });
-  }, [eligibleCards, search]);
+  }, [eligibleCards, search, typeFilter, costFilter]);
+
+  // Phase 3.83 : cost curve histogram. Compte les cartes par cost (1-7+).
+  const costCurve = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const [code, count] of draftEntries) {
+      const card = RUNETERRA_BASE_SET_BY_CODE.get(code);
+      if (!card) continue;
+      const bucket = card.cost >= 7 ? 7 : card.cost;
+      counts[bucket] = (counts[bucket] ?? 0) + count;
+    }
+    return counts;
+  }, [draftEntries]);
 
   const cardsInDeck = useMemo(() => {
     const arr: { card: RuneterraCardData; count: number }[] = [];
@@ -627,6 +656,8 @@ function DeckEditor({
         <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           {/* Colonne gauche : cartes du deck */}
           <div className="flex w-[320px] shrink-0 flex-col gap-2 overflow-hidden">
+            {/* Phase 3.83 : cost curve histogram */}
+            <CostCurve costCurve={costCurve} totalCount={totalCount} />
             <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2">
               <div className="text-[11px] uppercase tracking-widest text-zinc-500">
                 Cartes ({totalCount}/{DECK_SIZE})
@@ -659,6 +690,58 @@ function DeckEditor({
               placeholder="🔍 Rechercher dans tes cartes éligibles…"
               className="shrink-0 rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-sky-400/50 focus:outline-none"
             />
+            {/* Phase 3.83 : filter bar (type + cost). */}
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                Type
+              </span>
+              {(["all", "unit", "spell", "champion"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className={`rounded px-2 py-0.5 text-[10px] ${
+                    typeFilter === t
+                      ? "bg-sky-500/20 text-sky-200 ring-1 ring-sky-400/40"
+                      : "text-zinc-400 hover:bg-white/5"
+                  }`}
+                >
+                  {t === "all"
+                    ? "Tous"
+                    : t === "unit"
+                      ? "Unités"
+                      : t === "spell"
+                        ? "Sorts"
+                        : "★ Champions"}
+                </button>
+              ))}
+              <div className="mx-1 h-3 w-px bg-white/10" />
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                Coût
+              </span>
+              <button
+                onClick={() => setCostFilter(null)}
+                className={`rounded px-2 py-0.5 text-[10px] ${
+                  costFilter === null
+                    ? "bg-sky-500/20 text-sky-200 ring-1 ring-sky-400/40"
+                    : "text-zinc-400 hover:bg-white/5"
+                }`}
+              >
+                Tous
+              </button>
+              {[1, 2, 3, 4, 5, 6, 7].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCostFilter(c)}
+                  className={`rounded px-2 py-0.5 text-[10px] tabular-nums ${
+                    costFilter === c
+                      ? "bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40"
+                      : "text-zinc-400 hover:bg-white/5"
+                  }`}
+                >
+                  {c === 7 ? "7+" : c}
+                </button>
+              ))}
+            </div>
             <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2">
               {filtered.length === 0 ? (
                 <div className="py-8 text-center text-sm text-zinc-500">
@@ -829,6 +912,43 @@ function DeckCardRow({
         >
           +
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Phase 3.83 : histogramme de la courbe de mana du deck en cours.
+function CostCurve({
+  costCurve,
+  totalCount,
+}: {
+  costCurve: Record<number, number>;
+  totalCount: number;
+}) {
+  const max = Math.max(1, ...Object.values(costCurve));
+  const buckets = [1, 2, 3, 4, 5, 6, 7] as const;
+  return (
+    <div className="shrink-0 rounded-lg border border-white/10 bg-black/30 p-2">
+      <div className="mb-1 text-[11px] uppercase tracking-widest text-zinc-500">
+        Courbe de mana
+      </div>
+      <div className="flex h-12 items-end gap-1">
+        {buckets.map((c) => {
+          const count = costCurve[c] ?? 0;
+          const heightPct = totalCount === 0 ? 0 : (count / max) * 100;
+          return (
+            <div key={c} className="flex flex-1 flex-col items-center gap-0.5">
+              <div className="text-[9px] tabular-nums text-zinc-300">
+                {count > 0 ? count : ""}
+              </div>
+              <div
+                className="w-full rounded-sm bg-gradient-to-t from-amber-500/40 to-amber-300/70"
+                style={{ height: `${heightPct}%`, minHeight: count > 0 ? 2 : 0 }}
+              />
+              <div className="text-[9px] text-zinc-500">{c === 7 ? "7+" : c}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
