@@ -1771,6 +1771,142 @@ function applySpellEffect(
       const intermediate: InternalState = { ...state, players: newPlayers };
       return drawCards(intermediate, casterSeat, effect.drawCount).state;
     }
+    case "recall-ally-and-summon-token": {
+      // Phase 3.45 : Inversion spectrale. Retire l'allié ciblé du banc,
+      // l'ajoute à la main, puis summon le token à sa place (si slot dispo).
+      const player = newPlayers[casterSeat];
+      const idx = player.bench.findIndex((u) => u.uid === targetUid);
+      if (idx === -1) return state;
+      const recalled = player.bench[idx];
+      const benchSansAlly = [
+        ...player.bench.slice(0, idx),
+        ...player.bench.slice(idx + 1),
+      ];
+      // Yasuo level-up : "rappelé" compte aussi.
+      const playerAfterRecall: InternalPlayer = {
+        ...player,
+        bench: benchSansAlly,
+        hand: [...player.hand, { uid: recalled.uid, cardCode: recalled.cardCode }],
+        championCounters: {
+          ...player.championCounters,
+          enemyStunned: player.championCounters.enemyStunned + 1,
+        },
+      };
+      newPlayers[casterSeat] = playerAfterRecall;
+      // Summon le token.
+      const tokenCard = getCard(effect.tokenCardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") {
+        return { ...state, players: newPlayers };
+      }
+      const newUid = `${casterSeat}-rs-${state.round}-${state.log.length}`;
+      const newUnit = createUnit(newUid, effect.tokenCardCode);
+      newPlayers[casterSeat] = {
+        ...playerAfterRecall,
+        bench: [...playerAfterRecall.bench, newUnit],
+      };
+      const recalledName = getCard(recalled.cardCode)?.name ?? recalled.cardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} rappelle ${recalledName} et invoque ${tokenCard.name}.`,
+        ],
+      };
+    }
+    case "damage-or-frostbite-by-power-zero": {
+      // Phase 3.45 : Acier glacial. Si target power=0, dmg ; sinon freeze.
+      const opp = newPlayers[oppSeat];
+      const target = opp.bench.find((u) => u.uid === targetUid);
+      if (!target) return state;
+      if (target.power === 0) {
+        // Dmg branch.
+        const updatedBench = opp.bench.map((u) => {
+          if (u.uid !== targetUid) return u;
+          const copy = { ...u };
+          applyDamageToUnit(copy, effect.amount);
+          return copy;
+        });
+        const survivors = updatedBench.filter((u) => u.damage < u.health);
+        const dead = updatedBench.find((u) => u.damage >= u.health);
+        newPlayers[oppSeat] = { ...opp, bench: survivors };
+        let newState: InternalState = { ...state, players: newPlayers };
+        if (dead) newState = triggerLastBreath(newState, dead, oppSeat);
+        return newState;
+      }
+      // Frostbite branch (mirror de frostbite-enemy).
+      let froze = false;
+      const newBench = opp.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        if (u.frozen) return u;
+        froze = true;
+        const restorePower = u.power;
+        return {
+          ...u,
+          power: 0,
+          frozen: true,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff - restorePower,
+        };
+      });
+      newPlayers[oppSeat] = { ...opp, bench: newBench };
+      if (froze) {
+        const caster = newPlayers[casterSeat];
+        newPlayers[casterSeat] = {
+          ...caster,
+          championCounters: {
+            ...caster.championCounters,
+            enemiesFrostbitten: caster.championCounters.enemiesFrostbitten + 1,
+          },
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
+    case "kill-power-zero-and-frostbite-all-enemies": {
+      // Phase 3.45 : Ours blanc. Tue les ennemis avec power=0, puis
+      // gèle tous les ennemis restants.
+      const opp = newPlayers[oppSeat];
+      const dead = opp.bench.filter((u) => u.power === 0);
+      const survivors = opp.bench.filter((u) => u.power > 0);
+      // Apply freeze sur survivors.
+      let frostCount = 0;
+      const frozenSurvivors = survivors.map((u) => {
+        if (u.frozen) return u;
+        frostCount++;
+        const restorePower = u.power;
+        return {
+          ...u,
+          power: 0,
+          frozen: true,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff - restorePower,
+        };
+      });
+      newPlayers[oppSeat] = {
+        ...opp,
+        bench: frozenSurvivors,
+        alliesDiedThisRound: opp.alliesDiedThisRound + dead.length,
+        championCounters: {
+          ...opp.championCounters,
+          alliesDied: opp.championCounters.alliesDied + dead.length,
+          unitsDied: opp.championCounters.unitsDied + dead.length,
+        },
+      };
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        championCounters: {
+          ...caster.championCounters,
+          unitsDied: caster.championCounters.unitsDied + dead.length,
+          enemiesFrostbitten:
+            caster.championCounters.enemiesFrostbitten + frostCount,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const d of dead) {
+        newState = triggerLastBreath(newState, d, oppSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
     case "damage-enemy-and-rally": {
       // Phase 3.44 : Shunpo. Inflige amount dmg à un ennemi puis caster
       // gagne (ou regagne) le jeton d'attaque.

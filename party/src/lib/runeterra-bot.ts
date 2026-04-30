@@ -150,6 +150,12 @@ export function botAct(
       ) {
         continue; // aucun ennemi dans la fenêtre maxPower
       }
+      if (
+        effect.type === "kill-power-zero-and-frostbite-all-enemies" &&
+        opponent.bench.length === 0
+      ) {
+        continue; // pas d'ennemi à toucher
+      }
       targetUid = null;
     } else if (side === "ally") {
       if (effect.type === "buff-ally-permanent" && effect.requireWounded) {
@@ -205,6 +211,15 @@ export function botAct(
           .filter((u) => u.damage > 0)
           .sort((a, b) => b.damage - a.damage);
         const target = wounded[0] ?? player.bench[0];
+        targetUid = target.uid;
+      } else if (effect.type === "recall-ally-and-summon-token") {
+        // Phase 3.45 : Inversion spectrale. Recall l'allié le moins
+        // intéressant (tap, faible) et summon Ombre vivante. Skip si
+        // banc vide.
+        if (player.bench.length === 0) continue;
+        const target = [...player.bench].sort(
+          (a, b) => a.power + a.health - (b.power + b.health),
+        )[0];
         targetUid = target.uid;
       } else if (
         effect.type === "buff-2-allies-permanent" ||
@@ -278,6 +293,21 @@ export function botAct(
           .sort((a, b) => b.power - a.power)[0];
         if (!target) continue;
         targetUid = target.uid;
+      } else if (effect.type === "damage-or-frostbite-by-power-zero") {
+        // Phase 3.45 : Acier glacial. Préfère un ennemi power=0 (kill),
+        // sinon une grosse menace à freeze.
+        const killable = opponent.bench
+          .filter((u) => u.power === 0)
+          .sort((a, b) => b.health + b.power - (a.health + a.power))[0];
+        if (killable) {
+          targetUid = killable.uid;
+        } else {
+          const fallback = [...opponent.bench]
+            .filter((u) => !u.frozen)
+            .sort((a, b) => b.power - a.power)[0];
+          if (!fallback) continue;
+          targetUid = fallback.uid;
+        }
       } else if (effect.type === "damage-enemy-and-rally") {
         // Phase 3.44 : Shunpo. Préfère un ennemi tuable par dmg, sinon
         // la plus grosse menace pour réduire son power. Skip si banc

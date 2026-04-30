@@ -1568,7 +1568,20 @@ export type SpellEffect =
   // Phase 3.44
   // Cible : ennemi → inflige amount dmg puis rally (gain attack token).
   // Shunpo (01NX056 : 2 dmg + rally).
-  | { type: "damage-enemy-and-rally"; amount: number };
+  | { type: "damage-enemy-and-rally"; amount: number }
+  // Phase 3.45
+  // Cible : allié → recall (retire du banc, ajoute à la main) puis summon
+  // 1 × token sur le banc (slot du recall). Inversion spectrale.
+  | {
+      type: "recall-ally-and-summon-token";
+      tokenCardCode: string;
+    }
+  // Cible : ennemi → SI sa puissance est 0 (ex frozen), inflige amount
+  // dmg ; sinon le gèle. Acier glacial (01FR055 : 4 dmg or freeze).
+  | { type: "damage-or-frostbite-by-power-zero"; amount: number }
+  // Sans cible : tue tous les ennemis avec puissance = 0, puis gèle tous
+  // les ennemis restants. Ours blanc (01FR019).
+  | { type: "kill-power-zero-and-frostbite-all-enemies" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1863,6 +1876,19 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   "01DE047": { type: "summon-tokens", cardCode: "01DE016", count: 1 },
   // 01NX056 (Noxus, 5 Slow, Shunpo) — 2 dmg ennemi + rally.
   "01NX056": { type: "damage-enemy-and-rally", amount: 2 },
+
+  // ── Phase 3.45
+  // 01IO039 (Ionia, 2 Fast, Inversion spectrale) — recall un allié et
+  // summon 01IO009T1 (Ombre vivante, 3|2) à sa place.
+  "01IO039": {
+    type: "recall-ally-and-summon-token",
+    tokenCardCode: "01IO009T1",
+  },
+  // 01FR055 (Freljord, 1 Slow) — si l'ennemi a power=0, 4 dmg, sinon gel.
+  "01FR055": { type: "damage-or-frostbite-by-power-zero", amount: 4 },
+  // 01FR019 (Freljord, 7 Slow, Ours blanc) — kill all enemies power=0
+  // puis freeze tous les ennemis restants.
+  "01FR019": { type: "kill-power-zero-and-frostbite-all-enemies" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1934,6 +1960,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "buff-2-allies-permanent":
     case "damage-ally-buff-other-ally-round":
     case "heal-ally-and-draw":
+    case "recall-ally-and-summon-token":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -1950,6 +1977,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "frostbite-2-enemies":
     case "stun-enemy-buff-all-allies-round":
     case "damage-enemy-and-rally":
+    case "damage-or-frostbite-by-power-zero":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":
@@ -1964,6 +1992,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "buff-all-allies-round":
     case "damage-all-combatants":
     case "summon-tokens-if-ally-died":
+    case "kill-power-zero-and-frostbite-all-enemies":
       return "none";
   }
   return "none";
