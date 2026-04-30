@@ -36,6 +36,7 @@ import {
 } from "../../shared/tcg-onepiece-base";
 import {
   fetchTcgDeckById,
+  recordBattleLogs,
   recordBattleResult,
   recordBotWin,
 } from "./lib/supabase";
@@ -145,6 +146,10 @@ export default class OnePieceBattleServer implements Party.Server {
   private turnNumber = 0;
   private winner: OnePieceBattleSeatId | null = null;
   private log: string[] = [];
+  // Buffer complet pour insertion en DB en fin de match (record_battle_logs).
+  private fullLog: string[] = [];
+  // Timestamp ms du démarrage de la partie (pour calculer duration_ms).
+  private gameStartedAtMs: number | null = null;
   private uidCounter = 0;
   private pendingAttack: OnePieceBattlePendingAttack | null = null;
   private pendingTrigger: OnePieceBattlePendingTrigger | null = null;
@@ -457,6 +462,7 @@ export default class OnePieceBattleServer implements Party.Server {
     this.phase = "playing";
     this.activeSeat = Math.random() < 0.5 ? "p1" : "p2";
     this.turnNumber = 0; // sera incrémenté à 1 par nextTurn
+    this.gameStartedAtMs = Date.now();
     this.runTurnStartPhases(this.activeSeat, true /* isFirstTurnEver */);
     this.rearmTimer();
     this.broadcastState();
@@ -1578,11 +1584,15 @@ export default class OnePieceBattleServer implements Party.Server {
     this.pendingAttack = null;
     this.pendingChoice = null;
     this.pendingTrigger = null;
+    this.clearTimer();
     const loser: OnePieceBattleSeatId = winner === "p1" ? "p2" : "p1";
     this.pushLog(
       `🏁 Victoire ${this.seats[winner]?.username ?? winner} (${reason}).`,
     );
     this.broadcastState();
+
+    // Persistence des logs en DB (audit / debug / replay).
+    void this.persistBattleLogs(winner, reason);
 
     // Quête bot (joueur humain bat le bot 3× pour 1 pack gratuit).
     if (this.botMode && !this.questRecorded && winner === "p1" && this.seats.p1) {
@@ -3424,10 +3434,57 @@ export default class OnePieceBattleServer implements Party.Server {
     };
   }
 
+  /** Sauvegarde le log complet du match en DB pour audit / debug / replay
+   *  basique. Appelé après declareWinner. */
+  private async persistBattleLogs(
+    winner: OnePieceBattleSeatId,
+    reason: string,
+  ) {
+    const p1 = this.seats.p1;
+    const p2 = this.seats.p2;
+    if (!p1 || !p2) return;
+    try {
+      await recordBattleLogs(this.room, {
+        gameId: "onepiece",
+        battleHistoryId: null, // pas de lien avec battle_history pour
+                               // l'instant (PR distincte serait souhaitable)
+        roomId: this.room.id,
+        p1Id: p1.authId,
+        p2Id: p2.authId === BOT_AUTH_ID ? null : p2.authId,
+        p1Username: p1.username,
+        p2Username: p2.username,
+        p1DeckName: p1.deckName,
+        p2DeckName: p2.deckName,
+        p1LeaderId: p1.leaderId,
+        p2LeaderId: p2.leaderId,
+        log: this.fullLog,
+        winnerSeat: winner,
+        reason,
+        ranked: this.rankedMode,
+        botMode: this.botMode,
+        turnCount: this.turnNumber,
+        durationMs:
+          this.gameStartedAtMs !== null
+            ? Date.now() - this.gameStartedAtMs
+            : 0,
+      });
+    } catch (err) {
+      console.warn("[op-battle] persistBattleLogs threw:", err);
+    }
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   private pushLog(line: string) {
     this.log.push(line);
+    // Buffer complet conservé pour insertion DB en fin de match (audit /
+    // debug / replay). Pas borné — un match dure ~10-20 turns donc max
+    // ~500 lignes. Si on dépasse 5000 (cas extrême), on cap pour éviter
+    // d'exploser la mémoire.
+    this.fullLog.push(`[T${this.turnNumber}] ${line}`);
+    if (this.fullLog.length > 5000) {
+      this.fullLog = this.fullLog.slice(-5000);
+    }
     if (this.log.length > LOG_KEEP) this.log = this.log.slice(-LOG_KEEP);
   }
 

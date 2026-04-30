@@ -388,6 +388,77 @@ export async function recordBattleResult(
   }
 }
 
+/** Insère le log complet d'un match One Piece TCG dans `battle_logs`
+ *  (audit / debug / replay basique). Backed by record_battle_logs RPC. */
+export async function recordBattleLogs(
+  room: Party.Room,
+  args: {
+    gameId: string;
+    battleHistoryId: string | null;
+    roomId: string;
+    p1Id: string | null;
+    p2Id: string | null;
+    p1Username: string;
+    p2Username: string;
+    p1DeckName: string | null;
+    p2DeckName: string | null;
+    p1LeaderId: string | null;
+    p2LeaderId: string | null;
+    log: string[];
+    winnerSeat: "p1" | "p2" | null;
+    reason: string;
+    ranked: boolean;
+    botMode: boolean;
+    turnCount: number;
+    durationMs: number;
+  },
+): Promise<string | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(`${env.url}/rest/v1/rpc/record_battle_logs`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_game_id: args.gameId,
+        p_battle_history_id: args.battleHistoryId,
+        p_room_id: args.roomId,
+        p_p1_id: args.p1Id,
+        p_p2_id: args.p2Id,
+        p_p1_username: args.p1Username,
+        p_p2_username: args.p2Username,
+        p_p1_deck_name: args.p1DeckName,
+        p_p2_deck_name: args.p2DeckName,
+        p_p1_leader_id: args.p1LeaderId,
+        p_p2_leader_id: args.p2LeaderId,
+        p_log: args.log,
+        p_winner_seat: args.winnerSeat,
+        p_reason: args.reason,
+        p_ranked: args.ranked,
+        p_bot_mode: args.botMode,
+        p_turn_count: args.turnCount,
+        p_duration_ms: args.durationMs,
+      }),
+    });
+    if (!resp.ok) {
+      console.warn(
+        `[battle] record_battle_logs failed ${resp.status}:`,
+        await resp.text().catch(() => ""),
+      );
+      return null;
+    }
+    const data = await resp.json();
+    return typeof data === "string" ? data : null;
+  } catch (err) {
+    console.warn("[battle] record_battle_logs threw:", err);
+    return null;
+  }
+}
+
 /** Aggrégats nécessaires pour les checks d'achievements. Calculés
  *  côté Supabase (RPC get_user_battle_aggregates). */
 export type BattleAggregates = {
