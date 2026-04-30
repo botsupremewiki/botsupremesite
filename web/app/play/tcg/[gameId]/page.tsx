@@ -214,6 +214,15 @@ export default async function TcgGameHub({
                 gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.10),transparent_70%)]"
               />
             )}
+            <MenuButton
+              href={`/play/tcg/${gameId}/tutorial`}
+              icon="🎓"
+              title="Tutoriel guidé"
+              description="Apprends les bases en 8 étapes. +50 OS la première fois."
+              accent="text-cyan-200"
+              border="border-cyan-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.10),transparent_70%)]"
+            />
           </div>
         </div>
       </main>
