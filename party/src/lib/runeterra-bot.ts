@@ -742,6 +742,31 @@ export function botAct(
       // 1. Lethal au nexus ennemi si effect.amount >= nexusHealth
       // 2. Tuer un ennemi (dmg >= health restant)
       // 3. Toujours infliger au nexus ennemi (face damage)
+      // Phase 3.64 : 01PZ031 — 2 targets nexus (face damage) + draw 1.
+      if (effect.type === "deal-damage-2-targets-any-or-nexus-and-draw") {
+        // Préfère ennemis tuables, sinon double face damage au nexus.
+        const dmg = effect.damage1;
+        const killable = opponent.bench
+          .filter((u) => u.health - u.damage <= dmg)
+          .sort((a, b) => b.power + b.health - (a.power + a.health));
+        if (killable.length >= 2) {
+          targetUid = killable[0].uid;
+          targetUid2 = killable[1].uid;
+        } else if (killable.length === 1) {
+          targetUid = killable[0].uid;
+          targetUid2 = "nexus-enemy";
+        } else {
+          targetUid = "nexus-enemy";
+          // Pour 2e cible, doit être distincte. Pick un ennemi sinon
+          // nexus-self (sacrifice 1 dmg pour le draw).
+          if (opponent.bench.length > 0) {
+            targetUid2 = opponent.bench[0].uid;
+          } else {
+            targetUid2 = "nexus-self"; // self-damage 1 mais draw
+          }
+        }
+        return playSpell(state, seatIdx, i, targetUid, targetUid2);
+      }
       if (effect.type === "deal-damage-target-any-or-nexus") {
         const dmg = effect.amount;
         if (dmg >= opponent.nexusHealth) {

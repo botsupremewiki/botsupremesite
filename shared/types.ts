@@ -1790,7 +1790,16 @@ export type SpellEffect =
   // nexus). Remplace target1 par une copie exacte de target2 (cardCode
   // + stats reset au card de base, keywords du nouveau cardCode).
   // 01PZ005 Transformer.
-  | { type: "transform-target-into-other-target" };
+  | { type: "transform-target-into-other-target" }
+  // Phase 3.64
+  // 2 cibles distinctes (any unit ou nexus) : dmg1 à target1, dmg2 à
+  // target2 + pioche drawCount. 01PZ031 (1+1+draw 1).
+  | {
+      type: "deal-damage-2-targets-any-or-nexus-and-draw";
+      damage1: number;
+      damage2: number;
+      drawCount: number;
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2320,6 +2329,16 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01PZ005 (PiltoverZaun, 6 Fast, Transformer) — remplace target1 (allié)
   // par une copie exacte de target2 (unité quelconque, pas nexus).
   "01PZ005": { type: "transform-target-into-other-target" },
+
+  // ── Phase 3.64
+  // 01PZ031 (PiltoverZaun, 4 Fast) — 1 dmg à target1 (any-or-nexus)
+  // + 1 dmg à target2 (distinct any-or-nexus) + draw 1.
+  "01PZ031": {
+    type: "deal-damage-2-targets-any-or-nexus-and-draw",
+    damage1: 1,
+    damage2: 1,
+    drawCount: 1,
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2413,6 +2432,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "pay-all-mana-deal-damage-target-any":
       return "any";
     case "deal-damage-target-any-or-nexus":
+    case "deal-damage-2-targets-any-or-nexus-and-draw":
       return "any-or-nexus";
     case "unit-strike-unit":
     case "unit-strike-unit-in-combat":
@@ -2483,6 +2503,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "grant-keyword-2-allies-round":
     case "kill-ally-deal-power-to-target-any-or-nexus":
     case "transform-target-into-other-target":
+    case "deal-damage-2-targets-any-or-nexus-and-draw":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;

@@ -1411,17 +1411,31 @@ function validateSpellTarget(
   }
   // Phase 3.41 : "any-or-nexus" accepte unités OU "nexus-self" / "nexus-enemy".
   if (side === "any-or-nexus") {
-    if (targetUid === "nexus-self" || targetUid === "nexus-enemy") {
-      return { ok: true };
-    }
-    const foundN =
-      caster.bench.find((u) => u.uid === targetUid) ??
-      opponent.bench.find((u) => u.uid === targetUid);
-    if (!foundN) {
+    if (
+      targetUid !== "nexus-self" &&
+      targetUid !== "nexus-enemy" &&
+      !caster.bench.find((u) => u.uid === targetUid) &&
+      !opponent.bench.find((u) => u.uid === targetUid)
+    ) {
       return {
         ok: false,
         error: "La cible doit être une unité ou un nexus.",
       };
+    }
+    // Phase 3.64 : si l'effet attend 2 cibles, valide la 2e (any-or-nexus
+    // distinct).
+    if (targetCount === 2) {
+      if (
+        targetUid2 !== "nexus-self" &&
+        targetUid2 !== "nexus-enemy" &&
+        !caster.bench.find((u) => u.uid === targetUid2) &&
+        !opponent.bench.find((u) => u.uid === targetUid2)
+      ) {
+        return {
+          ok: false,
+          error: "La 2e cible doit être une unité ou un nexus.",
+        };
+      }
     }
     return { ok: true };
   }
@@ -2571,6 +2585,84 @@ function applySpellEffect(
           `${player.username} ranime ${toRevive} allié${toRevive > 1 ? "s" : ""} (Ephemeral).`,
         ],
       };
+    }
+    case "deal-damage-2-targets-any-or-nexus-and-draw": {
+      // Phase 3.64 : 01PZ031. Inflige damage1 à target1 + damage2 à
+      // target2 (unit ou nexus chacun) + draw drawCount. Last Breath +
+      // counters bumpés.
+      const applyDmg = (
+        s: InternalState,
+        targetUidStr: string,
+        amount: number,
+      ): InternalState => {
+        const ps: [InternalPlayer, InternalPlayer] = [
+          s.players[0],
+          s.players[1],
+        ] as [InternalPlayer, InternalPlayer];
+        if (targetUidStr === "nexus-self") {
+          const me = ps[casterSeat];
+          const newH = me.nexusHealth - amount;
+          ps[casterSeat] = { ...me, nexusHealth: newH };
+          if (newH <= 0) {
+            return {
+              ...s,
+              players: ps,
+              phase: "ended",
+              winnerSeatIdx: oppSeat,
+            };
+          }
+          return { ...s, players: ps };
+        }
+        if (targetUidStr === "nexus-enemy") {
+          const opp = ps[oppSeat];
+          const newH = opp.nexusHealth - amount;
+          ps[oppSeat] = { ...opp, nexusHealth: newH };
+          if (newH <= 0) {
+            return {
+              ...s,
+              players: ps,
+              phase: "ended",
+              winnerSeatIdx: casterSeat,
+            };
+          }
+          return { ...s, players: ps };
+        }
+        // Unit
+        let tSeat: 0 | 1 | null = null;
+        if (ps[casterSeat].bench.find((u) => u.uid === targetUidStr))
+          tSeat = casterSeat;
+        else if (ps[oppSeat].bench.find((u) => u.uid === targetUidStr))
+          tSeat = oppSeat;
+        if (tSeat === null) return s;
+        const tp = ps[tSeat];
+        const updated = tp.bench.map((u) => {
+          if (u.uid !== targetUidStr) return u;
+          const c = { ...u };
+          applyDamageToUnit(c, amount);
+          return c;
+        });
+        const survivors = updated.filter((u) => u.damage < u.health);
+        const dead = updated.find((u) => u.damage >= u.health);
+        ps[tSeat] = {
+          ...tp,
+          bench: survivors,
+          alliesDiedThisRound: tp.alliesDiedThisRound + (dead ? 1 : 0),
+          championCounters: {
+            ...tp.championCounters,
+            alliesDied: tp.championCounters.alliesDied + (dead ? 1 : 0),
+          },
+        };
+        let newS: InternalState = { ...s, players: ps };
+        if (dead) newS = triggerLastBreath(newS, dead, tSeat);
+        return newS;
+      };
+      let stateAfter: InternalState = { ...state, players: newPlayers };
+      stateAfter = applyDmg(stateAfter, targetUid ?? "", effect.damage1);
+      if (stateAfter.phase === "ended") return stateAfter;
+      stateAfter = applyDmg(stateAfter, targetUid2 ?? "", effect.damage2);
+      if (stateAfter.phase === "ended") return stateAfter;
+      // Draw.
+      return drawCards(stateAfter, casterSeat, effect.drawCount).state;
     }
     case "transform-target-into-other-target": {
       // Phase 3.63 : Transformer. Remplace target1 (ally) par une copie
