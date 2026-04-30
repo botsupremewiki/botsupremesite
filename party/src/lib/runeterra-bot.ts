@@ -168,6 +168,23 @@ export function botAct(
       ) {
         continue; // pas de combat → no-op
       }
+      if (
+        effect.type === "summon-tokens-and-buff-subtype-allies" &&
+        player.bench.length >= 6
+      ) {
+        continue; // banc plein, sort gaspillé
+      }
+      if (effect.type === "kill-all-units-with-max-power-if-ally-min-power") {
+        const hasMinAlly = player.bench.some(
+          (u) => u.power >= effect.minAllyPower,
+        );
+        if (!hasMinAlly) continue;
+        // Skip si aucune unité touchée (gaspillage de mana).
+        const wouldKill =
+          player.bench.filter((u) => u.power <= effect.maxPower).length +
+          opponent.bench.filter((u) => u.power <= effect.maxPower).length;
+        if (wouldKill === 0) continue;
+      }
       targetUid = null;
     } else if (side === "ally") {
       if (effect.type === "buff-ally-permanent" && effect.requireWounded) {
@@ -264,11 +281,12 @@ export function botAct(
         targetUid = target.uid;
       } else if (
         effect.type === "buff-2-allies-permanent" ||
-        effect.type === "buff-2-allies-round"
+        effect.type === "buff-2-allies-round" ||
+        effect.type === "grant-keyword-2-allies-round"
       ) {
-        // Phase 3.40 : 2 alliés distincts. Skip si <2 alliés.
-        if (player.bench.length < 2) continue;
+        // Phase 3.40 + 3.53 : 2 alliés distincts. Skip si <2 alliés.
         // Préfère les 2 plus gros (boost plus impactant).
+        if (player.bench.length < 2) continue;
         const sorted = [...player.bench].sort(
           (a, b) => b.power + b.health - (a.power + a.health),
         );

@@ -2018,6 +2018,94 @@ function applySpellEffect(
       }
       return newState;
     }
+    case "summon-tokens-and-buff-subtype-allies": {
+      // Phase 3.53 : summon count × tokenCardCode puis buff +pwr/+hp
+      // permanent à TOUS les alliés du subtype (incluant les nouveaux).
+      const cfgSB = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const tokenCard = getCard(effect.tokenCardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return state;
+      const slotsAvailable = cfgSB.maxBench - player.bench.length;
+      const toSummon = Math.max(0, Math.min(effect.count, slotsAvailable));
+      const newUnits: RuneterraBattleUnit[] = [];
+      for (let i = 0; i < toSummon; i++) {
+        const newUid = `${casterSeat}-sb-${state.round}-${state.log.length}-${i}`;
+        newUnits.push(createUnit(newUid, effect.tokenCardCode));
+      }
+      const fullBench = [...player.bench, ...newUnits];
+      // Buff tous les alliés du subtype (incluant les nouveaux).
+      const buffedBench = fullBench.map((u) => {
+        const card = getCard(u.cardCode);
+        if (!card?.subtypes?.includes(effect.subtype)) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: buffedBench };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${toSummon} × ${tokenCard.name} et buff ses ${effect.subtype}s (+${effect.power}|+${effect.health}).`,
+        ],
+      };
+    }
+    case "kill-all-units-with-max-power-if-ally-min-power": {
+      // Phase 3.53 : kill conditionnel. Si caster a un allié power ≥
+      // minAllyPower, tue toutes les unités (2 côtés) power ≤ maxPower.
+      const caster = newPlayers[casterSeat];
+      const hasMinAlly = caster.bench.some((u) => u.power >= effect.minAllyPower);
+      if (!hasMinAlly) return state;
+      const allDeadUnits: { unit: RuneterraBattleUnit; seat: 0 | 1 }[] = [];
+      const deadCountBySeat: [number, number] = [0, 0];
+      for (const seat of [0, 1] as const) {
+        const player = newPlayers[seat];
+        const survivors = player.bench.filter((u) => u.power > effect.maxPower);
+        const dead = player.bench.filter((u) => u.power <= effect.maxPower);
+        for (const d of dead) allDeadUnits.push({ unit: d, seat });
+        deadCountBySeat[seat] = dead.length;
+        newPlayers[seat] = {
+          ...player,
+          bench: survivors,
+          alliesDiedThisRound: player.alliesDiedThisRound + dead.length,
+          championCounters: {
+            ...player.championCounters,
+            alliesDied: player.championCounters.alliesDied + dead.length,
+          },
+        };
+      }
+      const totalDied = deadCountBySeat[0] + deadCountBySeat[1];
+      for (const seat of [0, 1] as const) {
+        newPlayers[seat] = {
+          ...newPlayers[seat],
+          championCounters: {
+            ...newPlayers[seat].championCounters,
+            unitsDied: newPlayers[seat].championCounters.unitsDied + totalDied,
+          },
+        };
+      }
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const { unit, seat } of allDeadUnits) {
+        newState = triggerLastBreath(newState, unit, seat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "grant-keyword-2-allies-round": {
+      // Phase 3.53 : grant keyword round à 2 alliés distincts.
+      const player = newPlayers[casterSeat];
+      const targets = new Set([targetUid, targetUid2].filter(Boolean));
+      const newBench = player.bench.map((u) => {
+        if (!targets.has(u.uid)) return u;
+        if (u.keywords.includes(effect.keyword)) return u;
+        return { ...u, keywords: [...u.keywords, effect.keyword] };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
     case "stun-attacker-enemy": {
       // Phase 3.52 : stun ennemi attaquant. Validation déjà faite.
       const opp = newPlayers[oppSeat];

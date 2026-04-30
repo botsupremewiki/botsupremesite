@@ -1612,7 +1612,30 @@ export type SpellEffect =
   | { type: "stun-attacker-enemy" }
   // Sans cible : grant Ephemeral à TOUS les adeptes (non-Champion) au
   // combat (les 2 côtés). Obscure lueur (01IO047).
-  | { type: "grant-ephemeral-all-followers-in-combat" };
+  | { type: "grant-ephemeral-all-followers-in-combat" }
+  // Phase 3.53
+  // Sans cible : summon count tokens + buff permanent +pwr/+hp à TOUS
+  // les alliés du subtype donné (incluant les nouveaux). 01SI050 (3 ×
+  // Jeune araignée + buff araignées), 01DE014 (2 × Détachement + buff
+  // élites).
+  | {
+      type: "summon-tokens-and-buff-subtype-allies";
+      tokenCardCode: string;
+      count: number;
+      subtype: string;
+      power: number;
+      health: number;
+    }
+  // Sans cible : si le caster a un allié de power ≥ minAllyPower, tue
+  // toutes les unités (2 côtés) avec power ≤ maxPower. 01NX053.
+  | {
+      type: "kill-all-units-with-max-power-if-ally-min-power";
+      maxPower: number;
+      minAllyPower: number;
+    }
+  // 2 cibles allié : grant un mot-clé pour ce round à 2 alliés distincts.
+  // 01IO010 Soutien indéfectible (Barrier round à 2 alliés).
+  | { type: "grant-keyword-2-allies-round"; keyword: string };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1967,6 +1990,38 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01IO047 (Ionia, 6 Fast, Obscure lueur) — Ephemeral à TOUS les
   // adeptes au combat (les 2 côtés).
   "01IO047": { type: "grant-ephemeral-all-followers-in-combat" },
+
+  // ── Phase 3.53
+  // 01SI050 (ShadowIsles, 6 Slow) — summon 3 × 01SI002 (Jeune araignée)
+  // + buff +1|+0 permanent à toutes les araignées alliées.
+  "01SI050": {
+    type: "summon-tokens-and-buff-subtype-allies",
+    tokenCardCode: "01SI002",
+    count: 3,
+    subtype: "ARAIGNÉE",
+    power: 1,
+    health: 0,
+  },
+  // 01DE014 (Demacia, 8 Slow) — summon 2 × 01DE016 (Détachement hardi)
+  // + buff +1|+1 permanent à tous les alliés ÉLITE.
+  "01DE014": {
+    type: "summon-tokens-and-buff-subtype-allies",
+    tokenCardCode: "01DE016",
+    count: 2,
+    subtype: "ÉLITE",
+    power: 1,
+    health: 1,
+  },
+  // 01NX053 (Noxus, 7 Slow) — si caster a un allié power ≥ 5, kill
+  // toutes les unités (2 côtés) avec power ≤ 4.
+  "01NX053": {
+    type: "kill-all-units-with-max-power-if-ally-min-power",
+    maxPower: 4,
+    minAllyPower: 5,
+  },
+  // 01IO010 (Ionia, 6 Burst, Soutien indéfectible) — grant Barrier round
+  // à 2 alliés distincts (le « swap » est cosmétique en LoR).
+  "01IO010": { type: "grant-keyword-2-allies-round", keyword: "Barrier" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2041,6 +2096,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "heal-ally-and-draw":
     case "recall-ally-and-summon-token":
     case "ally-strikes-all-enemies-in-combat":
+    case "grant-keyword-2-allies-round":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -2080,6 +2136,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "kill-power-zero-and-frostbite-all-enemies":
     case "revive-random-dead-ally-this-round":
     case "grant-ephemeral-all-followers-in-combat":
+    case "summon-tokens-and-buff-subtype-allies":
+    case "kill-all-units-with-max-power-if-ally-min-power":
       return "none";
   }
   return "none";
@@ -2097,6 +2155,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "unit-strike-unit":
     case "unit-strike-unit-in-combat":
     case "swap-ephemeral":
+    case "grant-keyword-2-allies-round":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;
