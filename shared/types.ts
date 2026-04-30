@@ -1712,7 +1712,16 @@ export type SpellEffect =
   // Cible : adepte (any side) → crée une copie dans la main du caster
   // avec un cardBuff Ephemeral (la copie sera Ephemeral quand jouée).
   // 01SI047 Vagues souvenirs.
-  | { type: "create-ephemeral-copy-of-target-in-hand" };
+  | { type: "create-ephemeral-copy-of-target-in-hand" }
+  // Phase 3.57 — Random spell creation.
+  // Sans cible : crée dans la main du caster un sort aléatoire venant
+  // d'une région du deck du caster. Filtres optionnels : minCost
+  // (01PZ016 ≥ 6), restoreSpellMana (01PZ016 fill gems).
+  | {
+      type: "create-random-spell-in-hand-from-regions";
+      minCost?: number;
+      restoreSpellMana?: boolean;
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2156,6 +2165,18 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI047 (ShadowIsles, 0 Burst, Vagues souvenirs) — crée une copie
   // de l'adepte ciblé dans la main du caster (avec cardBuff Ephemeral).
   "01SI047": { type: "create-ephemeral-copy-of-target-in-hand" },
+
+  // ── Phase 3.57 (random spell creation)
+  // 01PZ016 (PiltoverZaun, 3 Burst, Éclair de génie) — crée un sort
+  // aléatoire ≥ 6 cost depuis les régions du caster + restore spell mana.
+  "01PZ016": {
+    type: "create-random-spell-in-hand-from-regions",
+    minCost: 6,
+    restoreSpellMana: true,
+  },
+  // 01IO054 (Ionia, 2 Burst, Sagesse ancestrale) — crée un sort aléatoire
+  // depuis les régions du caster (Illumination skip).
+  "01IO054": { type: "create-random-spell-in-hand-from-regions" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2282,6 +2303,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "draw-and-reduce-cost":
     case "buff-all-allies-permanent":
     case "auto-discard-and-draw-up-to-n":
+    case "create-random-spell-in-hand-from-regions":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";

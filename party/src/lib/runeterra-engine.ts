@@ -2203,6 +2203,44 @@ function applySpellEffect(
         ],
       };
     }
+    case "create-random-spell-in-hand-from-regions": {
+      // Phase 3.57 : pick un sort aléatoire collectible matching :
+      //  - regions overlap avec les régions du caster (deck + bench + hand)
+      //  - cost ≥ minCost (si défini)
+      //  - type Spell + collectible
+      // Optionnel : restoreSpellMana → spellMana = max.
+      const cfgRS = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const ownedRegions = new Set<string>();
+      for (const c of [...player.deck, ...player.hand, ...player.bench]) {
+        const card = getCard(c.cardCode);
+        if (!card) continue;
+        for (const r of card.regions ?? []) ownedRegions.add(r);
+      }
+      const candidates: RuneterraCardData[] = [];
+      for (const card of RUNETERRA_BASE_SET_BY_CODE.values()) {
+        if (card.type !== "Spell") continue;
+        if (!card.collectible) continue;
+        if (effect.minCost !== undefined && card.cost < effect.minCost) continue;
+        const overlap = (card.regions ?? []).some((r) => ownedRegions.has(r));
+        if (!overlap) continue;
+        candidates.push(card);
+      }
+      let newPlayer: InternalPlayer = player;
+      if (candidates.length > 0) {
+        const picked = candidates[Math.floor(Math.random() * candidates.length)];
+        const newUid = `${casterSeat}-rs-${state.round}-${state.log.length}`;
+        newPlayer = {
+          ...newPlayer,
+          hand: [...newPlayer.hand, { uid: newUid, cardCode: picked.cardCode }],
+        };
+      }
+      if (effect.restoreSpellMana) {
+        newPlayer = { ...newPlayer, spellMana: cfgRS.maxSpellMana };
+      }
+      newPlayers[casterSeat] = newPlayer;
+      return { ...state, players: newPlayers };
+    }
     case "buff-all-allies-permanent": {
       // Phase 3.55 : +pwr/+hp permanent à tous les alliés sur le banc.
       const player = newPlayers[casterSeat];
