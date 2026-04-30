@@ -1784,6 +1784,24 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // (Carapateur ferrailleur, 1|1). La branche « si défaussé » n'est pas
   // implémentée (pas de système de défausse encore).
   "01PZ028": { type: "summon-tokens", cardCode: "01PZ032", count: 1 },
+
+  // ── Phase 3.38 (multi-target)
+  // 01FR042 (Freljord, 5 Burst) — gel 2 ennemis distincts.
+  "01FR042": { type: "frostbite-2-enemies" },
+  // 01NX025 (Noxus, 2 Burst) — +2|+0 permanent à 2 alliés distincts.
+  "01NX025": { type: "buff-2-allies-permanent", power: 2, health: 0 },
+  // 01FR010 (Freljord, 4 Burst) — +0|+3 permanent à 2 alliés distincts.
+  "01FR010": { type: "buff-2-allies-permanent", power: 0, health: 3 },
+  // 01DE041 (Demacia, 6 Burst) — +3|+3 round à 2 alliés distincts.
+  "01DE041": { type: "buff-2-allies-round", power: 3, health: 3 },
+  // 01NX047 (Noxus, 2 Burst, Transfusion) — 1 dmg à allié1, +2|+2 round
+  // à allié2. Cibles distinctes.
+  "01NX047": {
+    type: "damage-ally-buff-other-ally-round",
+    damage: 1,
+    buffPower: 2,
+    buffHealth: 2,
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
