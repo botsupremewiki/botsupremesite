@@ -1600,7 +1600,7 @@ export function declareAttack(
     }
   }
 
-  // Phase 3.18 : valide les forcedBlockers (Challenger).
+  // Phase 3.18+3.21 : valide les forcedBlockers (Challenger ou Vulnerable).
   if (forcedBlockerUids !== undefined) {
     if (forcedBlockerUids.length !== attackerUids.length) {
       return {
@@ -1612,14 +1612,13 @@ export function declareAttack(
     for (let i = 0; i < attackerUids.length; i++) {
       const forced = forcedBlockerUids[i];
       if (forced === null || forced === undefined) continue;
-      // L'attaquant doit avoir Challenger pour forcer un bloqueur.
       const attackerUnit = player.bench.find(
         (u) => u.uid === attackerUids[i],
       );
-      if (!attackerUnit || !hasKeyword(attackerUnit, "Challenger")) {
+      if (!attackerUnit) {
         return {
           ok: false,
-          error: `Seul un attaquant avec Challenger peut désigner un bloqueur forcé (lane ${i + 1}).`,
+          error: `Attaquant introuvable lane ${i + 1}.`,
         };
       }
       // La cible doit être une unité ennemie sur le banc.
@@ -1628,6 +1627,15 @@ export function declareAttack(
         return {
           ok: false,
           error: `Bloqueur forcé introuvable côté ennemi : ${forced}.`,
+        };
+      }
+      // Force légale si : attacker a Challenger OU target a Vulnerable.
+      const attackerHasChallenger = hasKeyword(attackerUnit, "Challenger");
+      const targetHasVulnerable = hasKeyword(forcedUnit, "Vulnerable");
+      if (!attackerHasChallenger && !targetHasVulnerable) {
+        return {
+          ok: false,
+          error: `Force impossible (lane ${i + 1}) : l'attaquant doit avoir Challenger OU la cible doit avoir Vulnérabilité.`,
         };
       }
     }

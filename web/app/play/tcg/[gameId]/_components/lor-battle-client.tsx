@@ -782,12 +782,18 @@ function ChallengerPicker({
   forcedByAttacker: Map<string, string>;
   onSetForced: (attackerUid: string, blockerUid: string | null) => void;
 }) {
+  // Phase 3.19 : Challenger units peuvent forcer n'importe quel ennemi.
+  // Phase 3.21 : tous les attaquants peuvent forcer un ennemi qui a
+  // Vulnerable (sans avoir besoin de Challenger côté attaquant).
   const challengerAttackers = pickedAttackerUids
     .map((uid) => attackerBench.find((u) => u.uid === uid))
-    .filter(
-      (u): u is RuneterraBattleUnit =>
-        u !== undefined && u.keywords.includes("Challenger"),
-    );
+    .filter((u): u is RuneterraBattleUnit => u !== undefined)
+    .filter((u) => {
+      // Show picker si l'attaquant a Challenger (peut forcer n'importe qui)
+      // OU si au moins un ennemi a Vulnerable (l'attaquant peut le forcer).
+      if (u.keywords.includes("Challenger")) return true;
+      return enemyBench.some((b) => b.keywords.includes("Vulnerable"));
+    });
   if (challengerAttackers.length === 0) return null;
   return (
     <div className="flex shrink-0 flex-col gap-1.5 rounded-md border border-rose-500/40 bg-rose-900/15 p-2">
@@ -813,15 +819,23 @@ function ChallengerPicker({
                 className="rounded border border-white/10 bg-black/60 px-1 py-0.5 text-[11px] text-zinc-100"
               >
                 <option value="">— libre (pas de force) —</option>
-                {enemyBench.map((b) => {
-                  const bCard = RUNETERRA_BASE_SET_BY_CODE.get(b.cardCode);
-                  return (
-                    <option key={b.uid} value={b.uid}>
-                      {bCard?.name?.slice(0, 14) ?? b.cardCode} (
-                      {b.power}/{b.health - b.damage})
-                    </option>
-                  );
-                })}
+                {enemyBench
+                  .filter((b) => {
+                    // Phase 3.21 : si l'attaquant n'a pas Challenger, seuls
+                    // les ennemis Vulnerable sont éligibles.
+                    if (attacker.keywords.includes("Challenger")) return true;
+                    return b.keywords.includes("Vulnerable");
+                  })
+                  .map((b) => {
+                    const bCard = RUNETERRA_BASE_SET_BY_CODE.get(b.cardCode);
+                    const tag = b.keywords.includes("Vulnerable") ? " ⚠️" : "";
+                    return (
+                      <option key={b.uid} value={b.uid}>
+                        {bCard?.name?.slice(0, 14) ?? b.cardCode}
+                        {tag} ({b.power}/{b.health - b.damage})
+                      </option>
+                    );
+                  })}
               </select>
             </div>
           );
