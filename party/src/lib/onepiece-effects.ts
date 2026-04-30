@@ -1292,6 +1292,168 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     ctx.battle.log("Belo Betty : pioche 1 carte.");
   },
 
+  // ─── BATCH 6 (cards 151-180 cardNumber) ─────────────────────────────────
+
+  /** P-030 Jinbe (Promo)
+   *  [En cas de KO] Placez au-dessous du deck de son propriétaire jusqu'à
+   *  1 Personnage ayant un coût de 3 ou moins. */
+  "P-030": (ctx) => {
+    if (ctx.hook === "on-ko") {
+      // Le seat qui doit choisir la cible = celui qui possédait Jinbe.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "P-030",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Jinbe : place un Persos adverse ≤ 3 au-dessous du deck de son propriétaire.",
+        params: { maxCost: 3 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.placeCharacterAtDeckBottom(
+        opponentSeat,
+        ctx.choice.selection.targetUid,
+      );
+      ctx.battle.log("Jinbe (En cas de KO) : Persos adverse retourné au deck.");
+    }
+  },
+
+  /** ST03-005 Dracule Mihawk
+   *  [DON!! x1] [En attaquant] Piochez 2 cartes et défaussez 2 cartes de
+   *  votre main. */
+  "ST03-005": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const c = seat?.characters.find((x) => x.uid === ctx.sourceUid);
+    if (!c || c.attachedDon < 1) return; // [DON!! x1] requirement
+    ctx.battle.drawCards(ctx.sourceSeat, 2);
+    ctx.battle.discardRandom(ctx.sourceSeat, 2);
+    ctx.battle.log(
+      "Dracule Mihawk : pioche 2 et défausse 2 ([DON!! x1] [En attaquant]).",
+    );
+  },
+
+  /** ST11-004 Nouvelle ère (Event)
+   *  [Principale] Si votre Leader est [Uta], regardez 3 cartes du dessus,
+   *  révélez jusqu'à 1 carte de type {FILM} autre que [Nouvelle ère] et
+   *  ajoutez-la à votre main. Puis, placez les cartes restantes au-dessous. */
+  "ST11-004": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const leaderMeta = seat?.leaderId
+      ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+      : null;
+    if (leaderMeta?.name !== "Uta") {
+      ctx.battle.log("Nouvelle ère : Leader pas Uta, effet annulé.");
+      return;
+    }
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      3,
+      "FILM",
+      "bottom",
+      "Nouvelle ère",
+    );
+    ctx.battle.log(
+      found
+        ? "Nouvelle ère : révèle une carte FILM."
+        : "Nouvelle ère : aucune carte FILM révélée.",
+    );
+  },
+
+  /** ST15-002 Edward Newgate (Char)
+   *  [Jouée] Donnez jusqu'à 1 carte DON!! épuisée à votre Leader ou à 1
+   *  de vos Personnages. (Effet [Activation] KO ≤ 5000 puissance skip
+   *  car nécessite filtre par puissance, pas implémenté.) */
+  "ST15-002": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST15-002",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Edward Newgate : choisis une cible pour recevoir 1 DON!! épuisée.",
+        params: { allowLeader: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const target = ctx.choice.selection.targetUid;
+      if (!target) return;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 1);
+      ctx.battle.log(`Edward Newgate : ${attached} DON!! attachée à la cible.`);
+    }
+  },
+
+  /** ST15-004 Thatch
+   *  [Jouée] Si votre Leader inclut «Équipage de Barbe Blanche» dans son
+   *  type, jusqu'à 1 Personnage adverse perd -2000 de puissance pour tout
+   *  le tour. Puis, ajoutez à votre main 1 carte du dessus de votre Vie. */
+  "ST15-004": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isBB = leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe blanche"),
+      );
+      if (!isBB) {
+        ctx.battle.log("Thatch : Leader pas Barbe Blanche, effet annulé.");
+        return;
+      }
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) {
+        // Pas de cible — applique juste le 2ᵉ effet (Vie → main).
+        ctx.battle.takeLifeToHand(ctx.sourceSeat);
+        ctx.battle.log(
+          "Thatch : pas de Persos adverse, ajoute 1 Vie à la main.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST15-004",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Thatch : choisis un Persos adverse à débuffer (-2000).",
+        params: { allowLeader: false, allowCharacters: true },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      const target = ctx.choice.selection.targetUid;
+      if (!ctx.choice.skipped && target && target !== "leader") {
+        const opponentSeat: OnePieceBattleSeatId =
+          ctx.sourceSeat === "p1" ? "p2" : "p1";
+        ctx.battle.addPowerBuff(
+          { kind: "character", seat: opponentSeat, uid: target },
+          -2000,
+        );
+        ctx.battle.log("Thatch : -2000 puissance pour ce tour.");
+      }
+      // Toujours ajouter 1 Vie à la main (effet "Puis,").
+      ctx.battle.takeLifeToHand(ctx.sourceSeat);
+      ctx.battle.log("Thatch : ajoute 1 Vie à la main.");
+    }
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
