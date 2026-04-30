@@ -293,6 +293,7 @@ export default class LorBattleServer implements Party.Server {
           data.handIndex,
           data.targetUid,
           data.targetUid2,
+          data.targetUid3,
         );
         break;
       case "lor-declare-attack":

@@ -1367,6 +1367,9 @@ export type RuneterraBattleClientMessage =
       // gel 2 ennemis, Transfusion dmg ally + buff ally, etc.).
       // Doit être distinct de targetUid pour les effets « 2 unités ».
       targetUid2?: string | null;
+      // Phase 3.70 : 3e cible (Crépuscule 01PZ004 = 3+2+1 dmg sur 3 cibles
+      // distinctes). Doit être distinct de targetUid + targetUid2.
+      targetUid3?: string | null;
     }
   | {
       type: "lor-declare-attack";
@@ -1813,8 +1816,16 @@ export type SpellEffect =
       insertCount: number;
     }
   // Sans cible : inflige amount dmg au nexus ennemi (simplifié pour les
-  // sorts multi-target qui font face damage). 01PZ004 (3+2+1=6 simpl.).
+  // sorts multi-target qui font face damage). [Plus utilisé Phase 3.70+
+  // pour 01PZ004 — voir deal-damage-3-targets-any-or-nexus.]
   | { type: "deal-damage-enemy-nexus-fixed"; amount: number }
+  // Phase 3.70 — 3-target chain damage.
+  // 3 cibles distinctes (any unit ou nexus) : damages[0] à target1,
+  // damages[1] à target2, damages[2] à target3. 01PZ004 ([3,2,1]).
+  | {
+      type: "deal-damage-3-targets-any-or-nexus";
+      damages: [number, number, number];
+    }
   // Phase 3.66
   // Sans cible : pioche count cartes. Stub minimal pour 01IO049 Rejet
   // (la mécanique de counter-spell vraie nécessite un spell stack avec
@@ -2374,10 +2385,12 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     tokenCardCode: "01PZ022",
     insertCount: 5,
   },
-  // 01PZ004 (PiltoverZaun, 7 Slow) — simplifié à 6 dmg cumulés
-  // (3+2+1) au nexus ennemi. La version 3-targets distincts attendra
-  // le support de targetUid3.
-  "01PZ004": { type: "deal-damage-enemy-nexus-fixed", amount: 6 },
+  // 01PZ004 (PiltoverZaun, 7 Slow) — Phase 3.70 : 3 cibles distinctes
+  // (any-or-nexus chacune) avec dmg [3, 2, 1].
+  "01PZ004": {
+    type: "deal-damage-3-targets-any-or-nexus",
+    damages: [3, 2, 1],
+  },
 
   // ── Phase 3.66
   // 01IO049 (Ionia, 4 Fast, Rejet) — stub : draw 1 carte. La vraie
@@ -2478,6 +2491,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
       return "any";
     case "deal-damage-target-any-or-nexus":
     case "deal-damage-2-targets-any-or-nexus-and-draw":
+    case "deal-damage-3-targets-any-or-nexus":
       return "any-or-nexus";
     case "unit-strike-unit":
     case "unit-strike-unit-in-combat":
@@ -2537,11 +2551,14 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
   return "none";
 }
 
-/** Phase 3.37 : combien de cibles d'unité ce sort attend. 0 = aucune
- *  cible, 1 = single-target (cas par défaut), 2 = 2 cibles distinctes
- *  (multi-target). Utilisé par UI + bot + validation pour le 2e target. */
-export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
+/** Phase 3.37 + 3.70 : combien de cibles d'unité ce sort attend.
+ *  0 = aucune cible, 1 = single-target (cas par défaut), 2 = 2 cibles
+ *  distinctes (multi-target), 3 = 3 cibles distinctes (Crépuscule).
+ *  Utilisé par UI + bot + validation pour les target* additionnels. */
+export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 | 3 {
   switch (effect.type) {
+    case "deal-damage-3-targets-any-or-nexus":
+      return 3;
     case "frostbite-2-enemies":
     case "buff-2-allies-round":
     case "buff-2-allies-permanent":

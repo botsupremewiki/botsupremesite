@@ -752,6 +752,48 @@ export function botAct(
       // 1. Lethal au nexus ennemi si effect.amount >= nexusHealth
       // 2. Tuer un ennemi (dmg >= health restant)
       // 3. Toujours infliger au nexus ennemi (face damage)
+      // Phase 3.70 : 01PZ004 Crépuscule — 3 targets [3,2,1] dmg.
+      if (effect.type === "deal-damage-3-targets-any-or-nexus") {
+        // Préfère 3 ennemis tuables, sinon mix kill + nexus, fallback
+        // tout au nexus ennemi (nexus-enemy / -self / 1 unit pour
+        // distinct).
+        const dmgs = effect.damages;
+        const enemies = [...opponent.bench];
+        const picks: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          // Cherche 1er ennemi non-déjà-pick tuable par dmgs[i].
+          const dmg = dmgs[i];
+          const killable = enemies
+            .filter((u) => !picks.includes(u.uid))
+            .filter((u) => u.health - u.damage <= dmg)
+            .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+          if (killable) {
+            picks.push(killable.uid);
+          } else if (!picks.includes("nexus-enemy")) {
+            picks.push("nexus-enemy");
+          } else if (
+            opponent.bench.find((u) => !picks.includes(u.uid))
+          ) {
+            picks.push(
+              opponent.bench.find((u) => !picks.includes(u.uid))!.uid,
+            );
+          } else if (!picks.includes("nexus-self")) {
+            picks.push("nexus-self"); // self damage en dernier recours
+          } else if (
+            player.bench.find((u) => !picks.includes(u.uid))
+          ) {
+            picks.push(player.bench.find((u) => !picks.includes(u.uid))!.uid);
+          } else {
+            // Pas assez de cibles distinctes — skip ce sort.
+            picks.length = 0;
+            break;
+          }
+        }
+        if (picks.length < 3) continue;
+        targetUid = picks[0];
+        targetUid2 = picks[1];
+        return playSpell(state, seatIdx, i, targetUid, targetUid2, picks[2]);
+      }
       // Phase 3.64 : 01PZ031 — 2 targets nexus (face damage) + draw 1.
       if (effect.type === "deal-damage-2-targets-any-or-nexus-and-draw") {
         // Préfère ennemis tuables, sinon double face damage au nexus.

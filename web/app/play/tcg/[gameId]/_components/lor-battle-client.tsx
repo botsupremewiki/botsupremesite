@@ -60,15 +60,17 @@ export function LorBattleClient({
   const [zoomedCard, setZoomedCard] = useState<RuneterraBattleUnit | string | null>(
     null,
   );
-  // Phase 3.7 + 3.39 : sort en attente de cible (null = pas de targeting en
-  // cours). targetCount: 1 ou 2 (2 = multi-target Vents mordants/Transfusion).
-  // firstTargetUid stocke la 1re cible quand on attend la 2e.
+  // Phase 3.7 + 3.39 + 3.70 : sort en attente de cible (null = pas de
+  // targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
+  // firstTargetUid + secondTargetUid stockent les cibles pickées en
+  // attendant la suivante.
   const [pendingSpell, setPendingSpell] = useState<{
     handIndex: number;
     side: SpellTargetSide;
     cardCode: string;
-    targetCount: 1 | 2;
+    targetCount: 1 | 2 | 3;
     firstTargetUid: string | null;
+    secondTargetUid: string | null;
   } | null>(null);
 
   const send = useCallback((msg: RuneterraBattleClientMessage) => {
@@ -153,14 +155,15 @@ export function LorBattleClient({
           send({ type: "lor-play-spell", handIndex, targetUid: null });
           return;
         }
-        // Mode targeting : attend que le user clique une (ou 2) cibles.
+        // Mode targeting : attend que le user clique une (ou 2 ou 3) cibles.
         const targetCount = getSpellTargetCount(effect);
         setPendingSpell({
           handIndex,
           side,
           cardCode,
-          targetCount: targetCount === 2 ? 2 : 1,
+          targetCount: targetCount === 0 ? 1 : targetCount,
           firstTargetUid: null,
+          secondTargetUid: null,
         });
       }
     },
@@ -170,27 +173,38 @@ export function LorBattleClient({
   const targetSpell = useCallback(
     (targetUid: string) => {
       if (!pendingSpell) return;
-      // Phase 3.39 : multi-target → 1er click stocke la cible et attend la 2e.
-      if (pendingSpell.targetCount === 2 && pendingSpell.firstTargetUid === null) {
+      // Phase 3.39 + 3.70 : multi-target → stocke les cibles et attend
+      // la dernière, puis envoie tout.
+      const tc = pendingSpell.targetCount;
+      if (tc >= 2 && pendingSpell.firstTargetUid === null) {
         setPendingSpell({ ...pendingSpell, firstTargetUid: targetUid });
         return;
       }
-      // Cancel si user reclique la même cible (2-target).
+      // Cancel si user reclique la même cible (anti-doublon).
       if (
-        pendingSpell.targetCount === 2 &&
-        pendingSpell.firstTargetUid === targetUid
+        pendingSpell.firstTargetUid === targetUid ||
+        pendingSpell.secondTargetUid === targetUid
       ) {
-        setErrorMsg("Les 2 cibles doivent être distinctes.");
+        setErrorMsg("Les cibles doivent être distinctes.");
         return;
       }
+      if (tc === 3 && pendingSpell.secondTargetUid === null) {
+        setPendingSpell({ ...pendingSpell, secondTargetUid: targetUid });
+        return;
+      }
+      // Tous les targets pickés — envoie.
       send({
         type: "lor-play-spell",
         handIndex: pendingSpell.handIndex,
         targetUid:
-          pendingSpell.targetCount === 2
-            ? pendingSpell.firstTargetUid
-            : targetUid,
-        targetUid2: pendingSpell.targetCount === 2 ? targetUid : undefined,
+          tc === 1 ? targetUid : pendingSpell.firstTargetUid,
+        targetUid2:
+          tc === 2
+            ? targetUid
+            : tc === 3
+              ? pendingSpell.secondTargetUid
+              : undefined,
+        targetUid3: tc === 3 ? targetUid : undefined,
       });
       setPendingSpell(null);
     },
@@ -412,8 +426,9 @@ function RoundView({
     handIndex: number;
     side: SpellTargetSide;
     cardCode: string;
-    targetCount: 1 | 2;
+    targetCount: 1 | 2 | 3;
     firstTargetUid: string | null;
+    secondTargetUid: string | null;
   } | null;
   onTargetSpell: (uid: string) => void;
   onCancelSpell: () => void;
@@ -567,6 +582,7 @@ function RoundView({
             : undefined
         }
         firstSelectedUid={pendingSpell?.firstTargetUid ?? null}
+        secondSelectedUid={pendingSpell?.secondTargetUid ?? null}
       />
 
       {/* Attack lanes (visible quand attaque en cours, peu importe le côté) */}
@@ -620,12 +636,16 @@ function RoundView({
           {pendingSpell && (
             <span className="text-violet-300">
               ✨{" "}
-              {pendingSpell.targetCount === 2 &&
-              pendingSpell.firstTargetUid === null
-                ? "Choisis la 1re cible"
-                : pendingSpell.targetCount === 2
-                  ? "Choisis la 2e cible (distincte)"
-                  : "Choisis une cible"}{" "}
+              {pendingSpell.targetCount === 1
+                ? "Choisis une cible"
+                : pendingSpell.firstTargetUid === null
+                  ? `Choisis la 1re cible (${pendingSpell.targetCount} au total)`
+                  : pendingSpell.targetCount === 3 &&
+                      pendingSpell.secondTargetUid === null
+                    ? "Choisis la 2e cible (distincte)"
+                    : pendingSpell.targetCount === 3
+                      ? "Choisis la 3e cible (distincte)"
+                      : "Choisis la 2e cible (distincte)"}{" "}
               (
               {pendingSpell.side === "ally"
                 ? "allié"
@@ -747,6 +767,7 @@ function RoundView({
               : undefined
         }
         firstSelectedUid={pendingSpell?.firstTargetUid ?? null}
+        secondSelectedUid={pendingSpell?.secondTargetUid ?? null}
         attackerPickMode={combatMode === "attacker-pick"}
         onUnitClick={handleSelfBenchClick}
       />
@@ -839,13 +860,16 @@ function BenchRow({
   onUnitClick,
   highlighted,
   firstSelectedUid,
+  secondSelectedUid,
   attackerPickMode,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
   highlighted?: Set<string>;
-  // Phase 3.39 : pour les sorts 2-cibles, marque la 1re cible déjà sélectionnée.
+  // Phase 3.39 : pour les sorts 2-cibles, marque la 1re cible déjà
+  // sélectionnée. Phase 3.70 : 2e cible pour sorts 3-cibles.
   firstSelectedUid?: string | null;
+  secondSelectedUid?: string | null;
   attackerPickMode?: boolean;
 }) {
   if (units.length === 0) {
@@ -866,17 +890,16 @@ function BenchRow({
       {units.map((u) => {
         const isPicked = highlighted?.has(u.uid) ?? false;
         const isFirstSelected = firstSelectedUid === u.uid;
+        const isSecondSelected = secondSelectedUid === u.uid;
         const eligibleAttacker =
           !attackerPickMode || (!u.playedThisRound && u.power > 0);
+        const ringClass = isFirstSelected
+          ? "rounded-md ring-2 ring-fuchsia-400 ring-offset-1 ring-offset-black"
+          : isSecondSelected
+            ? "rounded-md ring-2 ring-amber-400 ring-offset-1 ring-offset-black"
+            : "";
         return (
-          <div
-            key={u.uid}
-            className={
-              isFirstSelected
-                ? "rounded-md ring-2 ring-fuchsia-400 ring-offset-1 ring-offset-black"
-                : ""
-            }
-          >
+          <div key={u.uid} className={ringClass}>
             <UnitCard
               unit={u}
               onClick={() => onUnitClick(u)}

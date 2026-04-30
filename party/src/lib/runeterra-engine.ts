@@ -1115,6 +1115,7 @@ export function playSpell(
   handIndex: number,
   targetUid?: string | null,
   targetUid2?: string | null,
+  targetUid3?: string | null,
 ): EngineResult {
   if (state.phase !== "round") {
     return { ok: false, error: "La partie n'est pas en round." };
@@ -1142,7 +1143,8 @@ export function playSpell(
     };
   }
 
-  // Phase 3.7 + 3.37 : valide le ciblage (1 ou 2 cibles selon l'effet).
+  // Phase 3.7 + 3.37 + 3.70 : valide le ciblage (1, 2 ou 3 cibles selon
+  // l'effet).
   const effect = RUNETERRA_SPELL_EFFECTS[handCard.cardCode];
   if (effect) {
     const validation = validateSpellTarget(
@@ -1151,6 +1153,7 @@ export function playSpell(
       effect,
       targetUid,
       targetUid2,
+      targetUid3,
     );
     if (!validation.ok) return { ok: false, error: validation.error };
   }
@@ -1210,6 +1213,7 @@ export function playSpell(
       effect,
       targetUid ?? null,
       targetUid2 ?? null,
+      targetUid3 ?? null,
     );
     newPlayers = intermediateState.players;
   }
@@ -1241,6 +1245,7 @@ function validateSpellTarget(
   effect: SpellEffect,
   targetUid: string | null | undefined,
   targetUid2?: string | null | undefined,
+  targetUid3?: string | null | undefined,
 ): { ok: true } | { ok: false; error: string } {
   const side = getSpellTargetSide(effect);
   if (side === "none") return { ok: true };
@@ -1506,7 +1511,7 @@ function validateSpellTarget(
     }
     // Phase 3.64 : si l'effet attend 2 cibles, valide la 2e (any-or-nexus
     // distinct).
-    if (targetCount === 2) {
+    if (targetCount === 2 || targetCount === 3) {
       if (
         targetUid2 !== "nexus-self" &&
         targetUid2 !== "nexus-enemy" &&
@@ -1516,6 +1521,32 @@ function validateSpellTarget(
         return {
           ok: false,
           error: "La 2e cible doit être une unité ou un nexus.",
+        };
+      }
+    }
+    // Phase 3.70 : 3 cibles distinctes pour Crépuscule.
+    if (targetCount === 3) {
+      if (!targetUid3) {
+        return {
+          ok: false,
+          error: "Ce sort nécessite 3 cibles distinctes.",
+        };
+      }
+      if (
+        targetUid === targetUid3 ||
+        targetUid2 === targetUid3
+      ) {
+        return { ok: false, error: "Les 3 cibles doivent être distinctes." };
+      }
+      if (
+        targetUid3 !== "nexus-self" &&
+        targetUid3 !== "nexus-enemy" &&
+        !caster.bench.find((u) => u.uid === targetUid3) &&
+        !opponent.bench.find((u) => u.uid === targetUid3)
+      ) {
+        return {
+          ok: false,
+          error: "La 3e cible doit être une unité ou un nexus.",
         };
       }
     }
@@ -1559,12 +1590,86 @@ function validateSpellTarget(
   return { ok: true };
 }
 
+/** Phase 3.64+3.70 : helper qui applique amount dmg à un targetUid qui
+ *  peut être "nexus-self" / "nexus-enemy" ou un uid d'unité (ally/enemy).
+ *  Gère Last Breath + counters bumpés + game over si nexus ≤ 0. Si target
+ *  introuvable (uid invalide), no-op (return state). */
+function applyDmgToAnyOrNexus(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  oppSeat: 0 | 1,
+  targetUidStr: string,
+  amount: number,
+): InternalState {
+  const ps: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  if (targetUidStr === "nexus-self") {
+    const me = ps[casterSeat];
+    const newH = me.nexusHealth - amount;
+    ps[casterSeat] = { ...me, nexusHealth: newH };
+    if (newH <= 0) {
+      return {
+        ...state,
+        players: ps,
+        phase: "ended",
+        winnerSeatIdx: oppSeat,
+      };
+    }
+    return { ...state, players: ps };
+  }
+  if (targetUidStr === "nexus-enemy") {
+    const opp = ps[oppSeat];
+    const newH = opp.nexusHealth - amount;
+    ps[oppSeat] = { ...opp, nexusHealth: newH };
+    if (newH <= 0) {
+      return {
+        ...state,
+        players: ps,
+        phase: "ended",
+        winnerSeatIdx: casterSeat,
+      };
+    }
+    return { ...state, players: ps };
+  }
+  // Unit
+  let tSeat: 0 | 1 | null = null;
+  if (ps[casterSeat].bench.find((u) => u.uid === targetUidStr))
+    tSeat = casterSeat;
+  else if (ps[oppSeat].bench.find((u) => u.uid === targetUidStr))
+    tSeat = oppSeat;
+  if (tSeat === null) return state;
+  const tp = ps[tSeat];
+  const updated = tp.bench.map((u) => {
+    if (u.uid !== targetUidStr) return u;
+    const c = { ...u };
+    applyDamageToUnit(c, amount);
+    return c;
+  });
+  const survivors = updated.filter((u) => u.damage < u.health);
+  const dead = updated.find((u) => u.damage >= u.health);
+  ps[tSeat] = {
+    ...tp,
+    bench: survivors,
+    alliesDiedThisRound: tp.alliesDiedThisRound + (dead ? 1 : 0),
+    championCounters: {
+      ...tp.championCounters,
+      alliesDied: tp.championCounters.alliesDied + (dead ? 1 : 0),
+    },
+  };
+  let newS: InternalState = { ...state, players: ps };
+  if (dead) newS = triggerLastBreath(newS, dead, tSeat);
+  return newS;
+}
+
 function applySpellEffect(
   state: InternalState,
   casterSeat: 0 | 1,
   effect: SpellEffect,
   targetUid: string | null,
   targetUid2: string | null = null,
+  targetUid3: string | null = null,
 ): InternalState {
   if (!targetUid) return state;
   const oppSeat = otherSeat(casterSeat);
@@ -2792,79 +2897,40 @@ function applySpellEffect(
       // Phase 3.64 : 01PZ031. Inflige damage1 à target1 + damage2 à
       // target2 (unit ou nexus chacun) + draw drawCount. Last Breath +
       // counters bumpés.
-      const applyDmg = (
-        s: InternalState,
-        targetUidStr: string,
-        amount: number,
-      ): InternalState => {
-        const ps: [InternalPlayer, InternalPlayer] = [
-          s.players[0],
-          s.players[1],
-        ] as [InternalPlayer, InternalPlayer];
-        if (targetUidStr === "nexus-self") {
-          const me = ps[casterSeat];
-          const newH = me.nexusHealth - amount;
-          ps[casterSeat] = { ...me, nexusHealth: newH };
-          if (newH <= 0) {
-            return {
-              ...s,
-              players: ps,
-              phase: "ended",
-              winnerSeatIdx: oppSeat,
-            };
-          }
-          return { ...s, players: ps };
-        }
-        if (targetUidStr === "nexus-enemy") {
-          const opp = ps[oppSeat];
-          const newH = opp.nexusHealth - amount;
-          ps[oppSeat] = { ...opp, nexusHealth: newH };
-          if (newH <= 0) {
-            return {
-              ...s,
-              players: ps,
-              phase: "ended",
-              winnerSeatIdx: casterSeat,
-            };
-          }
-          return { ...s, players: ps };
-        }
-        // Unit
-        let tSeat: 0 | 1 | null = null;
-        if (ps[casterSeat].bench.find((u) => u.uid === targetUidStr))
-          tSeat = casterSeat;
-        else if (ps[oppSeat].bench.find((u) => u.uid === targetUidStr))
-          tSeat = oppSeat;
-        if (tSeat === null) return s;
-        const tp = ps[tSeat];
-        const updated = tp.bench.map((u) => {
-          if (u.uid !== targetUidStr) return u;
-          const c = { ...u };
-          applyDamageToUnit(c, amount);
-          return c;
-        });
-        const survivors = updated.filter((u) => u.damage < u.health);
-        const dead = updated.find((u) => u.damage >= u.health);
-        ps[tSeat] = {
-          ...tp,
-          bench: survivors,
-          alliesDiedThisRound: tp.alliesDiedThisRound + (dead ? 1 : 0),
-          championCounters: {
-            ...tp.championCounters,
-            alliesDied: tp.championCounters.alliesDied + (dead ? 1 : 0),
-          },
-        };
-        let newS: InternalState = { ...s, players: ps };
-        if (dead) newS = triggerLastBreath(newS, dead, tSeat);
-        return newS;
-      };
       let stateAfter: InternalState = { ...state, players: newPlayers };
-      stateAfter = applyDmg(stateAfter, targetUid ?? "", effect.damage1);
+      stateAfter = applyDmgToAnyOrNexus(
+        stateAfter,
+        casterSeat,
+        oppSeat,
+        targetUid ?? "",
+        effect.damage1,
+      );
       if (stateAfter.phase === "ended") return stateAfter;
-      stateAfter = applyDmg(stateAfter, targetUid2 ?? "", effect.damage2);
+      stateAfter = applyDmgToAnyOrNexus(
+        stateAfter,
+        casterSeat,
+        oppSeat,
+        targetUid2 ?? "",
+        effect.damage2,
+      );
       if (stateAfter.phase === "ended") return stateAfter;
-      // Draw.
       return drawCards(stateAfter, casterSeat, effect.drawCount).state;
+    }
+    case "deal-damage-3-targets-any-or-nexus": {
+      // Phase 3.70 : 01PZ004 Crépuscule. dmg[0]→t1, dmg[1]→t2, dmg[2]→t3.
+      let stateAfter3: InternalState = { ...state, players: newPlayers };
+      const targets = [targetUid ?? "", targetUid2 ?? "", targetUid3 ?? ""];
+      for (let i = 0; i < 3; i++) {
+        stateAfter3 = applyDmgToAnyOrNexus(
+          stateAfter3,
+          casterSeat,
+          oppSeat,
+          targets[i],
+          effect.damages[i],
+        );
+        if (stateAfter3.phase === "ended") return stateAfter3;
+      }
+      return stateAfter3;
     }
     case "transform-target-into-other-target": {
       // Phase 3.63 : Transformer. Remplace target1 (ally) par une copie
