@@ -2506,6 +2506,20 @@ export const RUNETERRA_ATTACK_EFFECTS: Record<string, SpellEffect> = {
   "01SI053": { type: "summon-tokens", cardCode: "01SI002", count: 1 },
 };
 
+// ─── Support effects (Phase 3.78) ────────────────────────────────────────
+// Effets déclenchés quand un Unit avec le mot-clé Support attaque AVEC
+// un autre allié (lane à droite). L'effet cible la lane[i+1].attackerUid
+// (l'allié « soutenu »). triggerSourceUid passé pour buff-all-other... etc.
+
+export const RUNETERRA_SUPPORT_EFFECTS: Record<string, SpellEffect> = {
+  // 01IO032 Shen : « Support : conférez Barrière à l'allié que je
+  // soutiens pour ce round. »
+  "01IO032": { type: "grant-keyword-ally-round", keyword: "Barrier" },
+  // 01DE043 Cuistots de guerre : « Support : conférez +1|+1 à l'allié
+  // que je soutiens pour ce round. »
+  "01DE043": { type: "buff-ally-round", power: 1, health: 1 },
+};
+
 // ─── Nexus-strike effects (Phase 3.75) ───────────────────────────────────
 // Effets déclenchés quand un Champion frappe le nexus ennemi pendant
 // resolveCombat. L'engine appelle triggerOnNexusStrike par strike (donc

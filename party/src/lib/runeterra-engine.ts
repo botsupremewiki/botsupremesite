@@ -27,6 +27,7 @@ import {
   RUNETERRA_NEXUS_STRIKE_EFFECTS,
   RUNETERRA_PLAY_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
+  RUNETERRA_SUPPORT_EFFECTS,
   getSpellTargetCount,
   getSpellTargetSide,
 } from "../../../shared/types";
@@ -914,6 +915,29 @@ export function triggerYasuoOnEnemyStunned(
   };
   if (dead) newState = triggerLastBreath(newState, dead, oppSeatIdx);
   return newState;
+}
+
+/** Phase 3.78 : déclenche le Support effect d'un Unit si enregistré
+ *  (Shen, Cuistots de guerre). attackerSeat = caster, supportedAllyUid =
+ *  uid de la lane[i+1].attackerUid (l'allié soutenu). */
+export function triggerOnSupport(
+  state: InternalState,
+  cardCode: string,
+  attackerSeat: 0 | 1,
+  supportedAllyUid: string,
+): InternalState {
+  const effect = RUNETERRA_SUPPORT_EFFECTS[cardCode];
+  if (!effect) return state;
+  return applySpellEffect(
+    state,
+    attackerSeat,
+    effect,
+    supportedAllyUid,
+    null,
+    null,
+    0,
+    null,
+  );
 }
 
 /** Phase 3.75 : déclenche l'effet on-nexus-strike d'un Champion si
@@ -5199,6 +5223,24 @@ export function declareAttack(
     const u = stateAfter.players[seatIdx].bench.find((x) => x.uid === uid);
     if (!u) continue;
     stateAfter = triggerOnAttack(stateAfter, u.cardCode, seatIdx, uid);
+    if (stateAfter.phase === "ended") break;
+  }
+
+  // Phase 3.78 : Support keyword. Pour chaque attaquant avec Support à
+  // l'index i (i < lanes.length-1), apply RUNETERRA_SUPPORT_EFFECTS à
+  // l'attaquant de la lane i+1.
+  for (let i = 0; i < attackerUids.length - 1; i++) {
+    const supporter = stateAfter.players[seatIdx].bench.find(
+      (x) => x.uid === attackerUids[i],
+    );
+    if (!supporter) continue;
+    if (!hasKeyword(supporter, "Support")) continue;
+    stateAfter = triggerOnSupport(
+      stateAfter,
+      supporter.cardCode,
+      seatIdx,
+      attackerUids[i + 1],
+    );
     if (stateAfter.phase === "ended") break;
   }
 
