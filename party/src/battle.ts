@@ -1016,6 +1016,16 @@ export default class BattleServer implements Party.Server {
     if (willKo) parts.push("→ K.O. !");
     this.pushLog(parts.join(" "));
 
+    // ── Recoil de la branche pile (Élektek Poing Éclair) ──
+    if (dmgResult.recoilSelf && dmgResult.recoilSelf > 0 && seat.active) {
+      seat.active.damage += dmgResult.recoilSelf;
+      const sd = getCardForBattle(seat.active.cardId);
+      if (sd && seat.active.damage >= sd.hp) {
+        // Self-KO sur le recul → l'adversaire marque 1 KO.
+        this.knockOut(oppId, seatId);
+      }
+    }
+
     // ── Talent passif Tartard « Contre-Attaque » ──
     // Si le défenseur est Tartard Actif, l'attaquant subit 20 dégâts.
     if (
@@ -1071,7 +1081,14 @@ export default class BattleServer implements Party.Server {
     attackName: string;
     baseDamage: number;
     defenderWeakness: PokemonEnergyType | null;
-  }): { finalDamage: number; weaknessApplied: boolean; cancelled: boolean } {
+  }): {
+    finalDamage: number;
+    weaknessApplied: boolean;
+    cancelled: boolean;
+    /** Self-damage à appliquer après les dégâts principaux (Élektek Poing
+     *  Éclair sur pile). 0 par défaut. */
+    recoilSelf?: number;
+  } {
     const { seat, opp, effects, attackerName, attackerType, baseDamage } = input;
     let damage = baseDamage;
     let cancelled = false;
@@ -1161,6 +1178,29 @@ export default class BattleServer implements Party.Server {
       if (!heads) {
         cancelled = true;
         damage = 0;
+      }
+    }
+
+    // ── Single-coin avec branches symétriques (Élektek Poing Éclair) ──
+    // UN seul flip : face → +bonus dégâts, pile → +recoil self-damage.
+    // Le recoil est appliqué en dehors (champ recoilSelf retourné).
+    let recoilSelf = 0;
+    const branched = effects.find(
+      (e) => e.kind === "single-coin-bonus-or-recoil",
+    );
+    if (branched && branched.kind === "single-coin-bonus-or-recoil") {
+      const heads = this.coinFlip();
+      this.emitCoinFlip(
+        `${attackerName}`,
+        heads,
+        heads
+          ? `Face : +${branched.bonus} dégâts !`
+          : `Pile : recul ${branched.recoil} dégâts.`,
+      );
+      if (heads) {
+        damage += branched.bonus;
+      } else {
+        recoilSelf = branched.recoil;
       }
     }
 
@@ -1275,7 +1315,7 @@ export default class BattleServer implements Party.Server {
       return { finalDamage: 0, weaknessApplied: false, cancelled: true };
     }
 
-    return { finalDamage: damage, weaknessApplied, cancelled: false };
+    return { finalDamage: damage, weaknessApplied, cancelled: false, recoilSelf };
   }
 
   /** Applique les effets secondaires d'une attaque APRÈS le damage principal :
@@ -1458,6 +1498,17 @@ export default class BattleServer implements Party.Server {
           const newActive = seat.bench[0];
           seat.bench[0] = seat.active;
           seat.active = newActive;
+        }
+      }
+      // ── Force switch adverse (Krakos « Dégagement », Roucarnage Déroute) ──
+      // Identique à Morgane : l'Actif adverse rejoint son Banc, on flag
+      // mustPromoteActive → l'adversaire choisit son nouvel Actif via le
+      // mécanisme existant. L'attaquant attend (requireOpponentReady).
+      else if (e.kind === "force-opp-switch") {
+        if (opp.active && opp.bench.length > 0) {
+          opp.bench.push(opp.active);
+          opp.active = null;
+          opp.mustPromoteActive = true;
         }
       }
       // ── Hand discard random (avec ou sans coin flip) ──

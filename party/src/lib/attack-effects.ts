@@ -179,6 +179,21 @@ export type AttackEffect =
    *  `copyFromUid` + `copyAttackIndex` au moment du `battle-attack` pour
    *  préciser quelle attaque copier. */
   | { kind: "copy-opp-attack" }
+  // ─── Force switch adverse (Krakos « Dégagement ») ────────────────────
+  /** « Échangez le Pokémon Actif de votre adversaire avec l'un de ses
+   *  Pokémon de Banc. (Votre adversaire choisit le nouveau Pokémon
+   *  Actif.) » — Pose mustPromoteActive sur l'adversaire. Identique à
+   *  l'effet de Morgane mais déclenché par une attaque. */
+  | { kind: "force-opp-switch" }
+  // ─── Single coin avec branches symétriques (Élektek « Poing Éclair ») ─
+  /** « Lancez une pièce. Si face, +N dégâts. Si pile, ce Pokémon s'inflige
+   *  aussi M dégâts. » — UN seul flip qui conditionne les DEUX résultats
+   *  (50%/50% chance), pas deux flips indépendants. */
+  | {
+      kind: "single-coin-bonus-or-recoil";
+      bonus: number;
+      recoil: number;
+    }
   // ─── Effets non implémentés (parsés pour debug, pas exécutés) ────────
   | { kind: "unimplemented"; pattern: string };
 
@@ -245,9 +260,24 @@ export function parseAttackEffects(
     effects.push({ kind: "tails-fail" });
   });
 
-  // ── Single coin bonus + parfois self-damage si pile ──
+  // ── Single coin avec branches symétriques (Élektek « Poing Éclair ») ──
+  // « Lancez une pièce. Si c'est face, +N dégâts. Si c'est pile, ce Pokémon
+  //   s'inflige aussi M dégâts. »
+  // Doit être PARSÉ EN PREMIER (avant single-coin-bonus + self-damage qui
+  // matcheraient chacun une moitié séparément, donnant 2 flips au lieu d'1).
+  consume(
+    /Lancez une pièce\.\s*Si c'est face, cette attaque inflige (\d+) dégâts de plus\.\s*Si c'est pile, ce Pokémon s'inflige aussi (\d+) dégâts\./i,
+    (m) => {
+      effects.push({
+        kind: "single-coin-bonus-or-recoil",
+        bonus: parseInt(m[1], 10),
+        recoil: parseInt(m[2], 10),
+      });
+    },
+  );
+
+  // ── Single coin bonus simple ──
   // « Lancez une pièce. Si c'est face, cette attaque inflige 40 dégâts de plus. »
-  // Attention : doit être avant le "Si c'est face, … paralysé" qui est traité dans STATUS.
   consume(
     /Lancez une pièce\.\s*Si c'est face, cette attaque inflige (\d+) dégâts de plus\./i,
     (m) => {
@@ -619,6 +649,16 @@ export function parseAttackEffects(
     /Choisissez l'une des attaques des Pokémon de votre adversaire et utilisez-la en tant que cette attaque\./i,
     () => {
       effects.push({ kind: "copy-opp-attack" });
+    },
+  );
+
+  // ── Force switch adverse (Krakos « Dégagement ») ──
+  // « Échangez le Pokémon Actif de votre adversaire avec l'un de ses
+  //   Pokémon de Banc. » — identique à l'effet Morgane.
+  consume(
+    /Échangez le Pokémon Actif de votre adversaire avec l'un de ses Pokémon de Banc\./i,
+    () => {
+      effects.push({ kind: "force-opp-switch" });
     },
   );
 
