@@ -980,6 +980,7 @@ export default class BattleServer implements Party.Server {
       attackerName: attackerData.name,
       attackerType: attackerData.type,
       attackName: attack.name,
+      attackCost: attack.cost,
       baseDamage,
       defenderWeakness: defenderData.weakness ?? null,
     });
@@ -1079,6 +1080,10 @@ export default class BattleServer implements Party.Server {
     attackerName: string;
     attackerType: PokemonEnergyType;
     attackName: string;
+    /** Coût de l'attaque utilisée — nécessaire pour `bonus-by-extra-energies`
+     *  qui soustrait le coût strict en énergies du type donné aux énergies
+     *  attachées pour calculer le « surplus ». */
+    attackCost: PokemonEnergyType[];
     baseDamage: number;
     defenderWeakness: PokemonEnergyType | null;
   }): {
@@ -1208,7 +1213,30 @@ export default class BattleServer implements Party.Server {
       return { finalDamage: 0, weaknessApplied: false, cancelled: true };
     }
 
-    // ── Conditional bonuses (sans coin flip) ──
+    // ── Phase A : scaling MULTIPLICATEUR (suffix "x") ───────────────
+    //  REMPLACE le damage. Doit être AVANT les bonus additifs pour ne
+    //  pas les écraser. Un seul scaling multiplicateur peut être actif
+    //  par attaque (vérifié sur le set A1+P-A).
+    //
+    //  Convention parser :
+    //   - scaling-by-typed-bench   → multiplicateur (« 30 par Pokémon {L} »)
+    //   - scaling-by-bench-count   → multiplicateur (« 30 par Pokémon »)
+    //   - scaling-by-opp-energies  → additif (« +20 par Énergie attachée »)
+    //   - scaling-by-named-bench   → additif (« +50 par Nidoking »)
+    for (const e of effects) {
+      if (e.kind === "scaling-by-bench-count") {
+        damage = e.per * seat.bench.length;
+      }
+      if (e.kind === "scaling-by-typed-bench") {
+        const count = seat.bench.filter((c) => {
+          const d = getCardForBattle(c.cardId);
+          return d?.type === e.type;
+        }).length;
+        damage = e.per * count;
+      }
+    }
+
+    // ── Phase B : bonus ADDITIFS (sans coin flip) ────────────────────
     for (const e of effects) {
       if (e.kind === "bonus-if-opp-hurt" && opp.active.damage > 0) {
         damage += e.bonus;
@@ -1227,36 +1255,25 @@ export default class BattleServer implements Party.Server {
         damage += e.bonus;
       }
       // Bonus si N énergies du type donné en plus du coût de l'attaque.
-      // Ex « Si ce Pokémon a au moins 3 Énergies {W} de plus, +70 dmg ».
+      // Ex Tortank Hydrocanon (coût W+C) « Si ce Pokémon a au moins 2
+      // Énergies {W} de plus, +60 dmg » : il faut 2 W ATTACHÉES en plus
+      // du coût strict en W (le coût strict en W est 1, donc il faut
+      // 1+2 = 3 W attachées au total pour déclencher le bonus).
       if (e.kind === "bonus-by-extra-energies" && seat.active) {
         const attached = seat.active.attachedEnergies.filter(
           (en) => en === e.energyType,
         ).length;
-        // On approxime « de plus que le coût » par : énergies du type
-        // attachées >= minExtra (le coût étant déjà payé pour pouvoir
-        // attaquer, ce qui dépasse le coût correspond bien aux extras).
-        // Pour être strict, on prendrait le coût de l'attaque en cours
-        // mais le contexte de l'effet ne l'a pas. Approximation acceptable.
-        if (attached >= e.minExtra) {
+        const requiredOfType = input.attackCost.filter(
+          (c) => c === e.energyType,
+        ).length;
+        const extra = attached - requiredOfType;
+        if (extra >= e.minExtra) {
           damage += e.bonus;
         }
       }
-    }
-
-    // ── Scaling (par énergies, par banc, par type, par nom) ──
-    for (const e of effects) {
+      // Scaling additifs (suffix "+").
       if (e.kind === "scaling-by-opp-energies") {
         damage += e.per * opp.active.attachedEnergies.length;
-      }
-      if (e.kind === "scaling-by-bench-count") {
-        damage += e.per * seat.bench.length;
-      }
-      if (e.kind === "scaling-by-typed-bench") {
-        const count = seat.bench.filter((c) => {
-          const d = getCardForBattle(c.cardId);
-          return d?.type === e.type;
-        }).length;
-        damage += e.per * count;
       }
       if (e.kind === "scaling-by-named-bench") {
         const count = seat.bench.filter((c) => {
@@ -1490,13 +1507,28 @@ export default class BattleServer implements Party.Server {
           seat.bench.push(this.makeBattleCard(card.cardId));
         }
       }
-      // ── Self swap (échange Actif avec un Banc au choix) ──
+      // ── Self swap (Abra Téléport : « Échangez ce Pokémon contre l'un
+      //   de vos Pokémon de Banc. ») ──
+      // Le texte officiel laisse le choix à l'attaquant. MVP : on
+      // sélectionne le Banc avec le PLUS de PV restants (= meilleur
+      // tank pour devenir Actif). Mieux qu'un random/index-0 et utile
+      // dans le sens de l'attaque (téléporter l'Actif en danger).
       else if (e.kind === "self-swap") {
         if (seat.active && seat.bench.length > 0) {
-          // MVP : swap automatique avec le 1er Banc (Pocket dit "au choix"
-          // mais on simplifie pour ne pas bloquer le tour).
-          const newActive = seat.bench[0];
-          seat.bench[0] = seat.active;
+          let bestIdx = 0;
+          let bestRemaining = -Infinity;
+          for (let i = 0; i < seat.bench.length; i++) {
+            const c = seat.bench[i];
+            const d = getCardForBattle(c.cardId);
+            if (!d) continue;
+            const remaining = d.hp - c.damage;
+            if (remaining > bestRemaining) {
+              bestRemaining = remaining;
+              bestIdx = i;
+            }
+          }
+          const newActive = seat.bench[bestIdx];
+          seat.bench[bestIdx] = seat.active;
           seat.active = newActive;
         }
       }
