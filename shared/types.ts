@@ -1348,8 +1348,12 @@ export type RuneterraBattleClientMessage =
       type: "lor-play-spell";
       handIndex: number;
       // Phase 3.7 : uid d'unité ciblée (allié ou ennemi selon le sort) ou
-      // null pour les sorts sans cible. Phase 3.7+ ajoutera nexus targets.
+      // null pour les sorts sans cible. Phase 3.41 ajoutera nexus targets.
       targetUid?: string | null;
+      // Phase 3.37 : 2e cible pour les sorts multi-target (Vents mordants
+      // gel 2 ennemis, Transfusion dmg ally + buff ally, etc.).
+      // Doit être distinct de targetUid pour les effets « 2 unités ».
+      targetUid2?: string | null;
     }
   | {
       type: "lor-declare-attack";
@@ -1516,7 +1520,22 @@ export type SpellEffect =
     }
   // Cible : unité (any) → inflige amount dmg SI au moins un allié est
   // mort pendant ce round. Sinon no-op (et ok côté serveur).
-  | { type: "deal-damage-anywhere-if-ally-died"; amount: number };
+  | { type: "deal-damage-anywhere-if-ally-died"; amount: number }
+  // Phase 3.37 — Multi-target effects (2 cibles distinctes).
+  // 2 ennemis : freeze chacun (Vents mordants).
+  | { type: "frostbite-2-enemies" }
+  // 2 alliés : +power/+health round à chacun (utilisé par 01DE041).
+  | { type: "buff-2-allies-round"; power: number; health: number }
+  // 2 alliés : +power/+health permanent (01NX025 +2|+0, 01FR010 +0|+3).
+  | { type: "buff-2-allies-permanent"; power: number; health: number }
+  // Cible 1 = allié pris en dmg, cible 2 = allié buffé round (Transfusion).
+  // Distinct (target1 ≠ target2).
+  | {
+      type: "damage-ally-buff-other-ally-round";
+      damage: number;
+      buffPower: number;
+      buffHealth: number;
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1825,6 +1844,9 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "drain-ally":
     case "kill-ally-for-draw":
     case "summon-ally-copies":
+    case "buff-2-allies-round":
+    case "buff-2-allies-permanent":
+    case "damage-ally-buff-other-ally-round":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -1835,6 +1857,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "frostbite-enemy":
     case "stun-enemy":
     case "silence-follower-target":
+    case "frostbite-2-enemies":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":
@@ -1852,6 +1875,21 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
       return "none";
   }
   return "none";
+}
+
+/** Phase 3.37 : combien de cibles d'unité ce sort attend. 0 = aucune
+ *  cible, 1 = single-target (cas par défaut), 2 = 2 cibles distinctes
+ *  (multi-target). Utilisé par UI + bot + validation pour le 2e target. */
+export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
+  switch (effect.type) {
+    case "frostbite-2-enemies":
+    case "buff-2-allies-round":
+    case "buff-2-allies-permanent":
+    case "damage-ally-buff-other-ally-round":
+      return 2;
+    default:
+      return getSpellTargetSide(effect) === "none" ? 0 : 1;
+  }
 }
 
 // ─── Lobby matchmaking LoR (Phase 3.6d) ──────────────────────────────────

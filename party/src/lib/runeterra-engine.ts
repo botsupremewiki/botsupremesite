@@ -23,6 +23,7 @@ import {
   RUNETERRA_IMBUE_EFFECTS,
   RUNETERRA_LAST_BREATH_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
+  getSpellTargetCount,
   getSpellTargetSide,
 } from "../../../shared/types";
 import { RUNETERRA_BASE_SET_BY_CODE } from "../../../shared/tcg-runeterra-base";
@@ -899,6 +900,7 @@ export function playSpell(
   seatIdx: 0 | 1,
   handIndex: number,
   targetUid?: string | null,
+  targetUid2?: string | null,
 ): EngineResult {
   if (state.phase !== "round") {
     return { ok: false, error: "La partie n'est pas en round." };
@@ -926,10 +928,16 @@ export function playSpell(
     };
   }
 
-  // Phase 3.7 : valide le ciblage si le sort en a besoin.
+  // Phase 3.7 + 3.37 : valide le ciblage (1 ou 2 cibles selon l'effet).
   const effect = RUNETERRA_SPELL_EFFECTS[handCard.cardCode];
   if (effect) {
-    const validation = validateSpellTarget(state, seatIdx, effect, targetUid);
+    const validation = validateSpellTarget(
+      state,
+      seatIdx,
+      effect,
+      targetUid,
+      targetUid2,
+    );
     if (!validation.ok) return { ok: false, error: validation.error };
   }
 
@@ -980,6 +988,7 @@ export function playSpell(
       seatIdx,
       effect,
       targetUid ?? null,
+      targetUid2 ?? null,
     );
     newPlayers = intermediateState.players;
   }
@@ -1010,12 +1019,23 @@ function validateSpellTarget(
   casterSeat: 0 | 1,
   effect: SpellEffect,
   targetUid: string | null | undefined,
+  targetUid2?: string | null | undefined,
 ): { ok: true } | { ok: false; error: string } {
   const side = getSpellTargetSide(effect);
   if (side === "none") return { ok: true };
   if (!targetUid) return { ok: false, error: "Ce sort nécessite une cible." };
   const caster = state.players[casterSeat];
   const opponent = state.players[otherSeat(casterSeat)];
+  // Phase 3.37 : si l'effet attend 2 cibles, valide la 2e + distinct.
+  const targetCount = getSpellTargetCount(effect);
+  if (targetCount === 2) {
+    if (!targetUid2) {
+      return { ok: false, error: "Ce sort nécessite 2 cibles distinctes." };
+    }
+    if (targetUid === targetUid2) {
+      return { ok: false, error: "Les 2 cibles doivent être distinctes." };
+    }
+  }
   if (side === "ally") {
     const allyUnit = caster.bench.find((u) => u.uid === targetUid);
     if (!allyUnit) {
@@ -1039,6 +1059,16 @@ function validateSpellTarget(
         return {
           ok: false,
           error: `Cible invalide : tu dois avoir exactement ${effect.requireExactBenchSize} allié(s) sur ton banc (actuellement ${caster.bench.length}).`,
+        };
+      }
+    }
+    // Phase 3.37 : 2e cible doit aussi être un allié.
+    if (targetCount === 2 && targetUid2) {
+      const ally2 = caster.bench.find((u) => u.uid === targetUid2);
+      if (!ally2) {
+        return {
+          ok: false,
+          error: "La 2e cible doit être un allié sur ton banc.",
         };
       }
     }
@@ -1069,6 +1099,16 @@ function validateSpellTarget(
         };
       }
     }
+    // Phase 3.37 : 2e cible doit aussi être un ennemi.
+    if (targetCount === 2 && targetUid2) {
+      const enemy2 = opponent.bench.find((u) => u.uid === targetUid2);
+      if (!enemy2) {
+        return {
+          ok: false,
+          error: "La 2e cible doit être une unité ennemie.",
+        };
+      }
+    }
     return { ok: true };
   }
   // any
@@ -1095,6 +1135,7 @@ function applySpellEffect(
   casterSeat: 0 | 1,
   effect: SpellEffect,
   targetUid: string | null,
+  targetUid2: string | null = null,
 ): InternalState {
   if (!targetUid) return state;
   const oppSeat = otherSeat(casterSeat);
@@ -1191,6 +1232,121 @@ function applySpellEffect(
         };
       }
       return { ...state, players: newPlayers };
+    }
+    case "frostbite-2-enemies": {
+      // Phase 3.37 : gel 2 ennemis distincts (Vents mordants). Mirror
+      // de frostbite-enemy mais sur targetUid + targetUid2.
+      const player = newPlayers[oppSeat];
+      let frostbitCount = 0;
+      const targets = new Set([targetUid, targetUid2].filter(Boolean));
+      const newBench = player.bench.map((u) => {
+        if (!targets.has(u.uid)) return u;
+        if (u.frozen) return u;
+        frostbitCount++;
+        const restorePower = u.power;
+        return {
+          ...u,
+          power: 0,
+          frozen: true,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff - restorePower,
+        };
+      });
+      newPlayers[oppSeat] = { ...player, bench: newBench };
+      if (frostbitCount > 0) {
+        const caster = newPlayers[casterSeat];
+        newPlayers[casterSeat] = {
+          ...caster,
+          championCounters: {
+            ...caster.championCounters,
+            enemiesFrostbitten:
+              caster.championCounters.enemiesFrostbitten + frostbitCount,
+          },
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
+    case "buff-2-allies-round": {
+      // Phase 3.37 : +power/+health round à 2 alliés distincts.
+      const player = newPlayers[casterSeat];
+      const targets = new Set([targetUid, targetUid2].filter(Boolean));
+      const newBench = player.bench.map((u) => {
+        if (!targets.has(u.uid)) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "buff-2-allies-permanent": {
+      // Phase 3.37 : +power/+health permanent à 2 alliés distincts.
+      const player = newPlayers[casterSeat];
+      const targets = new Set([targetUid, targetUid2].filter(Boolean));
+      const newBench = player.bench.map((u) => {
+        if (!targets.has(u.uid)) return u;
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "damage-ally-buff-other-ally-round": {
+      // Phase 3.37 : Transfusion. Inflige damage à allié1 (target1) puis
+      // buff round allié2 (target2). Si allié1 meurt, Last Breath +
+      // counters bumpés. Le buff s'applique même si allié1 meurt.
+      const player = newPlayers[casterSeat];
+      const damagedBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.damage);
+        return copy;
+      });
+      const survivors = damagedBench.filter((u) => u.damage < u.health);
+      const deadUnit = damagedBench.find((u) => u.damage >= u.health);
+      // Apply buff sur survivors (allié2 doit survivre à la 1re passe pour
+      // recevoir le buff — il n'est pas la cible damage de toute façon).
+      const buffedBench = survivors.map((u) => {
+        if (u.uid !== targetUid2) return u;
+        return {
+          ...u,
+          power: u.power + effect.buffPower,
+          health: u.health + effect.buffHealth,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.buffPower,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.buffHealth,
+        };
+      });
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: buffedBench,
+        alliesDiedThisRound:
+          player.alliesDiedThisRound + (deadUnit ? 1 : 0),
+        championCounters: {
+          ...player.championCounters,
+          alliesDied: player.championCounters.alliesDied + (deadUnit ? 1 : 0),
+          unitsDied: player.championCounters.unitsDied + (deadUnit ? 1 : 0),
+        },
+      };
+      if (deadUnit) {
+        newPlayers[oppSeat] = {
+          ...newPlayers[oppSeat],
+          championCounters: {
+            ...newPlayers[oppSeat].championCounters,
+            unitsDied: newPlayers[oppSeat].championCounters.unitsDied + 1,
+          },
+        };
+      }
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (deadUnit) {
+        newState = triggerLastBreath(newState, deadUnit, casterSeat);
+      }
+      return newState;
     }
     case "deal-damage-enemy-nexus": {
       // Pas de cible : dégâts directs au nexus ennemi.

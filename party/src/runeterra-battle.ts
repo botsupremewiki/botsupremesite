@@ -287,7 +287,13 @@ export default class LorBattleServer implements Party.Server {
         result = playUnit(this.state, seat, data.handIndex);
         break;
       case "lor-play-spell":
-        result = playSpell(this.state, seat, data.handIndex, data.targetUid);
+        result = playSpell(
+          this.state,
+          seat,
+          data.handIndex,
+          data.targetUid,
+          data.targetUid2,
+        );
         break;
       case "lor-declare-attack":
         result = declareAttack(
