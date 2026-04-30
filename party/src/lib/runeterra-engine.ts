@@ -940,6 +940,18 @@ function validateSpellTarget(
         };
       }
     }
+    // Phase 3.17 : Seul contre tous → exactement N alliés sur le banc.
+    if (
+      effect.type === "buff-ally-permanent" &&
+      effect.requireExactBenchSize !== undefined
+    ) {
+      if (caster.bench.length !== effect.requireExactBenchSize) {
+        return {
+          ok: false,
+          error: `Cible invalide : tu dois avoir exactement ${effect.requireExactBenchSize} allié(s) sur ton banc (actuellement ${caster.bench.length}).`,
+        };
+      }
+    }
     return { ok: true };
   }
   if (side === "enemy") {
@@ -1348,6 +1360,66 @@ function applySpellEffect(
       });
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
+    }
+    case "damage-all-units": {
+      // Phase 3.17 : Avalanche — dégâts à toutes les unités (2 côtés).
+      // Respecte Barrier/Tough via applyDamageToUnit, déclenche Last
+      // Breath pour chaque mort. Bail-out si phase=ended.
+      const allDeadUnits: { unit: RuneterraBattleUnit; seat: 0 | 1 }[] = [];
+      const deadCountBySeat: [number, number] = [0, 0];
+      for (const seat of [0, 1] as const) {
+        const player = newPlayers[seat];
+        const newBench = player.bench.map((u) => {
+          const copy = { ...u };
+          applyDamageToUnit(copy, effect.amount);
+          return copy;
+        });
+        const survivors = newBench.filter((u) => u.damage < u.health);
+        const deadUnits = newBench.filter((u) => u.damage >= u.health);
+        for (const dead of deadUnits) allDeadUnits.push({ unit: dead, seat });
+        deadCountBySeat[seat] = deadUnits.length;
+        newPlayers[seat] = {
+          ...player,
+          bench: survivors,
+          championCounters: {
+            ...player.championCounters,
+            alliesDied:
+              player.championCounters.alliesDied + deadUnits.length,
+          },
+        };
+      }
+      // unitsDied = total morts vu par chaque joueur (cohérent avec
+      // resolveCombat qui crédite la totalité aux 2 côtés).
+      const totalDied = deadCountBySeat[0] + deadCountBySeat[1];
+      for (const seat of [0, 1] as const) {
+        newPlayers[seat] = {
+          ...newPlayers[seat],
+          championCounters: {
+            ...newPlayers[seat].championCounters,
+            unitsDied: newPlayers[seat].championCounters.unitsDied + totalDied,
+          },
+        };
+      }
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const { unit, seat } of allDeadUnits) {
+        newState = triggerLastBreath(newState, unit, seat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "gain-attack-token-self": {
+      // Phase 3.17 : Rally (Poursuite inlassable). Si déjà attackToken,
+      // no-op (l'effet est juste de regagner le jeton si consommé).
+      const player = newPlayers[casterSeat];
+      newPlayers[casterSeat] = { ...player, attackToken: true };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} regagne le jeton d'attaque (Ralliement).`,
+        ],
+      };
     }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.

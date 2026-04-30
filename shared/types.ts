@@ -1372,12 +1372,15 @@ export type SpellEffect =
   | { type: "buff-ally-round"; power: number; health: number }
   | { type: "grant-keyword-ally"; keyword: string }
   | { type: "deal-damage-anywhere"; amount: number }
-  // Phase 3.8c
+  // Phase 3.8c (étendu Phase 3.17)
   | {
       type: "buff-ally-permanent";
       power: number;
       health: number;
       requireWounded?: boolean;
+      // Phase 3.17 : ne marche que si le banc du caster a exactement N
+      // allié(s) (Seul contre tous : exactement 1 allié).
+      requireExactBenchSize?: number;
     }
   | { type: "grant-keyword-ally-round"; keyword: string }
   | { type: "frostbite-enemy"; maxHealth?: number }
@@ -1427,7 +1430,14 @@ export type SpellEffect =
   // Cible : allié → grant plusieurs mots-clés pour ce round (Refuge
   // spirituel = Barrier + Lifesteal). Évite la combinatoire de variantes
   // pour chaque combo de keywords.
-  | { type: "grant-keywords-ally-round"; keywords: string[] };
+  | { type: "grant-keywords-ally-round"; keywords: string[] }
+  // Phase 3.17
+  // Sans cible : inflige X dégâts à TOUTES les unités des 2 côtés
+  // (Avalanche). Last Breath déclenché pour chaque mort.
+  | { type: "damage-all-units"; amount: number }
+  // Sans cible : le caster gagne (ou regagne) le jeton d'attaque ce round
+  // (Poursuite inlassable = Ralliez-vous).
+  | { type: "gain-attack-token-self" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1539,6 +1549,21 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     type: "grant-keywords-ally-round",
     keywords: ["Barrier", "Lifesteal"],
   },
+
+  // ── Phase 3.17
+  // Avalanche (Freljord, 4 mana, Slow) :
+  // « Infligez 2 pt(s) de dégâts à TOUTES les unités. »
+  "01FR020": { type: "damage-all-units", amount: 2 },
+  // Poursuite inlassable (Demacia, 4 mana, Slow) : « Ralliez-vous. »
+  "01DE021": { type: "gain-attack-token-self" },
+  // Seul contre tous (Demacia, 4 mana, Burst) :
+  // « Si vous avez exactement 1 allié, octroyez-lui +3|+3. »
+  "01DE017": {
+    type: "buff-ally-permanent",
+    power: 3,
+    health: 3,
+    requireExactBenchSize: 1,
+  },
 };
 
 // ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
@@ -1594,6 +1619,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "kill-all-units":
     case "damage-all-enemies-heal-nexus":
     case "grant-keyword-all-allies-round":
+    case "damage-all-units":
+    case "gain-attack-token-self":
       return "none";
   }
 }
