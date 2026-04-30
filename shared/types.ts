@@ -1477,7 +1477,12 @@ export type SpellEffect =
   | { type: "draw-champion" }
   // Sans cible : étourdit tous les ennemis dont la puissance est ≤ N
   // (Rugissement intimidant : ≤ 4). enemyStunned bumpé pour chaque cible.
-  | { type: "stun-all-enemies-max-power"; maxPower: number };
+  | { type: "stun-all-enemies-max-power"; maxPower: number }
+  // Phase 3.26
+  // Sans cible : invoque N copies du token cardCode sur le banc du caster
+  // (capé à maxBench). Pour Gadget de bric et de brac (01PZ057) et
+  // Relique hantée (01SI007).
+  | { type: "summon-tokens"; cardCode: string; count: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1640,11 +1645,18 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   "01SI045": { type: "drain-ally", amount: 4 },
 
   // ── Phase 3.25
-  // Haro (Freljord, 2 mana, Burst) : « Piochez un champion. »
+  // 01FR029 (Haro, Freljord, 2 Burst) — pioche un champion.
   "01FR029": { type: "draw-champion" },
-  // Rugissement intimidant (Noxus, 5 mana, Slow) :
-  // « Étourdissez tous les ennemis avec une puissance de 4 ou moins. »
+  // 01NX054 (Rugissement intimidant, Noxus, 5 Slow) — stun ennemis ≤ 4.
   "01NX054": { type: "stun-all-enemies-max-power", maxPower: 4 },
+
+  // ── Phase 3.26 (token summons)
+  // 01PZ057 (Gadget de bric et de brac, PiltoverZaun, 2 Slow) — summon
+  // 2 × Carapateur ferrailleur (token 01PZ032, 1|1).
+  "01PZ057": { type: "summon-tokens", cardCode: "01PZ032", count: 2 },
+  // 01SI007 (Relique hantée, ShadowIsles, 2 Slow) — summon 3 × Esprit
+  // déchaîné (token 01SI007T1, 1|1 Ephemeral).
+  "01SI007": { type: "summon-tokens", cardCode: "01SI007T1", count: 3 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1722,6 +1734,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "combo-buff-keyword-all-allies-round":
     case "draw-champion":
     case "stun-all-enemies-max-power":
+    case "summon-tokens":
       return "none";
   }
 }

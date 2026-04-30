@@ -1583,6 +1583,42 @@ function applySpellEffect(
       newPlayers[targetSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "summon-tokens": {
+      // Phase 3.26 : invoque effect.count copies du token effect.cardCode
+      // sur le banc du caster (capé à maxBench).
+      const cfgSummon = RUNETERRA_BATTLE_CONFIG;
+      const tokenCard = getCard(effect.cardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return state;
+      const player = newPlayers[casterSeat];
+      const slotsAvailable = cfgSummon.maxBench - player.bench.length;
+      if (slotsAvailable <= 0) {
+        return {
+          ...state,
+          log: [
+            ...state.log,
+            `${player.username} : impossible d'invoquer ${tokenCard.name} (banc plein).`,
+          ],
+        };
+      }
+      const toSummon = Math.min(effect.count, slotsAvailable);
+      const newUnits: RuneterraBattleUnit[] = [];
+      for (let i = 0; i < toSummon; i++) {
+        const newUid = `${casterSeat}-tk-${state.round}-${state.log.length}-${i}`;
+        newUnits.push(createUnit(newUid, effect.cardCode));
+      }
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, ...newUnits],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${toSummon} × ${tokenCard.name}.`,
+        ],
+      };
+    }
     case "draw-champion": {
       // Phase 3.25 : Haro. Cherche le 1er champion dans le deck du caster
       // (top → bottom) et le pioche. Si aucun champion → no-op silencieux.
