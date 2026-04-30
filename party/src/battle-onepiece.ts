@@ -48,6 +48,7 @@ import {
   type EffectContext,
   type EffectHook,
   fireCardEffect,
+  fireOnLeaveField,
   getGrantedKeywords,
   isKoBlocked,
 } from "./lib/onepiece-effects";
@@ -1096,6 +1097,12 @@ export default class OnePieceBattleServer implements Party.Server {
           const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
           this.pushLog(`${meta?.name ?? "?"} est mis KO.`);
           this.fireEffectFor(ko.cardId, "on-ko", ko.uid, defenderSeatId);
+          // Notifie tous les listeners on-leave-field (ex. Thousand Sunny).
+          fireOnLeaveField(
+            { seat: defenderSeatId, uid: ko.uid, cardId: ko.cardId },
+            "ko-combat",
+            this.getBattleAccess(),
+          );
         }
       }
       this.pendingAttack = null;
@@ -1993,6 +2000,12 @@ export default class OnePieceBattleServer implements Party.Server {
         const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
         this.pushLog(`${meta?.name ?? "?"} est mis KO (effet).`);
         this.fireEffectFor(ko.cardId, "on-ko", ko.uid, seatId);
+        // Notifie tous les listeners on-leave-field (ex. Thousand Sunny).
+        fireOnLeaveField(
+          { seat: seatId, uid: ko.uid, cardId: ko.cardId },
+          "ko-effect",
+          this.getBattleAccess(),
+        );
         return true;
       },
       attachDonToTarget: (target, count) => {
@@ -2024,6 +2037,11 @@ export default class OnePieceBattleServer implements Party.Server {
         const removed = s.characters.splice(idx, 1)[0];
         s.donRested += removed.attachedDon;
         s.deck.push({ cardId: removed.cardId });
+        fireOnLeaveField(
+          { seat: seatId, uid: removed.uid, cardId: removed.cardId },
+          "place-bottom",
+          this.getBattleAccess(),
+        );
         return true;
       },
       restCharacter: (seatId, uid) => {
@@ -2054,7 +2072,25 @@ export default class OnePieceBattleServer implements Party.Server {
         const removed = s.characters.splice(idx, 1)[0];
         s.donRested += removed.attachedDon;
         s.hand.push({ cardId: removed.cardId });
+        fireOnLeaveField(
+          { seat: seatId, uid: removed.uid, cardId: removed.cardId },
+          "bounce",
+          this.getBattleAccess(),
+        );
         return true;
+      },
+      placeHandOnTopOfDeck: (seatId, handIndex) => {
+        const s = this.seats[seatId];
+        if (!s) return null;
+        if (handIndex < 0 || handIndex >= s.hand.length) return null;
+        const card = s.hand.splice(handIndex, 1)[0];
+        s.deck.unshift(card);
+        return card.cardId;
+      },
+      peekTopOfDeck: (seatId) => {
+        const s = this.seats[seatId];
+        if (!s || s.deck.length === 0) return null;
+        return s.deck[0].cardId;
       },
       placeCardAboveLife: (seatId, source) => {
         const s = this.seats[seatId];
@@ -2139,6 +2175,7 @@ export default class OnePieceBattleServer implements Party.Server {
           leaderRested: s.leaderRested,
           leaderAttachedDon: s.leaderAttachedDon,
           characters: s.characters,
+          stage: s.stage,
           handSize: s.hand.length,
           deckSize: s.deck.length,
           lifeCount: s.life.length,

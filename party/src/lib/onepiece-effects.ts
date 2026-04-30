@@ -93,6 +93,24 @@ export type KeywordGrantContext = {
  *  sur la carte dans son effet. */
 export type KeywordGrant = (ctx: KeywordGrantContext) => string[];
 
+/** Contexte d'évaluation d'un listener "on-leave-field" déclenché quand
+ *  une carte quitte le board (KO combat/effet, bounce, place sous deck). */
+export type LeaveFieldContext = {
+  // La carte qui quitte le terrain.
+  leaving: { seat: OnePieceBattleSeatId; uid: string; cardId: string };
+  // Cause du départ.
+  reason: "ko-combat" | "ko-effect" | "bounce" | "place-bottom";
+  // À qui appartient la carte qui écoute (typiquement un Stage ou un
+  // Persos avec passif "quand X quitte le terrain").
+  modSourceSeat: OnePieceBattleSeatId;
+  modSourceUid: string;
+  battle: BattleEffectAccess;
+};
+
+/** Listener déclenché quand une carte quitte le terrain. Side-effect only,
+ *  ne retourne rien. */
+export type LeaveFieldListener = (ctx: LeaveFieldContext) => void;
+
 /** Selection passée au handler quand un PendingChoice est résolu. Mappe sur
  *  le payload du message client `op-resolve-choice`. */
 export type ChoiceSelection = {
@@ -220,6 +238,18 @@ export interface BattleEffectAccess {
       | { kind: "character"; uid: string },
   ): boolean;
 
+  /** Place une carte de la main au-dessus du deck (top). Utilisé par
+   *  Crocodile ST17-001, Marshall D. Teach ST17-005, Hina ST19-004.
+   *  Retourne le cardId placé ou null. */
+  placeHandOnTopOfDeck(
+    seat: OnePieceBattleSeatId,
+    handIndex: number,
+  ): string | null;
+
+  /** Lit (sans retirer) la carte du dessus du deck. Pour les effets
+   *  "Révélez 1 carte du dessus" (Crocodile ST17, Sanji char OP06-119). */
+  peekTopOfDeck(seat: OnePieceBattleSeatId): string | null;
+
   /** Défausse les cartes aux indices donnés de la main du seat. Renvoie
    *  les cardId défaussés. Skip les indices invalides. */
   discardFromHand(
@@ -233,6 +263,7 @@ export interface BattleEffectAccess {
     leaderRested: boolean;
     leaderAttachedDon: number;
     characters: ReadonlyArray<OnePieceBattleCardInPlay>;
+    stage: OnePieceBattleCardInPlay | null;
     handSize: number;
     deckSize: number;
     lifeCount: number;
@@ -2439,6 +2470,125 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     }
   },
 
+  // ─── BATCH 16 — Reorder top deck + placeHandOnTop ───────────────────────
+
+  /** ST17-001 Crocodile
+   *  [Jouée] Révélez 1 carte du dessus de votre deck ; si elle est de
+   *  type {Sept grands corsaires}, piochez 2 cartes et placez 1 carte de
+   *  votre main au-dessus de votre deck. */
+  "ST17-001": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const topCardId = ctx.battle.peekTopOfDeck(ctx.sourceSeat);
+      if (!topCardId) {
+        ctx.battle.log("Crocodile : deck vide.");
+        return;
+      }
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(topCardId);
+      const isCorsair = meta?.types.some((t) =>
+        t.toLowerCase().includes("sept grands corsaires"),
+      );
+      if (!isCorsair) {
+        ctx.battle.log(
+          `Crocodile : ${meta?.name ?? "?"} révélée mais pas Sept grands corsaires.`,
+        );
+        return;
+      }
+      ctx.battle.drawCards(ctx.sourceSeat, 2);
+      ctx.battle.log(
+        `Crocodile : ${meta?.name ?? "?"} = Sept grands corsaires, pioche 2 cartes.`,
+      );
+      // Demande au joueur quelle carte main placer sur le deck.
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.handSize === 0) return;
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST17-001",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Crocodile : choisis 1 carte de ta main à placer au-dessus du deck.",
+        params: { count: 1 },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (
+        !ctx.choice.skipped &&
+        ctx.choice.selection.handIndices &&
+        ctx.choice.selection.handIndices.length > 0
+      ) {
+        ctx.battle.placeHandOnTopOfDeck(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices[0],
+        );
+        ctx.battle.log("Crocodile : carte main placée au-dessus du deck.");
+      }
+    }
+  },
+
+  /** ST17-005 Marshall D. Teach
+   *  [Activation : Principale] [Une fois par tour] Vous pouvez placer
+   *  1 carte de votre main au-dessus de votre deck : Donnez jusqu'à 2
+   *  cartes DON!! épuisées à votre Leader ou à 1 de vos Personnages. */
+  "ST17-005": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat || seat.handSize === 0) {
+        ctx.battle.log("Marshall D. Teach : main vide, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST17-005",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Marshall D. Teach : choisis 1 carte de ta main à placer au-dessus du deck (coût pour donner 2 DON).",
+        params: { count: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      // Étape 1 : carte main → top deck.
+      if (
+        !ctx.choice.skipped &&
+        ctx.choice.selection.handIndices &&
+        ctx.choice.selection.handIndices.length > 0
+      ) {
+        ctx.battle.placeHandOnTopOfDeck(
+          ctx.sourceSeat,
+          ctx.choice.selection.handIndices[0],
+        );
+        // Étape 2 : ouvre buff-target pour les 2 DON.
+        ctx.battle.requestChoice({
+          seat: ctx.sourceSeat,
+          sourceCardNumber: "ST17-005",
+          sourceUid: ctx.sourceUid,
+          kind: "buff-target",
+          prompt:
+            "Marshall D. Teach : choisis une cible pour 2 DON!! épuisées.",
+          params: { allowLeader: true },
+          cancellable: true,
+        });
+        return;
+      }
+      // Étape 2bis : la cible des DON est choisie.
+      if (ctx.choice.selection.targetUid) {
+        const target = ctx.choice.selection.targetUid;
+        const ref: CardRef =
+          target === "leader"
+            ? { kind: "leader", seat: ctx.sourceSeat }
+            : { kind: "character", seat: ctx.sourceSeat, uid: target };
+        const attached = ctx.battle.attachDonToTarget(ref, 2);
+        ctx.battle.log(
+          `Marshall D. Teach : ${attached} DON!! attachée(s).`,
+        );
+      }
+    }
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
@@ -2647,6 +2797,101 @@ export const KO_GUARDS: Record<string, KoGuard> = {
     });
   },
 };
+
+// ─── Registre des listeners on-leave-field ──────────────────────────────
+
+export const LEAVE_FIELD_LISTENERS: Record<string, LeaveFieldListener> = {
+  /** OP09-080 Thousand Sunny (Stage)
+   *  [Tour adverse] Vous pouvez épuiser ce Lieu : Quand un de vos
+   *  Personnages de type {Équipage de Chapeau de paille} quitte le terrain
+   *  à cause d'un effet adverse, ajoutez jusqu'à 1 carte DON!! épuisée
+   *  de votre deck DON!! sur votre terrain.
+   *  Implémentation simplifiée : auto-trigger (sans choix d'épuiser le
+   *  Lieu manuellement) quand un Persos Chapeau quitte par effet adverse. */
+  "OP09-080": (ctx) => {
+    if (ctx.reason !== "ko-effect" && ctx.reason !== "bounce") return;
+    if (ctx.leaving.seat !== ctx.modSourceSeat) return; // doit être un de mes Persos
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(ctx.leaving.cardId);
+    if (
+      !meta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de chapeau de paille"),
+      )
+    )
+      return;
+    // Ajoute 1 DON depuis le DON deck à la pool active du seat.
+    ctx.battle.giveDonFromDeck(ctx.modSourceSeat, 1);
+    ctx.battle.log(
+      "Thousand Sunny : Persos Chapeau quitte le terrain → +1 DON.",
+    );
+  },
+};
+
+/** Évalue tous les listeners on-leave-field pour une carte qui quitte. */
+export function fireOnLeaveField(
+  leaving: { seat: OnePieceBattleSeatId; uid: string; cardId: string },
+  reason: "ko-combat" | "ko-effect" | "bounce" | "place-bottom",
+  battle: BattleEffectAccess,
+): void {
+  for (const seatId of ["p1", "p2"] as const) {
+    const seat = battle.getSeat(seatId);
+    if (!seat) continue;
+    // Leader
+    if (seat.leaderId) {
+      const num = cardNumberOf(seat.leaderId);
+      const listener = LEAVE_FIELD_LISTENERS[num];
+      if (listener) {
+        try {
+          listener({
+            leaving,
+            reason,
+            modSourceSeat: seatId,
+            modSourceUid: "leader",
+            battle,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+    // Persos
+    for (const c of seat.characters) {
+      const num = cardNumberOf(c.cardId);
+      const listener = LEAVE_FIELD_LISTENERS[num];
+      if (listener) {
+        try {
+          listener({
+            leaving,
+            reason,
+            modSourceSeat: seatId,
+            modSourceUid: c.uid,
+            battle,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+    // Stage (le Stage peut écouter on-leave-field, c'est même son cas
+    // d'usage principal — Thousand Sunny).
+    if (seat.stage) {
+      const num = cardNumberOf(seat.stage.cardId);
+      const listener = LEAVE_FIELD_LISTENERS[num];
+      if (listener) {
+        try {
+          listener({
+            leaving,
+            reason,
+            modSourceSeat: seatId,
+            modSourceUid: seat.stage.uid,
+            battle,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+}
 
 // ─── Registre des grants de mots-clés dynamiques ─────────────────────────
 
