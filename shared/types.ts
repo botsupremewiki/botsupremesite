@@ -953,7 +953,7 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
     id: "onepiece",
     name: "One Piece",
     tagline:
-      "One Piece TCG — OP-09 + ST-15 à ST-21 (281 cartes FR — collection seulement, combat à venir)",
+      "One Piece TCG — clone fidèle Bandai. Combat complet (Bot + PvP + Ranked), 166 cartes en français (OP-09 + ST-15 à ST-21).",
     packPrice: 10_000,
     packSize: 6,
     active: true,
@@ -2412,6 +2412,22 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // mécanique de counter-spell nécessite un spell stack avec priorités
   // (hors scope), donc on donne au moins le bénéfice secondaire.
   "01IO049": { type: "draw-cards", count: 1 },
+};
+
+// ─── Discard effects (Phase 3.72) ────────────────────────────────────────
+// Effets déclenchés quand un sort spécifique est défaussé (auto-discard
+// par 01PZ001 Fouillis ou 01PZ039 Enthousiasme). 01NX039 et 01PZ028 ont
+// la formulation « Quand ce sort est lancé ou qu'il est défaussé... » —
+// la portion « lancé » est déjà couverte par leur effet régulier dans
+// le SPELL_EFFECTS registry. Cette table couvre la portion « défaussé ».
+
+export const RUNETERRA_DISCARD_EFFECTS: Record<string, SpellEffect> = {
+  // 01NX039 (3 mana Burst) : si défaussé, +1|+0 perm à tous les alliés
+  // (même effet que le cast).
+  "01NX039": { type: "buff-all-allies-permanent", power: 1, health: 0 },
+  // 01PZ028 (1 mana Burst) : si défaussé, summon 1 × 01PZ032
+  // (Carapateur ferrailleur, 1|1).
+  "01PZ028": { type: "summon-tokens", cardCode: "01PZ032", count: 1 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -3914,6 +3930,8 @@ export type OnePieceBattleClientMessage =
   // Réponses pendant une attaque adverse.
   | { type: "op-block"; blockerUid: string }
   | { type: "op-counter"; handIndex: number }
+  // Joue un Évent [Contre] depuis la main pendant la défense (gratuit).
+  | { type: "op-play-counter-event"; handIndex: number }
   | { type: "op-pass-defense" }
   // Trigger révélé d'une Vie : accepter / refuser.
   | { type: "op-trigger-resolve"; activate: boolean }

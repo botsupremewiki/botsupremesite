@@ -20,6 +20,7 @@ import type {
 } from "../../../shared/types";
 import {
   RUNETERRA_BATTLE_CONFIG,
+  RUNETERRA_DISCARD_EFFECTS,
   RUNETERRA_IMBUE_EFFECTS,
   RUNETERRA_LAST_BREATH_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
@@ -724,6 +725,20 @@ export function drawCards(
 /** Mappe seat-id (0/1) → "p1"/"p2" pour l'envoi client. */
 export function seatToId(seatIdx: 0 | 1): "p1" | "p2" {
   return seatIdx === 0 ? "p1" : "p2";
+}
+
+/** Phase 3.72 : déclenche l'effet « si défaussé » d'un cardCode si
+ *  enregistré. Réutilise applySpellEffect comme un cast normal (sans
+ *  ciblage : RUNETERRA_DISCARD_EFFECTS ne contient que des effets
+ *  side="none"). casterSeat = celui dont la carte est défaussée. */
+export function triggerDiscardEffect(
+  state: InternalState,
+  cardCode: string,
+  casterSeat: 0 | 1,
+): InternalState {
+  const effect = RUNETERRA_DISCARD_EFFECTS[cardCode];
+  if (!effect) return state;
+  return applySpellEffect(state, casterSeat, effect, null);
 }
 
 /** Phase 3.34 : helper qui bumpe alliesDiedThisRound (per-round) ET
@@ -3294,11 +3309,14 @@ function applySpellEffect(
     case "auto-discard-and-draw-up-to-n": {
       // Phase 3.55 : Fouillis. Auto-discard up to maxDiscard cartes
       // (rightmost first comme heuristique simple) puis draw égal.
+      // Phase 3.72 : déclenche l'effet « si défaussé » de chaque carte
+      // discardée (01NX039, 01PZ028).
       const player = newPlayers[casterSeat];
       const discardCount = Math.min(effect.maxDiscard, player.hand.length);
+      const discarded = player.hand.slice(player.hand.length - discardCount);
       const newHand = player.hand.slice(0, player.hand.length - discardCount);
       const newCardBuffs = { ...player.cardBuffs };
-      for (const c of player.hand.slice(player.hand.length - discardCount)) {
+      for (const c of discarded) {
         delete newCardBuffs[c.uid];
       }
       newPlayers[casterSeat] = {
@@ -3306,21 +3324,25 @@ function applySpellEffect(
         hand: newHand,
         cardBuffs: newCardBuffs,
       };
-      const log = [
-        ...state.log,
-        `${player.username} défausse ${discardCount} carte${discardCount > 1 ? "s" : ""}.`,
-      ];
-      const intermediate: InternalState = {
+      let intermediate: InternalState = {
         ...state,
         players: newPlayers,
-        log,
+        log: [
+          ...state.log,
+          `${player.username} défausse ${discardCount} carte${discardCount > 1 ? "s" : ""}.`,
+        ],
       };
+      // Phase 3.72 : trigger discard effects pour chaque carte discardée.
+      for (const c of discarded) {
+        intermediate = triggerDiscardEffect(intermediate, c.cardCode, casterSeat);
+      }
       if (discardCount === 0) return intermediate;
       return drawCards(intermediate, casterSeat, discardCount).state;
     }
     case "auto-discard-and-damage-target-any-or-nexus": {
       // Phase 3.55 : Enthousiasme. Auto-discard 1 carte (rightmost)
       // puis dmg à la cible (unité ou nexus).
+      // Phase 3.72 : trigger discard effect de la carte discardée.
       const cfgED = RUNETERRA_BATTLE_CONFIG;
       const player = newPlayers[casterSeat];
       let intermediate: InternalState = state;
@@ -3339,6 +3361,11 @@ function applySpellEffect(
           players: newPlayers,
           log: [...state.log, `${player.username} défausse 1 carte.`],
         };
+        intermediate = triggerDiscardEffect(
+          intermediate,
+          discarded.cardCode,
+          casterSeat,
+        );
       }
       // Maintenant, applique le damage (réutilise la logique de
       // deal-damage-target-any-or-nexus en inline).
