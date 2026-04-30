@@ -872,7 +872,36 @@ export default class BattleServer implements Party.Server {
       case "battle-concede":
         this.handleConcede(seatId);
         break;
+      case "battle-emote":
+        this.handleEmote(seatId, data.emoteId);
+        break;
     }
+  }
+
+  // Cooldown anti-spam : 1 emote / 3s par siège.
+  private lastEmoteAt: Map<BattleSeatId, number> = new Map();
+  private handleEmote(seatId: BattleSeatId, emoteId: string): void {
+    const now = Date.now();
+    const last = this.lastEmoteAt.get(seatId) ?? 0;
+    if (now - last < 3000) return;
+    // Validation : doit être un id connu du catalogue (8 emotes).
+    const valid = new Set([
+      "salut",
+      "gg",
+      "beaujeu",
+      "argh",
+      "hate",
+      "desole",
+      "penser",
+      "haha",
+    ]);
+    if (!valid.has(emoteId)) return;
+    this.lastEmoteAt.set(seatId, now);
+    this.broadcast({
+      type: "battle-emote",
+      seat: seatId,
+      emoteId: emoteId as never,
+    });
   }
 
   onClose(conn: Party.Connection) {

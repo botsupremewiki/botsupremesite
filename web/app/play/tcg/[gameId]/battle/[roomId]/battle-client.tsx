@@ -115,6 +115,16 @@ export function BattleClient({
     trainerName: string;
     cardIds: string[];
   } | null>(null);
+  // Emotes flottantes — une par siège, disparaît après 3s.
+  const [emoteSelf, setEmoteSelf] = useState<{
+    id: string;
+    emoteId: string;
+  } | null>(null);
+  const [emoteOpp, setEmoteOpp] = useState<{
+    id: string;
+    emoteId: string;
+  } | null>(null);
+  const [emotePickerOpen, setEmotePickerOpen] = useState(false);
   // Animation de changement de tour : bandeau plein écran « À toi ! » /
   // « Tour adverse… » qui apparaît brièvement à chaque flip.
   const [turnBanner, setTurnBanner] = useState<{
@@ -248,6 +258,20 @@ export function BattleClient({
         case "chat":
           setChatMessages((prev) => [...prev.slice(-49), msg.message]);
           break;
+        case "battle-emote": {
+          // Affiche pendant 3s puis disparaît.
+          const id = crypto.randomUUID();
+          const isSelf =
+            pendingStateRef.current?.selfSeat === msg.seat ||
+            (state?.selfSeat ?? null) === msg.seat;
+          if (isSelf) setEmoteSelf({ id, emoteId: msg.emoteId });
+          else setEmoteOpp({ id, emoteId: msg.emoteId });
+          setTimeout(() => {
+            if (isSelf) setEmoteSelf((cur) => (cur?.id === id ? null : cur));
+            else setEmoteOpp((cur) => (cur?.id === id ? null : cur));
+          }, 3000);
+          break;
+        }
       }
     });
     return () => {
@@ -298,6 +322,11 @@ export function BattleClient({
   const endTurn = () => send({ type: "battle-end-turn" });
   const sendChat = useCallback(
     (text: string) => send({ type: "chat", text }),
+    [send],
+  );
+  const sendEmote = useCallback(
+    (emoteId: string) =>
+      send({ type: "battle-emote", emoteId: emoteId as never }),
     [send],
   );
 
@@ -406,16 +435,33 @@ export function BattleClient({
         <div className="flex items-center gap-3">
           <StatusIndicator status={status} />
           {state && state.phase !== "ended" && (
-            <button
-              onClick={concede}
-              className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 hover:bg-rose-500/20 hover:text-rose-200"
-            >
-              Abandonner
-            </button>
+            <>
+              <EmotePicker
+                open={emotePickerOpen}
+                onToggle={() => setEmotePickerOpen((v) => !v)}
+                onSend={(id) => {
+                  sendEmote(id);
+                  setEmotePickerOpen(false);
+                }}
+              />
+              <button
+                onClick={concede}
+                className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 hover:bg-rose-500/20 hover:text-rose-200"
+              >
+                Abandonner
+              </button>
+            </>
           )}
           {profile ? <UserPill profile={profile} variant="play" /> : null}
         </div>
       </header>
+      {/* Emote bubbles flottantes : opp en haut, self en bas. */}
+      {emoteOpp ? (
+        <EmoteBubble emoteId={emoteOpp.emoteId} position="top" />
+      ) : null}
+      {emoteSelf ? (
+        <EmoteBubble emoteId={emoteSelf.emoteId} position="bottom" />
+      ) : null}
 
       {!profile && (
         <div className="flex flex-1 items-center justify-center text-sm text-zinc-400">
@@ -3133,6 +3179,79 @@ function FlyProjectile({
       className={`absolute flex h-10 w-10 items-center justify-center rounded-full text-xl font-bold shadow-2xl ring-4 ring-white/40 ${anim.bg} ${anim.fg}`}
     >
       {anim.content}
+    </motion.div>
+  );
+}
+
+// ─── Emotes en match ─────────────────────────────────────────────────────
+import { BATTLE_EMOTES, type BattleEmoteId } from "@shared/types";
+
+function EmotePicker({
+  open,
+  onToggle,
+  onSend,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onSend: (id: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        title="Envoyer une emote"
+        className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+          open
+            ? "border-amber-400/60 bg-amber-400/15 text-amber-100"
+            : "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
+        }`}
+      >
+        😄 Emote
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-56 rounded-lg border border-white/10 bg-zinc-950/95 p-2 shadow-xl backdrop-blur">
+          <div className="grid grid-cols-2 gap-1.5">
+            {(Object.keys(BATTLE_EMOTES) as BattleEmoteId[]).map((id) => {
+              const e = BATTLE_EMOTES[id];
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSend(id)}
+                  className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 text-left text-xs text-zinc-200 transition-colors hover:bg-amber-300/10 hover:text-amber-100"
+                >
+                  <span className="text-base">{e.emoji}</span>
+                  <span>{e.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EmoteBubble({
+  emoteId,
+  position,
+}: {
+  emoteId: string;
+  position: "top" | "bottom";
+}) {
+  const e = BATTLE_EMOTES[emoteId as BattleEmoteId];
+  if (!e) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: position === "top" ? -10 : 10, scale: 0.8 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      className={`pointer-events-none fixed left-1/2 z-40 -translate-x-1/2 ${
+        position === "top" ? "top-20" : "bottom-32"
+      } flex items-center gap-2 rounded-2xl border border-amber-300/40 bg-zinc-950/95 px-4 py-2 text-sm font-bold text-amber-100 shadow-2xl backdrop-blur`}
+    >
+      <span className="text-xl">{e.emoji}</span>
+      <span>{e.label}</span>
     </motion.div>
   );
 }

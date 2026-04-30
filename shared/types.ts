@@ -3130,7 +3130,36 @@ export type BattleClientMessage =
   // Always available
   | { type: "battle-end-turn" }
   | { type: "battle-concede" }
-  | { type: "chat"; text: string };
+  | { type: "chat"; text: string }
+  // Emote prédéfinie (set fini, pas de texte libre — limite le toxic).
+  // Le serveur valide l'id, applique un cooldown anti-spam (3s/joueur)
+  // puis broadcast à l'autre côté.
+  | { type: "battle-emote"; emoteId: BattleEmoteId };
+
+/** Catalogue figé des emotes disponibles en match Pokémon. */
+export type BattleEmoteId =
+  | "salut"
+  | "gg"
+  | "beaujeu"
+  | "argh"
+  | "hate"
+  | "desole"
+  | "penser"
+  | "haha";
+
+export const BATTLE_EMOTES: Record<
+  BattleEmoteId,
+  { label: string; emoji: string }
+> = {
+  salut: { label: "Salut !", emoji: "👋" },
+  gg: { label: "GG !", emoji: "🏆" },
+  beaujeu: { label: "Beau jeu !", emoji: "👏" },
+  argh: { label: "Argh !", emoji: "😩" },
+  hate: { label: "Hâte !", emoji: "🔥" },
+  desole: { label: "Désolé !", emoji: "🙏" },
+  penser: { label: "Je réfléchis…", emoji: "🤔" },
+  haha: { label: "Haha !", emoji: "😄" },
+};
 
 // ─── Battle constants (Pocket-style) ───────────────────────────────────────
 
@@ -3172,7 +3201,14 @@ export type BattleServerMessage =
       trainerName: string;
       cardIds: string[];
     }
-  | { type: "chat"; message: ChatMessage };
+  | { type: "chat"; message: ChatMessage }
+  // Emote envoyée par l'un des deux joueurs ; le client affiche une bulle
+  // flottante côté `seat` pendant ~3s.
+  | {
+      type: "battle-emote";
+      seat: BattleSeatId;
+      emoteId: BattleEmoteId;
+    };
 
 // ─── Battle lobby (matchmaking) ────────────────────────────────────────────
 
