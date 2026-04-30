@@ -118,6 +118,139 @@ export const BOT_DECKS: BotDeck[] = [
       { cardId: "A1-224", count: 2 }, // Pierre (attache combat à Grolem/Onix)
     ],
   },
+
+  // ─── Deck 6 : Mewtwo-ex Psyburn (Psy + ex) ────────────────────────────
+  {
+    name: "Mewtwo-ex Psyburn",
+    description: "Mewtwo-ex Basic 150 PV, Hypnomade Pendulo Dodo pour Endormi.",
+    energyTypes: ["psychic"],
+    cards: [
+      { cardId: "A1-129", count: 2 }, // Mewtwo-ex (basic 150)
+      { cardId: "A1-128", count: 2 }, // Mewtwo (basic 120)
+      { cardId: "A1-124", count: 2 }, // Soporifik
+      { cardId: "A1-125", count: 2 }, // Hypnomade (talent Pendulo Dodo)
+      { cardId: "A1-115", count: 2 }, // Abra (Téléport self-swap)
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-001", count: 2 }, // Potion
+      { cardId: "P-A-005", count: 2 }, // Poké Ball
+      { cardId: "A1-223", count: 2 }, // Giovanni
+      { cardId: "P-A-002", count: 2 }, // Vitesse +
+    ],
+  },
+
+  // ─── Deck 7 : Pikachu-ex Surge (Élec + ex multiplicateur) ─────────────
+  {
+    name: "Pikachu-ex Surge",
+    description: "Pikachu-ex 30×N Pokémon ⚡ Banc — sature le Banc d'électriques.",
+    energyTypes: ["lightning"],
+    cards: [
+      { cardId: "A1-096", count: 2 }, // Pikachu-ex (Cercle Électrik 30×N)
+      { cardId: "A1-094", count: 2 }, // Pikachu
+      { cardId: "A1-097", count: 2 }, // Magnéti
+      { cardId: "A1-099", count: 2 }, // Voltorbe
+      { cardId: "A1-100", count: 2 }, // Électrode
+      { cardId: "A1-107", count: 2 }, // Anchwatt
+      { cardId: "A1-110", count: 2 }, // Galvaran
+      { cardId: "A1-112", count: 2 }, // Wattapik
+      { cardId: "A1-226", count: 2 }, // Major Bob
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+    ],
+  },
+
+  // ─── Deck 8 : Dracaufeu-ex Inferno (Feu stage 2 ex) ───────────────────
+  {
+    name: "Dracaufeu-ex Inferno",
+    description: "Salamèche → Reptincel → Dracaufeu-ex 180 PV. Tape fort, mais lent à monter.",
+    energyTypes: ["fire"],
+    cards: [
+      { cardId: "A1-033", count: 2 }, // Salamèche
+      { cardId: "A1-034", count: 2 }, // Reptincel
+      { cardId: "A1-036", count: 2 }, // Dracaufeu-ex (stage 2, 180 PV)
+      { cardId: "A1-035", count: 2 }, // Dracaufeu (backup non-ex)
+      { cardId: "A1-042", count: 2 }, // Ponyta
+      { cardId: "A1-043", count: 2 }, // Galopa
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-005", count: 2 }, // Poké Ball
+      { cardId: "P-A-001", count: 2 }, // Potion
+      { cardId: "A1-223", count: 2 }, // Giovanni
+    ],
+  },
+
+  // ─── Deck 9 : Ectoplasma-ex Maléfice (Psy stage 2 lock Supporter) ─────
+  {
+    name: "Ectoplasma Lock",
+    description: "Ectoplasma-ex talent Maléfice des Ombres bloque les Supporters adverses.",
+    energyTypes: ["psychic"],
+    cards: [
+      { cardId: "A1-120", count: 2 }, // Fantominus
+      { cardId: "A1-121", count: 2 }, // Spectrum
+      { cardId: "A1-123", count: 2 }, // Ectoplasma-ex (Maléfice des Ombres)
+      { cardId: "A1-124", count: 2 }, // Soporifik
+      { cardId: "A1-125", count: 2 }, // Hypnomade (Pendulo Dodo)
+      { cardId: "A1-115", count: 2 }, // Abra
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-005", count: 2 }, // Poké Ball
+      { cardId: "P-A-001", count: 2 }, // Potion
+      { cardId: "P-A-002", count: 2 }, // Vitesse +
+    ],
+  },
+
+  // ─── Deck 10 : Aéromite Poison (Plante poison) ────────────────────────
+  {
+    name: "Aéromite Poison",
+    description: "Aéromite Poudre Toxik empoisonne, Erika soigne le banc Plante.",
+    energyTypes: ["grass"],
+    cards: [
+      { cardId: "A1-016", count: 2 }, // Mimitoss
+      { cardId: "A1-017", count: 2 }, // Aéromite (Poudre Toxik empoisonne)
+      { cardId: "A1-008", count: 2 }, // Aspicot
+      { cardId: "A1-009", count: 2 }, // Coconfort
+      { cardId: "A1-010", count: 2 }, // Dardargnan
+      { cardId: "A1-025", count: 2 }, // Insécateur
+      { cardId: "A1-026", count: 2 }, // Scarabrute
+      { cardId: "A1-219", count: 2 }, // Erika (heal 50 grass)
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-001", count: 2 }, // Potion
+    ],
+  },
+
+  // ─── Deck 11 : Krabboss Tentacruel (Eau alternatif) ───────────────────
+  {
+    name: "Krabboss Crush",
+    description: "Eau alternatif avec Krabboss et Tentacruel, Ondine pour les énergies bonus.",
+    energyTypes: ["water"],
+    cards: [
+      { cardId: "A1-068", count: 2 }, // Krabby
+      { cardId: "A1-069", count: 2 }, // Krabboss
+      { cardId: "A1-062", count: 2 }, // Tentacool
+      { cardId: "A1-063", count: 2 }, // Tentacruel
+      { cardId: "A1-066", count: 2 }, // Kokiyas
+      { cardId: "A1-067", count: 2 }, // Crustabri (talent Coque Armure -10)
+      { cardId: "A1-220", count: 2 }, // Ondine
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-001", count: 2 }, // Potion
+      { cardId: "P-A-002", count: 2 }, // Vitesse +
+    ],
+  },
+
+  // ─── Deck 12 : Grodoudou Stall (Incolore endurance) ───────────────────
+  {
+    name: "Grodoudou Stall",
+    description: "Grodoudou + Roucarnage Déroute pour casser le tempo adverse.",
+    energyTypes: ["psychic", "colorless"],
+    cards: [
+      { cardId: "A1-193", count: 2 }, // Rondoudou
+      { cardId: "A1-194", count: 2 }, // Grodoudou
+      { cardId: "A1-186", count: 2 }, // Roucool
+      { cardId: "A1-187", count: 2 }, // Roucoups
+      { cardId: "A1-188", count: 2 }, // Roucarnage (talent Déroute force switch)
+      { cardId: "A1-128", count: 2 }, // Mewtwo (basic)
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-001", count: 2 }, // Potion
+      { cardId: "A1-225", count: 2 }, // Morgane (force switch)
+      { cardId: "P-A-002", count: 2 }, // Vitesse +
+    ],
+  },
 ];
 
 /** Tire un deck au hasard parmi ceux préenregistrés. */

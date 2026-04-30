@@ -417,7 +417,13 @@ export default class BattleServer implements Party.Server {
       return;
     }
 
-    // 4. Attaque (la plus forte payée). Les Fossiles n'ayant pas d'attaque,
+    // 4. Joue une carte Dresseur si pertinent.
+    if (this.botMaybePlayTrainer(seat)) return;
+
+    // 5. Active un talent si dispo (1×/tour, par carte).
+    if (this.botMaybeUseAbility(seat)) return;
+
+    // 6. Attaque (la plus forte payée). Les Fossiles n'ayant pas d'attaque,
     // `data.attacks` sera vide et la boucle sautera ce step.
     const data = seat.active ? getCardForBattle(seat.active.cardId) : null;
     if (
@@ -444,8 +450,337 @@ export default class BattleServer implements Party.Server {
       }
     }
 
-    // 5. Rien à faire → end turn
+    // 7. Rien à faire → end turn
     this.handleEndTurn("p2");
+  }
+
+  /** Tente de jouer une carte Dresseur pertinente depuis la main du bot.
+   *  Retourne true si une carte a été jouée (le tour continue via
+   *  scheduleNextBotStep), false sinon. Stratégie naïve mais utile :
+   *  Potion si Actif blessé, Recherches Pro si main vide, Poké Ball si
+   *  pas de basic en main, Giovanni avant attaque KO, Ondine sur Pokémon
+   *  Eau, etc. */
+  private botMaybePlayTrainer(seat: SeatState): boolean {
+    for (let hi = 0; hi < seat.hand.length; hi++) {
+      const handCard = seat.hand[hi];
+      const card = getCard(handCard.cardId);
+      if (!card || card.kind !== "trainer") continue;
+      if (FOSSIL_NAMES.has(card.name)) continue; // joué via play-basic
+
+      // Pocket : 1 Supporter max par tour, et flag noSupporter possible.
+      if (card.trainerType === "supporter") {
+        if (seat.usedSupporterThisTurn) continue;
+        if (seat.noSupporterThisTurn) continue;
+      }
+
+      // Décide si la carte est pertinente MAINTENANT.
+      const oppId: BattleSeatId = "p1";
+      const opp = this.seats[oppId];
+      switch (card.name) {
+        case "Potion": {
+          // Joue si l'Actif est blessé d'au moins 20.
+          if (seat.active && seat.active.damage >= 20) {
+            this.handlePlayTrainer("p2", hi, seat.active.uid);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Poké Ball": {
+          // Joue si peu de basics en main / banc pas plein.
+          if (seat.bench.length < MAX_BENCH) {
+            this.handlePlayTrainer("p2", hi, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Recherches Professorales": {
+          // Joue si main contient ≤ 4 cartes (sinon gaspille).
+          if (seat.hand.length <= 4) {
+            this.handlePlayTrainer("p2", hi, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Vitesse +": {
+          // Joue avant retraite si l'Actif est en mauvaise posture.
+          if (seat.active && seat.bench.length > 0) {
+            const d = getCardForBattle(seat.active.cardId);
+            if (d && seat.active.damage > d.hp / 2) {
+              this.handlePlayTrainer("p2", hi, null);
+              this.scheduleNextBotStep();
+              return true;
+            }
+          }
+          break;
+        }
+        case "Giovanni": {
+          // Joue si l'Actif peut KO l'opp avec +10 dégâts (= Giovanni
+          // débloque un KO qui aurait raté de 10 dmg).
+          if (seat.active && opp?.active) {
+            const aData = getCardForBattle(seat.active.cardId);
+            const dData = getCardForBattle(opp.active.cardId);
+            if (aData && dData) {
+              const hpLeft = dData.hp - opp.active.damage;
+              const bestAttack = aData.attacks
+                .filter((a) =>
+                  this.canPayAttackCost(seat.active!.attachedEnergies, a.cost),
+                )
+                .reduce<number>(
+                  (acc, a) => Math.max(acc, a.damage ?? 0),
+                  0,
+                );
+              if (bestAttack > 0 && bestAttack < hpLeft && bestAttack + 10 >= hpLeft) {
+                this.handlePlayTrainer("p2", hi, null);
+                this.scheduleNextBotStep();
+                return true;
+              }
+            }
+          }
+          break;
+        }
+        case "Erika": {
+          // Joue si on a un Pokémon Plante blessé d'au moins 30.
+          const targets = [
+            ...(seat.active ? [seat.active] : []),
+            ...seat.bench,
+          ];
+          for (const c of targets) {
+            const d = getCardForBattle(c.cardId);
+            if (d?.type === "grass" && c.damage >= 30) {
+              this.handlePlayTrainer("p2", hi, c.uid);
+              this.scheduleNextBotStep();
+              return true;
+            }
+          }
+          break;
+        }
+        case "Pierre": {
+          // Joue si on a Grolem ou Onix en jeu sans énergies max.
+          const targets = [
+            ...(seat.active ? [seat.active] : []),
+            ...seat.bench,
+          ];
+          for (const c of targets) {
+            const d = getCardForBattle(c.cardId);
+            if (d && (d.name === "Grolem" || d.name === "Onix")) {
+              this.handlePlayTrainer("p2", hi, c.uid);
+              this.scheduleNextBotStep();
+              return true;
+            }
+          }
+          break;
+        }
+        case "Ondine": {
+          // Joue sur le Pokémon Eau le plus chargé en énergies (= déjà
+          // investi, on continue à le booster).
+          const targets = [
+            ...(seat.active ? [seat.active] : []),
+            ...seat.bench,
+          ].filter((c) => getCardForBattle(c.cardId)?.type === "water");
+          if (targets.length > 0) {
+            const best = targets.reduce((acc, c) =>
+              c.attachedEnergies.length > acc.attachedEnergies.length
+                ? c
+                : acc,
+            );
+            this.handlePlayTrainer("p2", hi, best.uid);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Major Bob": {
+          // Joue si l'Actif est Raichu/Électrode/Élektek + ⚡ sur le Banc.
+          if (seat.active) {
+            const d = getCardForBattle(seat.active.cardId);
+            const valid = new Set(["Raichu", "Électrode", "Élektek"]);
+            if (d && valid.has(d.name)) {
+              const hasLightningBench = seat.bench.some((c) =>
+                c.attachedEnergies.includes("lightning"),
+              );
+              if (hasLightningBench) {
+                this.handlePlayTrainer("p2", hi, null);
+                this.scheduleNextBotStep();
+                return true;
+              }
+            }
+          }
+          break;
+        }
+        case "Auguste": {
+          // Joue avant attaque pour booster (le bonus est globalisé en MVP).
+          if (seat.active) {
+            this.handlePlayTrainer("p2", hi, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Morgane": {
+          // Joue si le Banc adverse contient un Pokémon plus faible que
+          // son Actif (= force un swap défavorable).
+          if (opp?.active && opp.bench.length > 0) {
+            this.handlePlayTrainer("p2", hi, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Carton Rouge": {
+          // Joue si l'adversaire a 5+ cartes en main (= on lui réinitialise
+          // une grosse main contre 3 cartes random).
+          if (opp && opp.hand.length >= 5) {
+            this.handlePlayTrainer("p2", hi, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Pokédex":
+        case "Scrute Main":
+          // Effets d'information — peu utiles pour le bot. Skip.
+          break;
+        case "Koga": {
+          // Joue si Grotadmorv ou Smogogo Actif blessé.
+          if (seat.active) {
+            const d = getCardForBattle(seat.active.cardId);
+            const valid = new Set(["Grotadmorv", "Smogogo"]);
+            if (d && valid.has(d.name) && seat.active.damage >= 50 && seat.bench.length > 0) {
+              this.handlePlayTrainer("p2", hi, null);
+              this.scheduleNextBotStep();
+              return true;
+            }
+          }
+          break;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** Tente d'activer un talent activable d'un Pokémon allié si pertinent.
+   *  Retourne true si un talent a été activé. */
+  private botMaybeUseAbility(seat: SeatState): boolean {
+    const candidates: BattleCard[] = [];
+    if (seat.active) candidates.push(seat.active);
+    candidates.push(...seat.bench);
+
+    for (const c of candidates) {
+      if (seat.abilitiesUsedThisTurn.has(c.uid)) continue;
+      const data = getCardForBattle(c.cardId);
+      if (data?.ability?.kind !== "activated") continue;
+
+      const oppId: BattleSeatId = "p1";
+      const opp = this.seats[oppId];
+      const isActive = seat.active?.uid === c.uid;
+
+      switch (data.ability.name) {
+        case "Soin Poudre": {
+          // Papilusion : utile si au moins 1 Pokémon allié blessé.
+          const all = [...(seat.active ? [seat.active] : []), ...seat.bench];
+          if (all.some((p) => p.damage > 0)) {
+            this.handleUseAbility("p2", c.uid, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Charge Volt": {
+          // Magnéton : toujours utile (énergie gratuite).
+          this.handleUseAbility("p2", c.uid, null);
+          this.scheduleNextBotStep();
+          return true;
+        }
+        case "Pendulo Dodo": {
+          // Hypnomade : pile/face Endormi adverse, toujours essayer.
+          if (opp?.active) {
+            this.handleUseAbility("p2", c.uid, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Ombre Psy": {
+          // Gardevoir : attache 🌀 sur Actif Psy. Vérifie que l'Actif est Psy.
+          const aData = seat.active ? getCardForBattle(seat.active.cardId) : null;
+          if (aData?.type === "psychic") {
+            this.handleUseAbility("p2", c.uid, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Fuite de Gaz": {
+          // Smogogo (Actif requis) : empoisonne, toujours utile.
+          if (isActive && opp?.active) {
+            this.handleUseAbility("p2", c.uid, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Sheauriken": {
+          // Amphinobi : 20 dmg sur le Pokémon adverse le plus faible (KO si possible).
+          if (opp?.active) {
+            const targets = [
+              ...(opp.active ? [opp.active] : []),
+              ...opp.bench,
+            ];
+            // Préfère un Pokémon qui sera KO par 20 dégâts.
+            const ko = targets.find((t) => {
+              const td = getCardForBattle(t.cardId);
+              return td && td.hp - t.damage <= 20;
+            });
+            const target = ko ?? targets[0];
+            if (target) {
+              this.handleUseAbility("p2", c.uid, target.uid);
+              this.scheduleNextBotStep();
+              return true;
+            }
+          }
+          break;
+        }
+        case "Numérisation": {
+          // Porygon : peek deck. Pas utile pour le bot, skip.
+          break;
+        }
+        case "Déroute": {
+          // Roucarnage : force switch adverse, joue si l'Actif adverse est
+          // chargé en énergies (= on neutralise une menace).
+          if (
+            opp?.active &&
+            opp.active.attachedEnergies.length >= 2 &&
+            opp.bench.length > 0
+          ) {
+            this.handleUseAbility("p2", c.uid, null);
+            this.scheduleNextBotStep();
+            return true;
+          }
+          break;
+        }
+        case "Piège Parfumé": {
+          // Empiflor (Actif requis) : promeut un Banc adverse de Base au
+          // hasard. Joue si l'Actif adverse est dangereux ET banc adverse
+          // contient un Basic.
+          if (isActive && opp?.active && opp.bench.length > 0) {
+            const candidate = opp.bench.find((b) => {
+              const bd = getCardForBattle(b.cardId);
+              return bd?.stage === "basic";
+            });
+            if (candidate) {
+              this.handleUseAbility("p2", c.uid, candidate.uid);
+              this.scheduleNextBotStep();
+              return true;
+            }
+          }
+          break;
+        }
+      }
+    }
+    return false;
   }
 
   /** Re-schedule the next bot step (after an action that didn't end the turn). */
