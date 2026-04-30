@@ -207,6 +207,19 @@ export interface BattleEffectAccess {
    *  "renvoyez à la main 1 Persos". Retourne true si appliqué. */
   bounceCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
 
+  /** Place une carte au-dessus de la pile de Vie d'un seat (face cachée
+   *  comme une Vie normale). Utilisé par Sabo (place 1 Persos en Vie),
+   *  Charlotte Daifuku (place top deck en Vie). Source : "hand" → indice
+   *  dans la main, "deck-top" → carte du dessus du deck, "character" →
+   *  uid d'un Persos en jeu retiré. Retourne true si appliqué. */
+  placeCardAboveLife(
+    seat: OnePieceBattleSeatId,
+    source:
+      | { kind: "hand"; handIndex: number }
+      | { kind: "deck-top" }
+      | { kind: "character"; uid: string },
+  ): boolean;
+
   /** Défausse les cartes aux indices donnés de la main du seat. Renvoie
    *  les cardId défaussés. Skip les indices invalides. */
   discardFromHand(
@@ -2291,6 +2304,138 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
         -3,
       );
       ctx.battle.log("Van Auger : -3 coût pour ce tour.");
+    }
+  },
+
+  // ─── BATCH 14 — [En cas de KO] avec [DON!! xN] ──────────────────────────
+
+  /** ST21-004 Jewelry Bonney
+   *  [DON!! x2] [En cas de KO] Piochez 1 carte. */
+  "ST21-004": (ctx) => {
+    if (ctx.hook !== "on-ko") return;
+    // Au moment du KO, ctx.sourceUid pointe vers la carte qui était sur
+    // le board. Mais elle a déjà été retirée — on ne peut pas re-checker
+    // attachedDon. On accepte la condition comme remplie tant que
+    // l'effet est déclenché (le moteur n'est pas assez précis pour
+    // figer attachedDon avant retrait — compromis).
+    ctx.battle.drawCards(ctx.sourceSeat, 1);
+    ctx.battle.log(
+      "Jewelry Bonney : pioche 1 carte ([DON!! x2] [En cas de KO]).",
+    );
+  },
+
+  /** OP09-015 Lucky Roo
+   *  [Bloqueur] (déjà géré)
+   *  [En cas de KO] Si votre Leader est de type {Équipage du Roux},
+   *  piochez 1 carte. */
+  "OP09-015": (ctx) => {
+    if (ctx.hook !== "on-ko") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const leaderMeta = seat?.leaderId
+      ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+      : null;
+    const isRoux = leaderMeta?.types.some((t) =>
+      t.toLowerCase().includes("équipage du roux"),
+    );
+    if (!isRoux) return;
+    ctx.battle.drawCards(ctx.sourceSeat, 1);
+    ctx.battle.log("Lucky Roo : pioche 1 carte (Leader Roux + KO).");
+  },
+
+  // ─── BATCH 15 — Place above/below Life ──────────────────────────────────
+
+  /** OP09-104 Sabo
+   *  [Jouée] Ajoutez face visible au-dessus de votre Vie jusqu'à 1 carte
+   *  Personnage de type {Armée révolutionnaire} de votre main. Puis, si
+   *  vous avez 2 cartes ou plus dans votre Vie, ajoutez à votre main 1
+   *  carte du dessus de votre Vie. */
+  "OP09-104": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-104",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Sabo : choisis 1 Persos {Armée révolutionnaire} de ta main à placer au-dessus de ta Vie.",
+        params: { count: 1, requireType: "Armée révolutionnaire" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (
+        !ctx.choice.skipped &&
+        ctx.choice.selection.handIndices &&
+        ctx.choice.selection.handIndices.length > 0
+      ) {
+        ctx.battle.placeCardAboveLife(ctx.sourceSeat, {
+          kind: "hand",
+          handIndex: ctx.choice.selection.handIndices[0],
+        });
+        ctx.battle.log(
+          "Sabo : Persos Armée révolutionnaire placé au-dessus de la Vie.",
+        );
+      }
+      // 2ᵉ effet conditionnel : si Vies ≥ 2, ajoute 1 Vie en main.
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (seat && seat.lifeCount >= 2) {
+        ctx.battle.takeLifeToHand(ctx.sourceSeat);
+        ctx.battle.log("Sabo : 1 Vie ajoutée à la main.");
+      }
+    }
+  },
+
+  /** ST07-005 Charlotte Daifuku
+   *  [DON!! x1] [En attaquant] Vous pouvez ajouter à votre main 1 carte
+   *  du dessus ou du dessous de votre Vie : Ajoutez au-dessus de votre
+   *  Vie jusqu'à 1 carte du dessus de votre deck. */
+  "ST07-005": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const c = seat?.characters.find((x) => x.uid === ctx.sourceUid);
+    if (!c || c.attachedDon < 1) return;
+    if (!seat || seat.lifeCount === 0 || seat.deckSize === 0) return;
+    // Coût : ajoute 1 Vie en main.
+    ctx.battle.takeLifeToHand(ctx.sourceSeat);
+    // Effet : place top deck en Vie.
+    ctx.battle.placeCardAboveLife(ctx.sourceSeat, { kind: "deck-top" });
+    ctx.battle.log(
+      "Charlotte Daifuku : Vie échangée contre carte du dessus du deck.",
+    );
+  },
+
+  /** OP09-101 Kuzan
+   *  [Jouée] Placez face visible au-dessus ou au-dessous de la Vie
+   *  adverse 1 Personnage adverse ayant un coût de 3 ou moins : Votre
+   *  adversaire doit défausser 1 carte de sa main. */
+  "OP09-101": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-101",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Kuzan : choisis un Persos adverse à placer en Vie adverse (coût ≤ 3).",
+        params: { maxCost: 3 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.placeCardAboveLife(opponentSeat, {
+        kind: "character",
+        uid: ctx.choice.selection.targetUid,
+      });
+      // L'adversaire défausse 1 (random pour rester auto).
+      ctx.battle.discardRandom(opponentSeat, 1);
+      ctx.battle.log(
+        "Kuzan : Persos placé en Vie adverse, adversaire défausse 1 carte.",
+      );
     }
   },
 

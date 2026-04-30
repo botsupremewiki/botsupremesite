@@ -1505,7 +1505,18 @@ export type SpellEffect =
       powerOverride?: number;
       healthOverride?: number;
       addKeywords?: string[];
-    };
+    }
+  // Phase 3.34
+  // Sans cible : invoque count tokens SI au moins un allié est mort
+  // pendant ce round (alliesDiedThisRound > 0). Sinon no-op.
+  | {
+      type: "summon-tokens-if-ally-died";
+      cardCode: string;
+      count: number;
+    }
+  // Cible : unité (any) → inflige amount dmg SI au moins un allié est
+  // mort pendant ce round. Sinon no-op (et ok côté serveur).
+  | { type: "deal-damage-anywhere-if-ally-died"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1736,6 +1747,18 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     count: 2,
     addKeywords: ["Ephemeral"],
   },
+
+  // ── Phase 3.34 (conditional)
+  // 01SI036 (ShadowIsles, 1 Slow) — si un allié est mort ce round,
+  // summon 2 × token 01SI002 (Jeune araignée, 1|1).
+  "01SI036": {
+    type: "summon-tokens-if-ally-died",
+    cardCode: "01SI002",
+    count: 2,
+  },
+  // 01SI034 (ShadowIsles, 3 Fast) — si un allié est mort ce round,
+  // inflige 4 dmg à une unité (any).
+  "01SI034": { type: "deal-damage-anywhere-if-ally-died", amount: 4 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1801,6 +1824,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "kill-target-any":
     case "recall-any":
     case "drain-target-any":
+    case "deal-damage-anywhere-if-ally-died":
       return "any";
     case "frostbite-enemy":
     case "stun-enemy":
@@ -1818,8 +1842,10 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "summon-tokens":
     case "buff-all-allies-round":
     case "damage-all-combatants":
+    case "summon-tokens-if-ally-died":
       return "none";
   }
+  return "none";
 }
 
 // ─── Lobby matchmaking LoR (Phase 3.6d) ──────────────────────────────────

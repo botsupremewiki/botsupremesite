@@ -2056,6 +2056,29 @@ export default class OnePieceBattleServer implements Party.Server {
         s.hand.push({ cardId: removed.cardId });
         return true;
       },
+      placeCardAboveLife: (seatId, source) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        let cardId: string | null = null;
+        if (source.kind === "hand") {
+          if (source.handIndex < 0 || source.handIndex >= s.hand.length)
+            return false;
+          cardId = s.hand.splice(source.handIndex, 1)[0].cardId;
+        } else if (source.kind === "deck-top") {
+          if (s.deck.length === 0) return false;
+          cardId = s.deck.shift()!.cardId;
+        } else if (source.kind === "character") {
+          const idx = s.characters.findIndex((c) => c.uid === source.uid);
+          if (idx < 0) return false;
+          const removed = s.characters.splice(idx, 1)[0];
+          s.donRested += removed.attachedDon;
+          cardId = removed.cardId;
+        }
+        if (!cardId) return false;
+        // Place au-dessus = position 0 (le dessus de la pile).
+        s.life.unshift({ cardId });
+        return true;
+      },
       discardFromHand: (seatId, handIndices) => {
         const s = this.seats[seatId];
         if (!s) return [];

@@ -1139,6 +1139,7 @@ function PendingChoicePanel({
           hand={self.hand}
           count={discardCount}
           requireTrigger={requireTrigger}
+          requireType={onlyOwnType}
           excludeName={excludeName}
           onConfirm={(handIndices) =>
             send({
@@ -1186,12 +1187,14 @@ function DiscardCardPicker({
   hand,
   count,
   requireTrigger,
+  requireType,
   excludeName,
   onConfirm,
 }: {
   hand: string[];
   count: number;
   requireTrigger: boolean;
+  requireType: string | null;
   excludeName: string | null;
   onConfirm: (handIndices: number[]) => void;
 }) {
@@ -1209,6 +1212,13 @@ function DiscardCardPicker({
       if (!meta) return false;
       if (excludeName && meta.name === excludeName) return false;
       if (requireTrigger && !meta.trigger) return false;
+      if (
+        requireType &&
+        !meta.types.some((t) =>
+          t.toLowerCase().includes(requireType.toLowerCase()),
+        )
+      )
+        return false;
       return true;
     });
 
