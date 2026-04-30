@@ -2545,10 +2545,11 @@ function applySpellEffect(
       return newState;
     }
     case "summon-tokens-if-ally-died": {
-      // Phase 3.34 : si alliesDiedThisRound > 0, summon count tokens
-      // (réutilise la logique de summon-tokens). Sinon no-op.
+      // Phase 3.34 + 3.50 : si alliesDiedThisRound >= minDeaths (default 1),
+      // summon count tokens. Sinon no-op.
       const player = newPlayers[casterSeat];
-      if (player.alliesDiedThisRound <= 0) return state;
+      const required = effect.minDeaths ?? 1;
+      if (player.alliesDiedThisRound < required) return state;
       const cfgCond = RUNETERRA_BATTLE_CONFIG;
       const tokenCard = getCard(effect.cardCode);
       if (!tokenCard || tokenCard.type !== "Unit") return state;

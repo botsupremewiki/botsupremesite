@@ -1510,13 +1510,15 @@ export type SpellEffect =
       healthOverride?: number;
       addKeywords?: string[];
     }
-  // Phase 3.34
-  // Sans cible : invoque count tokens SI au moins un allié est mort
-  // pendant ce round (alliesDiedThisRound > 0). Sinon no-op.
+  // Phase 3.34 + 3.50
+  // Sans cible : invoque count tokens SI alliesDiedThisRound >= minDeaths
+  // (par défaut 1). Sinon no-op. minDeaths permet à 01SI027 (Offrandes
+  // fraîches) d'exiger 3 morts au lieu de 1 (01SI036).
   | {
       type: "summon-tokens-if-ally-died";
       cardCode: string;
       count: number;
+      minDeaths?: number;
     }
   // Cible : unité (any) → inflige amount dmg SI au moins un allié est
   // mort pendant ce round. Sinon no-op (et ok côté serveur).
@@ -1926,6 +1928,16 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01IO003 (Ionia, 3 Fast, Marque de la mort) — retire Ephemeral d'un
   // allié et l'octroie à un ennemi.
   "01IO003": { type: "swap-ephemeral" },
+
+  // ── Phase 3.50
+  // 01SI027 (ShadowIsles, 3 Slow, Offrandes fraîches) — si ≥ 3 alliés
+  // sont morts ce round, summon 2 × 01SI002 (Jeune araignée).
+  "01SI027": {
+    type: "summon-tokens-if-ally-died",
+    cardCode: "01SI002",
+    count: 2,
+    minDeaths: 3,
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────

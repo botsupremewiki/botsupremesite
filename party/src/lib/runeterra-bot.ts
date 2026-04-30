@@ -112,9 +112,9 @@ export function botAct(
       }
       if (
         effect.type === "summon-tokens-if-ally-died" &&
-        player.alliesDiedThisRound <= 0
+        player.alliesDiedThisRound < (effect.minDeaths ?? 1)
       ) {
-        continue; // condition non remplie
+        continue; // condition non remplie (défaut 1, 01SI027 = 3)
       }
       if (
         effect.type === "summon-tokens" &&
