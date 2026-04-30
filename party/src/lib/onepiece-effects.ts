@@ -865,6 +865,176 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     }
   },
 
+  // ─── BATCH 3 (cards 61-90 cardNumber) ────────────────────────────────────
+
+  /** OP09-020 Qu'ils viennent !! On les attend de pied ferme !! (Event)
+   *  [Principale] Regardez 5 cartes du dessus de votre deck, révélez jusqu'à
+   *  1 carte de type {Équipage du Roux} autre que [Qu'ils viennent !!...] et
+   *  ajoutez-la à votre main. Puis placez les cartes restantes au-dessous. */
+  "OP09-020": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      5,
+      "Équipage du Roux",
+      "bottom",
+      "Qu'ils viennent !! On les attend de pied ferme !!",
+    );
+    ctx.battle.log(
+      found
+        ? "Évènement : révèle un Équipage du Roux."
+        : "Évènement : aucun Équipage du Roux révélé.",
+    );
+  },
+
+  /** OP09-024 Usopp
+   *  [Jouée] Si vous avez 2 Personnages ou plus épuisés, piochez 2 cartes
+   *  et défaussez 2 cartes de votre main. */
+  "OP09-024": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    if (!seat) return;
+    const restedCount = seat.characters.filter((c) => c.rested).length;
+    if (restedCount < 2) {
+      ctx.battle.log("Usopp : moins de 2 Persos épuisés, effet annulé.");
+      return;
+    }
+    ctx.battle.drawCards(ctx.sourceSeat, 2);
+    ctx.battle.discardRandom(ctx.sourceSeat, 2);
+    ctx.battle.log("Usopp : pioche 2 et défausse 2.");
+  },
+
+  /** OP09-026 Sakazuki
+   *  [Jouée] Si vous avez 2 Personnages ou plus épuisés, mettez KO jusqu'à
+   *  1 Personnage adverse ayant un coût de 5 ou moins. */
+  "OP09-026": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat) return;
+      const restedCount = seat.characters.filter((c) => c.rested).length;
+      if (restedCount < 2) {
+        ctx.battle.log("Sakazuki : moins de 2 Persos épuisés, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-026",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Sakazuki : choisis un Persos adverse à KO (coût ≤ 5).",
+        params: { maxCost: 5 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Sakazuki : KO réussi.");
+    }
+  },
+
+  /** OP09-037 Lim (Char)
+   *  [Jouée] Regardez 5 cartes du dessus de votre deck, révélez jusqu'à 1
+   *  carte de type {ODYSSEY} autre que [Lim] et ajoutez-la à votre main.
+   *  Puis, placez les cartes restantes au-dessous de votre deck. */
+  "OP09-037": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForType(
+      ctx.sourceSeat,
+      5,
+      "ODYSSEY",
+      "bottom",
+      "Lim",
+    );
+    ctx.battle.log(
+      found
+        ? "Lim : révèle une carte ODYSSEY."
+        : "Lim : aucune carte ODYSSEY révélée.",
+    );
+  },
+
+  /** OP09-040 Thunder Lance Flip Caliber Phoenix Shot (Event)
+   *  [Principale] Si vous avez 2 Personnages ou plus épuisés, mettez KO
+   *  jusqu'à 1 Personnage adverse ayant un coût de 4 ou moins. */
+  "OP09-040": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat) return;
+      const restedCount = seat.characters.filter((c) => c.rested).length;
+      if (restedCount < 2) {
+        ctx.battle.log("Phoenix Shot : moins de 2 Persos épuisés, annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-040",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Phoenix Shot : choisis un Persos adverse à KO (coût ≤ 4).",
+        params: { maxCost: 4 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Phoenix Shot : KO réussi.");
+    }
+  },
+
+  /** OP09-048 Dracule Mihawk
+   *  [Bloqueur] (déjà géré par hasKeyword)
+   *  [Jouée] Piochez 2 cartes et défaussez 1 carte de votre main. */
+  "OP09-048": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.drawCards(ctx.sourceSeat, 2);
+    ctx.battle.discardRandom(ctx.sourceSeat, 1);
+    ctx.battle.log("Dracule Mihawk : pioche 2 et défausse 1.");
+  },
+
+  /** OP09-051 Baggy (Char)
+   *  [Jouée] Placez jusqu'à 1 Personnage adverse au-dessous du deck de
+   *  son propriétaire. (Le 2ᵉ effet conditionnel "si vous n'avez pas 5
+   *  Persos coût ≥ 5, placez ce Persos sous deck" est skip pour l'instant.) */
+  "OP09-051": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) {
+        ctx.battle.log("Baggy : aucun Persos adverse à renvoyer au deck.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-051",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt:
+          "Baggy : choisis un Persos adverse à placer au-dessous de son deck.",
+        params: {},
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.placeCharacterAtDeckBottom(
+        opponentSeat,
+        ctx.choice.selection.targetUid,
+      );
+      ctx.battle.log("Baggy : Persos adverse renvoyé au-dessous du deck.");
+    }
+  },
+
   // ─── Plus d'effets à venir au fil des sessions ───
   // Les batches suivants étendront ce registre. La majorité des effets
   // restants nécessitent l'infra PendingChoice (ciblage joueur).
