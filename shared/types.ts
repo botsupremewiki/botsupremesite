@@ -1490,7 +1490,11 @@ export type SpellEffect =
   // Phase 3.30
   // Sans cible : +power/+health pour ce round à TOUS les alliés sur le
   // banc (sans grant keyword). Buff all-board pour ce round seulement.
-  | { type: "buff-all-allies-round"; power: number; health: number };
+  | { type: "buff-all-allies-round"; power: number; health: number }
+  // Phase 3.32
+  // Sans cible : inflige X dégâts à toutes les unités au combat (côté
+  // attaquant et bloqueur). No-op si pas d'attaque en cours.
+  | { type: "damage-all-combatants"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1698,6 +1702,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01PZ014 (PiltoverZaun, 6 Slow) — summon 1 × token 01PZ014T1
   // (Gadget illégal, 5|5).
   "01PZ014": { type: "summon-tokens", cardCode: "01PZ014T1", count: 1 },
+
+  // ── Phase 3.32
+  // 01NX050 (Noxus, 2 Fast) — 1 dmg à toutes les unités au combat
+  // (attaquants + bloqueurs). No-op hors combat.
+  "01NX050": { type: "damage-all-combatants", amount: 1 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1778,6 +1787,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "stun-all-enemies-max-power":
     case "summon-tokens":
     case "buff-all-allies-round":
+    case "damage-all-combatants":
       return "none";
   }
 }

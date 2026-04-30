@@ -1619,6 +1619,56 @@ function applySpellEffect(
       const drawResult = drawCards(newState, casterSeat, effect.drawCount);
       return drawResult.state;
     }
+    case "damage-all-combatants": {
+      // Phase 3.32 : inflige X dmg à toutes les unités au combat (uid
+      // dans state.attackInProgress.lanes côté attacker ou blocker).
+      // No-op si pas d'attaque en cours.
+      if (!state.attackInProgress) return state;
+      const combatantUids = new Set<string>();
+      for (const lane of state.attackInProgress.lanes) {
+        combatantUids.add(lane.attackerUid);
+        if (lane.blockerUid) combatantUids.add(lane.blockerUid);
+      }
+      const allDeadUnits: { unit: RuneterraBattleUnit; seat: 0 | 1 }[] = [];
+      const deadCountBySeat: [number, number] = [0, 0];
+      for (const seat of [0, 1] as const) {
+        const player = newPlayers[seat];
+        const newBench = player.bench.map((u) => {
+          if (!combatantUids.has(u.uid)) return u;
+          const copy = { ...u };
+          applyDamageToUnit(copy, effect.amount);
+          return copy;
+        });
+        const survivors = newBench.filter((u) => u.damage < u.health);
+        const dead = newBench.filter((u) => u.damage >= u.health);
+        for (const d of dead) allDeadUnits.push({ unit: d, seat });
+        deadCountBySeat[seat] = dead.length;
+        newPlayers[seat] = {
+          ...player,
+          bench: survivors,
+          championCounters: {
+            ...player.championCounters,
+            alliesDied: player.championCounters.alliesDied + dead.length,
+          },
+        };
+      }
+      const totalDied = deadCountBySeat[0] + deadCountBySeat[1];
+      for (const seat of [0, 1] as const) {
+        newPlayers[seat] = {
+          ...newPlayers[seat],
+          championCounters: {
+            ...newPlayers[seat].championCounters,
+            unitsDied: newPlayers[seat].championCounters.unitsDied + totalDied,
+          },
+        };
+      }
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const { unit, seat } of allDeadUnits) {
+        newState = triggerLastBreath(newState, unit, seat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
     case "buff-all-allies-round": {
       // Phase 3.30 : +power/+health round à tous les alliés du caster
       // (sans grant keyword). Mirror de combo-buff-keyword-all-allies-round
