@@ -1694,7 +1694,25 @@ export type SpellEffect =
   | {
       type: "auto-discard-and-damage-target-any-or-nexus";
       amount: number;
-    };
+    }
+  // Phase 3.56 — Hand-card creation.
+  // Cible : unité blessée (any side) → tuée + un sort spellCardCode est
+  // créé dans la main du caster. 01NX022 Guillotine noxienne (créé une
+  // copie de soi en main).
+  | {
+      type: "kill-wounded-target-and-create-spell-in-hand";
+      spellCardCode: string;
+    }
+  // Cible : adepte allié → inflige damage. S'il survit, crée une copie
+  // de lui (cardCode) dans la main. 01NX052 Sang pour sang.
+  | {
+      type: "damage-ally-create-copy-in-hand-if-survives";
+      damage: number;
+    }
+  // Cible : adepte (any side) → crée une copie dans la main du caster
+  // avec un cardBuff Ephemeral (la copie sera Ephemeral quand jouée).
+  // 01SI047 Vagues souvenirs.
+  | { type: "create-ephemeral-copy-of-target-in-hand" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2121,6 +2139,23 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     type: "auto-discard-and-damage-target-any-or-nexus",
     amount: 3,
   },
+
+  // ── Phase 3.56 (hand-card creation)
+  // 01NX022 (Noxus, 3 Fast, Guillotine noxienne) — kill une unité
+  // blessée (any side) + crée 1 copie de soi dans la main du caster.
+  "01NX022": {
+    type: "kill-wounded-target-and-create-spell-in-hand",
+    spellCardCode: "01NX022",
+  },
+  // 01NX052 (Noxus, 2 Burst, Sang pour sang) — 1 dmg à un adepte allié.
+  // S'il survit, crée une copie en main.
+  "01NX052": {
+    type: "damage-ally-create-copy-in-hand-if-survives",
+    damage: 1,
+  },
+  // 01SI047 (ShadowIsles, 0 Burst, Vagues souvenirs) — crée une copie
+  // de l'adepte ciblé dans la main du caster (avec cardBuff Ephemeral).
+  "01SI047": { type: "create-ephemeral-copy-of-target-in-hand" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2196,6 +2231,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "recall-ally-and-summon-token":
     case "ally-strikes-all-enemies-in-combat":
     case "grant-keyword-2-allies-round":
+    case "damage-ally-create-copy-in-hand-if-survives":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -2203,6 +2239,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "drain-target-any":
     case "deal-damage-anywhere-if-ally-died":
     case "drain-target-summon-token":
+    case "kill-wounded-target-and-create-spell-in-hand":
+    case "create-ephemeral-copy-of-target-in-hand":
       return "any";
     case "deal-damage-target-any-or-nexus":
       return "any-or-nexus";

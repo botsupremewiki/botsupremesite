@@ -246,6 +246,18 @@ export function botAct(
           .sort((a, b) => b.damage - a.damage);
         if (wounded.length === 0) continue;
         targetUid = wounded[0].uid;
+      } else if (effect.type === "damage-ally-create-copy-in-hand-if-survives") {
+        // Phase 3.56 : Sang pour sang. Pick adepte allié qui survit aux
+        // dmg (pour bénéficier de la copie en main). Skip si aucun.
+        const survivable = player.bench
+          .filter((u) => {
+            const c = getCard(u.cardCode);
+            return c?.supertype !== "Champion";
+          })
+          .filter((u) => u.health - u.damage > effect.damage)
+          .sort((a, b) => b.power + b.health - (a.power + a.health));
+        if (survivable.length === 0) continue;
+        targetUid = survivable[0].uid;
       } else if (effect.type === "drain-ally") {
         // Phase 3.24 : Absorbe-âme. Préfère un allié dont la mort serait
         // OK (low health restant) ou skip si banc vide / champion only.
@@ -475,6 +487,40 @@ export function botAct(
         } else if (player.bench.length > 0) {
           targetUid = player.bench[0].uid;
         } else continue;
+      } else if (effect.type === "kill-wounded-target-and-create-spell-in-hand") {
+        // Phase 3.56 : Guillotine. Pick une unité ennemie blessée si
+        // possible, sinon allié blessé sacrifiable, sinon skip.
+        const woundedEnemy = [...opponent.bench]
+          .filter((u) => u.damage > 0)
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        const woundedAlly = [...player.bench]
+          .filter((u) => u.damage > 0)
+          .filter((u) => {
+            const c = getCard(u.cardCode);
+            return c?.supertype !== "Champion";
+          })
+          .sort((a, b) => a.power + a.health - (b.power + b.health))[0];
+        if (woundedEnemy) targetUid = woundedEnemy.uid;
+        else if (woundedAlly) targetUid = woundedAlly.uid;
+        else continue;
+      } else if (effect.type === "create-ephemeral-copy-of-target-in-hand") {
+        // Phase 3.56 : Vagues souvenirs. Préfère un adepte ennemi gros
+        // (qu'on copie pour notre side), fallback ally adept gros.
+        const enemyAdept = opponent.bench
+          .filter((u) => {
+            const c = getCard(u.cardCode);
+            return c?.supertype !== "Champion";
+          })
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        const allyAdept = player.bench
+          .filter((u) => {
+            const c = getCard(u.cardCode);
+            return c?.supertype !== "Champion";
+          })
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        if (enemyAdept) targetUid = enemyAdept.uid;
+        else if (allyAdept) targetUid = allyAdept.uid;
+        else continue;
       } else if (effect.type === "drain-target-summon-token") {
         // Phase 3.42 : Vil festin. Préfère un ennemi (heal nexus + summon)
         // sinon un allié faible. Skip si banc plein (token gaspillé).

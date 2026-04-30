@@ -1129,6 +1129,16 @@ function validateSpellTarget(
         };
       }
     }
+    // Phase 3.56 : Sang pour sang — adept (non-Champion).
+    if (effect.type === "damage-ally-create-copy-in-hand-if-survives") {
+      const card = getCard(allyUnit.cardCode);
+      if (card?.supertype === "Champion") {
+        return {
+          ok: false,
+          error: "Cible invalide : un adepte allié (non-Champion) est requis.",
+        };
+      }
+    }
     // Phase 3.48 : Jugement requiert que la cible soit au combat.
     if (effect.type === "ally-strikes-all-enemies-in-combat") {
       if (!state.attackInProgress) {
@@ -1288,6 +1298,25 @@ function validateSpellTarget(
       return {
         ok: false,
         error: `Cible invalide : l'unité doit avoir ${effect.maxPower} puissance ou moins (${found.power} actuel).`,
+      };
+    }
+  }
+  // Phase 3.56 : Guillotine noxienne — cible doit être blessée.
+  if (effect.type === "kill-wounded-target-and-create-spell-in-hand") {
+    if (found.damage <= 0) {
+      return {
+        ok: false,
+        error: "Cible invalide : l'unité doit être blessée.",
+      };
+    }
+  }
+  // Phase 3.56 : Vagues souvenirs — cible doit être un adepte (non-Champion).
+  if (effect.type === "create-ephemeral-copy-of-target-in-hand") {
+    const card = getCard(found.cardCode);
+    if (card?.supertype === "Champion") {
+      return {
+        ok: false,
+        error: "Cible invalide : un adepte (non-Champion) est requis.",
       };
     }
   }
@@ -2054,6 +2083,125 @@ function applySpellEffect(
         if (newState.phase === "ended") return newState;
       }
       return newState;
+    }
+    case "kill-wounded-target-and-create-spell-in-hand": {
+      // Phase 3.56 : Guillotine noxienne. Tue cible blessée + crée
+      // spellCardCode dans la main du caster. Validation déjà faite.
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) targetSeat = casterSeat;
+      else if (newPlayers[oppSeat].bench.find((u) => u.uid === targetUid))
+        targetSeat = oppSeat;
+      if (targetSeat === null) return state;
+      const targetPlayer = newPlayers[targetSeat];
+      const idx = targetPlayer.bench.findIndex((u) => u.uid === targetUid);
+      const dyingUnit = targetPlayer.bench[idx];
+      const newBench = [
+        ...targetPlayer.bench.slice(0, idx),
+        ...targetPlayer.bench.slice(idx + 1),
+      ];
+      newPlayers[targetSeat] = {
+        ...targetPlayer,
+        bench: newBench,
+        alliesDiedThisRound: targetPlayer.alliesDiedThisRound + 1,
+        championCounters: {
+          ...targetPlayer.championCounters,
+          alliesDied: targetPlayer.championCounters.alliesDied + 1,
+          unitsDied: targetPlayer.championCounters.unitsDied + 1,
+        },
+      };
+      // Crée le spell dans la main du caster.
+      const newUid = `${casterSeat}-cr-${state.round}-${state.log.length}`;
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        hand: [...caster.hand, { uid: newUid, cardCode: effect.spellCardCode }],
+        championCounters: {
+          ...caster.championCounters,
+          unitsDied: caster.championCounters.unitsDied + 1,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      newState = triggerLastBreath(newState, dyingUnit, targetSeat);
+      return newState;
+    }
+    case "damage-ally-create-copy-in-hand-if-survives": {
+      // Phase 3.56 : Sang pour sang. 1 dmg à l'adepte allié. S'il survit,
+      // crée une copie en main.
+      const player = newPlayers[casterSeat];
+      const target = player.bench.find((u) => u.uid === targetUid);
+      if (!target) return state;
+      const updatedBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.damage);
+        return copy;
+      });
+      const survivor = updatedBench.find(
+        (u) => u.uid === targetUid && u.damage < u.health,
+      );
+      const dead = updatedBench.find(
+        (u) => u.uid === targetUid && u.damage >= u.health,
+      );
+      const newBench = updatedBench.filter((u) => u.damage < u.health);
+      let newCard: { uid: string; cardCode: string } | null = null;
+      if (survivor) {
+        newCard = {
+          uid: `${casterSeat}-cp-${state.round}-${state.log.length}`,
+          cardCode: target.cardCode,
+        };
+      }
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: newBench,
+        hand: newCard ? [...player.hand, newCard] : player.hand,
+        alliesDiedThisRound: player.alliesDiedThisRound + (dead ? 1 : 0),
+        championCounters: {
+          ...player.championCounters,
+          alliesDied: player.championCounters.alliesDied + (dead ? 1 : 0),
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (dead) newState = triggerLastBreath(newState, dead, casterSeat);
+      return newState;
+    }
+    case "create-ephemeral-copy-of-target-in-hand": {
+      // Phase 3.56 : Vagues souvenirs. Crée une copie de l'adepte ciblé
+      // dans la main avec un cardBuff Ephemeral pour qu'il soit Ephemeral
+      // quand joué.
+      let target: RuneterraBattleUnit | undefined;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) target = casterUnit;
+      else
+        target = newPlayers[oppSeat].bench.find((u) => u.uid === targetUid);
+      if (!target) return state;
+      const newUid = `${casterSeat}-ec-${state.round}-${state.log.length}`;
+      const caster = newPlayers[casterSeat];
+      const newCardBuffs = { ...caster.cardBuffs };
+      newCardBuffs[newUid] = {
+        powerDelta: 0,
+        healthDelta: 0,
+        costDelta: 0,
+        addKeywords: ["Ephemeral"],
+      };
+      newPlayers[casterSeat] = {
+        ...caster,
+        hand: [...caster.hand, { uid: newUid, cardCode: target.cardCode }],
+        cardBuffs: newCardBuffs,
+      };
+      const cardName = getCard(target.cardCode)?.name ?? target.cardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${caster.username} ajoute une copie éphémère de ${cardName} à sa main.`,
+        ],
+      };
     }
     case "buff-all-allies-permanent": {
       // Phase 3.55 : +pwr/+hp permanent à tous les alliés sur le banc.
