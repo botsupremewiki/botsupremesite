@@ -1482,7 +1482,11 @@ export type SpellEffect =
   // Sans cible : invoque N copies du token cardCode sur le banc du caster
   // (capé à maxBench). Pour Gadget de bric et de brac (01PZ057) et
   // Relique hantée (01SI007).
-  | { type: "summon-tokens"; cardCode: string; count: number };
+  | { type: "summon-tokens"; cardCode: string; count: number }
+  // Phase 3.27
+  // Cible : allié → tué (Last Breath déclenché) puis caster pioche
+  // drawCount cartes. Aperçu de l'au-delà (01SI049 : 2 cartes).
+  | { type: "kill-ally-for-draw"; drawCount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1657,6 +1661,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI007 (Relique hantée, ShadowIsles, 2 Slow) — summon 3 × Esprit
   // déchaîné (token 01SI007T1, 1|1 Ephemeral).
   "01SI007": { type: "summon-tokens", cardCode: "01SI007T1", count: 3 },
+
+  // ── Phase 3.27
+  // 01SI049 (Aperçu de l'au-delà, ShadowIsles, 2 Fast) — sacrifice un
+  // allié (Last Breath déclenché) pour piocher 2 cartes.
+  "01SI049": { type: "kill-ally-for-draw", drawCount: 2 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1715,6 +1724,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-keywords-ally-round":
     case "heal-ally-full":
     case "drain-ally":
+    case "kill-ally-for-draw":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":

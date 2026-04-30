@@ -1583,6 +1583,42 @@ function applySpellEffect(
       newPlayers[targetSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "kill-ally-for-draw": {
+      // Phase 3.27 : tue l'allié ciblé (Last Breath déclenché) puis le
+      // caster pioche drawCount cartes. Validation faite en amont (target
+      // sur banc allié).
+      const player = newPlayers[casterSeat];
+      const idx = player.bench.findIndex((u) => u.uid === targetUid);
+      if (idx === -1) return state;
+      const dyingUnit = player.bench[idx];
+      const newBench = [
+        ...player.bench.slice(0, idx),
+        ...player.bench.slice(idx + 1),
+      ];
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: newBench,
+        championCounters: {
+          ...player.championCounters,
+          alliesDied: player.championCounters.alliesDied + 1,
+          unitsDied: player.championCounters.unitsDied + 1,
+        },
+      };
+      newPlayers[oppSeat] = {
+        ...newPlayers[oppSeat],
+        championCounters: {
+          ...newPlayers[oppSeat].championCounters,
+          unitsDied: newPlayers[oppSeat].championCounters.unitsDied + 1,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      // Trigger Last Breath de l'unité sacrifiée.
+      newState = triggerLastBreath(newState, dyingUnit, casterSeat);
+      if (newState.phase === "ended") return newState;
+      // Pioche drawCount cartes pour le caster.
+      const drawResult = drawCards(newState, casterSeat, effect.drawCount);
+      return drawResult.state;
+    }
     case "summon-tokens": {
       // Phase 3.26 : invoque effect.count copies du token effect.cardCode
       // sur le banc du caster (capé à maxBench).
