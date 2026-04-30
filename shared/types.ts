@@ -1721,6 +1721,28 @@ export type SpellEffect =
       type: "create-random-spell-in-hand-from-regions";
       minCost?: number;
       restoreSpellMana?: boolean;
+    }
+  // Phase 3.58 — Counter-based conditional summons.
+  // Sans cible : invoque un adepte (non-Champion) aléatoire collectible
+  // de la région et cost donnés. 01DE033 (Demacia, cost 5).
+  | {
+      type: "summon-random-adept-from-region-cost";
+      region: string;
+      cost: number;
+    }
+  // Sans cible : si caster a joué ≥ minUnique cardCodes uniques cette
+  // partie, summon 1 × tokenCardCode. 01PZ033 Chatastrophe (≥ 20).
+  | {
+      type: "summon-token-if-unique-cards-played-min";
+      tokenCardCode: string;
+      minUnique: number;
+    }
+  // Sans cible : si caster a un allié de subtype donné, summon 1 ×
+  // tokenCardCode. Sinon ajoute le token au sommet du deck. 01FR051.
+  | {
+      type: "summon-token-or-add-to-deck-if-no-subtype-ally";
+      tokenCardCode: string;
+      subtype: string;
     };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
@@ -2177,6 +2199,30 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01IO054 (Ionia, 2 Burst, Sagesse ancestrale) — crée un sort aléatoire
   // depuis les régions du caster (Illumination skip).
   "01IO054": { type: "create-random-spell-in-hand-from-regions" },
+
+  // ── Phase 3.58 (counter-based conditional)
+  // 01DE033 (Demacia, 6 Slow) — invoque un adepte aléatoire de cost 5
+  // de Demacia. Cost reduction par morts d'alliés ce round : TODO
+  // (nécessite un cost dynamique au play-time).
+  "01DE033": {
+    type: "summon-random-adept-from-region-cost",
+    region: "Demacia",
+    cost: 5,
+  },
+  // 01PZ033 (PiltoverZaun, 5 Slow) — si caster a joué ≥ 20 cardCodes
+  // uniques cette partie, invoque 01PZ033T1 (Chatastrophe, 30/30).
+  "01PZ033": {
+    type: "summon-token-if-unique-cards-played-min",
+    tokenCardCode: "01PZ033T1",
+    minUnique: 20,
+  },
+  // 01FR051 (Freljord, 3 Slow) — si caster a un allié YÉTI, summon
+  // 01FR028 (Yéti furieux, 5/5). Sinon ajoute le token au sommet du deck.
+  "01FR051": {
+    type: "summon-token-or-add-to-deck-if-no-subtype-ally",
+    tokenCardCode: "01FR028",
+    subtype: "YÉTI",
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2304,6 +2350,9 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "buff-all-allies-permanent":
     case "auto-discard-and-draw-up-to-n":
     case "create-random-spell-in-hand-from-regions":
+    case "summon-random-adept-from-region-cost":
+    case "summon-token-if-unique-cards-played-min":
+    case "summon-token-or-add-to-deck-if-no-subtype-ally":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";
@@ -3585,6 +3634,8 @@ export type OnePiecePendingChoiceKind =
   | "select-target" // Sélectionner une cible générique (Leader ou Persos)
   | "play-from-hand" // Choisir 1 Persos de la main à jouer gratuitement (Crocodile, Trafalgar Law, Lim, Baggy, etc.)
   | "play-from-discard" // Choisir 1 Persos de la défausse à jouer (épuisé) gratuitement (Gecko Moria, Sanji)
+  | "ko-multi-combined-power" // KO ≤ N Persos adv avec contrainte power combinée (Disparais OP09-018)
+  | "reorder-top-deck" // Regarder N cartes top deck + réorganiser top/bottom (Hancock ST17-004)
   | "yes-no"; // Choix oui/non simple (l'effet est-il activé ?)
 
 export type OnePiecePendingChoice = {
@@ -3657,8 +3708,11 @@ export type OnePieceBattleClientMessage =
       skipped: boolean;
       selection?: {
         targetUid?: string; // ko-character / buff-target / select-target
+        targetUids?: string[]; // ko-multi-combined-power
         handIndices?: number[]; // discard-card
         yesNo?: boolean; // yes-no
+        // reorder-top-deck : ordre + placement de chaque carte révélée.
+        reorderTopDeck?: { cardId: string; placement: "top" | "bottom" }[];
       };
     }
   | { type: "op-end-turn" }

@@ -105,6 +105,9 @@ export type InternalPlayer = {
       addKeywords: string[];
     }
   >;
+  // Phase 3.58 : cardCodes uniques joués cette partie (Unit + Spell).
+  // Sert pour 01PZ033 (≥ 20 = invoque Chatastrophe).
+  uniqueCardCodesPlayedThisGame: string[];
   // Phase 3.5 + 3.9c + 3.10 : compteurs globaux pour conditions de level-up.
   championCounters: {
     alliesDied: number; // pour Lucian, Hécarim, etc.
@@ -261,6 +264,7 @@ export function createInitialState(
     alliesDiedThisRound: 0,
     deadAlliesThisRound: [],
     cardBuffs: {},
+    uniqueCardCodesPlayedThisGame: [],
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -909,12 +913,19 @@ export function playUnit(
   // Phase 3.54 : retire le cardBuff de la main (consommé).
   const newCardBuffs = { ...player.cardBuffs };
   delete newCardBuffs[handCard.uid];
+  // Phase 3.58 : track unique cardCodes joués cette partie.
+  const uniqueCodes = player.uniqueCardCodesPlayedThisGame.includes(
+    handCard.cardCode,
+  )
+    ? player.uniqueCardCodesPlayedThisGame
+    : [...player.uniqueCardCodesPlayedThisGame, handCard.cardCode];
   const updatedPlayer: InternalPlayer = {
     ...player,
     hand: newHand,
     bench: newBench,
     mana: player.mana - effectiveCost,
     cardBuffs: newCardBuffs,
+    uniqueCardCodesPlayedThisGame: uniqueCodes,
     championCounters: {
       ...player.championCounters,
       techPowerSummoned:
@@ -1011,11 +1022,18 @@ export function playSpell(
     targetUid !== null &&
     targetUid !== undefined &&
     state.players[otherSeat(seatIdx)].bench.some((u) => u.uid === targetUid);
+  // Phase 3.58 : track unique cardCodes joués cette partie.
+  const uniqueCodes = player.uniqueCardCodesPlayedThisGame.includes(
+    handCard.cardCode,
+  )
+    ? player.uniqueCardCodesPlayedThisGame
+    : [...player.uniqueCardCodesPlayedThisGame, handCard.cardCode];
   const updatedPlayer: InternalPlayer = {
     ...player,
     hand: newHand,
     mana: player.mana - fromMana,
     spellMana: player.spellMana - fromSpellMana,
+    uniqueCardCodesPlayedThisGame: uniqueCodes,
     championCounters: {
       ...player.championCounters,
       spellsCast: player.championCounters.spellsCast + 1,
@@ -2200,6 +2218,106 @@ function applySpellEffect(
         log: [
           ...state.log,
           `${caster.username} ajoute une copie éphémère de ${cardName} à sa main.`,
+        ],
+      };
+    }
+    case "summon-random-adept-from-region-cost": {
+      // Phase 3.58 : pick un adepte (non-Champion) collectible aléatoire
+      // matching region + cost, summon sur le banc du caster.
+      const cfgSR = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      if (player.bench.length >= cfgSR.maxBench) return state;
+      const candidates: RuneterraCardData[] = [];
+      for (const card of RUNETERRA_BASE_SET_BY_CODE.values()) {
+        if (card.type !== "Unit") continue;
+        if (card.supertype === "Champion") continue;
+        if (!card.collectible) continue;
+        if (card.cost !== effect.cost) continue;
+        if (!card.regions?.includes(effect.region)) continue;
+        candidates.push(card);
+      }
+      if (candidates.length === 0) return state;
+      const picked = candidates[Math.floor(Math.random() * candidates.length)];
+      const newUid = `${casterSeat}-sr-${state.round}-${state.log.length}`;
+      const newUnit = createUnit(newUid, picked.cardCode);
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, newUnit],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${picked.name} (adepte ${effect.region} aléatoire).`,
+        ],
+      };
+    }
+    case "summon-token-if-unique-cards-played-min": {
+      // Phase 3.58 : Chatastrophe. Si uniqueCardCodesPlayedThisGame ≥
+      // minUnique, summon tokenCardCode. Sinon no-op.
+      const cfgUC = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      if (player.uniqueCardCodesPlayedThisGame.length < effect.minUnique) {
+        return state;
+      }
+      if (player.bench.length >= cfgUC.maxBench) return state;
+      const tokenCard = getCard(effect.tokenCardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return state;
+      const newUid = `${casterSeat}-uc-${state.round}-${state.log.length}`;
+      const newUnit = createUnit(newUid, effect.tokenCardCode);
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, newUnit],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${tokenCard.name} (≥ ${effect.minUnique} cartes uniques jouées).`,
+        ],
+      };
+    }
+    case "summon-token-or-add-to-deck-if-no-subtype-ally": {
+      // Phase 3.58 : si caster a un allié du subtype, summon le token
+      // sur le banc. Sinon, push au top du deck (start of next pioche).
+      const cfgYE = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const hasSubtypeAlly = player.bench.some((u) => {
+        const card = getCard(u.cardCode);
+        return card?.subtypes?.includes(effect.subtype);
+      });
+      const tokenCard = getCard(effect.tokenCardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return state;
+      const newUid = `${casterSeat}-yt-${state.round}-${state.log.length}`;
+      if (hasSubtypeAlly) {
+        if (player.bench.length >= cfgYE.maxBench) return state;
+        const newUnit = createUnit(newUid, effect.tokenCardCode);
+        newPlayers[casterSeat] = {
+          ...player,
+          bench: [...player.bench, newUnit],
+        };
+        return {
+          ...state,
+          players: newPlayers,
+          log: [
+            ...state.log,
+            `${player.username} invoque ${tokenCard.name}.`,
+          ],
+        };
+      }
+      // Push au top du deck.
+      newPlayers[casterSeat] = {
+        ...player,
+        deck: [{ uid: newUid, cardCode: effect.tokenCardCode }, ...player.deck],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} ajoute ${tokenCard.name} au sommet de son deck.`,
         ],
       };
     }

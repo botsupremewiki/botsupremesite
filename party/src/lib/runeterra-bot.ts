@@ -209,6 +209,27 @@ export function botAct(
       if (effect.type === "grant-keyword-ally-in-hand-and-draw") {
         // Toujours utile (au moins le draw, même sans Unit en main).
       }
+      if (
+        effect.type === "summon-random-adept-from-region-cost" &&
+        player.bench.length >= 6
+      ) {
+        continue; // banc plein
+      }
+      if (effect.type === "summon-token-if-unique-cards-played-min") {
+        if (player.bench.length >= 6) continue;
+        if (player.uniqueCardCodesPlayedThisGame.length < effect.minUnique) {
+          continue;
+        }
+      }
+      if (effect.type === "summon-token-or-add-to-deck-if-no-subtype-ally") {
+        // Toujours utile (au moins ajout au deck), mais skip si on a
+        // déjà un allié subtype + banc plein (ne summon pas).
+        const hasSubtype = player.bench.some((u) => {
+          const c = getCard(u.cardCode);
+          return c?.subtypes?.includes(effect.subtype);
+        });
+        if (hasSubtype && player.bench.length >= 6) continue;
+      }
       if (effect.type === "buff-allies-of-subtype-everywhere") {
         const hasAnySubtype = [
           ...player.bench,
