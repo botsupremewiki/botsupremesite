@@ -1637,6 +1637,9 @@ export default class OnePieceBattleServer implements Party.Server {
       this.botActScheduled = false;
       try {
         if (this.phase === "mulligan") this.botDoMulligan();
+        // Le bot doit résoudre les pendingChoice ouverts sur son seat
+        // (peu importe que ce soit son tour ou pas — Linlin force l'adv).
+        else if (this.pendingChoice?.seat === "p2") this.botResolveChoice();
         else if (this.pendingTrigger?.defenderSeat === "p2")
           this.botResolveTrigger();
         else if (
@@ -1649,6 +1652,384 @@ export default class OnePieceBattleServer implements Party.Server {
         console.warn("[op-bot] threw:", err);
       }
     }, BOT_ACTION_DELAY_MS);
+  }
+
+  /** Variante interne de handleResolveChoice utilisée par le bot — pas
+   *  de validation de connexion / pas d'envoi d'erreur côté client. */
+  private _botResolve(
+    choiceId: string,
+    skipped: boolean,
+    selection: ChoiceSelection,
+  ) {
+    const pending = this.pendingChoice;
+    if (!pending || pending.id !== choiceId) return;
+    const cardNumber = pending.sourceCardNumber;
+    const sourceUid = pending.sourceUid;
+    const sourceSeat = pending.seat;
+    this.pendingChoice = null;
+    if (skipped) this.pushLog(`[Bot] effet ignoré.`);
+    const handler = CARD_HANDLERS[cardNumber];
+    if (handler) {
+      try {
+        handler({
+          hook: "on-choice-resolved",
+          sourceUid,
+          sourceSeat,
+          battle: this.getBattleAccess(),
+          choice: { skipped, selection },
+        });
+      } catch (err) {
+        console.warn(`[op-bot] resolve threw for ${cardNumber}:`, err);
+      }
+    }
+    this.broadcastState();
+    // Si un nouveau pendingChoice a été ouvert, replanifier le bot.
+    this.maybeBotAct();
+  }
+
+  /** Le bot résout un PendingChoice ouvert sur son seat. Stratégie simple
+   *  par kind — favorise les actions agressives qui résolvent l'effet,
+   *  skip si cancellable et aucune cible évidente. */
+  private botResolveChoice() {
+    const pending = this.pendingChoice;
+    if (!pending || pending.seat !== "p2") return;
+    const bot = this.seats.p2;
+    const opp = this.seats.p1;
+    if (!bot) return;
+    const skip = () => {
+      this._botResolve(pending.id, true, {});
+    };
+    const respond = (selection: ChoiceSelection) => {
+      this._botResolve(pending.id, false, selection);
+    };
+
+    switch (pending.kind) {
+      case "ko-character": {
+        if (!opp || opp.characters.length === 0) return skip();
+        const maxCost =
+          typeof pending.params.maxCost === "number"
+            ? pending.params.maxCost
+            : null;
+        const maxPower =
+          typeof pending.params.maxPower === "number"
+            ? pending.params.maxPower
+            : null;
+        const onlyRested = pending.params.onlyRested === true;
+        const requireTrigger = pending.params.requireTrigger === true;
+        // Cherche le Persos adv le plus cher qui matche les filtres
+        // (= cible la plus précieuse).
+        let best: { uid: string; cost: number } | null = null;
+        for (const c of opp.characters) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+          if (!meta || meta.kind !== "character") continue;
+          if (
+            maxCost !== null &&
+            meta.cost + (c.costBuff ?? 0) > maxCost
+          )
+            continue;
+          if (maxPower !== null) {
+            const power = meta.power + c.attachedDon * 1000;
+            if (power > maxPower) continue;
+          }
+          if (onlyRested && !c.rested) continue;
+          if (requireTrigger && !meta.trigger) continue;
+          if (!best || meta.cost > best.cost) {
+            best = { uid: c.uid, cost: meta.cost };
+          }
+        }
+        if (!best) return skip();
+        return respond({ targetUid: best.uid });
+      }
+      case "ko-character-own": {
+        // Le bot ne sacrifie ses Persos que si c'est obligatoire (skip
+        // sinon — cancellable check). Si non-cancellable, sacrifie le
+        // moins cher.
+        if (pending.cancellable) return skip();
+        if (bot.characters.length === 0) return skip();
+        let weakest = bot.characters[0];
+        for (const c of bot.characters) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+          const wMeta = ONEPIECE_BASE_SET_BY_ID.get(weakest.cardId);
+          if (
+            meta &&
+            wMeta &&
+            "cost" in meta &&
+            "cost" in wMeta &&
+            meta.cost < wMeta.cost
+          )
+            weakest = c;
+        }
+        return respond({ targetUid: weakest.uid });
+      }
+      case "buff-target": {
+        const allowLeader = pending.params.allowLeader !== false;
+        const requireType =
+          typeof pending.params.requireType === "string"
+            ? pending.params.requireType.toLowerCase()
+            : null;
+        const onlyRested = pending.params.onlyRested === true;
+        // Préfère un Persos rested (si onlyRested) ou le Leader.
+        if (onlyRested) {
+          for (const c of bot.characters) {
+            if (!c.rested) continue;
+            const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+            if (
+              requireType &&
+              !meta?.types.some((t) =>
+                t.toLowerCase().includes(requireType),
+              )
+            )
+              continue;
+            return respond({ targetUid: c.uid });
+          }
+          return skip();
+        }
+        if (allowLeader && bot.leaderId) {
+          if (requireType) {
+            const lmeta = ONEPIECE_BASE_SET_BY_ID.get(bot.leaderId);
+            if (
+              lmeta?.types.some((t) =>
+                t.toLowerCase().includes(requireType),
+              )
+            ) {
+              return respond({ targetUid: "leader" });
+            }
+          } else {
+            return respond({ targetUid: "leader" });
+          }
+        }
+        // Fallback : Persos qui matche le type filter.
+        for (const c of bot.characters) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+          if (
+            requireType &&
+            !meta?.types.some((t) => t.toLowerCase().includes(requireType))
+          )
+            continue;
+          return respond({ targetUid: c.uid });
+        }
+        return skip();
+      }
+      case "discard-card": {
+        const count =
+          typeof pending.params.count === "number" ? pending.params.count : 1;
+        const requireType =
+          typeof pending.params.requireType === "string"
+            ? pending.params.requireType.toLowerCase()
+            : null;
+        const requireColor =
+          typeof pending.params.requireColor === "string"
+            ? pending.params.requireColor.toLowerCase()
+            : null;
+        const requireTrigger = pending.params.requireTrigger === true;
+        // Choisit les cartes éligibles les moins chères (préserver
+        // les bombs).
+        const eligible: { i: number; cost: number }[] = [];
+        for (let i = 0; i < bot.hand.length; i++) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(bot.hand[i].cardId);
+          if (!meta) continue;
+          if (
+            requireType &&
+            !meta.types.some((t) => t.toLowerCase().includes(requireType))
+          )
+            continue;
+          if (
+            requireColor &&
+            meta.kind !== "don" &&
+            !meta.color.some((c: string) =>
+              c.toLowerCase().includes(requireColor),
+            )
+          )
+            continue;
+          if (requireColor && meta.kind === "don") continue;
+          if (requireTrigger && !meta.trigger) continue;
+          const cost = "cost" in meta ? meta.cost : 999;
+          eligible.push({ i, cost });
+        }
+        eligible.sort((a, b) => a.cost - b.cost);
+        const picked = eligible.slice(0, count);
+        if (picked.length < count && !pending.cancellable) {
+          // Discard random pour atteindre count si pas cancellable.
+          for (let i = 0; i < bot.hand.length && picked.length < count; i++) {
+            if (!picked.some((p) => p.i === i)) {
+              picked.push({ i, cost: 0 });
+            }
+          }
+        }
+        if (picked.length === 0) return skip();
+        return respond({ handIndices: picked.map((p) => p.i) });
+      }
+      case "select-target": {
+        // Bot stratégie : si allowLeader, cible Leader (impact maximal).
+        // Sinon, plus chère cible adv.
+        const allowLeader = pending.params.allowLeader !== false;
+        if (allowLeader && opp?.leaderId) {
+          return respond({ targetUid: "leader" });
+        }
+        if (!opp || opp.characters.length === 0) return skip();
+        let best = opp.characters[0];
+        for (const c of opp.characters) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+          const bMeta = ONEPIECE_BASE_SET_BY_ID.get(best.cardId);
+          if (
+            meta &&
+            bMeta &&
+            "cost" in meta &&
+            "cost" in bMeta &&
+            meta.cost > bMeta.cost
+          )
+            best = c;
+        }
+        return respond({ targetUid: best.uid });
+      }
+      case "play-from-hand": {
+        const maxCost =
+          typeof pending.params.maxCost === "number"
+            ? pending.params.maxCost
+            : null;
+        const requireType =
+          typeof pending.params.requireType === "string"
+            ? pending.params.requireType.toLowerCase()
+            : null;
+        const requireColor =
+          typeof pending.params.requireColor === "string"
+            ? pending.params.requireColor.toLowerCase()
+            : null;
+        const excludeName =
+          typeof pending.params.excludeName === "string"
+            ? pending.params.excludeName
+            : null;
+        // Cherche le Persos le plus cher qui matche.
+        let best: { i: number; cost: number } | null = null;
+        for (let i = 0; i < bot.hand.length; i++) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(bot.hand[i].cardId);
+          if (!meta || meta.kind !== "character") continue;
+          if (maxCost !== null && meta.cost > maxCost) continue;
+          if (excludeName && meta.name === excludeName) continue;
+          if (
+            requireType &&
+            !meta.types.some((t) => t.toLowerCase().includes(requireType))
+          )
+            continue;
+          if (
+            requireColor &&
+            !meta.color.some((c: string) =>
+              c.toLowerCase().includes(requireColor),
+            )
+          )
+            continue;
+          if (!best || meta.cost > best.cost) {
+            best = { i, cost: meta.cost };
+          }
+        }
+        if (!best) return skip();
+        return respond({ handIndices: [best.i] });
+      }
+      case "play-from-discard": {
+        const maxCost =
+          typeof pending.params.maxCost === "number"
+            ? pending.params.maxCost
+            : null;
+        const requireType =
+          typeof pending.params.requireType === "string"
+            ? pending.params.requireType.toLowerCase()
+            : null;
+        const excludeName =
+          typeof pending.params.excludeName === "string"
+            ? pending.params.excludeName
+            : null;
+        let best: { i: number; cost: number } | null = null;
+        for (let i = 0; i < bot.discard.length; i++) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(bot.discard[i].cardId);
+          if (!meta || meta.kind !== "character") continue;
+          if (maxCost !== null && meta.cost > maxCost) continue;
+          if (excludeName && meta.name === excludeName) continue;
+          if (
+            requireType &&
+            !meta.types.some((t) => t.toLowerCase().includes(requireType))
+          )
+            continue;
+          if (!best || meta.cost > best.cost) {
+            best = { i, cost: meta.cost };
+          }
+        }
+        if (!best) return skip();
+        return respond({ handIndices: [best.i] });
+      }
+      case "ko-multi-combined-power": {
+        if (!opp || opp.characters.length === 0) return skip();
+        const maxN =
+          typeof pending.params.maxN === "number" ? pending.params.maxN : 2;
+        const maxCombinedPower =
+          typeof pending.params.maxCombinedPower === "number"
+            ? pending.params.maxCombinedPower
+            : 4000;
+        // Greedy : trier par power ascendant, prendre les + chers tant
+        // que le combiné reste ≤ max.
+        const sorted = [...opp.characters].sort((a, b) => {
+          const ma = ONEPIECE_BASE_SET_BY_ID.get(a.cardId);
+          const mb = ONEPIECE_BASE_SET_BY_ID.get(b.cardId);
+          const pa =
+            (ma && "power" in ma ? ma.power : 0) + a.attachedDon * 1000;
+          const pb =
+            (mb && "power" in mb ? mb.power : 0) + b.attachedDon * 1000;
+          return pb - pa;
+        });
+        const picked: string[] = [];
+        let total = 0;
+        for (const c of sorted) {
+          if (picked.length >= maxN) break;
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+          const power =
+            (meta && "power" in meta ? meta.power : 0) + c.attachedDon * 1000;
+          if (total + power <= maxCombinedPower) {
+            picked.push(c.uid);
+            total += power;
+          }
+        }
+        if (picked.length === 0) return skip();
+        return respond({ targetUids: picked });
+      }
+      case "reorder-top-deck": {
+        // Stratégie : place tout en top dans l'ordre révélé.
+        const peekedRaw = pending.params.peeked;
+        const peeked =
+          typeof peekedRaw === "string"
+            ? peekedRaw.split(",").filter((x) => x.length > 0)
+            : [];
+        const reorderTopDeck = peeked.map((cardId) => ({
+          cardId,
+          placement: "top" as const,
+        }));
+        return respond({ reorderTopDeck });
+      }
+      case "select-option": {
+        // Premier option par défaut (Bloqueur pour Catarina Devon).
+        const optionsRaw = pending.params.options;
+        const options =
+          typeof optionsRaw === "string"
+            ? optionsRaw.split("|").filter((x) => x.length > 0)
+            : [];
+        if (options.length === 0) return skip();
+        return respond({ selectedOption: options[0] });
+      }
+      case "yes-no": {
+        // Stratégie par défaut : OUI (la plupart des yes-no sont
+        // bénéfiques au bot ; pour Linlin opp-choice, le bot préfère
+        // perdre 1 Vie plutôt que défausser 2 cartes — heuristique).
+        // Détecte Linlin via sourceCardNumber.
+        if (pending.sourceCardNumber === "ST20-005-step2") {
+          // Linlin : OUI = défausse 2, NON = perd 1 Vie.
+          // Si vie ≥ 2 : préfère perdre 1 vie. Sinon défausse 2.
+          const lifeOK = bot.life.length >= 2;
+          return respond({ yesNo: !lifeOK });
+        }
+        return respond({ yesNo: true });
+      }
+      default: {
+        return skip();
+      }
+    }
   }
 
   private botDoMulligan() {
