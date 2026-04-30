@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { MarketClient } from "./market-client";
 import { OnePieceMarketClient } from "../_components/onepiece-market-client";
+import { LorMarketClient } from "../_components/lor-market-client";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,17 @@ export default async function MarketPage({
   if (gameId === "onepiece") {
     return (
       <OnePieceMarketClient
+        profile={profile}
+        initialActive={activeListings}
+        initialMine={myListings}
+        myCollection={myCollection}
+        favoriteIds={favoriteIds}
+      />
+    );
+  }
+  if (gameId === "lol") {
+    return (
+      <LorMarketClient
         profile={profile}
         initialActive={activeListings}
         initialMine={myListings}
