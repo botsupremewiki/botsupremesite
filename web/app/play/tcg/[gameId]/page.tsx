@@ -169,7 +169,6 @@ export default async function TcgGameHub({
               accent="text-emerald-200"
               border="border-emerald-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
-              comingSoon={gameId === "lol"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/pvp`}
@@ -179,7 +178,6 @@ export default async function TcgGameHub({
               accent="text-sky-200"
               border="border-sky-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.10),transparent_70%)]"
-              comingSoon={gameId === "lol"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/battle/ranked`}
@@ -191,7 +189,6 @@ export default async function TcgGameHub({
               accent="text-rose-200"
               border="border-rose-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,113,133,0.10),transparent_70%)]"
-              comingSoon={gameId === "lol"}
             />
             <MenuButton
               href={`/play/tcg/${gameId}/market`}
@@ -203,12 +200,16 @@ export default async function TcgGameHub({
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.10),transparent_70%)]"
               comingSoon={gameId === "lol"}
             />
-            {gameId === "onepiece" && (
+            {(gameId === "onepiece" || gameId === "lol") && (
               <MenuButton
                 href={`/play/tcg/${gameId}/regles`}
                 icon="📖"
                 title="Règles & Tutoriel"
-                description="Phases, mots-clés, combat, récompenses, tutoriel pas-à-pas"
+                description={
+                  gameId === "lol"
+                    ? "Mana, attack token, mots-clés, combat, level-up champions"
+                    : "Phases, mots-clés, combat, récompenses, tutoriel pas-à-pas"
+                }
                 accent="text-amber-200"
                 border="border-amber-400/40"
                 gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,191,36,0.10),transparent_70%)]"
