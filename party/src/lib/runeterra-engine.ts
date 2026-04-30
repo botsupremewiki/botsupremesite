@@ -19,6 +19,7 @@ import type {
   SpellEffect,
 } from "../../../shared/types";
 import {
+  RUNETERRA_ATTACK_EFFECTS,
   RUNETERRA_BATTLE_CONFIG,
   RUNETERRA_DISCARD_EFFECTS,
   RUNETERRA_IMBUE_EFFECTS,
@@ -754,6 +755,20 @@ export function triggerOnSummon(
   const effect = RUNETERRA_PLAY_EFFECTS[cardCode];
   if (!effect) return state;
   return applySpellEffect(state, casterSeat, effect, null, null, null, 0, summonedUid);
+}
+
+/** Phase 3.74 : déclenche l'effet on-attack d'un Unit si enregistré.
+ *  Appelé par declareAttack pour chaque attaquant. triggerSourceUid =
+ *  uid de l'attaquant (sert pour summon-token-copy-self-stats notamment). */
+export function triggerOnAttack(
+  state: InternalState,
+  cardCode: string,
+  attackerSeat: 0 | 1,
+  attackerUid: string,
+): InternalState {
+  const effect = RUNETERRA_ATTACK_EFFECTS[cardCode];
+  if (!effect) return state;
+  return applySpellEffect(state, attackerSeat, effect, null, null, null, 0, attackerUid);
 }
 
 /** Phase 3.34 : helper qui bumpe alliesDiedThisRound (per-round) ET
@@ -2995,6 +3010,114 @@ function applySpellEffect(
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "damage-all-enemies-and-nexus": {
+      // Phase 3.74 : Anivia attack. amount dmg à tous les ennemis +
+      // amount dmg au nexus ennemi. Last Breath déclenché pour chaque mort.
+      const opp = newPlayers[oppSeat];
+      const newBench = opp.bench.map((u) => {
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = newBench.filter((u) => u.damage < u.health);
+      const dead = newBench.filter((u) => u.damage >= u.health);
+      const newNexus = opp.nexusHealth - effect.amount;
+      newPlayers[oppSeat] = {
+        ...opp,
+        bench: survivors,
+        nexusHealth: newNexus,
+        alliesDiedThisRound: opp.alliesDiedThisRound + dead.length,
+        championCounters: {
+          ...opp.championCounters,
+          alliesDied: opp.championCounters.alliesDied + dead.length,
+          unitsDied: opp.championCounters.unitsDied + dead.length,
+        },
+      };
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        championCounters: {
+          ...caster.championCounters,
+          unitsDied: caster.championCounters.unitsDied + dead.length,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (newNexus <= 0) {
+        return {
+          ...newState,
+          phase: "ended",
+          winnerSeatIdx: casterSeat,
+          log: [
+            ...newState.log,
+            `${state.players[casterSeat].username} remporte la partie (Anivia attack).`,
+          ],
+        };
+      }
+      for (const d of dead) {
+        newState = triggerLastBreath(newState, d, oppSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "frostbite-strongest-enemy": {
+      // Phase 3.74 : Ashe attack. Frostbite l'ennemi avec la plus haute
+      // power (non-frozen). Mirror de frostbite-enemy mais target auto.
+      const opp = newPlayers[oppSeat];
+      const target = [...opp.bench]
+        .filter((u) => !u.frozen && u.power > 0)
+        .sort((a, b) => b.power - a.power)[0];
+      if (!target) return state;
+      const restorePower = target.power;
+      const newBench = opp.bench.map((u) => {
+        if (u.uid !== target.uid) return u;
+        return {
+          ...u,
+          power: 0,
+          frozen: true,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff - restorePower,
+        };
+      });
+      newPlayers[oppSeat] = { ...opp, bench: newBench };
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        championCounters: {
+          ...caster.championCounters,
+          enemiesFrostbitten: caster.championCounters.enemiesFrostbitten + 1,
+        },
+      };
+      return { ...state, players: newPlayers };
+    }
+    case "summon-token-copy-self-stats": {
+      // Phase 3.74 : Zed attack. Summon 1 × tokenCardCode avec les stats
+      // CURRENT du triggerSourceUid (Zed). Capé à maxBench.
+      const cfgZ = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const sourceUnit = player.bench.find((u) => u.uid === triggerSourceUid);
+      if (!sourceUnit) return state;
+      if (player.bench.length >= cfgZ.maxBench) return state;
+      const tokenCard = getCard(effect.tokenCardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return state;
+      const newUid = `${casterSeat}-zs-${state.round}-${state.log.length}`;
+      const baseUnit = createUnit(newUid, effect.tokenCardCode);
+      const newUnit: RuneterraBattleUnit = {
+        ...baseUnit,
+        power: sourceUnit.power,
+        health: sourceUnit.health,
+      };
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, newUnit],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${tokenCard.name} (${sourceUnit.power}|${sourceUnit.health}).`,
+        ],
+      };
+    }
     case "create-card-in-hand": {
       // Phase 3.73 : push un nouveau {uid, cardCode} dans la main.
       // Capé à maxHand (sinon discard direct = no-op pour l'instant).
@@ -4834,20 +4957,28 @@ export function declareAttack(
   ];
   newPlayers[seatIdx] = updatedPlayer;
 
-  return {
-    ok: true,
-    state: {
-      ...state,
-      players: newPlayers,
-      activeSeatIdx: otherSeat(seatIdx),
-      consecutivePasses: 0,
-      attackInProgress: { attackerSeatIdx: seatIdx, lanes },
-      log: [
-        ...state.log,
-        `${player.username} déclare une attaque (${lanes.length} unité${lanes.length > 1 ? "s" : ""}).`,
-      ],
-    },
+  // Phase 3.74 : déclenche on-attack pour chaque attaquant qui a une
+  // ability registrée. État de base (avec attackInProgress posé) avant
+  // les triggers pour que les effets puissent voir les lanes.
+  let stateAfter: InternalState = {
+    ...state,
+    players: newPlayers,
+    activeSeatIdx: otherSeat(seatIdx),
+    consecutivePasses: 0,
+    attackInProgress: { attackerSeatIdx: seatIdx, lanes },
+    log: [
+      ...state.log,
+      `${player.username} déclare une attaque (${lanes.length} unité${lanes.length > 1 ? "s" : ""}).`,
+    ],
   };
+  for (const uid of attackerUids) {
+    const u = stateAfter.players[seatIdx].bench.find((x) => x.uid === uid);
+    if (!u) continue;
+    stateAfter = triggerOnAttack(stateAfter, u.cardCode, seatIdx, uid);
+    if (stateAfter.phase === "ended") break;
+  }
+
+  return { ok: true, state: stateAfter };
 }
 
 /** Le défenseur assigne ses bloqueurs (1 par lane, ou null pour laisser
