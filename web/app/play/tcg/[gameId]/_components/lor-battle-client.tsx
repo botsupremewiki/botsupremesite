@@ -246,8 +246,12 @@ export function LorBattleClient({
                 send({ type: "lor-concede" });
               }
             }}
-            onDeclareAttack={(uids) =>
-              send({ type: "lor-declare-attack", attackerUids: uids })
+            onDeclareAttack={(uids, forcedBlockerUids) =>
+              send({
+                type: "lor-declare-attack",
+                attackerUids: uids,
+                forcedBlockerUids,
+              })
             }
             onAssignBlockers={(uids) =>
               send({ type: "lor-assign-blockers", blockerUids: uids })
@@ -370,7 +374,10 @@ function RoundView({
   onPlayHand: (handIndex: number) => void;
   onPass: () => void;
   onConcede: () => void;
-  onDeclareAttack: (attackerUids: string[]) => void;
+  onDeclareAttack: (
+    attackerUids: string[],
+    forcedBlockerUids?: (string | null)[],
+  ) => void;
   onAssignBlockers: (blockerUids: (string | null)[]) => void;
   pendingSpell: {
     handIndex: number;
@@ -391,6 +398,11 @@ function RoundView({
   const [blockerByLane, setBlockerByLane] = useState<Map<number, string>>(
     new Map(),
   );
+  // Phase 3.19 : pour les attaquants avec Challenger, l'attaquant peut
+  // forcer un bloqueur ennemi spécifique. Map: attackerUid → forcedBlockerUid.
+  const [forcedBlockerByAttacker, setForcedBlockerByAttacker] = useState<
+    Map<string, string>
+  >(new Map());
 
   // Reset l'état de combat quand l'attaque se termine.
   const attackInProgress = state.attackInProgress;
@@ -399,6 +411,7 @@ function RoundView({
       setCombatMode("none");
       setPickedAttackers(new Set());
       setBlockerByLane(new Map());
+      setForcedBlockerByAttacker(new Map());
     }
   }, [attackInProgress]);
 
@@ -449,9 +462,19 @@ function RoundView({
 
   const handleConfirmAttack = () => {
     if (pickedAttackers.size === 0) return;
-    onDeclareAttack([...pickedAttackers]);
+    // Phase 3.19 : construit forcedBlockerUids parallèle aux attackerUids.
+    const attackerUidsList = [...pickedAttackers];
+    const forcedBlockerUids: (string | null)[] = attackerUidsList.map(
+      (uid) => forcedBlockerByAttacker.get(uid) ?? null,
+    );
+    const hasAnyForce = forcedBlockerUids.some((b) => b !== null);
+    onDeclareAttack(
+      attackerUidsList,
+      hasAnyForce ? forcedBlockerUids : undefined,
+    );
     setCombatMode("none");
     setPickedAttackers(new Set());
+    setForcedBlockerByAttacker(new Map());
   };
 
   const handleConfirmBlocks = () => {
@@ -605,6 +628,26 @@ function RoundView({
         </div>
       </div>
 
+      {/* Phase 3.19 : Challenger picker — visible en attacker-pick si au
+          moins un attaquant choisi a le keyword Challenger. Permet à
+          l'attaquant de désigner quelle unité ennemie doit bloquer. */}
+      {combatMode === "attacker-pick" && pickedAttackers.size > 0 && (
+        <ChallengerPicker
+          pickedAttackerUids={[...pickedAttackers]}
+          attackerBench={state.self.bench}
+          enemyBench={state.opponent.bench}
+          forcedByAttacker={forcedBlockerByAttacker}
+          onSetForced={(attackerUid, blockerUid) => {
+            setForcedBlockerByAttacker((prev) => {
+              const next = new Map(prev);
+              if (blockerUid === null) next.delete(attackerUid);
+              else next.set(attackerUid, blockerUid);
+              return next;
+            });
+          }}
+        />
+      )}
+
       {/* Self bench (cliquable pour zoom OU pick selon combat mode OU
           target selon spell targeting). */}
       <BenchRow
@@ -720,6 +763,70 @@ function BenchRow({
           />
         );
       })}
+    </div>
+  );
+}
+
+// Phase 3.19 : ChallengerPicker — pour chaque attaquant choisi avec le
+// keyword Challenger, propose un dropdown de bloqueurs ennemis à forcer.
+function ChallengerPicker({
+  pickedAttackerUids,
+  attackerBench,
+  enemyBench,
+  forcedByAttacker,
+  onSetForced,
+}: {
+  pickedAttackerUids: string[];
+  attackerBench: RuneterraBattleUnit[];
+  enemyBench: RuneterraBattleUnit[];
+  forcedByAttacker: Map<string, string>;
+  onSetForced: (attackerUid: string, blockerUid: string | null) => void;
+}) {
+  const challengerAttackers = pickedAttackerUids
+    .map((uid) => attackerBench.find((u) => u.uid === uid))
+    .filter(
+      (u): u is RuneterraBattleUnit =>
+        u !== undefined && u.keywords.includes("Challenger"),
+    );
+  if (challengerAttackers.length === 0) return null;
+  return (
+    <div className="flex shrink-0 flex-col gap-1.5 rounded-md border border-rose-500/40 bg-rose-900/15 p-2">
+      <div className="text-[11px] uppercase tracking-widest text-rose-300">
+        ⚔️ Challenger — force quel ennemi bloque
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {challengerAttackers.map((attacker) => {
+          const card = RUNETERRA_BASE_SET_BY_CODE.get(attacker.cardCode);
+          const forced = forcedByAttacker.get(attacker.uid) ?? "";
+          return (
+            <div
+              key={attacker.uid}
+              className="flex items-center gap-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs"
+            >
+              <span className="text-rose-300">{card?.name ?? attacker.uid}</span>
+              <span className="text-zinc-500">→</span>
+              <select
+                value={forced}
+                onChange={(e) =>
+                  onSetForced(attacker.uid, e.target.value || null)
+                }
+                className="rounded border border-white/10 bg-black/60 px-1 py-0.5 text-[11px] text-zinc-100"
+              >
+                <option value="">— libre (pas de force) —</option>
+                {enemyBench.map((b) => {
+                  const bCard = RUNETERRA_BASE_SET_BY_CODE.get(b.cardCode);
+                  return (
+                    <option key={b.uid} value={b.uid}>
+                      {bCard?.name?.slice(0, 14) ?? b.cardCode} (
+                      {b.power}/{b.health - b.damage})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
