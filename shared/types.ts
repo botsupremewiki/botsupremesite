@@ -1799,7 +1799,22 @@ export type SpellEffect =
       damage1: number;
       damage2: number;
       drawCount: number;
-    };
+    }
+  // Phase 3.65 — Simplifications fonctionnelles.
+  // Sans cible : invoque le 1er Unit du deck du caster (top → bottom)
+  // sur le banc. Capé à maxBench. 01FR023 (recurring TODO).
+  | { type: "summon-first-unit-from-deck" }
+  // Sans cible : insère insertCount copies de tokenCardCode à des
+  // positions aléatoires dans le deck adverse. 01PZ010 Mushrooms
+  // (on-draw trigger TODO).
+  | {
+      type: "insert-tokens-into-enemy-deck";
+      tokenCardCode: string;
+      insertCount: number;
+    }
+  // Sans cible : inflige amount dmg au nexus ennemi (simplifié pour les
+  // sorts multi-target qui font face damage). 01PZ004 (3+2+1=6 simpl.).
+  | { type: "deal-damage-enemy-nexus-fixed"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2339,6 +2354,25 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     damage2: 1,
     drawCount: 1,
   },
+
+  // ── Phase 3.65 (simplifications)
+  // 01FR023 (Freljord, 11 Slow, Appel de la chef de guerre) — invoque
+  // le 1er Unit du deck. La portion « + chaque round suivant » n'est
+  // pas implémentée (recurring effects TODO).
+  "01FR023": { type: "summon-first-unit-from-deck" },
+  // 01PZ010 (PiltoverZaun, 1 Burst, Nuage de champignons) — insère
+  // 5 × 01PZ022 (Champignon vénéneux) dans le deck adverse à des
+  // positions aléatoires. Le trigger on-draw « 1 dmg nexus » du
+  // Champignon n'est pas implémenté (TODO).
+  "01PZ010": {
+    type: "insert-tokens-into-enemy-deck",
+    tokenCardCode: "01PZ022",
+    insertCount: 5,
+  },
+  // 01PZ004 (PiltoverZaun, 7 Slow) — simplifié à 6 dmg cumulés
+  // (3+2+1) au nexus ennemi. La version 3-targets distincts attendra
+  // le support de targetUid3.
+  "01PZ004": { type: "deal-damage-enemy-nexus-fixed", amount: 6 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2481,6 +2515,9 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "gain-mana-slot-and-heal-nexus":
     case "damage-summoned-this-round-enemies":
     case "auto-copy-best-hand-card-into-deck":
+    case "summon-first-unit-from-deck":
+    case "insert-tokens-into-enemy-deck":
+    case "deal-damage-enemy-nexus-fixed":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";

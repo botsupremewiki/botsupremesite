@@ -248,6 +248,16 @@ export function botAct(
       if (effect.type === "auto-copy-best-hand-card-into-deck") {
         if (player.hand.length === 0) continue;
       }
+      if (effect.type === "summon-first-unit-from-deck") {
+        if (player.bench.length >= 6) continue;
+        const hasUnit = player.deck.some((c) => {
+          const card = getCard(c.cardCode);
+          return card?.type === "Unit";
+        });
+        if (!hasUnit) continue;
+      }
+      // insert-tokens-into-enemy-deck et deal-damage-enemy-nexus-fixed
+      // sont toujours utiles, pas de skip.
       if (effect.type === "buff-allies-of-subtype-everywhere") {
         const hasAnySubtype = [
           ...player.bench,

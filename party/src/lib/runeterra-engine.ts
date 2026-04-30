@@ -2357,6 +2357,98 @@ function applySpellEffect(
         ],
       };
     }
+    case "summon-first-unit-from-deck": {
+      // Phase 3.65 : 01FR023. Pick le 1er Unit dans le deck (top → bottom),
+      // summon sur le banc. La portion « recurring chaque round » est TODO.
+      const cfgFU = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      if (player.bench.length >= cfgFU.maxBench) return state;
+      const idx = player.deck.findIndex((c) => {
+        const card = getCard(c.cardCode);
+        return card?.type === "Unit";
+      });
+      if (idx === -1) return state;
+      const drawn = player.deck[idx];
+      const newDeck = [
+        ...player.deck.slice(0, idx),
+        ...player.deck.slice(idx + 1),
+      ];
+      const baseUnit = createUnit(drawn.uid, drawn.cardCode);
+      // Applique cardBuff si présent.
+      const buff = player.cardBuffs[drawn.uid];
+      const newUnit: RuneterraBattleUnit = buff
+        ? {
+            ...baseUnit,
+            power: baseUnit.power + buff.powerDelta,
+            health: baseUnit.health + buff.healthDelta,
+            keywords: Array.from(
+              new Set([...baseUnit.keywords, ...buff.addKeywords]),
+            ),
+          }
+        : baseUnit;
+      const newCardBuffs = { ...player.cardBuffs };
+      delete newCardBuffs[drawn.uid];
+      newPlayers[casterSeat] = {
+        ...player,
+        deck: newDeck,
+        bench: [...player.bench, newUnit],
+        cardBuffs: newCardBuffs,
+        summonedUidsThisRound: [...player.summonedUidsThisRound, newUnit.uid],
+      };
+      const cardName = getCard(drawn.cardCode)?.name ?? drawn.cardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${cardName} depuis son deck.`,
+        ],
+      };
+    }
+    case "insert-tokens-into-enemy-deck": {
+      // Phase 3.65 : Mushrooms. Insère insertCount copies du token dans
+      // le deck adverse à des positions aléatoires.
+      const opp = newPlayers[oppSeat];
+      let newOppDeck = [...opp.deck];
+      for (let i = 0; i < effect.insertCount; i++) {
+        const newUid = `${oppSeat}-mu-${state.round}-${state.log.length}-${i}`;
+        const insertIdx = Math.floor(Math.random() * (newOppDeck.length + 1));
+        newOppDeck = [
+          ...newOppDeck.slice(0, insertIdx),
+          { uid: newUid, cardCode: effect.tokenCardCode },
+          ...newOppDeck.slice(insertIdx),
+        ];
+      }
+      newPlayers[oppSeat] = { ...opp, deck: newOppDeck };
+      const tokenName = getCard(effect.tokenCardCode)?.name ?? effect.tokenCardCode;
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${state.players[casterSeat].username} plante ${effect.insertCount} ${tokenName} dans le deck de ${opp.username}.`,
+        ],
+      };
+    }
+    case "deal-damage-enemy-nexus-fixed": {
+      // Phase 3.65 : 01PZ004 simplifié — dmg amount au nexus ennemi.
+      const opp = newPlayers[oppSeat];
+      const newNexus = opp.nexusHealth - effect.amount;
+      newPlayers[oppSeat] = { ...opp, nexusHealth: newNexus };
+      if (newNexus <= 0) {
+        return {
+          ...state,
+          players: newPlayers,
+          phase: "ended",
+          winnerSeatIdx: casterSeat,
+          log: [
+            ...state.log,
+            `${state.players[casterSeat].username} remporte la partie (sort direct au nexus).`,
+          ],
+        };
+      }
+      return { ...state, players: newPlayers };
+    }
     case "auto-copy-best-hand-card-into-deck": {
       // Phase 3.62 : Contrefaçons. Pick le card de plus haut cost en
       // main (le sort lui-même est déjà retiré par playSpell). Crée
