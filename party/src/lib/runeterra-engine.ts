@@ -1111,6 +1111,30 @@ function validateSpellTarget(
     }
     return { ok: true };
   }
+  // Phase 3.46 : "ally-and-enemy" — target1 doit être ally, target2 enemy.
+  if (side === "ally-and-enemy") {
+    const allyUnit = caster.bench.find((u) => u.uid === targetUid);
+    if (!allyUnit) {
+      return {
+        ok: false,
+        error: "La 1re cible doit être un allié sur ton banc.",
+      };
+    }
+    if (!targetUid2) {
+      return {
+        ok: false,
+        error: "Ce sort nécessite 2 cibles (1 allié + 1 ennemi).",
+      };
+    }
+    const enemyUnit = opponent.bench.find((u) => u.uid === targetUid2);
+    if (!enemyUnit) {
+      return {
+        ok: false,
+        error: "La 2e cible doit être une unité ennemie.",
+      };
+    }
+    return { ok: true };
+  }
   // Phase 3.41 : "any-or-nexus" accepte unités OU "nexus-self" / "nexus-enemy".
   if (side === "any-or-nexus") {
     if (targetUid === "nexus-self" || targetUid === "nexus-enemy") {
@@ -1904,6 +1928,79 @@ function applySpellEffect(
       for (const d of dead) {
         newState = triggerLastBreath(newState, d, oppSeat);
         if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "unit-strike-unit": {
+      // Phase 3.46 : Combat singulier. target1=ally, target2=enemy.
+      // Les 2 se frappent simultanément (dmg = power de l'autre).
+      // Pas de QuickStrike timing : les 2 reçoivent les dégâts.
+      const ally = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      const enemy = newPlayers[oppSeat].bench.find(
+        (u) => u.uid === targetUid2,
+      );
+      if (!ally || !enemy) return state;
+      const allyDmg = enemy.power;
+      const enemyDmg = ally.power;
+      // Apply damage à ally.
+      const updatedAllyBench = newPlayers[casterSeat].bench.map((u) => {
+        if (u.uid !== ally.uid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, allyDmg);
+        return copy;
+      });
+      const allySurvivors = updatedAllyBench.filter((u) => u.damage < u.health);
+      const allyDead = updatedAllyBench.find((u) => u.damage >= u.health);
+      // Apply damage à enemy.
+      const updatedEnemyBench = newPlayers[oppSeat].bench.map((u) => {
+        if (u.uid !== enemy.uid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, enemyDmg);
+        return copy;
+      });
+      const enemySurvivors = updatedEnemyBench.filter((u) => u.damage < u.health);
+      const enemyDead = updatedEnemyBench.find((u) => u.damage >= u.health);
+      newPlayers[casterSeat] = {
+        ...newPlayers[casterSeat],
+        bench: allySurvivors,
+        alliesDiedThisRound:
+          newPlayers[casterSeat].alliesDiedThisRound + (allyDead ? 1 : 0),
+        championCounters: {
+          ...newPlayers[casterSeat].championCounters,
+          alliesDied:
+            newPlayers[casterSeat].championCounters.alliesDied +
+            (allyDead ? 1 : 0),
+          unitsDied:
+            newPlayers[casterSeat].championCounters.unitsDied +
+            (allyDead ? 1 : 0) +
+            (enemyDead ? 1 : 0),
+        },
+      };
+      newPlayers[oppSeat] = {
+        ...newPlayers[oppSeat],
+        bench: enemySurvivors,
+        alliesDiedThisRound:
+          newPlayers[oppSeat].alliesDiedThisRound + (enemyDead ? 1 : 0),
+        championCounters: {
+          ...newPlayers[oppSeat].championCounters,
+          alliesDied:
+            newPlayers[oppSeat].championCounters.alliesDied +
+            (enemyDead ? 1 : 0),
+          unitsDied:
+            newPlayers[oppSeat].championCounters.unitsDied +
+            (allyDead ? 1 : 0) +
+            (enemyDead ? 1 : 0),
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (allyDead) {
+        newState = triggerLastBreath(newState, allyDead, casterSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      if (enemyDead) {
+        newState = triggerLastBreath(newState, enemyDead, oppSeat);
       }
       return newState;
     }

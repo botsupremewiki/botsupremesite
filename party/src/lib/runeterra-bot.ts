@@ -384,6 +384,37 @@ export function botAct(
         if (!target) continue;
         targetUid = target.uid;
       }
+    } else if (side === "ally-and-enemy") {
+      // Phase 3.46 : Combat singulier. target1=ally + target2=enemy.
+      // Préfère un ally qui survit + tue l'enemy (good trade), sinon
+      // skip si pas de pair valide.
+      if (player.bench.length === 0 || opponent.bench.length === 0) continue;
+      // Cherche le meilleur ally (survit + tue) ou plus gros ally fallback.
+      let bestPair: { allyUid: string; enemyUid: string } | null = null;
+      let bestScore = -Infinity;
+      for (const ally of player.bench) {
+        if (ally.power <= 0) continue;
+        for (const enemy of opponent.bench) {
+          if (enemy.power <= 0) continue;
+          const allyHp = ally.health - ally.damage;
+          const enemyHp = enemy.health - enemy.damage;
+          const allySurvives = enemy.power < allyHp;
+          const enemyDies = ally.power >= enemyHp;
+          // Score : kill+survive > kill > survive > nothing.
+          let score = 0;
+          if (allySurvives && enemyDies) score = 100 + enemy.power;
+          else if (enemyDies) score = 50 + enemy.power;
+          else if (allySurvives) score = 10 + enemy.power;
+          else score = -Math.abs(ally.power - enemy.power);
+          if (score > bestScore) {
+            bestScore = score;
+            bestPair = { allyUid: ally.uid, enemyUid: enemy.uid };
+          }
+        }
+      }
+      if (!bestPair || bestScore < 0) continue;
+      targetUid = bestPair.allyUid;
+      targetUid2 = bestPair.enemyUid;
     } else if (side === "any-or-nexus") {
       // Phase 3.41 : Tir mystique. Préfère :
       // 1. Lethal au nexus ennemi si effect.amount >= nexusHealth

@@ -1581,7 +1581,11 @@ export type SpellEffect =
   | { type: "damage-or-frostbite-by-power-zero"; amount: number }
   // Sans cible : tue tous les ennemis avec puissance = 0, puis gèle tous
   // les ennemis restants. Ours blanc (01FR019).
-  | { type: "kill-power-zero-and-frostbite-all-enemies" };
+  | { type: "kill-power-zero-and-frostbite-all-enemies" }
+  // Phase 3.46
+  // 2 cibles : target1 = allié, target2 = ennemi. Les 2 se frappent
+  // mutuellement (dégâts simultanés = power de l'autre). Combat singulier.
+  | { type: "unit-strike-unit" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1889,6 +1893,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01FR019 (Freljord, 7 Slow, Ours blanc) — kill all enemies power=0
   // puis freeze tous les ennemis restants.
   "01FR019": { type: "kill-power-zero-and-frostbite-all-enemies" },
+
+  // ── Phase 3.46
+  // 01DE026 (Demacia, 2 Fast, Combat singulier) — 1 allié et 1 ennemi
+  // se frappent mutuellement (dmg simultanés = power de l'autre).
+  "01DE026": { type: "unit-strike-unit" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1940,6 +1949,7 @@ export type SpellTargetSide =
   | "enemy"
   | "any"
   | "any-or-nexus"
+  | "ally-and-enemy"
   | "none";
 
 export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
@@ -1971,6 +1981,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
       return "any";
     case "deal-damage-target-any-or-nexus":
       return "any-or-nexus";
+    case "unit-strike-unit":
+      return "ally-and-enemy";
     case "frostbite-enemy":
     case "stun-enemy":
     case "silence-follower-target":
@@ -2007,6 +2019,7 @@ export function getSpellTargetCount(effect: SpellEffect): 0 | 1 | 2 {
     case "buff-2-allies-round":
     case "buff-2-allies-permanent":
     case "damage-ally-buff-other-ally-round":
+    case "unit-strike-unit":
       return 2;
     default:
       return getSpellTargetSide(effect) === "none" ? 0 : 1;
