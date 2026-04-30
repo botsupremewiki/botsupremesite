@@ -16,12 +16,33 @@ import { UserPill } from "@/components/user-pill";
 type ConnStatus = "connecting" | "connected" | "disconnected";
 type LobbyState = "idle" | "queued" | "matched";
 
+// Phase 3.87 : structure d'un combat récent (issue de battle_history).
+// Sert à afficher les 5 derniers résultats (W/L) dans le lobby.
+export type LorRecentBattle = {
+  winner_id: string;
+  loser_id: string;
+  winner_username: string;
+  loser_username: string;
+  ranked: boolean;
+  winner_elo_before: number | null;
+  winner_elo_after: number | null;
+  loser_elo_before: number | null;
+  loser_elo_after: number | null;
+  ended_at: string;
+};
+
 export function LorLobbyClient({
   profile,
   ranked = false,
+  myElo,
+  recent,
 }: {
   profile: Profile | null;
   ranked?: boolean;
+  // Phase 3.87 : ELO LoR du joueur (null si pas de partie classée).
+  myElo?: number | null;
+  // Phase 3.87 : 5 derniers combats du joueur (any mode).
+  recent?: LorRecentBattle[];
 }) {
   const router = useRouter();
   const game = TCG_GAMES.lol;
@@ -194,18 +215,110 @@ export function LorLobbyClient({
       >
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
           <div className="rounded-xl border border-white/10 bg-black/40 p-4">
-            <h1 className="text-2xl font-bold text-zinc-100">
-              {ranked ? "🏆 Combat JcJ classé" : "🆚 Combat JcJ"} — Legends of Runeterra
-            </h1>
-            <p className="mt-1 text-sm text-zinc-400">
-              {ranked
-                ? "Match classé : ton ELO LoR est mis à jour à la fin (formule Elo K=32, départ 1000). Sélectionne un deck valide"
-                : "Match amical sans classement. Sélectionne un deck valide"}{" "}
-              ({RUNETERRA_BATTLE_CONFIG.deckSize} cartes), entre en file, et
-              tu seras automatiquement matché contre le prochain joueur en
-              attente.
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold text-zinc-100">
+                  {ranked ? "🏆 Combat JcJ classé" : "🆚 Combat JcJ"} — Legends
+                  of Runeterra
+                </h1>
+                <p className="mt-1 text-sm text-zinc-400">
+                  {ranked
+                    ? "Match classé : ton ELO LoR est mis à jour à la fin (formule Elo K=32, départ 1000). Sélectionne un deck valide"
+                    : "Match amical sans classement. Sélectionne un deck valide"}{" "}
+                  ({RUNETERRA_BATTLE_CONFIG.deckSize} cartes), entre en file, et
+                  tu seras automatiquement matché contre le prochain joueur en
+                  attente.
+                </p>
+              </div>
+              {/* Phase 3.87 : ELO actuel (visible aussi en pvp non-classé). */}
+              {profile && (
+                <div className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/10 px-3 py-2 text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-violet-200">
+                    ELO LoR
+                  </div>
+                  <div className="text-lg font-bold tabular-nums text-violet-100">
+                    {myElo !== null && myElo !== undefined ? myElo : "—"}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Phase 3.87 : 5 derniers combats. */}
+          {profile && recent && recent.length > 0 && (
+            <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+              <div className="text-xs uppercase tracking-widest text-zinc-400">
+                Derniers combats
+              </div>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {recent.map((b, i) => {
+                  const isWinner = b.winner_id === profile.id;
+                  const opponent = isWinner
+                    ? b.loser_username
+                    : b.winner_username;
+                  const myEloBefore = isWinner
+                    ? b.winner_elo_before
+                    : b.loser_elo_before;
+                  const myEloAfter = isWinner
+                    ? b.winner_elo_after
+                    : b.loser_elo_after;
+                  const eloDelta =
+                    b.ranked && myEloBefore !== null && myEloAfter !== null
+                      ? myEloAfter - myEloBefore
+                      : null;
+                  const date = new Date(b.ended_at);
+                  const timeAgo = formatTimeAgo(date);
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-center justify-between rounded-md border px-3 py-1.5 text-xs ${
+                        isWinner
+                          ? "border-emerald-400/30 bg-emerald-500/10"
+                          : "border-rose-400/30 bg-rose-500/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`font-bold ${
+                            isWinner ? "text-emerald-300" : "text-rose-300"
+                          }`}
+                        >
+                          {isWinner ? "✓ Victoire" : "✗ Défaite"}
+                        </span>
+                        <span className="text-zinc-300">vs {opponent}</span>
+                        {b.ranked && (
+                          <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-violet-200">
+                            Classé
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-zinc-500">
+                        {eloDelta !== null && (
+                          <span
+                            className={`tabular-nums ${
+                              eloDelta >= 0
+                                ? "text-emerald-300"
+                                : "text-rose-300"
+                            }`}
+                          >
+                            {eloDelta >= 0 ? "+" : ""}
+                            {eloDelta} ELO
+                          </span>
+                        )}
+                        <span>{timeAgo}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <Link
+                href="/play/tcg/lol/battle/history"
+                className="mt-2 inline-block text-[10px] text-sky-300 hover:text-sky-200"
+              >
+                Voir tout l'historique →
+              </Link>
+            </div>
+          )}
 
           {!profile ? (
             <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
@@ -309,4 +422,17 @@ export function LorLobbyClient({
       </main>
     </div>
   );
+}
+
+// Phase 3.87 : "il y a X" relatif basique. Pas de dépendance externe.
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "à l'instant";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `il y a ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `il y a ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `il y a ${days} j`;
+  return date.toLocaleDateString("fr-FR");
 }

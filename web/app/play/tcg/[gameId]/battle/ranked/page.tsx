@@ -3,7 +3,10 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { BattleLobbyClient } from "../pvp/battle-lobby-client";
-import { LorLobbyClient } from "../../_components/lor-lobby-client";
+import {
+  LorLobbyClient,
+  type LorRecentBattle,
+} from "../../_components/lor-lobby-client";
 import { SeasonBanner } from "../../_components/season-banner";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +27,8 @@ export default async function RankedLobbyPage({
     start_at: string;
   } | null = null;
   let myElo: number | null = null;
+  // Phase 3.87 (lol) : 5 derniers combats pour le lobby.
+  let recent: LorRecentBattle[] = [];
   const supabase = await createClient();
   if (supabase) {
     const seasonRes = await supabase.rpc("get_current_season", {
@@ -37,6 +42,18 @@ export default async function RankedLobbyPage({
       });
       const data = stats.data as { elo?: number } | null;
       myElo = data?.elo ?? null;
+      if (gameId === "lol") {
+        const histRes = await supabase
+          .from("battle_history")
+          .select(
+            "winner_id,loser_id,winner_username,loser_username,ranked,winner_elo_before,winner_elo_after,loser_elo_before,loser_elo_after,ended_at",
+          )
+          .eq("game_id", "lol")
+          .or(`winner_id.eq.${profile.id},loser_id.eq.${profile.id}`)
+          .order("ended_at", { ascending: false })
+          .limit(5);
+        recent = ((histRes.data ?? []) as LorRecentBattle[]) ?? [];
+      }
     }
   }
 
@@ -48,7 +65,12 @@ export default async function RankedLobbyPage({
         </div>
       ) : null}
       {gameId === "lol" ? (
-        <LorLobbyClient profile={profile} ranked />
+        <LorLobbyClient
+          profile={profile}
+          ranked
+          myElo={myElo}
+          recent={recent}
+        />
       ) : (
         <BattleLobbyClient
           profile={profile}
