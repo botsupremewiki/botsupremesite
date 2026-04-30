@@ -1153,9 +1153,25 @@ function HandRow({
       ) : (
         self.hand.map((cardCode, i) => {
           const card = RUNETERRA_BASE_SET_BY_CODE.get(cardCode);
-          const cost = card?.cost ?? 0;
+          // Phase 3.67 : récupère le cardBuff pour cet uid (si présent).
+          const handUid = self.handUids?.[i];
+          const buff = handUid ? self.cardBuffs?.[handUid] : undefined;
+          const printedCost = card?.cost ?? 0;
+          const effectiveCost = Math.max(0, printedCost + (buff?.costDelta ?? 0));
           const total = self.mana + (card?.type === "Spell" ? self.spellMana : 0);
-          const playable = myTurn && total >= cost && card?.type === "Unit";
+          const playable = myTurn && total >= effectiveCost;
+          // Stats affichées avec buff (pour Units uniquement).
+          const printedAttack = card?.attack ?? 0;
+          const printedHealth = card?.health ?? 0;
+          const effectiveAttack = printedAttack + (buff?.powerDelta ?? 0);
+          const effectiveHealth = printedHealth + (buff?.healthDelta ?? 0);
+          const hasBuff = buff && (
+            buff.powerDelta !== 0 ||
+            buff.healthDelta !== 0 ||
+            buff.costDelta !== 0 ||
+            buff.addKeywords.length > 0
+          );
+          const costColor = buff && buff.costDelta < 0 ? "bg-emerald-500/90" : "bg-blue-500/80";
           return (
             <button
               key={`${cardCode}-${i}`}
@@ -1170,7 +1186,7 @@ function HandRow({
                   ? "border-emerald-400/60 cursor-pointer hover:scale-[1.05] hover:-translate-y-2"
                   : "border-white/10 opacity-70 cursor-not-allowed"
               }`}
-              title={`${card?.name ?? cardCode} · click pour jouer · clic-droit pour zoomer`}
+              title={`${card?.name ?? cardCode}${hasBuff ? " (buffé)" : ""} · click pour jouer · clic-droit pour zoomer`}
             >
               <div className="aspect-[2/3]">
                 {card?.image ? (
@@ -1186,9 +1202,21 @@ function HandRow({
                   </div>
                 )}
               </div>
-              <div className="absolute left-1 top-1 rounded-full bg-blue-500/80 px-1.5 text-[10px] font-bold text-white">
-                {cost}
+              <div className={`absolute left-1 top-1 rounded-full px-1.5 text-[10px] font-bold text-white ${costColor}`}>
+                {effectiveCost}
               </div>
+              {/* Phase 3.67 : badge stats si Unit + buff */}
+              {card?.type === "Unit" && hasBuff && (
+                <div className="absolute right-1 top-1 rounded bg-fuchsia-500/90 px-1 text-[9px] font-bold text-white">
+                  {effectiveAttack}/{effectiveHealth}
+                </div>
+              )}
+              {/* Phase 3.67 : badge keywords ajoutés */}
+              {hasBuff && buff && buff.addKeywords.length > 0 && (
+                <div className="absolute bottom-1 left-1 right-1 truncate rounded bg-fuchsia-500/90 px-1 text-[8px] font-bold text-white">
+                  +{buff.addKeywords.join(" +")}
+                </div>
+              )}
             </button>
           );
         })
