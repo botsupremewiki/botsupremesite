@@ -61,6 +61,23 @@ export type PassivePowerContext = {
  *  pas dans cette situation. */
 export type PassivePowerMod = (ctx: PassivePowerContext) => number;
 
+/** Contexte d'évaluation d'une immunité KO. Le moteur appelle tous les
+ *  `KoGuard` enregistrés à chaque tentative de KO ; si un retourne true,
+ *  le KO est bloqué. */
+export type KoGuardContext = {
+  // Cible du KO (Persos uniquement — les Leaders ne peuvent pas être KO).
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string };
+  // Origine : combat (attaque résolue) ou effet (effet de carte).
+  source: "combat" | "effect";
+  // À qui appartient la carte qui applique ce guard.
+  modSourceSeat: OnePieceBattleSeatId;
+  modSourceUid: string;
+  battle: BattleEffectAccess;
+};
+
+/** Guard d'immunité KO. Retourne true pour bloquer le KO. */
+export type KoGuard = (ctx: KoGuardContext) => boolean;
+
 /** Selection passée au handler quand un PendingChoice est résolu. Mappe sur
  *  le payload du message client `op-resolve-choice`. */
 export type ChoiceSelection = {
@@ -2242,6 +2259,127 @@ export const PASSIVE_POWER_MODS: Record<string, PassivePowerMod> = {
     return Math.floor(seat.discardSize / 4) * 1000;
   },
 };
+
+// ─── Registre des guards d'immunité KO ──────────────────────────────────
+
+export const KO_GUARDS: Record<string, KoGuard> = {
+  /** OP03-079 Vergo — "[DON!! x1] Ce Personnage ne peut pas être mis KO
+   *  en combat." */
+  "OP03-079": (ctx) => {
+    if (ctx.source !== "combat") return false;
+    if (ctx.target.uid !== ctx.modSourceUid) return false;
+    if (ctx.target.seat !== ctx.modSourceSeat) return false;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    const me = seat?.characters.find((c) => c.uid === ctx.modSourceUid);
+    return !!me && me.attachedDon >= 1;
+  },
+
+  /** OP09-025 Crocodile — "Si votre Leader est de type {ODYSSEY}, ce
+   *  Personnage ne peut pas être mis KO par le Leader adverse en combat."
+   *  Note : le moteur ne distingue pas "par Leader" vs "par Persos" en
+   *  combat — on bloque tous les KO combat (légère permissivité). */
+  "OP09-025": (ctx) => {
+    if (ctx.source !== "combat") return false;
+    if (ctx.target.uid !== ctx.modSourceUid) return false;
+    if (ctx.target.seat !== ctx.modSourceSeat) return false;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat?.leaderId) return false;
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    return !!leaderMeta?.types.some((t) =>
+      t.toLowerCase().includes("odyssey"),
+    );
+  },
+
+  /** OP09-033 Nico Robin — "Si vous avez 2 Personnages ou plus épuisés,
+   *  tous vos Personnages de type {ODYSSEY} ou {Équipage de Chapeau de
+   *  paille} ne peuvent pas être mis KO par un effet jusqu'à la fin du
+   *  prochain tour adverse." Implémentation simplifiée : couvre uniquement
+   *  les KO par effet (pas combat) tant que la condition est vraie. */
+  "OP09-033": (ctx) => {
+    if (ctx.source !== "effect") return false;
+    if (ctx.target.seat !== ctx.modSourceSeat) return false;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return false;
+    const restedCount = seat.characters.filter((c) => c.rested).length;
+    if (restedCount < 2) return false;
+    const targetMeta = ONEPIECE_BASE_SET_BY_ID.get(ctx.target.cardId);
+    if (!targetMeta) return false;
+    const matches = targetMeta.types.some(
+      (t) =>
+        t.toLowerCase().includes("odyssey") ||
+        t.toLowerCase().includes("équipage de chapeau de paille"),
+    );
+    return matches;
+  },
+
+  /** OP09-045 Cabaji — "Si vous avez un Personnage [Baggy] ou [Morge],
+   *  ce Personnage ne peut pas être mis KO en combat." */
+  "OP09-045": (ctx) => {
+    if (ctx.source !== "combat") return false;
+    if (ctx.target.uid !== ctx.modSourceUid) return false;
+    if (ctx.target.seat !== ctx.modSourceSeat) return false;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return false;
+    return seat.characters.some((c) => {
+      const m = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+      return m?.name === "Baggy" || m?.name === "Morge";
+    });
+  },
+};
+
+/** Évalue toutes les guards d'immunité KO pour une cible. Retourne true si
+ *  au moins un guard bloque le KO. */
+export function isKoBlocked(
+  target: { seat: OnePieceBattleSeatId; uid: string; cardId: string },
+  source: "combat" | "effect",
+  battle: BattleEffectAccess,
+): boolean {
+  for (const seatId of ["p1", "p2"] as const) {
+    const seat = battle.getSeat(seatId);
+    if (!seat) continue;
+    if (seat.leaderId) {
+      const num = cardNumberOf(seat.leaderId);
+      const guard = KO_GUARDS[num];
+      if (guard) {
+        try {
+          if (
+            guard({
+              target,
+              source,
+              modSourceSeat: seatId,
+              modSourceUid: "leader",
+              battle,
+            })
+          )
+            return true;
+        } catch {
+          // ignore
+        }
+      }
+    }
+    for (const c of seat.characters) {
+      const num = cardNumberOf(c.cardId);
+      const guard = KO_GUARDS[num];
+      if (guard) {
+        try {
+          if (
+            guard({
+              target,
+              source,
+              modSourceSeat: seatId,
+              modSourceUid: c.uid,
+              battle,
+            })
+          )
+            return true;
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+  return false;
+}
 
 /** Évalue tous les modificateurs de puissance passifs pour une cible.
  *  Itère sur les cartes en jeu des deux seats (Leaders + Persos) et

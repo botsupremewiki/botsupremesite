@@ -48,6 +48,7 @@ import {
   type EffectContext,
   type EffectHook,
   fireCardEffect,
+  isKoBlocked,
 } from "./lib/onepiece-effects";
 
 const UUID_RE =
@@ -1051,17 +1052,28 @@ export default class OnePieceBattleServer implements Party.Server {
       this.pendingAttack = null;
       this.takeLives(defenderSeatId, lifesToTake);
     } else {
-      // Personnage hit → KO.
+      // Personnage hit → KO (sauf immunité combat).
       const idx = defender.characters.findIndex((c) => c.uid === att.targetUid);
       if (idx >= 0) {
-        const ko = defender.characters.splice(idx, 1)[0];
-        // DON attachées retournent à la pool du défenseur (épuisées).
-        defender.donRested += ko.attachedDon;
-        defender.discard.push({ cardId: ko.cardId });
-        const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
-        this.pushLog(`${meta?.name ?? "?"} est mis KO.`);
-        // Hook on-ko : effet [En cas de KO] (pioche, recyclage défausse…).
-        this.fireEffectFor(ko.cardId, "on-ko", ko.uid, defenderSeatId);
+        const target = defender.characters[idx];
+        const blocked = isKoBlocked(
+          { seat: defenderSeatId, uid: target.uid, cardId: target.cardId },
+          "combat",
+          this.getBattleAccess(),
+        );
+        if (blocked) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(target.cardId);
+          this.pushLog(
+            `${meta?.name ?? "?"} résiste au KO (immunité combat).`,
+          );
+        } else {
+          const ko = defender.characters.splice(idx, 1)[0];
+          defender.donRested += ko.attachedDon;
+          defender.discard.push({ cardId: ko.cardId });
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
+          this.pushLog(`${meta?.name ?? "?"} est mis KO.`);
+          this.fireEffectFor(ko.cardId, "on-ko", ko.uid, defenderSeatId);
+        }
       }
       this.pendingAttack = null;
       this.broadcastState();
@@ -1907,12 +1919,25 @@ export default class OnePieceBattleServer implements Party.Server {
         if (!s) return false;
         const idx = s.characters.findIndex((c) => c.uid === uid);
         if (idx < 0) return false;
+        const target = s.characters[idx];
+        // Vérifie immunité KO par effet.
+        const blocked = isKoBlocked(
+          { seat: seatId, uid: target.uid, cardId: target.cardId },
+          "effect",
+          this.getBattleAccess(),
+        );
+        if (blocked) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(target.cardId);
+          this.pushLog(
+            `${meta?.name ?? "?"} résiste au KO (immunité effet).`,
+          );
+          return false;
+        }
         const ko = s.characters.splice(idx, 1)[0];
         s.donRested += ko.attachedDon;
         s.discard.push({ cardId: ko.cardId });
         const meta = ONEPIECE_BASE_SET_BY_ID.get(ko.cardId);
         this.pushLog(`${meta?.name ?? "?"} est mis KO (effet).`);
-        // Hook on-ko sur la carte KO.
         this.fireEffectFor(ko.cardId, "on-ko", ko.uid, seatId);
         return true;
       },
