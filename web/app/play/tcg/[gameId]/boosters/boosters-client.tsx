@@ -537,6 +537,22 @@ function RevealCard({
   clickable: boolean;
 }) {
   const accent = RARITY_COLOR[card.rarity] ?? RARITY_COLOR["diamond-1"];
+  // Rareté élevée → effet visuel dramatique au moment du flip.
+  const isRare =
+    card.rarity === "star-1" ||
+    card.rarity === "star-2" ||
+    card.rarity === "star-3" ||
+    card.rarity === "crown";
+  const isCrown = card.rarity === "crown";
+  // Couleur de l'aura selon la rareté.
+  const auraColor = isCrown
+    ? "shadow-[0_0_60px_rgba(250,204,21,0.8)] ring-yellow-300"
+    : card.rarity === "star-3"
+      ? "shadow-[0_0_50px_rgba(251,146,60,0.7)] ring-orange-300"
+      : card.rarity === "star-2"
+        ? "shadow-[0_0_40px_rgba(244,114,182,0.6)] ring-rose-300"
+        : "shadow-[0_0_40px_rgba(217,70,239,0.6)] ring-fuchsia-300";
+
   return (
     <button
       onClick={clickable ? onClick : undefined}
@@ -544,9 +560,62 @@ function RevealCard({
         clickable ? "cursor-pointer" : "cursor-default"
       }`}
     >
+      {/* Aura pulsante derrière la carte si rare et révélée */}
+      {flipped && isRare && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: [0, 0.9, 0.6, 0.9, 0.6], scale: [0.8, 1.15, 1.05, 1.15, 1.05] }}
+          transition={{ duration: 2, repeat: Infinity, repeatType: "loop" }}
+          className={`pointer-events-none absolute inset-0 rounded-xl ring-4 ${auraColor}`}
+        />
+      )}
+      {/* Confettis pour les crown */}
+      {flipped && isCrown && (
+        <>
+          {Array.from({ length: 14 }).map((_, i) => {
+            // Direction et délai aléatoires pour chaque particule.
+            const angle = (i / 14) * Math.PI * 2;
+            const dx = Math.cos(angle) * 120;
+            const dy = Math.sin(angle) * 120;
+            return (
+              <motion.span
+                key={i}
+                initial={{ opacity: 0, x: 0, y: 0, scale: 0 }}
+                animate={{
+                  opacity: [0, 1, 0],
+                  x: dx,
+                  y: dy,
+                  scale: [0, 1.2, 0.4],
+                  rotate: 540,
+                }}
+                transition={{
+                  duration: 1.4,
+                  delay: 0.6 + i * 0.04,
+                  ease: "easeOut",
+                }}
+                className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-2xl"
+              >
+                {i % 3 === 0 ? "✨" : i % 3 === 1 ? "👑" : "⭐"}
+              </motion.span>
+            );
+          })}
+        </>
+      )}
       <motion.div
-        animate={{ rotateY: flipped ? 180 : 0 }}
-        transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+        animate={{
+          rotateY: flipped ? 180 : 0,
+          // Petit shake juste avant la révélation finale pour les rares
+          // (anticipation = bonus de drama).
+          x:
+            flipped && isRare
+              ? [0, -3, 3, -2, 2, 0]
+              : 0,
+        }}
+        transition={{
+          duration: 0.6,
+          ease: [0.2, 0.8, 0.2, 1],
+          x: { duration: 0.4, delay: 0.5 },
+        }}
         className="relative h-full w-full"
         style={{ transformStyle: "preserve-3d" }}
       >
