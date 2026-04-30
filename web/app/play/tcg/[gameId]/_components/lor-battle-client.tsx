@@ -26,6 +26,7 @@ import type {
 import {
   RUNETERRA_SPELL_EFFECTS,
   TCG_GAMES,
+  getSpellTargetCount,
   getSpellTargetSide,
 } from "@shared/types";
 import { RUNETERRA_BASE_SET_BY_CODE } from "@shared/tcg-runeterra-base";
@@ -59,11 +60,15 @@ export function LorBattleClient({
   const [zoomedCard, setZoomedCard] = useState<RuneterraBattleUnit | string | null>(
     null,
   );
-  // Phase 3.7 : sort en attente de cible (null = pas de targeting en cours).
+  // Phase 3.7 + 3.39 : sort en attente de cible (null = pas de targeting en
+  // cours). targetCount: 1 ou 2 (2 = multi-target Vents mordants/Transfusion).
+  // firstTargetUid stocke la 1re cible quand on attend la 2e.
   const [pendingSpell, setPendingSpell] = useState<{
     handIndex: number;
     side: SpellTargetSide;
     cardCode: string;
+    targetCount: 1 | 2;
+    firstTargetUid: string | null;
   } | null>(null);
 
   const send = useCallback((msg: RuneterraBattleClientMessage) => {
@@ -148,8 +153,15 @@ export function LorBattleClient({
           send({ type: "lor-play-spell", handIndex, targetUid: null });
           return;
         }
-        // Mode targeting : attend que le user clique une cible valide.
-        setPendingSpell({ handIndex, side, cardCode });
+        // Mode targeting : attend que le user clique une (ou 2) cibles.
+        const targetCount = getSpellTargetCount(effect);
+        setPendingSpell({
+          handIndex,
+          side,
+          cardCode,
+          targetCount: targetCount === 2 ? 2 : 1,
+          firstTargetUid: null,
+        });
       }
     },
     [state, send],
@@ -158,10 +170,27 @@ export function LorBattleClient({
   const targetSpell = useCallback(
     (targetUid: string) => {
       if (!pendingSpell) return;
+      // Phase 3.39 : multi-target → 1er click stocke la cible et attend la 2e.
+      if (pendingSpell.targetCount === 2 && pendingSpell.firstTargetUid === null) {
+        setPendingSpell({ ...pendingSpell, firstTargetUid: targetUid });
+        return;
+      }
+      // Cancel si user reclique la même cible (2-target).
+      if (
+        pendingSpell.targetCount === 2 &&
+        pendingSpell.firstTargetUid === targetUid
+      ) {
+        setErrorMsg("Les 2 cibles doivent être distinctes.");
+        return;
+      }
       send({
         type: "lor-play-spell",
         handIndex: pendingSpell.handIndex,
-        targetUid,
+        targetUid:
+          pendingSpell.targetCount === 2
+            ? pendingSpell.firstTargetUid
+            : targetUid,
+        targetUid2: pendingSpell.targetCount === 2 ? targetUid : undefined,
       });
       setPendingSpell(null);
     },
@@ -383,6 +412,8 @@ function RoundView({
     handIndex: number;
     side: SpellTargetSide;
     cardCode: string;
+    targetCount: 1 | 2;
+    firstTargetUid: string | null;
   } | null;
   onTargetSpell: (uid: string) => void;
   onCancelSpell: () => void;
@@ -503,6 +534,7 @@ function RoundView({
             ? new Set(state.opponent.bench.map((u) => u.uid))
             : undefined
         }
+        firstSelectedUid={pendingSpell?.firstTargetUid ?? null}
       />
 
       {/* Attack lanes (visible quand attaque en cours, peu importe le côté) */}
@@ -555,7 +587,14 @@ function RoundView({
           )}
           {pendingSpell && (
             <span className="text-violet-300">
-              ✨ Choisis une cible (
+              ✨{" "}
+              {pendingSpell.targetCount === 2 &&
+              pendingSpell.firstTargetUid === null
+                ? "Choisis la 1re cible"
+                : pendingSpell.targetCount === 2
+                  ? "Choisis la 2e cible (distincte)"
+                  : "Choisis une cible"}{" "}
+              (
               {pendingSpell.side === "ally"
                 ? "allié"
                 : pendingSpell.side === "enemy"
@@ -660,6 +699,7 @@ function RoundView({
               ? new Set(state.self.bench.map((u) => u.uid))
               : undefined
         }
+        firstSelectedUid={pendingSpell?.firstTargetUid ?? null}
         attackerPickMode={combatMode === "attacker-pick"}
         onUnitClick={handleSelfBenchClick}
       />
@@ -727,11 +767,14 @@ function BenchRow({
   units,
   onUnitClick,
   highlighted,
+  firstSelectedUid,
   attackerPickMode,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
   highlighted?: Set<string>;
+  // Phase 3.39 : pour les sorts 2-cibles, marque la 1re cible déjà sélectionnée.
+  firstSelectedUid?: string | null;
   attackerPickMode?: boolean;
 }) {
   if (units.length === 0) {
@@ -751,16 +794,25 @@ function BenchRow({
     >
       {units.map((u) => {
         const isPicked = highlighted?.has(u.uid) ?? false;
+        const isFirstSelected = firstSelectedUid === u.uid;
         const eligibleAttacker =
           !attackerPickMode || (!u.playedThisRound && u.power > 0);
         return (
-          <UnitCard
+          <div
             key={u.uid}
-            unit={u}
-            onClick={() => onUnitClick(u)}
-            highlighted={isPicked}
-            dimmed={attackerPickMode && !eligibleAttacker}
-          />
+            className={
+              isFirstSelected
+                ? "rounded-md ring-2 ring-fuchsia-400 ring-offset-1 ring-offset-black"
+                : ""
+            }
+          >
+            <UnitCard
+              unit={u}
+              onClick={() => onUnitClick(u)}
+              highlighted={isPicked}
+              dimmed={attackerPickMode && !eligibleAttacker}
+            />
+          </div>
         );
       })}
     </div>
