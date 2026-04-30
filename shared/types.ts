@@ -1586,6 +1586,19 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   "01DE050": { type: "silence-follower-target" },
 };
 
+// ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
+// Effets déclenchés sur les unités alliées avec le mot-clé Imbue à chaque
+// fois que le caster lance un sort (résolu APRÈS l'effet du sort).
+
+export type ImbueEffect =
+  | { type: "buff-self-permanent"; power: number; health: number };
+
+export const RUNETERRA_IMBUE_EFFECTS: Record<string, ImbueEffect> = {
+  // Bot d'assemblage (PiltoverZaun, 1 mana, 1|1 + Imbue) :
+  // « Quand vous lancez un sort, octroyez-moi +1|+1. »
+  "01PZ003": { type: "buff-self-permanent", power: 1, health: 1 },
+};
+
 // ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
 // Effets déclenchés quand une unité avec le mot-clé LastBreath meurt.
 // L'engine appelle triggerLastBreath() à chaque mort + look up dans le

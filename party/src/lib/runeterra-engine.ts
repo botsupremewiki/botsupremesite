@@ -8,6 +8,7 @@
 // token). PAS encore : combat, spells, keywords, level-up champions.
 
 import type {
+  ImbueEffect,
   LastBreathEffect,
   RuneterraBattlePhase,
   RuneterraBattleState,
@@ -19,6 +20,7 @@ import type {
 } from "../../../shared/types";
 import {
   RUNETERRA_BATTLE_CONFIG,
+  RUNETERRA_IMBUE_EFFECTS,
   RUNETERRA_LAST_BREATH_EFFECTS,
   RUNETERRA_SPELL_EFFECTS,
   getSpellTargetSide,
@@ -550,6 +552,63 @@ export function seatToId(seatIdx: 0 | 1): "p1" | "p2" {
   return seatIdx === 0 ? "p1" : "p2";
 }
 
+// ────────────────────── Phase 3.22 : Imbue ───────────────────────────────
+
+/** Déclenche les effets Imbue de tous les alliés du caster qui ont le
+ *  mot-clé Imbue. Appelé APRÈS la résolution d'un sort par le caster.
+ *  Returns le nouvel état avec les buffs/effets Imbue appliqués + log. */
+export function triggerImbue(
+  state: InternalState,
+  casterSeatIdx: 0 | 1,
+): InternalState {
+  const player = state.players[casterSeatIdx];
+  let newBench = player.bench;
+  let changed = false;
+  const events: string[] = [];
+  for (const unit of player.bench) {
+    if (!unit.keywords.includes("Imbue")) continue;
+    const effect = RUNETERRA_IMBUE_EFFECTS[unit.cardCode];
+    if (!effect) continue;
+    const applied = applyImbueEffect(newBench, unit.uid, effect);
+    if (applied) {
+      newBench = applied;
+      changed = true;
+      const card = getCard(unit.cardCode);
+      if (effect.type === "buff-self-permanent") {
+        events.push(
+          `${card?.name ?? unit.cardCode} (Inspiration) gagne +${effect.power}|+${effect.health}.`,
+        );
+      }
+    }
+  }
+  if (!changed) return state;
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[casterSeatIdx] = { ...player, bench: newBench };
+  return { ...state, players: newPlayers, log: [...state.log, ...events] };
+}
+
+function applyImbueEffect(
+  bench: RuneterraBattleUnit[],
+  unitUid: string,
+  effect: ImbueEffect,
+): RuneterraBattleUnit[] | null {
+  switch (effect.type) {
+    case "buff-self-permanent":
+      return bench.map((u) =>
+        u.uid === unitUid
+          ? {
+              ...u,
+              power: u.power + effect.power,
+              health: u.health + effect.health,
+            }
+          : u,
+      );
+  }
+}
+
 // ────────────────────── Phase 3.9b : Last Breath ─────────────────────────
 
 /** Déclenche le Last Breath d'une unité qui vient de mourir. Appelé après
@@ -899,17 +958,20 @@ export function playSpell(
     newPlayers = intermediateState.players;
   }
 
+  // Phase 3.22 : déclenche Imbue sur tous les alliés du caster qui en ont.
+  let postSpellState: InternalState = {
+    ...intermediateState,
+    activeSeatIdx: otherSeat(seatIdx),
+    consecutivePasses: 0,
+    log: [
+      ...intermediateState.log,
+      `${player.username} lance ${card.name} (coût ${card.cost}).`,
+    ],
+  };
+  postSpellState = triggerImbue(postSpellState, seatIdx);
   return {
     ok: true,
-    state: checkLevelUps({
-      ...intermediateState,
-      activeSeatIdx: otherSeat(seatIdx),
-      consecutivePasses: 0,
-      log: [
-        ...intermediateState.log,
-        `${player.username} lance ${card.name} (coût ${card.cost}).`,
-      ],
-    }),
+    state: checkLevelUps(postSpellState),
   };
 }
 
