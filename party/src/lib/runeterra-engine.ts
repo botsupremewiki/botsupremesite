@@ -1619,6 +1619,21 @@ function applySpellEffect(
       const drawResult = drawCards(newState, casterSeat, effect.drawCount);
       return drawResult.state;
     }
+    case "buff-all-allies-round": {
+      // Phase 3.30 : +power/+health round à tous les alliés du caster
+      // (sans grant keyword). Mirror de combo-buff-keyword-all-allies-round
+      // mais sans la partie keyword.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => ({
+        ...u,
+        power: u.power + effect.power,
+        health: u.health + effect.health,
+        endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+        endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+      }));
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
     case "summon-tokens": {
       // Phase 3.26 : invoque effect.count copies du token effect.cardCode
       // sur le banc du caster (capé à maxBench).

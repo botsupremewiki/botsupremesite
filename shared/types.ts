@@ -1486,7 +1486,11 @@ export type SpellEffect =
   // Phase 3.27
   // Cible : allié → tué (Last Breath déclenché) puis caster pioche
   // drawCount cartes. Aperçu de l'au-delà (01SI049 : 2 cartes).
-  | { type: "kill-ally-for-draw"; drawCount: number };
+  | { type: "kill-ally-for-draw"; drawCount: number }
+  // Phase 3.30
+  // Sans cible : +power/+health pour ce round à TOUS les alliés sur le
+  // banc (sans grant keyword). Buff all-board pour ce round seulement.
+  | { type: "buff-all-allies-round"; power: number; health: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1684,6 +1688,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI010 (Cavaliers spectraux, ShadowIsles, 2 Slow) — summon 2 ×
   // token 01SI024 (Cavalier spectral, 2|2 Ephemeral).
   "01SI010": { type: "summon-tokens", cardCode: "01SI024", count: 2 },
+
+  // ── Phase 3.30
+  // 01DE035 (Demacia, 6 Slow) — +3|+3 à tous les alliés pour ce round
+  // (pas de grant keyword, juste le buff stat).
+  "01DE035": { type: "buff-all-allies-round", power: 3, health: 3 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1763,6 +1772,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "draw-champion":
     case "stun-all-enemies-max-power":
     case "summon-tokens":
+    case "buff-all-allies-round":
       return "none";
   }
 }
