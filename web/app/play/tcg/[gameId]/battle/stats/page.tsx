@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
+import {
+  TCG_ACHIEVEMENTS,
+  tierAccent,
+  type Achievement,
+} from "@shared/tcg-achievements";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
 
@@ -17,6 +22,18 @@ type Stats = {
   ranked_wins: number;
 };
 
+type DeckWinrate = {
+  deck_name: string;
+  wins: number;
+  losses: number;
+  total: number;
+};
+
+type UnlockedAchievement = {
+  achievement_id: string;
+  unlocked_at: string;
+};
+
 export default async function StatsPage({
   params,
 }: {
@@ -28,14 +45,28 @@ export default async function StatsPage({
   const game = TCG_GAMES[gameId as TcgGameId];
 
   let stats: Stats | null = null;
+  let deckWinrates: DeckWinrate[] = [];
+  let unlockedAchievements: UnlockedAchievement[] = [];
   if (profile) {
     const supabase = await createClient();
     if (supabase) {
-      const { data } = await supabase.rpc("get_tcg_player_stats", {
-        p_user_id: profile.id,
-        p_game_id: gameId,
-      });
-      stats = (data as Stats) ?? null;
+      const [statsRes, decksRes, achRes] = await Promise.all([
+        supabase.rpc("get_tcg_player_stats", {
+          p_user_id: profile.id,
+          p_game_id: gameId,
+        }),
+        supabase.rpc("get_user_deck_winrates", {
+          p_user_id: profile.id,
+          p_game_id: gameId,
+        }),
+        supabase.rpc("get_user_achievements", {
+          p_user_id: profile.id,
+          p_game_id: gameId,
+        }),
+      ]);
+      stats = (statsRes.data as Stats) ?? null;
+      deckWinrates = (decksRes.data as DeckWinrate[]) ?? [];
+      unlockedAchievements = (achRes.data as UnlockedAchievement[]) ?? [];
     }
   }
 
@@ -47,6 +78,10 @@ export default async function StatsPage({
     stats && stats.ranked_total > 0
       ? Math.round((stats.ranked_wins / stats.ranked_total) * 100)
       : null;
+  const unlockedSet = new Set(unlockedAchievements.map((a) => a.achievement_id));
+  const unlockedDates = new Map(
+    unlockedAchievements.map((a) => [a.achievement_id, a.unlocked_at]),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -132,6 +167,123 @@ export default async function StatsPage({
                 }`}
                 accent="text-violet-300"
               />
+            </div>
+          )}
+
+          {/* ─── Stats par deck ─── */}
+          {profile && deckWinrates.length > 0 && (
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-zinc-100">
+                🃏 Stats par deck
+              </h2>
+              <p className="text-xs text-zinc-500">
+                Tes wins / losses pour chaque deck que tu as joué.
+              </p>
+              <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-zinc-400">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Deck</th>
+                      <th className="px-3 py-2 text-right">Wins</th>
+                      <th className="px-3 py-2 text-right">Losses</th>
+                      <th className="px-3 py-2 text-right">Winrate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {deckWinrates.map((d) => {
+                      const wr =
+                        d.total > 0
+                          ? Math.round((Number(d.wins) / Number(d.total)) * 100)
+                          : 0;
+                      return (
+                        <tr
+                          key={d.deck_name}
+                          className="bg-black/40 hover:bg-white/[0.03]"
+                        >
+                          <td className="px-3 py-2 font-semibold text-zinc-100">
+                            {d.deck_name}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
+                            {String(d.wins)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-rose-300">
+                            {String(d.losses)}
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right font-bold tabular-nums ${
+                              wr >= 50
+                                ? "text-emerald-300"
+                                : "text-rose-300"
+                            }`}
+                          >
+                            {wr}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Achievements ─── */}
+          {profile && (
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-zinc-100">
+                🏅 Achievements
+                <span className="ml-2 text-sm font-normal text-zinc-500">
+                  {unlockedSet.size} / {TCG_ACHIEVEMENTS.length}
+                </span>
+              </h2>
+              <p className="text-xs text-zinc-500">
+                Débloque des badges en jouant des matchs PvP / classés.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {TCG_ACHIEVEMENTS.map((ach: Achievement) => {
+                  const unlocked = unlockedSet.has(ach.id);
+                  const date = unlockedDates.get(ach.id);
+                  return (
+                    <div
+                      key={ach.id}
+                      className={`rounded-lg border p-3 transition-opacity ${
+                        unlocked
+                          ? tierAccent(ach.tier)
+                          : "border-white/5 bg-black/30 opacity-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={`text-2xl ${
+                            unlocked ? "" : "grayscale"
+                          }`}
+                        >
+                          {ach.icon}
+                        </span>
+                        <div className="flex-1">
+                          <div className="text-sm font-bold">
+                            {ach.name}
+                            {unlocked && (
+                              <span className="ml-1 text-[10px] uppercase tracking-widest opacity-70">
+                                {ach.tier}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-zinc-400">
+                            {ach.description}
+                          </div>
+                          {unlocked && date && (
+                            <div className="mt-1 text-[10px] text-zinc-500">
+                              Débloqué le{" "}
+                              {new Date(date).toLocaleDateString("fr-FR")}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -382,6 +382,79 @@ export async function recordBattleResult(
   }
 }
 
+/** Aggrégats nécessaires pour les checks d'achievements. Calculés
+ *  côté Supabase (RPC get_user_battle_aggregates). */
+export type BattleAggregates = {
+  totalMatches: number;
+  wins: number;
+  losses: number;
+  rankedWins: number;
+  elo: number;
+  winningDecks: string[];
+  bestWinStreak: number;
+};
+
+export async function fetchBattleAggregates(
+  room: Party.Room,
+  userId: string,
+  gameId: string,
+): Promise<BattleAggregates | null> {
+  const env = getSupabaseEnv(room);
+  if (!env) return null;
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/rpc/get_user_battle_aggregates`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ p_user_id: userId, p_game_id: gameId }),
+      },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as BattleAggregates;
+  } catch {
+    return null;
+  }
+}
+
+/** Tente de débloquer un achievement (idempotent — ON CONFLICT DO NOTHING).
+ *  Retourne true si nouvellement débloqué, false sinon. */
+export async function tryUnlockAchievement(
+  room: Party.Room,
+  userId: string,
+  gameId: string,
+  achievementId: string,
+): Promise<boolean> {
+  const env = getSupabaseEnv(room);
+  if (!env) return false;
+  try {
+    const resp = await fetch(
+      `${env.url}/rest/v1/rpc/try_unlock_achievement`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          p_user_id: userId,
+          p_game_id: gameId,
+          p_achievement_id: achievementId,
+        }),
+      },
+    );
+    if (!resp.ok) return false;
+    return ((await resp.json()) as boolean) === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Read a player's TCG stats for a given game (ELO, winrate, totals). */
 export type TcgPlayerStats = {
   elo: number;

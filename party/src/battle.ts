@@ -13,11 +13,14 @@ import type {
 } from "../../shared/types";
 import { BATTLE_CONFIG } from "../../shared/types";
 import {
+  fetchBattleAggregates,
   fetchProfile,
   fetchTcgDeckById,
   recordBattleResult,
   recordBotWin,
+  tryUnlockAchievement,
 } from "./lib/supabase";
+import { TCG_ACHIEVEMENTS } from "../../shared/tcg-achievements";
 import {
   type DeckCard,
   FOSSIL_NAMES,
@@ -2997,14 +3000,51 @@ export default class BattleServer implements Party.Server {
         ranked,
         reason,
       })
-        .then((res) => {
-          if (!res || !ranked) return;
-          this.pushLog(
-            `📊 ELO — ${w.username} ${res.winner_elo_before}→${res.winner_elo_after} · ${l.username} ${res.loser_elo_before}→${res.loser_elo_after}.`,
-          );
-          this.broadcastState();
+        .then(async (res) => {
+          if (res && ranked) {
+            this.pushLog(
+              `📊 ELO — ${w.username} ${res.winner_elo_before}→${res.winner_elo_after} · ${l.username} ${res.loser_elo_before}→${res.loser_elo_after}.`,
+            );
+            this.broadcastState();
+          }
+          // Vérifie les achievements pour les DEUX joueurs (le perdant
+          // peut débloquer « 1er match », « 50 matches », etc.).
+          await this.checkAndUnlockAchievements(w.authId, gameId, w.username);
+          await this.checkAndUnlockAchievements(l.authId, gameId, l.username);
         })
         .catch(() => {});
+    }
+  }
+
+  /** Récupère les agrégats du joueur depuis Supabase et vérifie chaque
+   *  achievement du catalogue. Pour ceux dont la condition est remplie,
+   *  appelle try_unlock_achievement (idempotent). Si nouvellement
+   *  débloqué, log dans la partie. */
+  private async checkAndUnlockAchievements(
+    userId: string,
+    gameId: string,
+    username: string,
+  ) {
+    const aggregates = await fetchBattleAggregates(this.room, userId, gameId);
+    if (!aggregates) return;
+    for (const ach of TCG_ACHIEVEMENTS) {
+      if (!ach.check(aggregates)) continue;
+      try {
+        const newlyUnlocked = await tryUnlockAchievement(
+          this.room,
+          userId,
+          gameId,
+          ach.id,
+        );
+        if (newlyUnlocked) {
+          this.pushLog(
+            `🏅 ${username} débloque « ${ach.name} » ${ach.icon}`,
+          );
+          this.broadcastState();
+        }
+      } catch {
+        // best-effort, on ignore les erreurs réseau
+      }
     }
   }
 
