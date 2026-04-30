@@ -138,6 +138,15 @@ export interface BattleEffectAccess {
    *  "redressez jusqu'à 1 Personnage". Retourne true si appliqué. */
   untapCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
 
+  /** Redresse le Leader (rested = false). Utilisé par les effets type
+   *  "Redressez votre Leader". */
+  untapLeader(seat: OnePieceBattleSeatId): void;
+
+  /** Renvoie un Personnage du board à la main de son propriétaire. Les DON
+   *  attachées retournent en pool épuisée. Utilisé par les effets type
+   *  "renvoyez à la main 1 Persos". Retourne true si appliqué. */
+  bounceCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
+
   /** Défausse les cartes aux indices donnés de la main du seat. Renvoie
    *  les cardId défaussés. Skip les indices invalides. */
   discardFromHand(
@@ -1951,6 +1960,122 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
     ctx.battle.drawCards(ctx.sourceSeat, 1);
     ctx.battle.log(
       "Sabo : 3+ Persos épuisés, pioche 1 carte ([En attaquant] [1×/tour]).",
+    );
+  },
+
+  // ─── BATCH 9 — bounce + untap leader + adverse forced ─────────────────
+
+  /** OP09-087 Charlotte Pudding (Char)
+   *  [Jouée] Si votre adversaire a 5 cartes ou plus dans sa main, il doit
+   *  défausser 1 carte de sa main. */
+  "OP09-087": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const opponentSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    const opp = ctx.battle.getSeat(opponentSeat);
+    if (!opp || opp.handSize < 5) {
+      ctx.battle.log(
+        "Charlotte Pudding : main adverse < 5 cartes, effet annulé.",
+      );
+      return;
+    }
+    // Défausse forcée — random pour rester auto.
+    ctx.battle.discardRandom(opponentSeat, 1);
+    ctx.battle.log(
+      "Charlotte Pudding : adversaire défausse 1 carte au hasard.",
+    );
+  },
+
+  /** OP09-088 Shiliew
+   *  [DON!! x1] [En attaquant] Vous pouvez défausser 2 cartes de votre
+   *  main : Piochez 2 cartes. */
+  "OP09-088": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const c = seat?.characters.find((x) => x.uid === ctx.sourceUid);
+    if (!c || c.attachedDon < 1) return; // [DON!! x1] requirement
+    if (!seat || seat.handSize < 2) return; // pas assez à défausser
+    ctx.battle.discardRandom(ctx.sourceSeat, 2);
+    ctx.battle.drawCards(ctx.sourceSeat, 2);
+    ctx.battle.log(
+      "Shiliew : défausse 2 et pioche 2 ([DON!! x1] [En attaquant]).",
+    );
+  },
+
+  /** OP09-058 Maggy Ball spéciale (Event)
+   *  [Principale] Votre adversaire doit renvoyer à la main de son
+   *  propriétaire 1 de ses Personnages ayant un coût de 6 ou moins.
+   *  L'adversaire fait le choix (forcé). */
+  "OP09-058": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!opp || opp.characters.length === 0) {
+        ctx.battle.log(
+          "Maggy Ball : aucun Persos adverse à renvoyer en main.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: opponentSeat,
+        sourceCardNumber: "OP09-058",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character-own",
+        prompt:
+          "Maggy Ball spéciale : ton adversaire t'oblige à renvoyer 1 de tes Persos (coût ≤ 6) à ta main.",
+        params: { maxCost: 6 },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      // Le choix a été fait par l'adversaire. La cible est dans son board.
+      const targetSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.bounceCharacter(
+        targetSeat,
+        ctx.choice.selection.targetUid,
+      );
+      ctx.battle.log("Maggy Ball : Persos adverse renvoyé à sa main.");
+    }
+  },
+
+  /** OP09-064 Killer
+   *  [Jouée] DON!! -1 (vous pouvez renvoyer 1 DON!! au deck DON) :
+   *  Redressez jusqu'à 1 de vos Leaders de type {Équipage de Kidd}.
+   *  Le coût DON-1 est skip (juste le buff Leader si applicable). */
+  "OP09-064": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const leaderMeta = seat?.leaderId
+      ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+      : null;
+    const isKidd = leaderMeta?.types.some((t) =>
+      t.toLowerCase().includes("équipage de kidd"),
+    );
+    if (!isKidd) {
+      ctx.battle.log("Killer : Leader pas Équipage de Kidd, effet annulé.");
+      return;
+    }
+    if (!seat?.leaderRested) {
+      ctx.battle.log("Killer : Leader déjà redressé.");
+      return;
+    }
+    ctx.battle.untapLeader(ctx.sourceSeat);
+    ctx.battle.log("Killer : Leader Équipage de Kidd redressé.");
+  },
+
+  /** ST17-003 Baggy
+   *  [Jouée] Regardez 3 cartes du dessus de votre deck, réorganisez-les
+   *  dans l'ordre de votre choix et placez-les au-dessus de votre deck.
+   *  Sans UI reorder, l'effet est purement informatif (l'ordre actuel est
+   *  préservé — fonctionnellement équivalent côté moteur). */
+  "ST17-003": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    ctx.battle.log(
+      "Baggy : regarde le top 3 du deck (réorganisation manuelle non implémentée).",
     );
   },
 

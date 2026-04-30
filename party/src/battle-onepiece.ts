@@ -1932,6 +1932,20 @@ export default class OnePieceBattleServer implements Party.Server {
         c.rested = false;
         return true;
       },
+      untapLeader: (seatId) => {
+        const s = this.seats[seatId];
+        if (s) s.leaderRested = false;
+      },
+      bounceCharacter: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const idx = s.characters.findIndex((c) => c.uid === uid);
+        if (idx < 0) return false;
+        const removed = s.characters.splice(idx, 1)[0];
+        s.donRested += removed.attachedDon;
+        s.hand.push({ cardId: removed.cardId });
+        return true;
+      },
       discardFromHand: (seatId, handIndices) => {
         const s = this.seats[seatId];
         if (!s) return [];
