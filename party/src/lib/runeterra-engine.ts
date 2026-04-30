@@ -971,6 +971,16 @@ function validateSpellTarget(
         };
       }
     }
+    // Phase 3.20 : Purification ne peut cibler qu'un adepte (non-Champion).
+    if (effect.type === "silence-follower-target") {
+      const card = getCard(enemyUnit.cardCode);
+      if (card?.supertype === "Champion") {
+        return {
+          ok: false,
+          error: `${card.name} est un Champion — Purification ne cible que les adeptes.`,
+        };
+      }
+    }
     return { ok: true };
   }
   // any
@@ -1422,6 +1432,29 @@ function applySpellEffect(
           `${player.username} regagne le jeton d'attaque (Ralliement).`,
         ],
       };
+    }
+    case "silence-follower-target": {
+      // Phase 3.20 : Purification. Supprime tous les mots-clés et reset
+      // les statuts round-only (frozen, stunned, barrierUsed) + annule
+      // les endOfRoundBuffs (revert power/health aux valeurs de base).
+      const player = newPlayers[oppSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        // Annule les buffs round-only (subtract et reset).
+        return {
+          ...u,
+          keywords: [],
+          power: u.power - u.endOfRoundPowerBuff,
+          health: u.health - u.endOfRoundHealthBuff,
+          endOfRoundPowerBuff: 0,
+          endOfRoundHealthBuff: 0,
+          frozen: false,
+          stunned: false,
+          barrierUsed: false,
+        };
+      });
+      newPlayers[oppSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
     }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.

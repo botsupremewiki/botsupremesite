@@ -1447,7 +1447,12 @@ export type SpellEffect =
   | { type: "damage-all-units"; amount: number }
   // Sans cible : le caster gagne (ou regagne) le jeton d'attaque ce round
   // (Poursuite inlassable = Ralliez-vous).
-  | { type: "gain-attack-token-self" };
+  | { type: "gain-attack-token-self" }
+  // Phase 3.20
+  // Cible : adepte ennemi (non-Champion) → supprime tous ses mots-clés
+  // et ses buffs round (frozen / stunned / barrier / endOfRoundBuffs).
+  // Purification (01DE050) : ne marche que sur un adepte.
+  | { type: "silence-follower-target" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1574,6 +1579,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     health: 3,
     requireExactBenchSize: 1,
   },
+
+  // ── Phase 3.20
+  // Purification (Demacia, 2 mana, Burst) :
+  // « Réduisez au silence un adepte. »
+  "01DE050": { type: "silence-follower-target" },
 };
 
 // ─── Last Breath effects (Phase 3.9b) ────────────────────────────────────
@@ -1624,6 +1634,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
       return "any";
     case "frostbite-enemy":
     case "stun-enemy":
+    case "silence-follower-target":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":
