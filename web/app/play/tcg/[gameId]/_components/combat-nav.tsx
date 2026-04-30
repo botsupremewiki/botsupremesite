@@ -8,6 +8,7 @@ export type CombatNavMode =
   | "ranked"
   | "history"
   | "stats"
+  | "seasons"
   | "trade";
 
 const ITEMS: { mode: CombatNavMode; label: string; sub: string }[] = [
@@ -16,6 +17,7 @@ const ITEMS: { mode: CombatNavMode; label: string; sub: string }[] = [
   { mode: "ranked", label: "🏆", sub: "Classé" },
   { mode: "history", label: "📜", sub: "Historique" },
   { mode: "stats", label: "📊", sub: "Stats" },
+  { mode: "seasons", label: "📅", sub: "Saisons" },
   { mode: "trade", label: "🤝", sub: "Trade" },
 ];
 
@@ -36,7 +38,9 @@ export function CombatNav({
         const href =
           it.mode === "trade"
             ? `/play/tcg/${gameId}/trade`
-            : `/play/tcg/${gameId}/battle/${it.mode}`;
+            : it.mode === "seasons"
+              ? `/play/tcg/${gameId}/seasons`
+              : `/play/tcg/${gameId}/battle/${it.mode}`;
         return (
           <Link
             key={it.mode}
