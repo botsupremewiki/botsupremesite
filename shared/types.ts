@@ -1293,6 +1293,10 @@ export type RuneterraBattleUnit = {
   // fois que je survis à des dégâts, summon Poro puissant ». Default
   // false. Set à true après le 1er survive. Aucun reset.
   survivedDamageOnce: boolean;
+  // Phase 3.77 : flag once-per-Senna (01DE038) « la première fois qu'un
+  // Lucian allié meurt, +1|+1 et Double frappe ». Default false. Set à
+  // true après le 1er trigger. Aucun reset.
+  lucianDeathTriggerUsed: boolean;
 };
 
 // État public d'un joueur (visible par l'adversaire). Pas de hand, pas de
@@ -2451,6 +2455,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // « défaussez 1 carte » est skip — pas de discard cost system pour les
   // tokens créés en main).
   "01NX020T1": { type: "buff-ally-round", power: 1, health: 0 },
+
+  // ── Phase 3.77 (token spell créé par Lux level-up)
+  // 01DE042T3 (Éclat final, 10 Slow, créé par Lux niveau 2). 4 dmg à
+  // une cible (unité ou nexus — fallback nexus si pas d'ennemi via UI).
+  "01DE042T3": { type: "deal-damage-target-any-or-nexus", amount: 4 },
 };
 
 // ─── Play effects (Phase 3.73) ───────────────────────────────────────────

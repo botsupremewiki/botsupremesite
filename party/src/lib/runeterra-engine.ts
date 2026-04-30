@@ -220,6 +220,7 @@ export function createUnit(uid: string, cardCode: string): RuneterraBattleUnit {
     frozen: false,
     stunned: false,
     survivedDamageOnce: false,
+    lucianDeathTriggerUsed: false,
   };
 }
 
@@ -1031,7 +1032,43 @@ export function triggerLastBreath(
     deadAlliesThisRound: [...dyingPlayer.deadAlliesThisRound, deathEntry],
     deadAlliesThisGame: [...dyingPlayer.deadAlliesThisGame, deathEntry],
   };
-  const stateWithDeath: InternalState = { ...state, players: newPlayers };
+  let stateWithDeath: InternalState = { ...state, players: newPlayers };
+  // Phase 3.77 : Senna trigger — si un Lucian allié meurt, +1|+1 et
+  // Double frappe à toutes les Sennas allies non-déjà-triggered.
+  if (dyingUnit.cardCode === "01DE022") {
+    const owner = stateWithDeath.players[dyingUnitSeat];
+    let buffed = false;
+    const newSennaBench = owner.bench.map((u) => {
+      if (u.cardCode !== "01DE038") return u;
+      if (u.lucianDeathTriggerUsed) return u;
+      buffed = true;
+      const newKeywords = u.keywords.includes("DoubleStrike")
+        ? u.keywords
+        : [...u.keywords, "DoubleStrike"];
+      return {
+        ...u,
+        power: u.power + 1,
+        health: u.health + 1,
+        keywords: newKeywords,
+        lucianDeathTriggerUsed: true,
+      };
+    });
+    if (buffed) {
+      const psSenna: [InternalPlayer, InternalPlayer] = [
+        stateWithDeath.players[0],
+        stateWithDeath.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      psSenna[dyingUnitSeat] = { ...owner, bench: newSennaBench };
+      stateWithDeath = {
+        ...stateWithDeath,
+        players: psSenna,
+        log: [
+          ...stateWithDeath.log,
+          `${owner.username} : Senna pleure Lucian (+1|+1 et Double frappe).`,
+        ],
+      };
+    }
+  }
   if (!dyingUnit.keywords.includes("LastBreath")) return stateWithDeath;
   const effect = RUNETERRA_LAST_BREATH_EFFECTS[dyingUnit.cardCode];
   if (!effect) return stateWithDeath;
@@ -5990,6 +6027,8 @@ const LEVEL_UP_REGISTRY: Record<
 function checkLevelUps(state: InternalState): InternalState {
   let newPlayers = state.players;
   const events: string[] = [];
+  // Phase 3.77 : track les level-ups de Lux pour fire create-card-in-hand.
+  const luxLevelUpsBySeat: [number, number] = [0, 0];
 
   for (const seatIdx of [0, 1] as const) {
     const player = newPlayers[seatIdx];
@@ -6005,6 +6044,11 @@ function checkLevelUps(state: InternalState): InternalState {
       if (!lvl2 || lvl2.type !== "Unit") return u; // mapping foireux, skip
       benchChanged = true;
       events.push(`${card.name} passe au niveau supérieur !`);
+      // Phase 3.77 : Lux level-up bumpe le compteur pour fire l'effet
+      // create Éclat final après la mutation.
+      if (u.cardCode === "01DE042") {
+        luxLevelUpsBySeat[seatIdx]++;
+      }
       return {
         ...u,
         cardCode: entry.levelUpCardCode,
@@ -6021,8 +6065,24 @@ function checkLevelUps(state: InternalState): InternalState {
     }
   }
 
-  if (events.length === 0) return state;
-  return { ...state, players: newPlayers, log: [...state.log, ...events] };
+  let newState: InternalState =
+    events.length === 0
+      ? state
+      : { ...state, players: newPlayers, log: [...state.log, ...events] };
+
+  // Phase 3.77 : Lux level-up — créer 1 × Éclat final (01DE042T3) en
+  // main par level-up.
+  for (const seatIdx of [0, 1] as const) {
+    for (let i = 0; i < luxLevelUpsBySeat[seatIdx]; i++) {
+      newState = applySpellEffect(
+        newState,
+        seatIdx,
+        { type: "create-card-in-hand", cardCode: "01DE042T3" },
+        null,
+      );
+    }
+  }
+  return newState;
 }
 
 /** Prédicat UI : peut-on déclarer l'attaque maintenant ? */
