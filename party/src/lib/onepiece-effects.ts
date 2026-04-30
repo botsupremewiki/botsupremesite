@@ -39,6 +39,28 @@ export type EffectHook =
   | "on-activate-main" // [Activation : Principale] déclenché manuellement
   | "on-choice-resolved"; // PendingChoice résolu — applique la suite de l'effet
 
+/** Contexte d'évaluation d'un passif de puissance. Le moteur appelle tous
+ *  les `PassivePowerMod` enregistrés à chaque calcul de power (attaque,
+ *  défense, etc.) ; chaque mod retourne un delta à ajouter. */
+export type PassivePowerContext = {
+  // La carte dont on calcule le power.
+  target: CardRef;
+  // Quelle phase / situation déclenche le calcul.
+  situation: "attack" | "defend" | "global";
+  // À qui appartient la carte qui applique ce passif.
+  modSourceSeat: OnePieceBattleSeatId;
+  modSourceUid: string;
+  // À quel seat appartient le tour courant (pour [Votre tour], [Tour adverse]).
+  activeSeat: OnePieceBattleSeatId | null;
+  // Lecture de l'état du combat.
+  battle: BattleEffectAccess;
+};
+
+/** Modificateur de puissance passif. Retourne un delta (positif ou négatif)
+ *  à appliquer au power de la cible. Retourne 0 si le passif ne s'applique
+ *  pas dans cette situation. */
+export type PassivePowerMod = (ctx: PassivePowerContext) => number;
+
 /** Selection passée au handler quand un PendingChoice est résolu. Mappe sur
  *  le payload du message client `op-resolve-choice`. */
 export type ChoiceSelection = {
@@ -2087,6 +2109,193 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
 /** Récupère le cardNumber depuis un cardId (avec ou sans suffixe variante). */
 export function cardNumberOf(cardId: string): string {
   return cardId.replace(/_p\d+$/, "");
+}
+
+// ─── Registre des modificateurs de puissance passifs ────────────────────
+// Indexé par cardNumber. À chaque calcul de power, le moteur itère sur
+// toutes les cartes en jeu (Leaders + Persos + Stage des deux seats) et
+// appelle le mod correspondant si présent. La somme des deltas s'ajoute
+// au power de base.
+
+export const PASSIVE_POWER_MODS: Record<string, PassivePowerMod> = {
+  /** OP09-004 Shanks (Char) — "Tous les Personnages adverses perdent
+   *  -1000 de puissance." Buff global passif sur les Persos adverses. */
+  "OP09-004": (ctx) => {
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat === ctx.modSourceSeat) return 0;
+    return -1000;
+  },
+
+  /** OP02-019 Rakuyo — "[DON!! x1] [Votre tour] Tous vos Personnages
+   *  incluant «Équipage de Barbe Blanche» dans leur type gagnent +1000
+   *  de puissance." */
+  "OP02-019": (ctx) => {
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    if (ctx.activeSeat !== ctx.modSourceSeat) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return 0;
+    const rakuyo = seat.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!rakuyo || rakuyo.attachedDon < 1) return 0;
+    const targetUid = ctx.target.uid;
+    const tgt = seat.characters.find((c) => c.uid === targetUid);
+    if (!tgt) return 0;
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(tgt.cardId);
+    if (
+      !meta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe blanche"),
+      )
+    )
+      return 0;
+    return 1000;
+  },
+
+  /** ST21-002 Usopp — "[DON!! x2] [Tour adverse] Ce Personnage gagne
+   *  +2000 de puissance." */
+  "ST21-002": (ctx) => {
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    if (ctx.target.uid !== ctx.modSourceUid) return 0;
+    if (ctx.activeSeat === ctx.modSourceSeat) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    const me = seat?.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!me || me.attachedDon < 2) return 0;
+    return 2000;
+  },
+
+  /** ST21-011 Franky — "[DON!! x2] [Tour adverse] Tous vos Personnages
+   *  de type {Équipage de Chapeau de paille} ayant 4000 de puissance de
+   *  base ou moins gagnent +1000 de puissance." */
+  "ST21-011": (ctx) => {
+    if (ctx.activeSeat === ctx.modSourceSeat) return 0;
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return 0;
+    const franky = seat.characters.find((c) => c.uid === ctx.modSourceUid);
+    if (!franky || franky.attachedDon < 2) return 0;
+    const targetUid = ctx.target.uid;
+    const tgt = seat.characters.find((c) => c.uid === targetUid);
+    if (!tgt) return 0;
+    const meta = ONEPIECE_BASE_SET_BY_ID.get(tgt.cardId);
+    if (
+      !meta ||
+      meta.kind !== "character" ||
+      meta.power > 4000 ||
+      !meta.types.some((t) =>
+        t.toLowerCase().includes("équipage de chapeau de paille"),
+      )
+    )
+      return 0;
+    return 1000;
+  },
+
+  /** ST16-005 Monkey D. Luffy — "Si une de vos [Uta] est épuisée, ce
+   *  Personnage gagne +1000 de puissance." */
+  "ST16-005": (ctx) => {
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    if (ctx.target.uid !== ctx.modSourceUid) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat) return 0;
+    const hasRestedUta = seat.characters.some((c) => {
+      if (!c.rested) return false;
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+      return meta?.name === "Uta";
+    });
+    return hasRestedUta ? 1000 : 0;
+  },
+
+  /** ST16-003 Charlotte Katakuri — "Si votre Leader est de type {FILM} et
+   *  que vous avez 6 cartes ou plus épuisées, ce Personnage gagne +2000
+   *  de puissance." */
+  "ST16-003": (ctx) => {
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    if (ctx.target.uid !== ctx.modSourceUid) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat?.leaderId) return 0;
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    if (!leaderMeta?.types.some((t) => t.toLowerCase().includes("film")))
+      return 0;
+    const restedCount = seat.characters.filter((c) => c.rested).length;
+    if (restedCount < 6) return 0;
+    return 2000;
+  },
+
+  /** OP09-086 Jesus Burgess — "Si votre Leader est de type {Équipage de
+   *  Barbe Noire}, pour chaque tranche de 4 cartes dans votre Défausse,
+   *  ce Personnage gagne +1000 de puissance." */
+  "OP09-086": (ctx) => {
+    if (ctx.target.kind !== "character") return 0;
+    if (ctx.target.seat !== ctx.modSourceSeat) return 0;
+    if (ctx.target.uid !== ctx.modSourceUid) return 0;
+    const seat = ctx.battle.getSeat(ctx.modSourceSeat);
+    if (!seat?.leaderId) return 0;
+    const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId);
+    if (
+      !leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("équipage de barbe noire"),
+      )
+    )
+      return 0;
+    return Math.floor(seat.discardSize / 4) * 1000;
+  },
+};
+
+/** Évalue tous les modificateurs de puissance passifs pour une cible.
+ *  Itère sur les cartes en jeu des deux seats (Leaders + Persos) et
+ *  accumule les deltas. Retourne le delta total. */
+export function applyAllPowerMods(
+  target: CardRef,
+  situation: "attack" | "defend" | "global",
+  battle: BattleEffectAccess,
+  activeSeat: OnePieceBattleSeatId | null,
+): number {
+  let delta = 0;
+  for (const seatId of ["p1", "p2"] as const) {
+    const seat = battle.getSeat(seatId);
+    if (!seat) continue;
+    // Leader
+    if (seat.leaderId) {
+      const num = cardNumberOf(seat.leaderId);
+      const mod = PASSIVE_POWER_MODS[num];
+      if (mod) {
+        try {
+          delta += mod({
+            target,
+            situation,
+            modSourceSeat: seatId,
+            modSourceUid: "leader",
+            activeSeat,
+            battle,
+          });
+        } catch {
+          // ignore handler errors
+        }
+      }
+    }
+    // Characters
+    for (const c of seat.characters) {
+      const num = cardNumberOf(c.cardId);
+      const mod = PASSIVE_POWER_MODS[num];
+      if (mod) {
+        try {
+          delta += mod({
+            target,
+            situation,
+            modSourceSeat: seatId,
+            modSourceUid: c.uid,
+            activeSeat,
+            battle,
+          });
+        } catch {
+          // ignore handler errors
+        }
+      }
+    }
+  }
+  return delta;
 }
 
 /** Tente d'exécuter le handler d'effet pour une carte sur un hook donné.

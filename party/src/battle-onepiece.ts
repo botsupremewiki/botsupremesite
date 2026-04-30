@@ -40,6 +40,7 @@ import {
   recordBotWin,
 } from "./lib/supabase";
 import {
+  applyAllPowerMods,
   type BattleEffectAccess,
   CARD_HANDLERS,
   type CardRef,
@@ -878,6 +879,18 @@ export default class OnePieceBattleServer implements Party.Server {
     // qui inflige -1000 à l'adversaire). On les applique au defenderBasePower.
     defenderBasePower += this.getPowerBuff(opponentSeatId, targetUid);
 
+    // Applique les modificateurs passifs de toutes les cartes en jeu.
+    const attackerRef: CardRef =
+      attackerUid === "leader"
+        ? { kind: "leader", seat: seatId }
+        : { kind: "character", seat: seatId, uid: attackerUid };
+    const defenderRef: CardRef =
+      targetUid === "leader"
+        ? { kind: "leader", seat: opponentSeatId }
+        : { kind: "character", seat: opponentSeatId, uid: targetUid };
+    attackerPower += this.applyPassivesTo(attackerRef, "attack");
+    defenderBasePower += this.applyPassivesTo(defenderRef, "defend");
+
     // Ouvre la defense window.
     this.pendingAttack = {
       attackerSeat: seatId,
@@ -930,12 +943,18 @@ export default class OnePieceBattleServer implements Party.Server {
       this.sendError(conn, "Ce Bloqueur est déjà la cible.");
       return;
     }
-    // Redirige l'attaque + épuise le bloqueur. Recalcule defenderBasePower.
+    // Redirige l'attaque + épuise le bloqueur. Recalcule defenderBasePower
+    // (base + DON + temp buffs + passifs sur le nouveau défenseur).
     blocker.rested = true;
     if ("power" in meta) {
       this.pendingAttack.targetUid = blockerUid;
-      this.pendingAttack.defenderBasePower =
-        meta.power + blocker.attachedDon * 1000;
+      let blockerPower = meta.power + blocker.attachedDon * 1000;
+      blockerPower += this.getPowerBuff(seatId, blockerUid);
+      blockerPower += this.applyPassivesTo(
+        { kind: "character", seat: seatId, uid: blockerUid },
+        "defend",
+      );
+      this.pendingAttack.defenderBasePower = blockerPower;
     }
     this.pushLog(
       `${seat.username} bloque avec ${meta.name} (${this.pendingAttack.defenderBasePower}).`,
@@ -1766,6 +1785,18 @@ export default class OnePieceBattleServer implements Party.Server {
     attackerPower += this.getPowerBuff("p2", attackerUid);
     defenderBasePower += this.getPowerBuff("p1", targetUid);
 
+    // Modificateurs passifs.
+    const attackerRef: CardRef =
+      attackerUid === "leader"
+        ? { kind: "leader", seat: "p2" }
+        : { kind: "character", seat: "p2", uid: attackerUid };
+    const defenderRef: CardRef =
+      targetUid === "leader"
+        ? { kind: "leader", seat: "p1" }
+        : { kind: "character", seat: "p1", uid: targetUid };
+    attackerPower += this.applyPassivesTo(attackerRef, "attack");
+    defenderBasePower += this.applyPassivesTo(defenderRef, "defend");
+
     this.pendingAttack = {
       attackerSeat: "p2",
       attackerUid,
@@ -2041,6 +2072,21 @@ export default class OnePieceBattleServer implements Party.Server {
     const s = this.seats[seatId];
     if (!s) return 0;
     return s.tempPowerBuffs.get(targetUid) ?? 0;
+  }
+
+  /** Calcule le delta de puissance dû aux passifs continus de toutes les
+   *  cartes en jeu (Leaders + Persos des deux seats). À ajouter au power
+   *  de base + DON + temp buffs. */
+  private applyPassivesTo(
+    target: CardRef,
+    situation: "attack" | "defend" | "global",
+  ): number {
+    return applyAllPowerMods(
+      target,
+      situation,
+      this.getBattleAccess(),
+      this.activeSeat,
+    );
   }
 
   /** Helper : valide que c'est mon tour en main phase. */
