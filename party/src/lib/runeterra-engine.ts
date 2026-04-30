@@ -571,9 +571,26 @@ export function endRound(state: InternalState): InternalState {
   // 1) Bank spell mana
   // 2) Expire round-only buffs (Phase 3.7)
   // 3) Regeneration : les unités avec ce mot-clé soignent tous leurs dégâts
+  // 4) Phase 3.76 : Karma EOR trigger (apply BEFORE bank/expire pour
+  //    que les compteurs spellManaSpent fassent sens dans le round).
+  let stateForEor: InternalState = state;
+  for (const seat of [0, 1] as const) {
+    const p = stateForEor.players[seat];
+    const karmaCount = p.bench.filter((u) => u.cardCode === "01IO041").length;
+    for (let i = 0; i < karmaCount; i++) {
+      // Crée un random spell des régions du caster (réutilise la logique
+      // de Sagesse ancestrale via applySpellEffect).
+      stateForEor = applySpellEffect(
+        stateForEor,
+        seat,
+        { type: "create-random-spell-in-hand-from-regions" },
+        null,
+      );
+    }
+  }
   const updatedPlayers: [InternalPlayer, InternalPlayer] = [
-    applyRegeneration(expireRoundBuffs(bankSpellMana(state.players[0]))),
-    applyRegeneration(expireRoundBuffs(bankSpellMana(state.players[1]))),
+    applyRegeneration(expireRoundBuffs(bankSpellMana(stateForEor.players[0]))),
+    applyRegeneration(expireRoundBuffs(bankSpellMana(stateForEor.players[1]))),
   ];
 
   // Vérifier game over.
@@ -583,12 +600,12 @@ export function endRound(state: InternalState): InternalState {
     const winner: 0 | 1 | null =
       p0Dead && p1Dead ? null : p0Dead ? 1 : 0;
     return {
-      ...state,
+      ...stateForEor,
       phase: "ended",
       players: updatedPlayers,
       winnerSeatIdx: winner,
       log: [
-        ...state.log,
+        ...stateForEor.log,
         winner === null
           ? "Égalité — les 2 nexus sont à 0."
           : `${updatedPlayers[winner].username} remporte la partie.`,
@@ -596,9 +613,10 @@ export function endRound(state: InternalState): InternalState {
     };
   }
 
-  // Sinon, on démarre le round suivant.
+  // Sinon, on démarre le round suivant. Phase 3.76 : utilise stateForEor
+  // pour préserver les logs de Karma EOR.
   return startRound({
-    ...state,
+    ...stateForEor,
     players: updatedPlayers,
   });
   void cfg;
@@ -771,6 +789,130 @@ export function triggerOnAttack(
   const effect = RUNETERRA_ATTACK_EFFECTS[cardCode];
   if (!effect) return state;
   return applySpellEffect(state, attackerSeat, effect, null, null, null, 0, attackerUid);
+}
+
+/** Phase 3.76 : Heimerdinger (01PZ056) — quand un sort est lancé par le
+ *  caster, créer une tourelle fugace du même coût dans sa main, avec
+ *  +1|+1 et coût ramené à 0 via cardBuffs. cost → cardCode mapping :
+ *  0→T1, 1→T4, 2→T7, 3→T8, 4→T9, 5→T2, 6→T6, 7+→T5 (cap). */
+const HEIMER_TURRETS_BY_COST: Record<number, string> = {
+  0: "01PZ056T1",
+  1: "01PZ056T4",
+  2: "01PZ056T7",
+  3: "01PZ056T8",
+  4: "01PZ056T9",
+  5: "01PZ056T2",
+  6: "01PZ056T6",
+  7: "01PZ056T5",
+};
+
+export function triggerHeimerdingerOnSpellCast(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  spellCost: number,
+): InternalState {
+  const cfg = RUNETERRA_BATTLE_CONFIG;
+  const player = state.players[casterSeat];
+  const heimerCount = player.bench.filter(
+    (u) => u.cardCode === "01PZ056",
+  ).length;
+  if (heimerCount === 0) return state;
+  const cappedCost = Math.min(spellCost, 7);
+  const tokenCardCode = HEIMER_TURRETS_BY_COST[cappedCost];
+  if (!tokenCardCode) return state;
+  const tokenCard = getCard(tokenCardCode);
+  if (!tokenCard) return state;
+  let newPlayer = player;
+  // 1 turret par Heimerdinger sur le banc.
+  for (let i = 0; i < heimerCount; i++) {
+    if (newPlayer.hand.length >= cfg.maxHand) break;
+    const newUid = `${casterSeat}-htur-${state.round}-${state.log.length}-${i}`;
+    const newCardBuffs = { ...newPlayer.cardBuffs };
+    // +1|+1 et cost 0 (printed cost = X, costDelta = -X pour 0 effectif).
+    newCardBuffs[newUid] = {
+      powerDelta: 1,
+      healthDelta: 1,
+      costDelta: -cappedCost,
+      addKeywords: [],
+    };
+    newPlayer = {
+      ...newPlayer,
+      hand: [...newPlayer.hand, { uid: newUid, cardCode: tokenCardCode }],
+      cardBuffs: newCardBuffs,
+    };
+  }
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[casterSeat] = newPlayer;
+  return {
+    ...state,
+    players: newPlayers,
+    log: [
+      ...state.log,
+      `${player.username} : Heimerdinger crée ${heimerCount} × ${tokenCard.name}.`,
+    ],
+  };
+}
+
+/** Phase 3.76 : Yasuo (01IO015) déclenche 2 dmg sur tout enemy qu'on
+ *  vient de stun (ou recall). À appeler depuis tous les sites stun-enemy.
+ *  casterSeat = le joueur qui a un Yasuo potentiel. stunnedEnemyUid =
+ *  uid de l'unité ennemie stunnée (existe encore sur opp bench). */
+export function triggerYasuoOnEnemyStunned(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  stunnedEnemyUid: string,
+): InternalState {
+  const oppSeatIdx = otherSeat(casterSeat);
+  const caster = state.players[casterSeat];
+  const opp = state.players[oppSeatIdx];
+  const yasuoCount = caster.bench.filter((u) => u.cardCode === "01IO015").length;
+  if (yasuoCount === 0) return state;
+  const target = opp.bench.find((u) => u.uid === stunnedEnemyUid);
+  if (!target) return state;
+  // 2 dmg par Yasuo allié sur le banc.
+  const totalDmg = 2 * yasuoCount;
+  const updatedBench = opp.bench.map((u) => {
+    if (u.uid !== stunnedEnemyUid) return u;
+    const c = { ...u };
+    applyDamageToUnit(c, totalDmg);
+    return c;
+  });
+  const survivors = updatedBench.filter((u) => u.damage < u.health);
+  const dead = updatedBench.find((u) => u.damage >= u.health);
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[oppSeatIdx] = {
+    ...opp,
+    bench: survivors,
+    alliesDiedThisRound: opp.alliesDiedThisRound + (dead ? 1 : 0),
+    championCounters: {
+      ...opp.championCounters,
+      alliesDied: opp.championCounters.alliesDied + (dead ? 1 : 0),
+      unitsDied: opp.championCounters.unitsDied + (dead ? 1 : 0),
+    },
+  };
+  newPlayers[casterSeat] = {
+    ...caster,
+    championCounters: {
+      ...caster.championCounters,
+      unitsDied: caster.championCounters.unitsDied + (dead ? 1 : 0),
+    },
+  };
+  let newState: InternalState = {
+    ...state,
+    players: newPlayers,
+    log: [
+      ...state.log,
+      `${target.uid} (Yasuo) prend ${totalDmg} dmg.`,
+    ],
+  };
+  if (dead) newState = triggerLastBreath(newState, dead, oppSeatIdx);
+  return newState;
 }
 
 /** Phase 3.75 : déclenche l'effet on-nexus-strike d'un Champion si
@@ -1319,6 +1461,12 @@ export function playSpell(
     ],
   };
   postSpellState = triggerImbue(postSpellState, seatIdx);
+  // Phase 3.76 : Heimerdinger trigger (cast turret of same cost in hand).
+  postSpellState = triggerHeimerdingerOnSpellCast(
+    postSpellState,
+    seatIdx,
+    effectiveSpellCost,
+  );
   return {
     ok: true,
     state: checkLevelUps(postSpellState),
@@ -2110,7 +2258,16 @@ function applySpellEffect(
           },
         };
       }
-      return { ...state, players: newPlayers };
+      let stateAfterStun: InternalState = { ...state, players: newPlayers };
+      // Phase 3.76 : Yasuo (01IO015) — 2 dmg à l'ennemi stunned.
+      if (appliedNew && targetUid) {
+        stateAfterStun = triggerYasuoOnEnemyStunned(
+          stateAfterStun,
+          casterSeat,
+          targetUid,
+        );
+      }
+      return stateAfterStun;
     }
     case "combo-buff-keyword-ally-round": {
       // +power/+health round + grant keyword (round-only via convention,
@@ -3904,7 +4061,11 @@ function applySpellEffect(
           },
         };
       }
-      return { ...state, players: newPlayers };
+      let stateAfter: InternalState = { ...state, players: newPlayers };
+      if (stunned && targetUid) {
+        stateAfter = triggerYasuoOnEnemyStunned(stateAfter, casterSeat, targetUid);
+      }
+      return stateAfter;
     }
     case "grant-ephemeral-all-followers-in-combat": {
       // Phase 3.52 : grant Ephemeral à tous les adeptes (non-Champion)
@@ -4193,7 +4354,11 @@ function applySpellEffect(
             }
           : caster.championCounters,
       };
-      return { ...state, players: newPlayers };
+      let stateAfter: InternalState = { ...state, players: newPlayers };
+      if (stunned && targetUid) {
+        stateAfter = triggerYasuoOnEnemyStunned(stateAfter, casterSeat, targetUid);
+      }
+      return stateAfter;
     }
     case "drain-target-summon-token": {
       // Phase 3.42 : Vil festin. Drain drainAmount d'une unité (any) puis
@@ -4690,14 +4855,15 @@ function applySpellEffect(
       // dont la puissance est ≤ maxPower. enemyStunned bumpé pour chaque
       // cible (compte vers Yasuo level-up).
       const opp = newPlayers[oppSeat];
-      let stunCount = 0;
+      const freshlyStunnedUids: string[] = [];
       const newBench = opp.bench.map((u) => {
         if (u.power > effect.maxPower) return u;
         if (u.stunned) return u;
-        stunCount++;
+        freshlyStunnedUids.push(u.uid);
         return { ...u, stunned: true };
       });
       newPlayers[oppSeat] = { ...opp, bench: newBench };
+      const stunCount = freshlyStunnedUids.length;
       if (stunCount > 0) {
         const caster = newPlayers[casterSeat];
         newPlayers[casterSeat] = {
@@ -4708,7 +4874,13 @@ function applySpellEffect(
           },
         };
       }
-      return { ...state, players: newPlayers };
+      let stateAfter: InternalState = { ...state, players: newPlayers };
+      // Phase 3.76 : Yasuo trigger pour chaque ennemi stunned.
+      for (const uid of freshlyStunnedUids) {
+        stateAfter = triggerYasuoOnEnemyStunned(stateAfter, casterSeat, uid);
+        if (stateAfter.phase === "ended") return stateAfter;
+      }
+      return stateAfter;
     }
     case "drain-target-any":
     case "drain-ally": {
