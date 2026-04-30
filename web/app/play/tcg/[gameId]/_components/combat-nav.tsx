@@ -11,6 +11,7 @@ export type CombatNavMode =
   | "seasons"
   | "tournaments"
   | "quests"
+  | "meta"
   | "trade";
 
 const ITEMS: { mode: CombatNavMode; label: string; sub: string }[] = [
@@ -22,6 +23,7 @@ const ITEMS: { mode: CombatNavMode; label: string; sub: string }[] = [
   { mode: "seasons", label: "📅", sub: "Saisons" },
   { mode: "tournaments", label: "🏟️", sub: "Tournois" },
   { mode: "quests", label: "🎯", sub: "Quêtes" },
+  { mode: "meta", label: "📈", sub: "Méta" },
   { mode: "trade", label: "🤝", sub: "Trade" },
 ];
 
@@ -48,7 +50,9 @@ export function CombatNav({
                 ? `/play/tcg/${gameId}/tournaments`
                 : it.mode === "quests"
                   ? `/play/tcg/${gameId}/quests`
-                  : `/play/tcg/${gameId}/battle/${it.mode}`;
+                  : it.mode === "meta"
+                    ? `/play/tcg/${gameId}/meta`
+                    : `/play/tcg/${gameId}/battle/${it.mode}`;
         return (
           <Link
             key={it.mode}
