@@ -821,11 +821,48 @@ function RoundView({
         onZoom={(c) => onZoom(c)}
       />
 
-      {/* Log compact */}
-      <div className="shrink-0 max-h-20 overflow-y-auto rounded-md border border-white/5 bg-black/30 p-2 text-[11px] text-zinc-400">
-        {state.log.slice(-5).map((entry, i) => (
-          <div key={i}>{entry}</div>
-        ))}
+      {/* Log expandable + help button */}
+      <BattleLogPanel state={state} />
+    </div>
+  );
+}
+
+function BattleLogPanel({ state }: { state: RuneterraBattleState }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? state.log : state.log.slice(-5);
+  return (
+    <div className="shrink-0">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-zinc-400 hover:bg-white/[0.07]"
+        >
+          <span>{expanded ? "▼" : "▶"}</span>
+          <span>
+            {expanded
+              ? `Log (${state.log.length} évènements)`
+              : `Log compact (5/${state.log.length})`}
+          </span>
+        </button>
+        <Link
+          href="/play/tcg/lol/regles"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200 hover:bg-violet-500/20"
+        >
+          📖 Règles
+        </Link>
+      </div>
+      <div
+        className={`mt-1 overflow-y-auto rounded-md border border-white/5 bg-black/30 p-2 text-[11px] text-zinc-400 ${
+          expanded ? "max-h-48" : "max-h-20"
+        }`}
+      >
+        {visible.length === 0 ? (
+          <div className="text-zinc-600">— début de la partie —</div>
+        ) : (
+          visible.map((entry, i) => <div key={i}>{entry}</div>)
+        )}
       </div>
     </div>
   );
