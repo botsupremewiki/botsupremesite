@@ -257,6 +257,29 @@ export interface BattleEffectAccess {
     handIndices: number[],
   ): string[];
 
+  /** Renvoie N cartes DON!! du terrain au deck DON!!. Priorité : DON
+   *  épuisées (active → rested → attached). Utilisé par les effets
+   *  «Vous pouvez renvoyer à votre deck DON!! 1 carte DON!! ou plus de
+   *  votre terrain» (Sanji, Brook, Nami, Zoro, Luffy, Chopper). Retourne
+   *  le nombre effectivement renvoyé (peut être < count si pas assez). */
+  returnDonFromBoard(seat: OnePieceBattleSeatId, count: number): number;
+
+  /** Épuise N cartes DON!! actives du seat. Utilisé par les coûts
+   *  «Vous pouvez épuiser N de vos cartes DON!!» (Adio, Laffitte, Lim).
+   *  Retourne le nombre effectivement épuisé. */
+  restDon(seat: OnePieceBattleSeatId, count: number): number;
+
+  /** Place la carte du dessus de la Vie du seat dans la Défausse du même
+   *  seat (utilisé par les effets type Nico Robin OP09-107 «placez dans
+   *  sa Défausse 1 carte du dessus de sa Vie»). Retourne le cardId placé
+   *  ou null si Vie vide. */
+  placeOpponentLifeOnDiscard(seat: OnePieceBattleSeatId): string | null;
+
+  /** Retourne le seat dont c'est le tour actuellement (ou null si pas de
+   *  partie en cours). Utilisé par les passifs et listeners qui ont des
+   *  conditions «[Tour adverse]» ou «[Votre tour]». */
+  getActiveSeat(): OnePieceBattleSeatId | null;
+
   /** Lit l'état d'un seat (read-only). */
   getSeat(seat: OnePieceBattleSeatId): {
     leaderId: string | null;
@@ -2836,11 +2859,8 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       return;
     }
     // Coûts : 1 DON active → rested + ce Persos rested.
+    ctx.battle.restDon(ctx.sourceSeat, 1);
     ctx.battle.restCharacter(ctx.sourceSeat, ctx.sourceUid);
-    // Pour le DON : pas d'API "rest 1 DON" donc on simule via l'effet
-    // attachDonToTarget(self, 1) qui consomme 1 DON. Pas idéal — préférons
-    // un log et l'ajout via un effet temporaire. On log juste le coût.
-    // (Une API restDon dédiée arrivera dans le batch suivant.)
     ctx.battle.log("Laffitte : 1 DON épuisée + ce Persos épuisé.");
     const found = ctx.battle.searchDeckTopForType(
       ctx.sourceSeat,
@@ -2870,12 +2890,11 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       );
       return;
     }
-    // On utilise placeOpponentLifeOnDiscard via un workaround : prend la
-    // Vie et la défausse manuellement en interne. Pas d'API dédiée encore,
-    // on fera un workaround log-only (sera complété batch suivant avec
-    // l'API placeOpponentLifeOnDiscard).
+    const cardId = ctx.battle.placeOpponentLifeOnDiscard(oppSeat);
     ctx.battle.log(
-      "Nico Robin : effet déclenché (placement Vie→Défausse adverse — API à venir).",
+      cardId
+        ? "Nico Robin : 1 Vie adverse → Défausse."
+        : "Nico Robin : pas de Vie à retirer.",
     );
   },
 
@@ -3209,6 +3228,314 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
           : { kind: "character", seat: oppSeat, uid: targetUid };
       ctx.battle.addPowerBuff(ref, -1000);
       ctx.battle.log("Shanks : -1000 cible adverse ce tour.");
+    }
+  },
+
+  // ─── BATCH 19 — cartes utilisant les APIs returnDon / restDon ──────────
+
+  /** OP09-070 Nami
+   *  [Jouée] Vous pouvez renvoyer à votre deck DON!! 1 carte DON!! ou plus
+   *  de votre terrain : Donnez jusqu'à 2 cartes DON!! épuisées à votre
+   *  Leader ou à 1 de vos Personnages. */
+  "OP09-070": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+      if (returned === 0) {
+        ctx.battle.log("Nami : pas de DON à renvoyer, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-070",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Nami : choisis ton Leader ou un Persos pour 2 DON épuisées.",
+        params: { allowLeader: true },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      const attached = ctx.battle.attachDonToTarget(ref, 2);
+      ctx.battle.log(`Nami : ${attached} DON attachée(s).`);
+    }
+  },
+
+  /** OP09-073 Brook
+   *  [En attaquant] Vous pouvez renvoyer à votre deck DON!! 1 carte DON!!
+   *  ou plus de votre terrain : Jusqu'à 2 Personnages adverses perdent
+   *  -2000 de puissance pour tout le tour. */
+  "OP09-073": (ctx) => {
+    if (ctx.hook === "on-attack") {
+      const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+      if (returned === 0) {
+        ctx.battle.log("Brook : pas de DON à renvoyer, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-073",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt:
+          "Brook : choisis 1er Persos adverse à -2000 (1 sur 2).",
+        params: { allowLeader: false, brookStep: 1 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const targetUid = ctx.choice.selection.targetUid;
+      if (!targetUid || targetUid === "leader") return;
+      ctx.battle.addPowerBuff(
+        { kind: "character", seat: oppSeat, uid: targetUid },
+        -2000,
+      );
+      ctx.battle.log("Brook : -2000 sur cible ce tour.");
+      // Étape 2 : 2e cible.
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-073-step2",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt:
+          "Brook : choisis 2e Persos adverse à -2000 (peut être identique au premier).",
+        params: { allowLeader: false },
+        cancellable: true,
+      });
+    }
+  },
+  // Step 2 wrapper : reroute vers OP09-073 second buff.
+  "OP09-073-step2": (ctx) => {
+    if (ctx.hook !== "on-choice-resolved" || !ctx.choice) return;
+    if (ctx.choice.skipped) return;
+    const oppSeat: OnePieceBattleSeatId =
+      ctx.sourceSeat === "p1" ? "p2" : "p1";
+    const targetUid = ctx.choice.selection.targetUid;
+    if (!targetUid || targetUid === "leader") return;
+    ctx.battle.addPowerBuff(
+      { kind: "character", seat: oppSeat, uid: targetUid },
+      -2000,
+    );
+    ctx.battle.log("Brook : -2000 sur 2e cible ce tour.");
+  },
+
+  /** OP09-076 Roronoa Zoro
+   *  [Jouée] Vous pouvez renvoyer à votre deck DON!! 1 carte DON!! ou plus
+   *  de votre terrain : Ajoutez jusqu'à 1 carte DON!! redressée de votre
+   *  deck DON!!. */
+  "OP09-076": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+    if (returned === 0) {
+      ctx.battle.log("Roronoa Zoro : pas de DON à renvoyer, effet annulé.");
+      return;
+    }
+    ctx.battle.giveDonFromDeck(ctx.sourceSeat, 1);
+    ctx.battle.log("Roronoa Zoro : DON renvoyée → +1 DON redressée.");
+  },
+
+  /** OP09-119 Monkey D. Luffy (alt-art / promo)
+   *  [Jouée] Vous pouvez renvoyer à votre deck DON!! 1 carte DON!! ou plus
+   *  de votre terrain : Piochez 1 carte ; ce Personnage gagne [Initiative]
+   *  pour tout le tour. */
+  "OP09-119": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+    if (returned === 0) {
+      ctx.battle.log("Luffy 119 : pas de DON à renvoyer, effet annulé.");
+      return;
+    }
+    ctx.battle.drawCards(ctx.sourceSeat, 1);
+    ctx.battle.log(
+      "Luffy 119 : +1 carte ; gagne [Initiative] (effet géré par texte).",
+    );
+  },
+
+  /** OP09-068 Tony-Tony Chopper
+   *  [Fin de votre tour] Vous pouvez renvoyer à votre deck DON!! 1 carte
+   *  DON!! ou plus : Redressez ce Personnage. Puis, ce Persos gagne
+   *  [Bloqueur] jusqu'à la fin du prochain tour adverse.
+   *  (Le Bloqueur dynamique demanderait un grant — pour l'instant on
+   *  applique juste la redressment.) */
+  "OP09-068": (ctx) => {
+    if (ctx.hook !== "on-turn-end") return;
+    const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+    if (returned === 0) return;
+    ctx.battle.untapCharacter(ctx.sourceSeat, ctx.sourceUid);
+    ctx.battle.log("Tony-Tony Chopper : redressé (DON renvoyée).");
+  },
+
+  /** OP09-065 Sanji
+   *  [Jouée] Vous pouvez renvoyer à votre deck DON!! 1 carte DON!! ou plus
+   *  de votre terrain : Ce Personnage gagne [Initiative] pour tout le tour.
+   *  Puis, épuisez jusqu'à 1 Personnage adverse ayant un coût de 6 ou
+   *  moins. */
+  "OP09-065": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 1);
+      if (returned === 0) {
+        ctx.battle.log("Sanji : pas de DON à renvoyer, effet annulé.");
+        return;
+      }
+      ctx.battle.log("Sanji : gagne [Initiative] ce tour.");
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-065",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Sanji : choisis 1 Persos adverse à épuiser (coût ≤ 6).",
+        params: { maxCost: 6 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const oppSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.restCharacter(oppSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Sanji : Persos adverse ≤ 6 épuisé.");
+    }
+  },
+
+  /** OP09-074 Bepo (passif d'observation)
+   *  [Votre tour] [Une fois par tour] Quand une carte DON!! de votre
+   *  terrain est renvoyée à votre deck DON!!, jusqu'à 1 de vos Leaders ou
+   *  Personnages gagne +1000 de puissance pour tout le tour.
+   *  (Le déclencheur «DON renvoyée» n'a pas encore de hook dédié — pour
+   *  l'instant on offre l'effet via on-activate-main pour usage manuel.) */
+  "OP09-074": (ctx) => {
+    if (ctx.hook === "on-activate-main") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-074",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Bepo : choisis ton Leader/Persos pour +1000 ce tour.",
+        params: { allowLeader: true, amount: 1000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      ctx.battle.addPowerBuff(ref, 1000);
+      ctx.battle.log("Bepo : cible +1000 ce tour.");
+    }
+  },
+
+  /** OP09-023 Adio
+   *  [Jouée] Si votre Leader est de type {ODYSSEY}, redressez jusqu'à 3 de
+   *  vos cartes DON!!. (Le second effet [Attaque adverse] : skip, demande
+   *  un nouveau hook.) */
+  "OP09-023": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const leaderMeta = seat?.leaderId
+      ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+      : null;
+    const isOdyssey = !!leaderMeta?.types.some((t) =>
+      t.toLowerCase().includes("odyssey"),
+    );
+    if (!isOdyssey) {
+      ctx.battle.log("Adio : Leader pas ODYSSEY, effet annulé.");
+      return;
+    }
+    if (!seat) return;
+    // "Redresser" 1 DON = la passer de rested → active.
+    const taken = Math.min(3, seat.donRested);
+    if (taken > 0) {
+      // On simule avec restDon en sens inverse : décrémente rested,
+      // incrémente active. Pas d'API directe → log + hack via giveDon
+      // (qui prend du donDeck, pas pareil). Pour rester simple ici, on
+      // émule via attachDonToTarget(self, 0) — non. Plus propre : ajout
+      // d'une API dédiée. Pour l'instant on log et on consume rested→active
+      // par un workaround : 0 op. Pas idéal. On laisse une note claire.
+      ctx.battle.log(
+        `Adio : effet ODYSSEY déclenché (jusqu'à ${taken} DON à redresser — API untapDon à venir).`,
+      );
+    } else {
+      ctx.battle.log("Adio : pas de DON épuisées à redresser.");
+    }
+  },
+
+  /** OP09-072 Franky
+   *  [Jouée] DON!! -2 ; vous pouvez défausser 1 carte de votre main :
+   *  Piochez 2 cartes. (Le coût DON-2 est traité comme returnDonFromBoard.) */
+  "OP09-072": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const returned = ctx.battle.returnDonFromBoard(ctx.sourceSeat, 2);
+      if (returned < 2) {
+        ctx.battle.log(
+          `Franky : seulement ${returned} DON renvoyée(s), effet annulé.`,
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-072",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt: "Franky : défausse 1 carte de ta main pour piocher 2.",
+        params: { count: 1 },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      ctx.battle.drawCards(ctx.sourceSeat, 2);
+      ctx.battle.log("Franky : DON-2 + discard 1 → +2 cartes.");
+    }
+  },
+
+  /** ST21-016 Gum Gum Dawn Whip (Event)
+   *  [Principale] Jusqu'à 1 de vos Leaders ou Personnages gagne +1000 de
+   *  puissance pour tout le tour. (Le second clause «1 char adv ne peut
+   *  activer Bloqueur» nécessite un nouveau status — pour ce batch on
+   *  applique seulement le buff +1000.) */
+  "ST21-016": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST21-016",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt: "Gum Gum Dawn Whip : choisis Leader/Persos pour +1000.",
+        params: { allowLeader: true, amount: 1000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      const ref: CardRef =
+        target === "leader"
+          ? { kind: "leader", seat: ctx.sourceSeat }
+          : { kind: "character", seat: ctx.sourceSeat, uid: target };
+      ctx.battle.addPowerBuff(ref, 1000);
+      ctx.battle.log("Gum Gum Dawn Whip : +1000 ce tour.");
     }
   },
 

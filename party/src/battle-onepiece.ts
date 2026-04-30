@@ -2184,6 +2184,60 @@ export default class OnePieceBattleServer implements Party.Server {
           donRested: s.donRested,
         };
       },
+      returnDonFromBoard: (seatId, count) => {
+        const s = this.seats[seatId];
+        if (!s) return 0;
+        let returned = 0;
+        // Priorité 1 : DON épuisées (sens littéral le plus souvent voulu).
+        while (returned < count && s.donRested > 0) {
+          s.donRested--;
+          s.donDeck++;
+          returned++;
+        }
+        // Priorité 2 : DON actives.
+        while (returned < count && s.donActive > 0) {
+          s.donActive--;
+          s.donDeck++;
+          returned++;
+        }
+        // Priorité 3 : DON attachées au Leader.
+        while (returned < count && s.leaderAttachedDon > 0) {
+          s.leaderAttachedDon--;
+          s.donDeck++;
+          returned++;
+        }
+        // Priorité 4 : DON attachées aux Persos (du plus chargé au moins).
+        if (returned < count) {
+          const sortedChars = [...s.characters].sort(
+            (a, b) => b.attachedDon - a.attachedDon,
+          );
+          for (const c of sortedChars) {
+            while (returned < count && c.attachedDon > 0) {
+              c.attachedDon--;
+              s.donDeck++;
+              returned++;
+            }
+            if (returned >= count) break;
+          }
+        }
+        return returned;
+      },
+      restDon: (seatId, count) => {
+        const s = this.seats[seatId];
+        if (!s) return 0;
+        const taken = Math.min(count, s.donActive);
+        s.donActive -= taken;
+        s.donRested += taken;
+        return taken;
+      },
+      placeOpponentLifeOnDiscard: (seatId) => {
+        const s = this.seats[seatId];
+        if (!s || s.life.length === 0) return null;
+        const card = s.life.shift()!;
+        s.discard.push(card);
+        return card.cardId;
+      },
+      getActiveSeat: () => this.activeSeat,
     };
   }
 
