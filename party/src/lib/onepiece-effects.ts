@@ -175,6 +175,18 @@ export interface BattleEffectAccess {
     excludeName?: string,
   ): string | null;
 
+  /** Variante de searchDeckTopForType qui filtre par carte ayant un Trigger
+   *  (meta.trigger != null). Utilisé par OP09-102 Professeur Clover et
+   *  OP09-117 Dereshi. `extractCount` limite le nombre de cartes ajoutées
+   *  à la main (1 ou 2). Retourne la liste des cardIds extraits. */
+  searchDeckTopForTrigger(
+    seat: OnePieceBattleSeatId,
+    count: number,
+    extractCount: number,
+    restGoesTo: SearchRestPlacement,
+    excludeName?: string,
+  ): string[];
+
   /** Ouvre un PendingChoice côté state. Le handler doit retourner après
    *  cet appel : la résolution rappellera le handler avec hook
    *  `on-choice-resolved` et `ctx.choice` rempli. */
@@ -4330,6 +4342,146 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       const attached = ctx.battle.attachDonToTarget(ref, 1);
       ctx.battle.log(`Katakuri : ${attached} DON attachée(s).`);
     }
+  },
+
+  // ─── BATCH 23 — Recherche trigger + cartes restantes ───────────────────
+
+  /** OP09-102 Professeur Clover
+   *  [Jouée] Si votre Leader est [Nico Robin], regardez 3 cartes du dessus
+   *  de votre deck, révélez jusqu'à 1 carte ayant [Déclenchement] et
+   *  ajoutez-la à votre main. Puis, placez les cartes restantes au-dessous
+   *  de votre deck dans l'ordre de votre choix. */
+  "OP09-102": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    const leaderMeta = seat?.leaderId
+      ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+      : null;
+    if (leaderMeta?.name !== "Nico Robin") {
+      ctx.battle.log(
+        "Professeur Clover : Leader pas [Nico Robin], effet annulé.",
+      );
+      return;
+    }
+    const found = ctx.battle.searchDeckTopForTrigger(
+      ctx.sourceSeat,
+      3,
+      1,
+      "bottom",
+    );
+    ctx.battle.log(
+      found.length > 0
+        ? `Professeur Clover : ${found.length} carte(s) Trigger ajoutée(s).`
+        : "Professeur Clover : aucune carte Trigger révélée.",
+    );
+  },
+
+  /** OP09-117 Dereshi (Event)
+   *  [Principale] Regardez 5 cartes du dessus de votre deck, révélez
+   *  jusqu'à 2 cartes ayant [Déclenchement] autres que [Dereshi] et
+   *  ajoutez-les à votre main. */
+  "OP09-117": (ctx) => {
+    if (ctx.hook !== "on-play") return;
+    const found = ctx.battle.searchDeckTopForTrigger(
+      ctx.sourceSeat,
+      5,
+      2,
+      "bottom",
+      "Dereshi",
+    );
+    ctx.battle.log(
+      found.length > 0
+        ? `Dereshi : ${found.length} carte(s) Trigger ajoutée(s).`
+        : "Dereshi : aucune carte Trigger révélée.",
+    );
+  },
+
+  /** ST19-002 Sengoku
+   *  [Jouée] Vous pouvez défausser 2 cartes de type {Marine} noires de
+   *  votre main : Si votre Leader est de type {Marine}, piochez 3 cartes.
+   *  (Filtre couleur «noire» omis — on vérifie juste le type Marine.) */
+  "ST19-002": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const leaderMeta = seat?.leaderId
+        ? ONEPIECE_BASE_SET_BY_ID.get(seat.leaderId)
+        : null;
+      const isMarine = !!leaderMeta?.types.some((t) =>
+        t.toLowerCase().includes("marine"),
+      );
+      if (!isMarine) {
+        ctx.battle.log("Sengoku : Leader pas Marine, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST19-002",
+        sourceUid: ctx.sourceUid,
+        kind: "discard-card",
+        prompt:
+          "Sengoku : défausse 2 cartes Marine de ta main pour piocher 3.",
+        params: { count: 2, requireType: "Marine" },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.handIndices) return;
+      const discarded = ctx.battle.discardFromHand(
+        ctx.sourceSeat,
+        ctx.choice.selection.handIndices,
+      );
+      if (discarded.length < 2) {
+        ctx.battle.log(
+          `Sengoku : seulement ${discarded.length} carte(s) défaussée(s), effet annulé.`,
+        );
+        return;
+      }
+      ctx.battle.drawCards(ctx.sourceSeat, 3);
+      ctx.battle.log("Sengoku : 2 Marine défaussées → 3 cartes piochées.");
+    }
+  },
+
+  /** ST15-003 Kingdew
+   *  [Tour adverse] Quand ce Personnage est mis KO par un effet, jusqu'à
+   *  1 de vos Leaders gagne +2000 de puissance pour tout le tour.
+   *  (Simplification : on déclenche le buff sur on-ko quel que soit la
+   *  source — pas de distinction combat/effet ici.) */
+  "ST15-003": (ctx) => {
+    if (ctx.hook !== "on-ko") return;
+    ctx.battle.addPowerBuff(
+      { kind: "leader", seat: ctx.sourceSeat },
+      2000,
+    );
+    ctx.battle.log("Kingdew : Leader +2000 ce tour (en KO).");
+  },
+
+  /** OP09-052 Marco
+   *  [Tour adverse] Vous pouvez défausser 1 carte de votre main : Quand
+   *  ce Personnage est mis KO par un effet adverse, jouez cette carte
+   *  Personnage épuisée depuis votre Défausse.
+   *  (Simplification : auto-déclenchement sans coût discard ; quand Marco
+   *  est KO, on tente de le re-poser épuisé depuis la défausse.) */
+  "OP09-052": (ctx) => {
+    if (ctx.hook !== "on-ko") return;
+    // Cherche Marco dans la défausse (vient juste d'y arriver via koCharacter).
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    if (!seat) return;
+    // La carte vient d'être ajoutée à la fin de la défausse — on cherche
+    // l'index du dernier Marco.
+    // On utilise les API publiques : la défausse est exposée via
+    // ctx.battle ne donne pas accès direct. Mais on peut demander le seat
+    // public et lire seat.discard ... actuellement pas exposé sur getSeat.
+    // Workaround : on tente playCharacterFromDiscard sur le dernier index.
+    // L'implémentation interne lira le discard.
+    // Le seat est disponible — tentons l'index basé sur discardSize - 1.
+    if (seat.discardSize === 0) return;
+    const uid = ctx.battle.playCharacterFromDiscard(
+      ctx.sourceSeat,
+      seat.discardSize - 1,
+      { rested: true },
+    );
+    if (uid) ctx.battle.log("Marco : ré-incarne épuisé depuis la Défausse.");
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───

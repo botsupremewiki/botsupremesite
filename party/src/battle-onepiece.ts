@@ -2222,6 +2222,32 @@ export default class OnePieceBattleServer implements Party.Server {
         else if (restGoesTo === "discard") s.discard.push(...top);
         return foundId;
       },
+      searchDeckTopForTrigger: (seatId, count, extractCount, restGoesTo, excludeName) => {
+        const s = this.seats[seatId];
+        if (!s) return [];
+        const top = s.deck.splice(0, Math.min(count, s.deck.length));
+        const extracted: string[] = [];
+        const remaining = [...top];
+        for (let i = 0; i < remaining.length && extracted.length < extractCount; ) {
+          const meta = ONEPIECE_BASE_SET_BY_ID.get(remaining[i].cardId);
+          if (
+            meta &&
+            meta.trigger &&
+            (!excludeName || meta.name !== excludeName)
+          ) {
+            const found = remaining.splice(i, 1)[0];
+            s.hand.push(found);
+            extracted.push(found.cardId);
+            // Pas d'increment de i — l'élément suivant glisse à i.
+          } else {
+            i++;
+          }
+        }
+        if (restGoesTo === "top") s.deck.unshift(...remaining);
+        else if (restGoesTo === "bottom") s.deck.push(...remaining);
+        else if (restGoesTo === "discard") s.discard.push(...remaining);
+        return extracted;
+      },
       getSeat: (seatId) => {
         const s = this.seats[seatId];
         if (!s) return null;
