@@ -2055,6 +2055,150 @@ function applySpellEffect(
       }
       return newState;
     }
+    case "buff-all-allies-permanent": {
+      // Phase 3.55 : +pwr/+hp permanent à tous les alliés sur le banc.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => ({
+        ...u,
+        power: u.power + effect.power,
+        health: u.health + effect.health,
+      }));
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "auto-discard-and-draw-up-to-n": {
+      // Phase 3.55 : Fouillis. Auto-discard up to maxDiscard cartes
+      // (rightmost first comme heuristique simple) puis draw égal.
+      const player = newPlayers[casterSeat];
+      const discardCount = Math.min(effect.maxDiscard, player.hand.length);
+      const newHand = player.hand.slice(0, player.hand.length - discardCount);
+      const newCardBuffs = { ...player.cardBuffs };
+      for (const c of player.hand.slice(player.hand.length - discardCount)) {
+        delete newCardBuffs[c.uid];
+      }
+      newPlayers[casterSeat] = {
+        ...player,
+        hand: newHand,
+        cardBuffs: newCardBuffs,
+      };
+      const log = [
+        ...state.log,
+        `${player.username} défausse ${discardCount} carte${discardCount > 1 ? "s" : ""}.`,
+      ];
+      const intermediate: InternalState = {
+        ...state,
+        players: newPlayers,
+        log,
+      };
+      if (discardCount === 0) return intermediate;
+      return drawCards(intermediate, casterSeat, discardCount).state;
+    }
+    case "auto-discard-and-damage-target-any-or-nexus": {
+      // Phase 3.55 : Enthousiasme. Auto-discard 1 carte (rightmost)
+      // puis dmg à la cible (unité ou nexus).
+      const cfgED = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      let intermediate: InternalState = state;
+      if (player.hand.length > 0) {
+        const newHand = player.hand.slice(0, player.hand.length - 1);
+        const newCardBuffs = { ...player.cardBuffs };
+        const discarded = player.hand[player.hand.length - 1];
+        delete newCardBuffs[discarded.uid];
+        newPlayers[casterSeat] = {
+          ...player,
+          hand: newHand,
+          cardBuffs: newCardBuffs,
+        };
+        intermediate = {
+          ...state,
+          players: newPlayers,
+          log: [...state.log, `${player.username} défausse 1 carte.`],
+        };
+      }
+      // Maintenant, applique le damage (réutilise la logique de
+      // deal-damage-target-any-or-nexus en inline).
+      const newPlayersDmg: [InternalPlayer, InternalPlayer] = [
+        intermediate.players[0],
+        intermediate.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      if (targetUid === "nexus-self") {
+        const me = newPlayersDmg[casterSeat];
+        const newNexus = me.nexusHealth - effect.amount;
+        newPlayersDmg[casterSeat] = { ...me, nexusHealth: newNexus };
+        if (newNexus <= 0) {
+          return {
+            ...intermediate,
+            players: newPlayersDmg,
+            phase: "ended",
+            winnerSeatIdx: oppSeat,
+          };
+        }
+        return { ...intermediate, players: newPlayersDmg };
+      }
+      if (targetUid === "nexus-enemy") {
+        const opp = newPlayersDmg[oppSeat];
+        const newNexus = opp.nexusHealth - effect.amount;
+        newPlayersDmg[oppSeat] = { ...opp, nexusHealth: newNexus };
+        if (newNexus <= 0) {
+          return {
+            ...intermediate,
+            players: newPlayersDmg,
+            phase: "ended",
+            winnerSeatIdx: casterSeat,
+            log: [
+              ...intermediate.log,
+              `${intermediate.players[casterSeat].username} remporte la partie (sort direct au nexus).`,
+            ],
+          };
+        }
+        return { ...intermediate, players: newPlayersDmg };
+      }
+      // Unité.
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayersDmg[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else {
+        const oppUnit = newPlayersDmg[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) return intermediate;
+      const targetPlayer = newPlayersDmg[targetSeat];
+      const updatedBench = targetPlayer.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayersDmg[targetSeat] = {
+        ...targetPlayer,
+        bench: survivors,
+        alliesDiedThisRound:
+          targetPlayer.alliesDiedThisRound + (deadUnit ? 1 : 0),
+        championCounters: {
+          ...targetPlayer.championCounters,
+          alliesDied:
+            targetPlayer.championCounters.alliesDied + (deadUnit ? 1 : 0),
+        },
+      };
+      let newState: InternalState = { ...intermediate, players: newPlayersDmg };
+      if (deadUnit) {
+        newState = triggerLastBreath(newState, deadUnit, targetSeat);
+      }
+      void cfgED;
+      return newState;
+    }
     case "buff-allies-in-hand-permanent": {
       // Phase 3.54 : +pwr/+hp permanent à toutes les cartes Unit alliées
       // de la main via cardBuffs (cumulatif si déjà buffée).

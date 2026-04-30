@@ -1680,6 +1680,20 @@ export type SpellEffect =
       type: "draw-and-reduce-cost";
       drawCount: number;
       delta: number;
+    }
+  // Phase 3.55 — Discard mechanic + 01NX039 cast portion.
+  // Sans cible : +pwr/+hp permanent à TOUS les alliés sur le banc.
+  // 01NX039 (cast portion ; le trigger « si défaussé » est TODO).
+  | { type: "buff-all-allies-permanent"; power: number; health: number }
+  // Sans cible : auto-discard up to maxDiscard cartes (rightmost first
+  // par défaut, heuristique simple) puis pioche autant qu'on a discarded.
+  // 01PZ001 Fouillis.
+  | { type: "auto-discard-and-draw-up-to-n"; maxDiscard: number }
+  // Cible : unité ou nexus → auto-discard 1 carte (rightmost) puis dmg
+  // amount à la cible. 01PZ039 Enthousiasme.
+  | {
+      type: "auto-discard-and-damage-target-any-or-nexus";
+      amount: number;
     };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
@@ -2093,6 +2107,20 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   },
   // 01PZ049 (PiltoverZaun, 8 Burst) — pioche 3 + -1 cost aux 3 nouvelles.
   "01PZ049": { type: "draw-and-reduce-cost", drawCount: 3, delta: 1 },
+
+  // ── Phase 3.55 (discard auto)
+  // 01NX039 (Noxus, 3 Burst) — +1|+0 permanent à tous les alliés au cast.
+  // (Le trigger « si défaussé » ne fait rien sans système de défausse.)
+  "01NX039": { type: "buff-all-allies-permanent", power: 1, health: 0 },
+  // 01PZ001 (PiltoverZaun, 2 Burst, Fouillis) — auto-discard up to 2
+  // cartes (rightmost first) + draw égal au nombre discarded.
+  "01PZ001": { type: "auto-discard-and-draw-up-to-n", maxDiscard: 2 },
+  // 01PZ039 (PiltoverZaun, 3 Fast, Enthousiasme) — auto-discard 1
+  // (rightmost) + 3 dmg à n'importe quelle cible (unité ou nexus).
+  "01PZ039": {
+    type: "auto-discard-and-damage-target-any-or-nexus",
+    amount: 3,
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2214,7 +2242,11 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-keyword-ally-in-hand-and-draw":
     case "buff-allies-of-subtype-everywhere":
     case "draw-and-reduce-cost":
+    case "buff-all-allies-permanent":
+    case "auto-discard-and-draw-up-to-n":
       return "none";
+    case "auto-discard-and-damage-target-any-or-nexus":
+      return "any-or-nexus";
   }
   return "none";
 }

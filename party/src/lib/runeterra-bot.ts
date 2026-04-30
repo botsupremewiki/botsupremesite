@@ -185,6 +185,16 @@ export function botAct(
           opponent.bench.filter((u) => u.power <= effect.maxPower).length;
         if (wouldKill === 0) continue;
       }
+      // Phase 3.55 : sorts auto-discard. Skip si pas de carte à discarder.
+      if (
+        effect.type === "auto-discard-and-draw-up-to-n" &&
+        player.hand.length === 0
+      ) {
+        continue; // rien à discard
+      }
+      if (effect.type === "buff-all-allies-permanent" && player.bench.length === 0) {
+        continue; // pas d'allié à buff
+      }
       // Phase 3.54 : sorts hand-buff. Skip si aucune carte cible en main.
       if (effect.type === "buff-allies-in-hand-permanent") {
         const hasUnitInHand = player.hand.some((c) => {
