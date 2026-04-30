@@ -1583,6 +1583,85 @@ function applySpellEffect(
       newPlayers[targetSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "drain-target-any":
+    case "drain-ally": {
+      // Phase 3.24 : drain — inflige X dégâts à la cible et soigne le
+      // nexus du caster du même montant (capé à initialNexusHealth).
+      // drain-target-any peut viser n'importe quel côté ; drain-ally
+      // ne vise que le banc du caster (validation faite en amont).
+      const cfgDrain = RUNETERRA_BATTLE_CONFIG;
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else if (effect.type === "drain-target-any") {
+        const oppUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) return state;
+      // Inflige les dégâts (on récupère les unités tuées pour Last Breath).
+      const targetPlayer = newPlayers[targetSeat];
+      const updatedBench = targetPlayer.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers[targetSeat] = {
+        ...targetPlayer,
+        bench: survivors,
+        championCounters: {
+          ...targetPlayer.championCounters,
+          alliesDied:
+            targetPlayer.championCounters.alliesDied + (deadUnit ? 1 : 0),
+        },
+      };
+      // Soigne le nexus du caster.
+      const casterPlayer = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...casterPlayer,
+        nexusHealth: Math.min(
+          cfgDrain.initialNexusHealth,
+          casterPlayer.nexusHealth + effect.amount,
+        ),
+      };
+      // Bumpe unitsDied côté caster + déclenche Last Breath si mort.
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (deadUnit) {
+        const newPlayers2: [InternalPlayer, InternalPlayer] = [
+          newState.players[0],
+          newState.players[1],
+        ] as [InternalPlayer, InternalPlayer];
+        newPlayers2[casterSeat] = {
+          ...newPlayers2[casterSeat],
+          championCounters: {
+            ...newPlayers2[casterSeat].championCounters,
+            unitsDied: newPlayers2[casterSeat].championCounters.unitsDied + 1,
+          },
+        };
+        newPlayers2[oppSeat] = {
+          ...newPlayers2[oppSeat],
+          championCounters: {
+            ...newPlayers2[oppSeat].championCounters,
+            unitsDied: newPlayers2[oppSeat].championCounters.unitsDied + 1,
+          },
+        };
+        newState = { ...newState, players: newPlayers2 };
+        newState = triggerLastBreath(newState, deadUnit, targetSeat);
+      }
+      return newState;
+    }
   }
 }
 

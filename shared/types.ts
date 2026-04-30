@@ -1463,7 +1463,14 @@ export type SpellEffect =
       power: number;
       health: number;
       keyword: string;
-    };
+    }
+  // Phase 3.24
+  // Drain : inflige X dégâts à la cible et soigne le nexus du caster du
+  // même montant (capé à la valeur initiale du nexus).
+  // drain-target-any → any side (Poigne de l'immortel).
+  // drain-ally       → ally side seulement (Absorbe-âme).
+  | { type: "drain-target-any"; amount: number }
+  | { type: "drain-ally"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1616,6 +1623,14 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     health: 2,
     keyword: "Overwhelm",
   },
+
+  // ── Phase 3.24 (drain)
+  // Poigne de l'immortel (ShadowIsles, 5 mana, Fast) :
+  // « Drainez 3 PV d'une unité. »
+  "01SI054": { type: "drain-target-any", amount: 3 },
+  // Absorbe-âme (ShadowIsles, 1 mana, Fast) :
+  // « Drainez 4 PV d'un allié. »
+  "01SI045": { type: "drain-ally", amount: 4 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1673,10 +1688,12 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "combo-buff-keyword-ally-round":
     case "grant-keywords-ally-round":
     case "heal-ally-full":
+    case "drain-ally":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
     case "recall-any":
+    case "drain-target-any":
       return "any";
     case "frostbite-enemy":
     case "stun-enemy":
