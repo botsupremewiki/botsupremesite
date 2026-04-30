@@ -1,5 +1,8 @@
-// Lit scripts/pocket-cards-fr.json (généré par generate-pocket-cards-fr.mjs)
-// et produit shared/tcg-pokemon-base.ts au format PokemonCardData (Pocket).
+// Lit un JSON de cartes Pokémon Pocket et produit un fichier TS au format
+// PokemonCardData. Par défaut, lit pocket-cards-fr.json → tcg-pokemon-base.ts.
+// Pour générer un set additionnel (A1a, A2…) :
+//   node scripts/pocket-json-to-ts.mjs --in=scripts/pocket-cards-A1a-fr.json \
+//     --out=shared/tcg-pokemon-a1a.ts --export=POKEMON_A1A_SET
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -8,8 +11,20 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-const INPUT = path.join(ROOT, "scripts", "pocket-cards-fr.json");
-const OUTPUT = path.join(ROOT, "shared", "tcg-pokemon-base.ts");
+const args = process.argv.slice(2);
+function arg(name, fallback) {
+  const a = args.find((x) => x.startsWith(`--${name}=`));
+  return a ? a.slice(name.length + 3) : fallback;
+}
+const INPUT = path.resolve(
+  ROOT,
+  arg("in", "scripts/pocket-cards-fr.json"),
+);
+const OUTPUT = path.resolve(
+  ROOT,
+  arg("out", "shared/tcg-pokemon-base.ts"),
+);
+const EXPORT_NAME = arg("export", "POKEMON_BASE_SET");
 
 function tsValue(v) {
   if (v === null || v === undefined) return "undefined";
@@ -126,10 +141,10 @@ async function main() {
 
   lines.push("];");
   lines.push("");
-  lines.push("export const POKEMON_BASE_SET: PokemonCardData[] = POKEMON;");
+  lines.push(`export const ${EXPORT_NAME}: PokemonCardData[] = POKEMON;`);
   lines.push("");
   lines.push(
-    "export const POKEMON_BASE_SET_BY_ID: Map<string, PokemonCardData> = new Map(",
+    `export const ${EXPORT_NAME}_BY_ID: Map<string, PokemonCardData> = new Map(`,
   );
   lines.push("  POKEMON.map((c) => [c.id, c]),");
   lines.push(");");

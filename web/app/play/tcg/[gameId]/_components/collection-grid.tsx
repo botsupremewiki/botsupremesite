@@ -6,6 +6,7 @@ import type {
   PokemonEnergyType,
   TcgRarity,
 } from "@shared/types";
+import { POKEMON_SETS } from "@shared/tcg-pokemon-sets";
 import { CardSlot, CardZoomModal, RARITY_TIER } from "./card-visuals";
 
 type CollectionFilter = "all" | "owned" | "missing" | "dupes";
@@ -28,6 +29,8 @@ type FacetState = {
   types: Set<PokemonEnergyType>;
   rarities: Set<TcgRarity>;
   packs: Set<PackFilter>;
+  /** Set Pocket (A1+P-A, A1a, A2…). Vide = tous les sets. */
+  sets: Set<string>;
   exOnly: boolean;
 };
 
@@ -36,6 +39,7 @@ const EMPTY_FACETS: FacetState = {
   types: new Set(),
   rarities: new Set(),
   packs: new Set(),
+  sets: new Set(),
   exOnly: false,
 };
 
@@ -125,6 +129,14 @@ export function CollectionGrid({
       return { ...f, packs: next };
     });
   }
+  function toggleSet(v: string) {
+    setFacets((f) => {
+      const next = new Set(f.sets);
+      if (next.has(v)) next.delete(v);
+      else next.add(v);
+      return { ...f, sets: next };
+    });
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -170,6 +182,19 @@ export function CollectionGrid({
         const pack = (c as { pack?: string }).pack;
         if (!pack || !facets.packs.has(pack as PackFilter)) return false;
       }
+      if (facets.sets.size > 0) {
+        // Match par préfixe d'id (A1-001, A1a-005, P-A-001…).
+        const isPA = c.id.startsWith("P-A-");
+        const prefix = isPA ? "P-A" : c.id.split("-")[0];
+        let matched = false;
+        for (const s of facets.sets) {
+          if (s.includes(prefix) || prefix === s) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) return false;
+      }
       if (facets.exOnly) {
         if (c.kind !== "pokemon" || !c.isEx) return false;
       }
@@ -214,6 +239,7 @@ export function CollectionGrid({
     facets.types.size +
     facets.rarities.size +
     facets.packs.size +
+    facets.sets.size +
     (facets.exOnly ? 1 : 0);
   const filtersActive =
     !!search || facetCount > 0 || ownedFilter !== "all";
@@ -323,6 +349,20 @@ export function CollectionGrid({
             label="EX seulement"
             title="N'afficher que les Pokémon EX"
           />
+          {POKEMON_SETS.length > 1 ? (
+            <>
+              <FilterSeparator />
+              {POKEMON_SETS.filter((s) => s.active).map((s) => (
+                <FilterChip
+                  key={s.id}
+                  active={facets.sets.has(s.id)}
+                  onClick={() => toggleSet(s.id)}
+                  label={s.id}
+                  title={s.name}
+                />
+              ))}
+            </>
+          ) : null}
         </div>
         {filtersActive && (
           <div className="text-[11px] text-zinc-500">
