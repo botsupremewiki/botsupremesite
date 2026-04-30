@@ -447,6 +447,12 @@ function DecksList({
             const regs = (d.regions ?? []).filter((r): r is RuneterraRegion =>
               REGION_ORDER.includes(r as RuneterraRegion),
             );
+            // Phase 3.88 : extrait les champions du deck pour les afficher.
+            // Permet d'identifier rapidement un deck (« Yasuo Sett vs Garen »).
+            const champs = d.cards
+              .map((c) => RUNETERRA_BASE_SET_BY_CODE.get(c.cardId))
+              .filter((c) => c && c.supertype === "Champion")
+              .map((c) => c!.name);
             return (
               <div
                 key={d.id}
@@ -487,6 +493,19 @@ function DecksList({
                     <div className="text-[11px] text-zinc-500">
                       {total} / {DECK_SIZE} cartes
                     </div>
+                    {/* Phase 3.88 : noms des champions du deck. */}
+                    {champs.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {champs.map((name, i) => (
+                          <span
+                            key={i}
+                            className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200"
+                          >
+                            ★ {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
