@@ -246,6 +246,9 @@ export function OnePieceBattleClient({
                   ? "à toi de jouer"
                   : "tour adverse"}{" "}
                 · phase {state.turnPhase}
+                {state.deadlineMs != null && (
+                  <DeadlineCountdown deadlineMs={state.deadlineMs} />
+                )}
                 {attackerSelected && (
                   <span className="ml-2 text-amber-300">
                     🎯 Choisis une cible (Leader adverse ou Personnage épuisé) —{" "}
@@ -1446,6 +1449,28 @@ function PendingChoicePanel({
         </button>
       )}
     </div>
+  );
+}
+
+function DeadlineCountdown({ deadlineMs }: { deadlineMs: number }) {
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+  const remaining = Math.max(0, Math.floor((deadlineMs - now) / 1000));
+  const urgent = remaining <= 10;
+  return (
+    <span
+      className={`ml-2 inline-block rounded px-1.5 py-0.5 font-mono text-[10px] ${
+        urgent
+          ? "bg-red-500/20 text-red-200"
+          : "bg-zinc-800/60 text-zinc-300"
+      }`}
+      title="Compte à rebours anti-AFK"
+    >
+      ⏱ {remaining}s
+    </span>
   );
 }
 

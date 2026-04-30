@@ -154,6 +154,13 @@ export default class OnePieceBattleServer implements Party.Server {
   private resultRecorded = false;
   private readonly botMode: boolean;
   private readonly rankedMode: boolean;
+  // Timer anti-AFK : deadline (timestamp ms) + handle pour clearTimeout
+  // + key qui caractérise l'état lié au timer (ex. "main:p1", "defense:p2",
+  // "choice:<uuid>"). Le timer n'est reset QUE si la key change — sinon
+  // un AFK pourrait bouger 1× et reset son tour.
+  private deadlineMs: number | null = null;
+  private timerHandle: ReturnType<typeof setTimeout> | null = null;
+  private timerKey: string | null = null;
 
   constructor(readonly room: Party.Room) {
     this.botMode = room.id.startsWith("bot-");
@@ -451,6 +458,7 @@ export default class OnePieceBattleServer implements Party.Server {
     this.activeSeat = Math.random() < 0.5 ? "p1" : "p2";
     this.turnNumber = 0; // sera incrémenté à 1 par nextTurn
     this.runTurnStartPhases(this.activeSeat, true /* isFirstTurnEver */);
+    this.rearmTimer();
     this.broadcastState();
   }
 
@@ -3327,6 +3335,9 @@ export default class OnePieceBattleServer implements Party.Server {
   // ─── State broadcasting ──────────────────────────────────────────────────
 
   private broadcastState() {
+    // Re-arm le timer anti-AFK selon l'état courant. Idempotent : si l'état
+    // n'a pas changé depuis le dernier broadcast, le timer reste actif.
+    this.rearmTimer();
     for (const [connId, seatId] of this.connToSeat) {
       const seat = this.seats[seatId];
       if (!seat || !seat.conn) continue;
@@ -3346,6 +3357,7 @@ export default class OnePieceBattleServer implements Party.Server {
         pendingAttack: this.pendingAttack,
         pendingTrigger: this.pendingTrigger,
         pendingChoice: this.pendingChoice,
+        deadlineMs: this.deadlineMs,
       };
       this.sendTo(seat.conn, { type: "op-state", state });
       void connId;
@@ -3410,6 +3422,196 @@ export default class OnePieceBattleServer implements Party.Server {
 
   private sendError(conn: Party.Connection, message: string) {
     this.sendTo(conn, { type: "op-error", message });
+  }
+
+  /** Annule le timer en cours. */
+  private clearTimer() {
+    if (this.timerHandle) {
+      clearTimeout(this.timerHandle);
+      this.timerHandle = null;
+    }
+    this.deadlineMs = null;
+    this.timerKey = null;
+  }
+
+  /** Schedule un timer anti-AFK avec une `key` qui caractérise l'état.
+   *  Si la key correspond à celle du timer en cours, NE FAIT RIEN
+   *  (= le timer continue). Sinon, annule l'ancien et démarre un nouveau.
+   *  Le bot mode skip le timer (le bot agit instantanément). */
+  private scheduleTimer(
+    key: string,
+    durationMs: number,
+    onExpire: () => void,
+  ) {
+    if (this.botMode) {
+      this.clearTimer();
+      return;
+    }
+    if (this.timerKey === key && this.timerHandle) {
+      // Même état → le timer continue.
+      return;
+    }
+    this.clearTimer();
+    this.timerKey = key;
+    this.deadlineMs = Date.now() + durationMs;
+    this.timerHandle = setTimeout(() => {
+      this.timerHandle = null;
+      this.deadlineMs = null;
+      this.timerKey = null;
+      try {
+        onExpire();
+      } catch (err) {
+        console.warn("[op-timer] onExpire threw:", err);
+      }
+    }, durationMs);
+  }
+
+  /** Schedule le timer approprié selon l'état courant du jeu. À appeler
+   *  après chaque mutation qui transitionne d'état. */
+  private rearmTimer() {
+    if (this.phase !== "playing" && this.phase !== "mulligan") {
+      this.clearTimer();
+      return;
+    }
+    if (this.phase === "mulligan") {
+      this.scheduleTimer("mulligan", OP_BATTLE_CONFIG.mulliganTimeoutMs, () => {
+        // Auto-skip mulligan pour les joueurs qui n'ont pas décidé.
+        for (const seatId of ["p1", "p2"] as const) {
+          const s = this.seats[seatId];
+          if (s && !s.mulliganDecided) {
+            s.mulliganDecided = true;
+            this.pushLog(`${s.username} : mulligan auto-passé (AFK).`);
+          }
+        }
+        // Si tous les seats ont décidé, démarre la partie.
+        const p1Done = this.seats.p1?.mulliganDecided ?? true;
+        const p2Done = this.seats.p2?.mulliganDecided ?? true;
+        if (p1Done && p2Done && this.phase === "mulligan") {
+          this.startGame();
+        }
+        this.broadcastState();
+      });
+      return;
+    }
+    if (this.pendingChoice) {
+      this.scheduleTimer(
+        `choice:${this.pendingChoice.id}`,
+        OP_BATTLE_CONFIG.choiceTimeoutMs,
+        () => {
+        // Auto-skip le pendingChoice (cancellable ou non).
+        const pc = this.pendingChoice;
+        if (!pc) return;
+        this.pushLog(`Choix auto-skip (timeout AFK).`);
+        const cardNumber = pc.sourceCardNumber;
+        const sourceUid = pc.sourceUid;
+        const sourceSeat = pc.seat;
+        this.pendingChoice = null;
+        const handler = CARD_HANDLERS[cardNumber];
+        if (handler) {
+          try {
+            handler({
+              hook: "on-choice-resolved",
+              sourceUid,
+              sourceSeat,
+              battle: this.getBattleAccess(),
+              choice: { skipped: true, selection: {} },
+            });
+          } catch {
+            // ignore
+          }
+        }
+        this.broadcastState();
+        this.maybeBotAct();
+        this.rearmTimer();
+      });
+      return;
+    }
+    if (this.pendingTrigger) {
+      this.scheduleTimer(
+        `trigger:${this.pendingTrigger.defenderSeat}:${this.pendingTrigger.cardId}`,
+        OP_BATTLE_CONFIG.triggerTimeoutMs,
+        () => {
+          this.pendingTrigger = null;
+          this.pushLog("Trigger auto-décliné (timeout AFK).");
+          this.broadcastState();
+          this.rearmTimer();
+        },
+      );
+      return;
+    }
+    if (this.pendingAttack) {
+      this.scheduleTimer(
+        `defense:${this.pendingAttack.attackerSeat}:${this.pendingAttack.attackerUid}:${this.pendingAttack.targetUid}`,
+        OP_BATTLE_CONFIG.defenseTimeoutMs,
+        () => {
+          this.pushLog("Défense auto-passée (timeout AFK).");
+          this.resolveAttack();
+          this.rearmTimer();
+        },
+      );
+      return;
+    }
+    // Tour normal en main phase. Key = "main:<seat>:<turnNumber>" pour
+    // garantir un timer fixe pour tout le tour.
+    if (this.activeSeat) {
+      const active = this.activeSeat;
+      this.scheduleTimer(
+        `main:${active}:${this.turnNumber}`,
+        OP_BATTLE_CONFIG.turnTimeoutMs,
+        () => {
+          this.pushLog(
+            `${this.seats[active]?.username ?? active} : tour auto-passé (timeout AFK).`,
+          );
+          this.forceEndTurn(active);
+        },
+      );
+    }
+  }
+
+  /** Force la fin de tour côté serveur (utilisé par le timer AFK). */
+  private forceEndTurn(seatId: OnePieceBattleSeatId) {
+    if (this.phase !== "playing" || this.activeSeat !== seatId) return;
+    const seat = this.seats[seatId];
+    if (!seat) return;
+    this.turnPhase = "end";
+    if (seat.leaderId) {
+      this.fireEffectFor(seat.leaderId, "on-turn-end", "leader", seatId);
+    }
+    for (const c of seat.characters) {
+      this.fireEffectFor(c.cardId, "on-turn-end", c.uid, seatId);
+    }
+    seat.donRested += seat.leaderAttachedDon;
+    seat.leaderAttachedDon = 0;
+    for (const c of seat.characters) {
+      seat.donRested += c.attachedDon;
+      c.attachedDon = 0;
+    }
+    seat.tempPowerBuffs.clear();
+    seat.usedActivationsThisTurn.clear();
+    seat.turnFlags.clear();
+    for (const c of seat.characters) {
+      c.costBuff = 0;
+      c.noBlockerThisTurn = false;
+      c.nextAttackPreventsBlock = false;
+      c.koSubUsedThisTurn = false;
+    }
+    const oppId = seatId === "p1" ? "p2" : "p1";
+    this.seats[oppId]?.tempPowerBuffs.clear();
+    if (this.seats[oppId]) {
+      for (const c of this.seats[oppId]!.characters) {
+        c.costBuff = 0;
+        c.noBlockerThisTurn = false;
+        c.nextAttackPreventsBlock = false;
+      }
+    }
+    const next: OnePieceBattleSeatId = seatId === "p1" ? "p2" : "p1";
+    if (this.seats[next]) {
+      this.activeSeat = next;
+      this.runTurnStartPhases(next, false);
+    }
+    this.broadcastState();
+    this.rearmTimer();
+    this.maybeBotAct();
   }
 }
 
