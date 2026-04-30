@@ -5,6 +5,7 @@
 // chat ; gère mulligan, attaques, défense (Bloqueur / Counter / Évent
 // [Contre]), résolution de Trigger, PendingChoice, timer anti-AFK.
 
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -128,16 +129,16 @@ export function OnePieceBattleClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
-        <div className="flex items-center gap-3">
+      <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-2 py-2 text-sm sm:px-4 sm:py-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href="/play/tcg/onepiece"
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
             ← {game.name}
           </Link>
-          <div className="h-4 w-px bg-white/10" />
-          <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+          <div className="hidden h-4 w-px bg-white/10 sm:block" />
+          <span className={`hidden font-semibold sm:inline ${game.accent}`}>{game.name}</span>
           <span className="text-xs text-zinc-500">⚔️ Combat</span>
         </div>
         {profile ? (
@@ -148,7 +149,7 @@ export function OnePieceBattleClient({
       </header>
 
       <main
-        className={`relative flex flex-1 flex-col gap-4 overflow-y-auto p-4 ${game.gradient}`}
+        className={`relative flex flex-1 flex-col gap-3 overflow-y-auto p-2 sm:gap-4 sm:p-4 ${game.gradient}`}
       >
         {!profile ? (
           <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
@@ -399,6 +400,7 @@ export function OnePieceBattleClient({
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <AnimatePresence mode="popLayout">
                   {state.self.hand.map((cardId, i) => {
                     const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
                     const isMyMainPhase =
@@ -430,21 +432,47 @@ export function OnePieceBattleClient({
                     const canPlayStage =
                       meta?.kind === "stage" && isMyMainPhase && canAfford;
                     return (
-                      <div
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.6 }}
+                        transition={{ duration: 0.2 }}
                         key={`${cardId}-${i}`}
-                        className="flex w-24 flex-col gap-1"
+                        className="flex w-16 flex-col gap-1 sm:w-20 md:w-24"
                       >
                         <div
-                          className="group relative overflow-hidden rounded border border-white/10 bg-zinc-950"
+                          className="group relative overflow-visible rounded border border-white/10 bg-zinc-950"
                           title={meta?.name ?? cardId}
                         >
                           {meta && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={meta.image}
-                              alt={meta.name}
-                              className="h-32 w-full object-contain"
-                            />
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={meta.image}
+                                alt={meta.name}
+                                className="h-32 w-full rounded object-contain"
+                              />
+                              {/* Hover zoom preview — absolu, ne déplace pas le layout. */}
+                              <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
+                                <div className="rounded-lg border-2 border-amber-400/60 bg-zinc-950 p-2 shadow-2xl shadow-black/80">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={meta.image}
+                                    alt={meta.name}
+                                    className="w-full rounded"
+                                  />
+                                  <div className="mt-1 text-[10px] font-semibold text-amber-200">
+                                    {meta.name}
+                                  </div>
+                                  {meta.effect && (
+                                    <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
+                                      {meta.effect}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
                           )}
                         </div>
                         {meta?.kind === "character" && (
@@ -517,9 +545,10 @@ export function OnePieceBattleClient({
                             Leader
                           </span>
                         )}
-                      </div>
+                      </motion.div>
                     );
                   })}
+                  </AnimatePresence>
                 </div>
               </div>
             )}
@@ -723,6 +752,7 @@ function PlayerPanel({
           {/* Persos en jeu */}
           {data.characters.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1.5 border-t border-white/5 pt-2">
+              <AnimatePresence mode="popLayout">
               {data.characters.map((c) => {
                 const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
                 const power = meta && "power" in meta ? meta.power : 0;
@@ -738,9 +768,14 @@ function PlayerPanel({
                   (!c.playedThisTurn ||
                     hasKeywordClient(meta?.effect, "Initiative"));
                 return (
-                  <div
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, scale: 0.6, y: -20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.4, rotate: -8 }}
+                    transition={{ duration: 0.25 }}
                     key={c.uid}
-                    className={`flex w-20 flex-col gap-1 ${
+                    className={`flex w-14 flex-col gap-1 sm:w-16 md:w-20 ${
                       c.rested ? "opacity-60" : ""
                     }`}
                     title={meta?.name ?? c.cardId}
@@ -750,7 +785,7 @@ function PlayerPanel({
                         if (targetable && onPickTarget) onPickTarget(c.uid);
                       }}
                       disabled={!targetable}
-                      className={`relative overflow-hidden rounded border bg-zinc-950 transition-transform ${
+                      className={`group relative overflow-visible rounded border bg-zinc-950 transition-transform ${
                         c.playedThisTurn
                           ? "border-amber-400/40"
                           : "border-white/10"
@@ -761,22 +796,49 @@ function PlayerPanel({
                       } ${isSelected ? "ring-2 ring-emerald-400" : ""}`}
                     >
                       {meta && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={meta.image}
-                          alt={meta.name}
-                          className={`h-24 w-full object-contain ${
-                            c.rested ? "rotate-90" : ""
-                          }`}
-                        />
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={meta.image}
+                            alt={meta.name}
+                            className={`h-24 w-full rounded object-contain ${
+                              c.rested ? "rotate-90" : ""
+                            }`}
+                          />
+                          {/* Hover preview agrandi */}
+                          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
+                            <div className="rounded-lg border-2 border-amber-400/60 bg-zinc-950 p-2 text-left shadow-2xl shadow-black/80">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={meta.image}
+                                alt={meta.name}
+                                className="w-full rounded"
+                              />
+                              <div className="mt-1 text-[10px] font-semibold text-amber-200">
+                                {meta.name}
+                              </div>
+                              {meta.effect && (
+                                <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
+                                  {meta.effect}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
                       )}
                       <span className="absolute bottom-0 left-0 rounded-tr bg-black/80 px-1 text-[9px] text-amber-200">
                         {totalPower}
                       </span>
                       {c.attachedDon > 0 && (
-                        <span className="absolute right-0 top-0 rounded-bl bg-amber-400 px-1 text-[9px] font-bold text-amber-950">
+                        <motion.span
+                          key={c.attachedDon}
+                          initial={{ scale: 1.5, backgroundColor: "#fef3c7" }}
+                          animate={{ scale: 1, backgroundColor: "#fbbf24" }}
+                          transition={{ duration: 0.3 }}
+                          className="absolute right-0 top-0 rounded-bl px-1 text-[9px] font-bold text-amber-950"
+                        >
                           +{c.attachedDon}
-                        </span>
+                        </motion.span>
                       )}
                     </button>
                     {isSelf && canAttachDon && (
@@ -808,9 +870,10 @@ function PlayerPanel({
                           ✨ Activer
                         </button>
                       )}
-                  </div>
+                  </motion.div>
                 );
               })}
+              </AnimatePresence>
             </div>
           )}
         </>
@@ -904,10 +967,14 @@ function DefensePanel({
     });
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: -10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.18 }}
       className={`rounded-md border p-3 text-xs ${
         isDefender
-          ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
+          ? "border-amber-400/60 bg-amber-400/10 text-amber-100 shadow-[0_0_25px_rgba(251,191,36,0.3)]"
           : "border-zinc-500/40 bg-black/40 text-zinc-300"
       }`}
     >
@@ -982,7 +1049,7 @@ function DefensePanel({
           </button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
