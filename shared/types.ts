@@ -1759,6 +1759,12 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01SI034 (ShadowIsles, 3 Fast) — si un allié est mort ce round,
   // inflige 4 dmg à une unité (any).
   "01SI034": { type: "deal-damage-anywhere-if-ally-died", amount: 4 },
+
+  // ── Phase 3.36
+  // 01PZ028 (PiltoverZaun, 1 Burst) — au cast, summon 1 × token 01PZ032
+  // (Carapateur ferrailleur, 1|1). La branche « si défaussé » n'est pas
+  // implémentée (pas de système de défausse encore).
+  "01PZ028": { type: "summon-tokens", cardCode: "01PZ032", count: 1 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
