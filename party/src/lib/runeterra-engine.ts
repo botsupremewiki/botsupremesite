@@ -1583,6 +1583,45 @@ function applySpellEffect(
       newPlayers[targetSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "summon-ally-copies": {
+      // Phase 3.33 : invoque count copies de l'allié ciblé sur le banc
+      // du caster. Override stats + add keywords si fourni. Capé à
+      // maxBench (autant que possible si pas assez de slots).
+      const cfgCopy = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const sourceUnit = player.bench.find((u) => u.uid === targetUid);
+      if (!sourceUnit) return state;
+      const slotsAvailable = cfgCopy.maxBench - player.bench.length;
+      if (slotsAvailable <= 0) return state;
+      const toSummon = Math.min(effect.count, slotsAvailable);
+      const newUnits: RuneterraBattleUnit[] = [];
+      for (let i = 0; i < toSummon; i++) {
+        const newUid = `${casterSeat}-cp-${state.round}-${state.log.length}-${i}`;
+        const baseUnit = createUnit(newUid, sourceUnit.cardCode);
+        const finalKeywords = effect.addKeywords
+          ? Array.from(new Set([...baseUnit.keywords, ...effect.addKeywords]))
+          : baseUnit.keywords;
+        newUnits.push({
+          ...baseUnit,
+          power: effect.powerOverride ?? baseUnit.power,
+          health: effect.healthOverride ?? baseUnit.health,
+          keywords: finalKeywords,
+        });
+      }
+      const sourceName = getCard(sourceUnit.cardCode)?.name ?? sourceUnit.cardCode;
+      newPlayers[casterSeat] = {
+        ...player,
+        bench: [...player.bench, ...newUnits],
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} invoque ${toSummon} copie${toSummon > 1 ? "s" : ""} de ${sourceName}.`,
+        ],
+      };
+    }
     case "kill-ally-for-draw": {
       // Phase 3.27 : tue l'allié ciblé (Last Breath déclenché) puis le
       // caster pioche drawCount cartes. Validation faite en amont (target

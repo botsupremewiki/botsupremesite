@@ -1494,7 +1494,18 @@ export type SpellEffect =
   // Phase 3.32
   // Sans cible : inflige X dégâts à toutes les unités au combat (côté
   // attaquant et bloqueur). No-op si pas d'attaque en cours.
-  | { type: "damage-all-combatants"; amount: number };
+  | { type: "damage-all-combatants"; amount: number }
+  // Phase 3.33
+  // Cible : allié → invoque count copies sur le banc du caster. Override
+  // optionnel des stats (Âme scindée : 1|1) et add keywords (Ephemeral).
+  // Capé à maxBench. Si pas de slots → invoque autant que possible.
+  | {
+      type: "summon-ally-copies";
+      count: number;
+      powerOverride?: number;
+      healthOverride?: number;
+      addKeywords?: string[];
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1707,6 +1718,24 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01NX050 (Noxus, 2 Fast) — 1 dmg à toutes les unités au combat
   // (attaquants + bloqueurs). No-op hors combat.
   "01NX050": { type: "damage-all-combatants", amount: 1 },
+
+  // ── Phase 3.33
+  // 01SI028 (ShadowIsles, 3 Slow) — invoque 1 copie d'un allié avec
+  // stats overrides à 1|1 et keyword Ephemeral.
+  "01SI028": {
+    type: "summon-ally-copies",
+    count: 1,
+    powerOverride: 1,
+    healthOverride: 1,
+    addKeywords: ["Ephemeral"],
+  },
+  // 01IO024 (Ionia, 6 Slow) — invoque 2 copies d'un allié avec keyword
+  // Ephemeral (stats originaux conservés).
+  "01IO024": {
+    type: "summon-ally-copies",
+    count: 2,
+    addKeywords: ["Ephemeral"],
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1766,6 +1795,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "heal-ally-full":
     case "drain-ally":
     case "kill-ally-for-draw":
+    case "summon-ally-copies":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
