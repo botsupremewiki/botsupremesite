@@ -130,6 +130,14 @@ export interface BattleEffectAccess {
     uid: string,
   ): boolean;
 
+  /** Épuise un Personnage (rested = true). Utilisé par les effets type
+   *  "épuisez jusqu'à 1 Personnage adverse". Retourne true si appliqué. */
+  restCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
+
+  /** Redresse un Personnage (rested = false). Utilisé par les effets type
+   *  "redressez jusqu'à 1 Personnage". Retourne true si appliqué. */
+  untapCharacter(seat: OnePieceBattleSeatId, uid: string): boolean;
+
   /** Défausse les cartes aux indices donnés de la main du seat. Renvoie
    *  les cardId défaussés. Skip les indices invalides. */
   discardFromHand(
@@ -148,6 +156,7 @@ export interface BattleEffectAccess {
     lifeCount: number;
     discardSize: number;
     donActive: number;
+    donRested: number;
   } | null;
 }
 
@@ -1636,6 +1645,313 @@ export const CARD_HANDLERS: Record<string, CardEffectHandler> = {
       );
       ctx.battle.log("Gum Gum Taupe Bullet : -5000 puissance pour ce tour.");
     }
+  },
+
+  // ─── BATCH 8 — Filtres power + rest/untap ───────────────────────────────
+
+  /** OP09-009 Ben Beckmann
+   *  [Jouée] Placez dans sa Défausse jusqu'à 1 Personnage adverse ayant
+   *  6000 de puissance ou moins. (= KO ≤ 6000 puissance) */
+  "OP09-009": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-009",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Ben Beckmann : choisis un Persos adverse à KO (≤ 6000 puissance).",
+        params: { maxPower: 6000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Ben Beckmann : KO réussi.");
+    }
+  },
+
+  /** OP09-077 Gum Gum Foudre (Event)
+   *  [Principale] DON!! -2 : Mettez KO jusqu'à 1 Personnage adverse ayant
+   *  6000 de puissance ou moins. (DON cost skip — on évalue juste la
+   *  partie KO). */
+  "OP09-077": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-077",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Gum Gum Foudre : choisis un Persos adverse à KO (≤ 6000 puissance).",
+        params: { maxPower: 6000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Gum Gum Foudre : KO réussi.");
+    }
+  },
+
+  /** OP09-114 Lindbergh
+   *  [Jouée] Si vous et votre adversaire avez un total de 5 cartes ou
+   *  moins dans vos Vies, mettez KO jusqu'à 1 Personnage adverse ayant
+   *  2000 de puissance ou moins. */
+  "OP09-114": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      const opp = ctx.battle.getSeat(opponentSeat);
+      if (!seat || !opp) return;
+      const totalLife = seat.lifeCount + opp.lifeCount;
+      if (totalLife > 5) {
+        ctx.battle.log("Lindbergh : total Vies > 5, effet annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-114",
+        sourceUid: ctx.sourceUid,
+        kind: "ko-character",
+        prompt: "Lindbergh : choisis un Persos adverse à KO (≤ 2000 puissance).",
+        params: { maxPower: 2000 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.koCharacter(opponentSeat, ctx.choice.selection.targetUid);
+      ctx.battle.log("Lindbergh : KO réussi.");
+    }
+  },
+
+  /** OP09-035 Portgas D. Ace
+   *  [Jouée] Si vous avez 2 Personnages ou plus épuisés, épuisez jusqu'à
+   *  1 Personnage adverse ayant un coût de 5 ou moins. */
+  "OP09-035": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat) return;
+      const restedCount = seat.characters.filter((c) => c.rested).length;
+      if (restedCount < 2) {
+        ctx.battle.log("Portgas D. Ace : moins de 2 Persos épuisés, annulé.");
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-035",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Portgas D. Ace : choisis un Persos adverse à épuiser (coût ≤ 5).",
+        params: { allowLeader: false, maxCost: 5 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.restCharacter(opponentSeat, target);
+      ctx.battle.log("Portgas D. Ace : Persos adverse épuisé.");
+    }
+  },
+
+  /** OP09-079 Gum Gum Saut à la corde (Event)
+   *  [Principale] DON!! -2 : Épuisez jusqu'à 1 Personnage adverse ayant
+   *  un coût de 5 ou moins. Puis, piochez 1 carte. */
+  "OP09-079": (ctx) => {
+    if (ctx.hook === "on-play") {
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-079",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Gum Gum Saut à la corde : choisis un Persos adverse à épuiser (coût ≤ 5).",
+        params: { allowLeader: false, maxCost: 5 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      const target = ctx.choice.selection.targetUid;
+      if (!ctx.choice.skipped && target && target !== "leader") {
+        const opponentSeat: OnePieceBattleSeatId =
+          ctx.sourceSeat === "p1" ? "p2" : "p1";
+        ctx.battle.restCharacter(opponentSeat, target);
+        ctx.battle.log("Saut à la corde : Persos adverse épuisé.");
+      }
+      // "Puis piochez 1 carte" → toujours pioche 1.
+      ctx.battle.drawCards(ctx.sourceSeat, 1);
+      ctx.battle.log("Saut à la corde : pioche 1 carte.");
+    }
+  },
+
+  /** ST18-001 Usohachi
+   *  [Jouée] Si vous avez 8 cartes DON!! ou plus sur votre terrain,
+   *  épuisez jusqu'à 1 Personnage adverse ayant un coût de 5 ou moins.
+   *  ("DON sur votre terrain" = donActive + donRested + DON attachées) */
+  "ST18-001": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      if (!seat) return;
+      const totalDon =
+        seat.donActive +
+        seat.donRested +
+        seat.leaderAttachedDon +
+        seat.characters.reduce((s, c) => s + c.attachedDon, 0);
+      if (totalDon < 8) {
+        ctx.battle.log(
+          `Usohachi : ${totalDon} DON < 8 sur le terrain, effet annulé.`,
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST18-001",
+        sourceUid: ctx.sourceUid,
+        kind: "select-target",
+        prompt: "Usohachi : choisis un Persos adverse à épuiser (coût ≤ 5).",
+        params: { allowLeader: false, maxCost: 5 },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      const opponentSeat: OnePieceBattleSeatId =
+        ctx.sourceSeat === "p1" ? "p2" : "p1";
+      ctx.battle.restCharacter(opponentSeat, target);
+      ctx.battle.log("Usohachi : Persos adverse épuisé.");
+    }
+  },
+
+  /** OP09-029 Tony-Tony Chopper (Char)
+   *  [Fin de votre tour] Redressez jusqu'à 1 de vos Personnages de type
+   *  {ODYSSEY} ayant un coût de 4 ou moins. */
+  "OP09-029": (ctx) => {
+    if (ctx.hook === "on-turn-end") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      // Filtre rapide : un Persos ODYSSEY rested ≤ 4 existe-t-il ?
+      const eligible = seat?.characters.filter((c) => {
+        if (!c.rested) return false;
+        const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+        if (!meta || meta.kind !== "character") return false;
+        if (meta.cost > 4) return false;
+        return meta.types.some((t) =>
+          t.toLowerCase().includes("odyssey"),
+        );
+      });
+      if (!eligible || eligible.length === 0) {
+        ctx.battle.log(
+          "Tony-Tony Chopper : aucun Persos ODYSSEY ≤ 4 à redresser.",
+        );
+        return;
+      }
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "OP09-029",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Tony-Tony Chopper : choisis un de tes Persos ODYSSEY ≤ 4 à redresser.",
+        params: {
+          allowLeader: false,
+          maxCost: 4,
+          requireType: "ODYSSEY",
+          onlyRested: true,
+        },
+        cancellable: true,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      ctx.battle.untapCharacter(ctx.sourceSeat, target);
+      ctx.battle.log("Tony-Tony Chopper : Persos ODYSSEY redressé.");
+    }
+  },
+
+  /** ST20-004 Charlotte Pudding
+   *  [Jouée] Vous pouvez ajouter à votre main 1 carte du dessus de votre
+   *  Vie : Redressez jusqu'à 1 de vos Personnages de type {Équipage de
+   *  Big Mom} ayant un coût de 3 ou moins. */
+  "ST20-004": (ctx) => {
+    if (ctx.hook === "on-play") {
+      const seat = ctx.battle.getSeat(ctx.sourceSeat);
+      const eligible = seat?.characters.filter((c) => {
+        if (!c.rested) return false;
+        const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+        if (!meta || meta.kind !== "character") return false;
+        if (meta.cost > 3) return false;
+        return meta.types.some((t) =>
+          t.toLowerCase().includes("équipage de big mom"),
+        );
+      });
+      if (!eligible || eligible.length === 0) {
+        ctx.battle.log(
+          "Charlotte Pudding : aucun Persos Big Mom ≤ 3 à redresser.",
+        );
+        return;
+      }
+      // Le coût Vie→main est obligatoire pour activer l'effet.
+      ctx.battle.takeLifeToHand(ctx.sourceSeat);
+      ctx.battle.requestChoice({
+        seat: ctx.sourceSeat,
+        sourceCardNumber: "ST20-004",
+        sourceUid: ctx.sourceUid,
+        kind: "buff-target",
+        prompt:
+          "Charlotte Pudding : choisis un Persos Big Mom ≤ 3 à redresser (1 Vie ajoutée à la main).",
+        params: {
+          allowLeader: false,
+          maxCost: 3,
+          requireType: "Équipage de Big Mom",
+          onlyRested: true,
+        },
+        cancellable: false,
+      });
+      return;
+    }
+    if (ctx.hook === "on-choice-resolved" && ctx.choice) {
+      if (ctx.choice.skipped || !ctx.choice.selection.targetUid) return;
+      const target = ctx.choice.selection.targetUid;
+      if (target === "leader") return;
+      ctx.battle.untapCharacter(ctx.sourceSeat, target);
+      ctx.battle.log("Charlotte Pudding : Persos Big Mom redressé.");
+    }
+  },
+
+  /** OP09-027 Sabo (Char)
+   *  [En attaquant] [Une fois par tour] Si vous avez 3 Personnages ou
+   *  plus épuisés, piochez 1 carte. (Auto, pas de PendingChoice). */
+  "OP09-027": (ctx) => {
+    if (ctx.hook !== "on-attack") return;
+    const seat = ctx.battle.getSeat(ctx.sourceSeat);
+    if (!seat) return;
+    const restedCount = seat.characters.filter((c) => c.rested).length;
+    if (restedCount < 3) return; // condition pas remplie
+    ctx.battle.drawCards(ctx.sourceSeat, 1);
+    ctx.battle.log(
+      "Sabo : 3+ Persos épuisés, pioche 1 carte ([En attaquant] [1×/tour]).",
+    );
   },
 
   // ─── Plus d'effets à venir au fil des sessions ───

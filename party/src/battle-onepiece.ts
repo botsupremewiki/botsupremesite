@@ -1916,6 +1916,22 @@ export default class OnePieceBattleServer implements Party.Server {
         s.deck.push({ cardId: removed.cardId });
         return true;
       },
+      restCharacter: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (!c) return false;
+        c.rested = true;
+        return true;
+      },
+      untapCharacter: (seatId, uid) => {
+        const s = this.seats[seatId];
+        if (!s) return false;
+        const c = s.characters.find((x) => x.uid === uid);
+        if (!c) return false;
+        c.rested = false;
+        return true;
+      },
       discardFromHand: (seatId, handIndices) => {
         const s = this.seats[seatId];
         if (!s) return [];
@@ -1981,6 +1997,7 @@ export default class OnePieceBattleServer implements Party.Server {
           lifeCount: s.life.length,
           discardSize: s.discard.length,
           donActive: s.donActive,
+          donRested: s.donRested,
         };
       },
     };

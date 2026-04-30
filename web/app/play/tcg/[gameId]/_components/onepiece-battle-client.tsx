@@ -945,6 +945,13 @@ function PendingChoicePanel({
   const self = state.self;
   const maxCost =
     typeof choice.params.maxCost === "number" ? choice.params.maxCost : null;
+  const maxPower =
+    typeof choice.params.maxPower === "number" ? choice.params.maxPower : null;
+  const onlyRested = choice.params.onlyRested === true;
+  const onlyOwnType =
+    typeof choice.params.requireType === "string"
+      ? choice.params.requireType
+      : null;
   const excludeName =
     typeof choice.params.excludeName === "string"
       ? choice.params.excludeName
@@ -988,11 +995,15 @@ function PendingChoicePanel({
         <div className="mt-2 flex flex-wrap gap-2">
           {opponent.characters
             .filter((c) => {
-              if (maxCost !== null) {
-                const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
-                if (!meta || !("cost" in meta)) return false;
-                if (meta.cost > maxCost) return false;
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+              if (!meta || !("cost" in meta)) return false;
+              if (maxCost !== null && meta.cost > maxCost) return false;
+              if (maxPower !== null) {
+                const power =
+                  ("power" in meta ? meta.power : 0) + c.attachedDon * 1000;
+                if (power > maxPower) return false;
               }
+              if (onlyRested && !c.rested) return false;
               return true;
             })
             .map((c) => {
@@ -1039,18 +1050,34 @@ function PendingChoicePanel({
               ⬆️ Leader
             </button>
           )}
-          {self.characters.map((c) => {
-            const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
-            return (
-              <button
-                key={c.uid}
-                onClick={() => pickTarget(c.uid)}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-emerald-100 hover:bg-emerald-500/20"
-              >
-                ⬆️ {meta?.name ?? c.cardId}
-              </button>
-            );
-          })}
+          {self.characters
+            .filter((c) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+              if (!meta) return false;
+              if (maxCost !== null && "cost" in meta && meta.cost > maxCost)
+                return false;
+              if (
+                onlyOwnType &&
+                !meta.types.some((t) =>
+                  t.toLowerCase().includes(onlyOwnType.toLowerCase()),
+                )
+              )
+                return false;
+              if (onlyRested && !c.rested) return false;
+              return true;
+            })
+            .map((c) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+              return (
+                <button
+                  key={c.uid}
+                  onClick={() => pickTarget(c.uid)}
+                  className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-emerald-100 hover:bg-emerald-500/20"
+                >
+                  ⬆️ {meta?.name ?? c.cardId}
+                </button>
+              );
+            })}
         </div>
       )}
 
@@ -1065,18 +1092,36 @@ function PendingChoicePanel({
               🎯 Leader adverse
             </button>
           )}
-          {opponent.characters.map((c) => {
-            const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
-            return (
-              <button
-                key={c.uid}
-                onClick={() => pickTarget(c.uid)}
-                className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-amber-100 hover:bg-amber-500/20"
-              >
-                🎯 {meta?.name ?? c.cardId}
-              </button>
-            );
-          })}
+          {opponent.characters
+            .filter((c) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+              if (!meta) return false;
+              if (
+                maxCost !== null &&
+                "cost" in meta &&
+                meta.cost > maxCost
+              )
+                return false;
+              if (maxPower !== null) {
+                const power =
+                  ("power" in meta ? meta.power : 0) + c.attachedDon * 1000;
+                if (power > maxPower) return false;
+              }
+              if (onlyRested && !c.rested) return false;
+              return true;
+            })
+            .map((c) => {
+              const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
+              return (
+                <button
+                  key={c.uid}
+                  onClick={() => pickTarget(c.uid)}
+                  className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-amber-100 hover:bg-amber-500/20"
+                >
+                  🎯 {meta?.name ?? c.cardId}
+                </button>
+              );
+            })}
         </div>
       )}
 
