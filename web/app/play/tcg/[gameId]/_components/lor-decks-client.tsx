@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RuneterraCardData,
@@ -54,6 +55,7 @@ const REGION_GLYPH: Record<RuneterraRegion, string> = {
 
 export function LorDecksClient({ profile }: { profile: Profile | null }) {
   const game = TCG_GAMES.lol;
+  const router = useRouter();
   const socketRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -206,6 +208,18 @@ export function LorDecksClient({ profile }: { profile: Profile | null }) {
     send({ type: "tcg-delete-deck", deckId: d.id });
   }
 
+  // Phase 3.86 : raccourci « jouer ce deck vs bot ». Génère un roomId
+  // côté client pour entrer directement dans la salle de combat.
+  function playDeckVsBot(d: TcgDeck) {
+    const total = d.cards.reduce((s, c) => s + c.count, 0);
+    if (total !== DECK_SIZE) {
+      setErrorMsg(`Deck incomplet (${total}/${DECK_SIZE}).`);
+      return;
+    }
+    const roomId = crypto.randomUUID();
+    router.push(`/play/tcg/lol/battle/${roomId}?deck=${d.id}&bot=1`);
+  }
+
   function toggleRegion(region: RuneterraRegion) {
     setDraftRegions((prev) => {
       const isSelected = prev.includes(region);
@@ -356,6 +370,7 @@ export function LorDecksClient({ profile }: { profile: Profile | null }) {
             onNew={startNewDeck}
             onEdit={editDeck}
             onDelete={deleteDeck}
+            onPlayBot={playDeckVsBot}
           />
         ) : (
           <DeckEditor
@@ -391,11 +406,15 @@ function DecksList({
   onNew,
   onEdit,
   onDelete,
+  onPlayBot,
 }: {
   decks: TcgDeck[];
   onNew: () => void;
   onEdit: (d: TcgDeck) => void;
   onDelete: (d: TcgDeck) => void;
+  // Phase 3.86 : raccourci « jouer ce deck vs bot » directement depuis
+  // la liste de decks (économise un clic vers la page launcher).
+  onPlayBot: (d: TcgDeck) => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
@@ -471,6 +490,18 @@ function DecksList({
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => onPlayBot(d)}
+                    disabled={total !== DECK_SIZE}
+                    title={
+                      total !== DECK_SIZE
+                        ? `Deck incomplet (${total}/${DECK_SIZE})`
+                        : "Jouer ce deck contre le bot"
+                    }
+                    className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    🤖 Jouer
+                  </button>
                   <button
                     onClick={() => onEdit(d)}
                     className="flex-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 hover:bg-white/10"
