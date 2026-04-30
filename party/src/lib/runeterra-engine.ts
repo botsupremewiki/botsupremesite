@@ -1518,6 +1518,39 @@ function applySpellEffect(
       newPlayers[oppSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "heal-ally-full": {
+      // Phase 3.23 : Regain de courage. Soigne entièrement l'allié ciblé
+      // (damage = 0). Pas de cap : si l'unité a été buffée en health par
+      // ailleurs, le full-heal restaure tout.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        return { ...u, damage: 0 };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
+    case "combo-buff-keyword-all-allies-round": {
+      // Phase 3.23 : Esprit de meute. +power/+health pour ce round +
+      // grant un mot-clé à TOUS les alliés sur le banc. Mirror de
+      // grant-keyword-all-allies-round mais avec un buff stat additionnel.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        const newKw = u.keywords.includes(effect.keyword)
+          ? u.keywords
+          : [...u.keywords, effect.keyword];
+        return {
+          ...u,
+          power: u.power + effect.power,
+          health: u.health + effect.health,
+          endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+          endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+          keywords: newKw,
+        };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      return { ...state, players: newPlayers };
+    }
     case "deal-damage-anywhere": {
       // Cherche cible des deux côtés.
       let target: RuneterraBattleUnit | undefined;

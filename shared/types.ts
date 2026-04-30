@@ -1452,7 +1452,18 @@ export type SpellEffect =
   // Cible : adepte ennemi (non-Champion) → supprime tous ses mots-clés
   // et ses buffs round (frozen / stunned / barrier / endOfRoundBuffs).
   // Purification (01DE050) : ne marche que sur un adepte.
-  | { type: "silence-follower-target" };
+  | { type: "silence-follower-target" }
+  // Phase 3.23
+  // Cible : allié → soigne entièrement (damage = 0). Regain de courage.
+  | { type: "heal-ally-full" }
+  // Sans cible : +power/+health pour ce round + grant un mot-clé pour ce
+  // round à TOUS les alliés sur le banc (Esprit de meute = +2/+2 Overwhelm).
+  | {
+      type: "combo-buff-keyword-all-allies-round";
+      power: number;
+      health: number;
+      keyword: string;
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1584,6 +1595,27 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // Purification (Demacia, 2 mana, Burst) :
   // « Réduisez au silence un adepte. »
   "01DE050": { type: "silence-follower-target" },
+
+  // ── Phase 3.23
+  // Puissance (Noxus, 3 mana, Burst) :
+  // « Conférez +3|+0 et Surpuissance à un allié pour ce round. »
+  "01NX019": {
+    type: "combo-buff-keyword-ally-round",
+    power: 3,
+    health: 0,
+    keyword: "Overwhelm",
+  },
+  // Regain de courage (Demacia, 6 mana, Slow) :
+  // « Soignez entièrement un allié. »
+  "01DE044": { type: "heal-ally-full" },
+  // Esprit de meute (Freljord, 7 mana, Slow) :
+  // « Conférez +2|+2 et Surpuissance aux alliés pour ce round. »
+  "01FR057": {
+    type: "combo-buff-keyword-all-allies-round",
+    power: 2,
+    health: 2,
+    keyword: "Overwhelm",
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1640,6 +1672,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "recall-ally":
     case "combo-buff-keyword-ally-round":
     case "grant-keywords-ally-round":
+    case "heal-ally-full":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -1655,6 +1688,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "grant-keyword-all-allies-round":
     case "damage-all-units":
     case "gain-attack-token-self":
+    case "combo-buff-keyword-all-allies-round":
       return "none";
   }
 }
