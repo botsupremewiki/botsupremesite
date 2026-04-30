@@ -1542,7 +1542,29 @@ export type SpellEffect =
   // - "nexus-self" = nexus du caster
   // - "nexus-enemy" = nexus adverse
   // Tir mystique (01PZ052), Enthousiasme (01PZ039), etc.
-  | { type: "deal-damage-target-any-or-nexus"; amount: number };
+  | { type: "deal-damage-target-any-or-nexus"; amount: number }
+  // Phase 3.42 — Combination effects.
+  // Cible : allié → heal damage de healAmount + caster pioche drawCount.
+  // Rituel du renouveau (01IO001 : 4 + 1).
+  | {
+      type: "heal-ally-and-draw";
+      healAmount: number;
+      drawCount: number;
+    }
+  // Cible : ennemi → étourdit + +power/+health round à tous les alliés du
+  // caster. Manœuvre décisive (01NX013 : stun + +2|+0).
+  | {
+      type: "stun-enemy-buff-all-allies-round";
+      power: number;
+      health: number;
+    }
+  // Cible : unité (any) → drain drainAmount PV (heal nexus du caster) puis
+  // summon 1 × token. Vil festin (01SI040 : 1 + Jeune araignée 01SI002).
+  | {
+      type: "drain-target-summon-token";
+      drainAmount: number;
+      tokenCardCode: string;
+    };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1814,6 +1836,22 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01PZ052 (PiltoverZaun, 2 Fast, Tir mystique) — 2 dmg à n'importe
   // quelle cible (unité ou nexus, des 2 côtés).
   "01PZ052": { type: "deal-damage-target-any-or-nexus", amount: 2 },
+
+  // ── Phase 3.42 (combination effects)
+  // 01IO001 (Ionia, 4 Burst) — heal 4 ally + draw 1.
+  "01IO001": { type: "heal-ally-and-draw", healAmount: 4, drawCount: 1 },
+  // 01NX013 (Noxus, 5 Fast) — stun ennemi + +2|+0 round à tous les alliés.
+  "01NX013": {
+    type: "stun-enemy-buff-all-allies-round",
+    power: 2,
+    health: 0,
+  },
+  // 01SI040 (ShadowIsles, 2 Fast) — drain 1 unité + summon Jeune araignée.
+  "01SI040": {
+    type: "drain-target-summon-token",
+    drainAmount: 1,
+    tokenCardCode: "01SI002",
+  },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1884,12 +1922,14 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "buff-2-allies-round":
     case "buff-2-allies-permanent":
     case "damage-ally-buff-other-ally-round":
+    case "heal-ally-and-draw":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
     case "recall-any":
     case "drain-target-any":
     case "deal-damage-anywhere-if-ally-died":
+    case "drain-target-summon-token":
       return "any";
     case "deal-damage-target-any-or-nexus":
       return "any-or-nexus";
@@ -1897,6 +1937,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "stun-enemy":
     case "silence-follower-target":
     case "frostbite-2-enemies":
+    case "stun-enemy-buff-all-allies-round":
       return "enemy";
     case "deal-damage-enemy-nexus":
     case "kill-all-units":

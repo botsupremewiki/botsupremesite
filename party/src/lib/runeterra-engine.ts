@@ -1759,6 +1759,131 @@ function applySpellEffect(
       newPlayers[casterSeat] = { ...player, bench: newBench };
       return { ...state, players: newPlayers };
     }
+    case "heal-ally-and-draw": {
+      // Phase 3.42 : Rituel du renouveau. Soigne l'allié (damage -=
+      // healAmount, cap 0) puis pioche drawCount cartes.
+      const player = newPlayers[casterSeat];
+      const newBench = player.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        return { ...u, damage: Math.max(0, u.damage - effect.healAmount) };
+      });
+      newPlayers[casterSeat] = { ...player, bench: newBench };
+      const intermediate: InternalState = { ...state, players: newPlayers };
+      return drawCards(intermediate, casterSeat, effect.drawCount).state;
+    }
+    case "stun-enemy-buff-all-allies-round": {
+      // Phase 3.42 : Manœuvre décisive. Stun ennemi cible + +pwr/+hp round
+      // à tous les alliés du caster.
+      const opp = newPlayers[oppSeat];
+      let stunned = false;
+      const newOppBench = opp.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        if (u.stunned) return u;
+        stunned = true;
+        return { ...u, stunned: true };
+      });
+      newPlayers[oppSeat] = { ...opp, bench: newOppBench };
+      const caster = newPlayers[casterSeat];
+      const newCasterBench = caster.bench.map((u) => ({
+        ...u,
+        power: u.power + effect.power,
+        health: u.health + effect.health,
+        endOfRoundPowerBuff: u.endOfRoundPowerBuff + effect.power,
+        endOfRoundHealthBuff: u.endOfRoundHealthBuff + effect.health,
+      }));
+      newPlayers[casterSeat] = {
+        ...caster,
+        bench: newCasterBench,
+        championCounters: stunned
+          ? {
+              ...caster.championCounters,
+              enemyStunned: caster.championCounters.enemyStunned + 1,
+            }
+          : caster.championCounters,
+      };
+      return { ...state, players: newPlayers };
+    }
+    case "drain-target-summon-token": {
+      // Phase 3.42 : Vil festin. Drain drainAmount d'une unité (any) puis
+      // summon 1 × token (capé à maxBench).
+      const cfgVF = RUNETERRA_BATTLE_CONFIG;
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else {
+        const oppUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) return state;
+      // Drain damage.
+      const targetPlayer = newPlayers[targetSeat];
+      const updatedBench = targetPlayer.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.drainAmount);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers[targetSeat] = {
+        ...targetPlayer,
+        bench: survivors,
+        alliesDiedThisRound:
+          targetPlayer.alliesDiedThisRound + (deadUnit ? 1 : 0),
+        championCounters: {
+          ...targetPlayer.championCounters,
+          alliesDied:
+            targetPlayer.championCounters.alliesDied + (deadUnit ? 1 : 0),
+        },
+      };
+      // Heal nexus du caster.
+      const casterPlayer = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...casterPlayer,
+        nexusHealth: Math.min(
+          cfgVF.initialNexusHealth,
+          casterPlayer.nexusHealth + effect.drainAmount,
+        ),
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (deadUnit) {
+        newState = triggerLastBreath(newState, deadUnit, targetSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      // Summon 1 token sur le banc du caster (capé à maxBench).
+      const casterAfterDrain = newState.players[casterSeat];
+      if (casterAfterDrain.bench.length >= cfgVF.maxBench) return newState;
+      const tokenCard = getCard(effect.tokenCardCode);
+      if (!tokenCard || tokenCard.type !== "Unit") return newState;
+      const newUid = `${casterSeat}-vf-${state.round}-${state.log.length}`;
+      const newUnit = createUnit(newUid, effect.tokenCardCode);
+      const newPlayers2: [InternalPlayer, InternalPlayer] = [
+        newState.players[0],
+        newState.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      newPlayers2[casterSeat] = {
+        ...casterAfterDrain,
+        bench: [...casterAfterDrain.bench, newUnit],
+      };
+      return {
+        ...newState,
+        players: newPlayers2,
+        log: [
+          ...newState.log,
+          `${casterAfterDrain.username} invoque ${tokenCard.name}.`,
+        ],
+      };
+    }
     case "deal-damage-target-any-or-nexus": {
       // Phase 3.41 : Tir mystique. Inflige amount dmg à une unité OU un
       // nexus. targetUid spéciaux : "nexus-self" / "nexus-enemy".
