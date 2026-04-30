@@ -236,6 +236,15 @@ export function botAct(
         if (player.deadAlliesThisGame.length === 0) continue;
         if (player.bench.length >= 6) continue;
       }
+      if (effect.type === "gain-mana-slot-and-heal-nexus") {
+        // Toujours utile (mana + heal). Pas de skip.
+      }
+      if (effect.type === "damage-summoned-this-round-enemies") {
+        const targetable = opponent.bench.filter((u) =>
+          opponent.summonedUidsThisRound.includes(u.uid),
+        );
+        if (targetable.length === 0) continue;
+      }
       if (effect.type === "buff-allies-of-subtype-everywhere") {
         const hasAnySubtype = [
           ...player.bench,
@@ -526,6 +535,21 @@ export function botAct(
         } else if (player.bench.length > 0) {
           targetUid = player.bench[0].uid;
         } else continue;
+      } else if (effect.type === "pay-all-mana-deal-damage-target-any") {
+        // Phase 3.61 : Rayon thermogénique. Skip si pas assez de mana
+        // (≥3 dmg = playable). Préfère ennemi tuable, sinon plus grosse
+        // menace.
+        const dmg = player.mana + player.spellMana;
+        if (dmg < 3) continue; // pas rentable
+        const killable = opponent.bench
+          .filter((u) => u.health - u.damage <= dmg)
+          .sort((a, b) => b.power + b.health - (a.power + a.health))[0];
+        const fallback = [...opponent.bench].sort(
+          (a, b) => b.power + b.health - (a.power + a.health),
+        )[0];
+        const target = killable ?? fallback;
+        if (!target) continue;
+        targetUid = target.uid;
       } else if (effect.type === "kill-wounded-target-and-create-spell-in-hand") {
         // Phase 3.56 : Guillotine. Pick une unité ennemie blessée si
         // possible, sinon allié blessé sacrifiable, sinon skip.

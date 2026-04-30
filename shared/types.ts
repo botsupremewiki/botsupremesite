@@ -1763,7 +1763,17 @@ export type SpellEffect =
   | {
       type: "revive-n-most-powerful-dead-allies-this-game-as-ephemeral";
       count: number;
-    };
+    }
+  // Phase 3.61
+  // Sans cible : caster gagne 1 mana slot permanent (manaSlotsBonus +1)
+  // + heal nexus de healAmount. 01FR012 Catalyseur de l'éternité.
+  | { type: "gain-mana-slot-and-heal-nexus"; healAmount: number }
+  // Cible : unité (any) → caster paie tout son mana (mana + spellMana)
+  // pour infliger ce montant en dmg. 01PZ027 Rayon thermogénique.
+  | { type: "pay-all-mana-deal-damage-target-any" }
+  // Sans cible : amount dmg à toutes les unités ennemies summoned ce
+  // round (uid présent dans opp.summonedUidsThisRound). 01SI019 La cage.
+  | { type: "damage-summoned-this-round-enemies"; amount: number };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -2263,6 +2273,17 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
     type: "revive-n-most-powerful-dead-allies-this-game-as-ephemeral",
     count: 6,
   },
+
+  // ── Phase 3.61
+  // 01FR012 (Freljord, 5 Burst, Catalyseur de l'éternité) — gain mana
+  // slot permanent + heal 3 nexus.
+  "01FR012": { type: "gain-mana-slot-and-heal-nexus", healAmount: 3 },
+  // 01PZ027 (PiltoverZaun, 0 Slow, Rayon thermogénique) — pay all mana
+  // (mana + spellMana), dmg = ce montant à une unité (any).
+  "01PZ027": { type: "pay-all-mana-deal-damage-target-any" },
+  // 01SI019 (ShadowIsles, 4 Fast, La cage) — 3 dmg à toutes les unités
+  // ennemies summoned ce round.
+  "01SI019": { type: "damage-summoned-this-round-enemies", amount: 3 },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -2352,6 +2373,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "drain-target-summon-token":
     case "kill-wounded-target-and-create-spell-in-hand":
     case "create-ephemeral-copy-of-target-in-hand":
+    case "pay-all-mana-deal-damage-target-any":
       return "any";
     case "deal-damage-target-any-or-nexus":
       return "any-or-nexus";
@@ -2398,6 +2420,8 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "summon-token-if-unique-cards-played-min":
     case "summon-token-or-add-to-deck-if-no-subtype-ally":
     case "revive-n-most-powerful-dead-allies-this-game-as-ephemeral":
+    case "gain-mana-slot-and-heal-nexus":
+    case "damage-summoned-this-round-enemies":
       return "none";
     case "auto-discard-and-damage-target-any-or-nexus":
       return "any-or-nexus";

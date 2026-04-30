@@ -94,6 +94,12 @@ export type InternalPlayer = {
   // Phase 3.60 : liste des alliés morts CETTE PARTIE (cumulé, never reset).
   // Sert pour 01SI003 (revive 6 plus puissants morts cette partie).
   deadAlliesThisGame: { uid: string; cardCode: string }[];
+  // Phase 3.61 : bonus permanent de mana slots (01FR012 Catalyseur).
+  // manaMax = min(round + manaSlotsBonus, cap).
+  manaSlotsBonus: number;
+  // Phase 3.61 : uids des unités summoned ce round (côté ce joueur).
+  // Reset à startRound. Sert à 01SI019 (dmg ennemis summoned ce round).
+  summonedUidsThisRound: string[];
   // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
   // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
   // healthDelta directement sur la nouvelle unité, costDelta sur la mana
@@ -269,6 +275,8 @@ export function createInitialState(
     deadAlliesThisGame: [],
     cardBuffs: {},
     uniqueCardCodesPlayedThisGame: [],
+    manaSlotsBonus: 0,
+    summonedUidsThisRound: [],
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -387,7 +395,6 @@ export function applyMulligan(
 export function startRound(state: InternalState): InternalState {
   const cfg = RUNETERRA_BATTLE_CONFIG;
   const newRound = state.round + 1;
-  const newManaMax = Math.min(newRound, cfg.maxMana);
   const isFirstRound = state.round === 0; // mulligan terminé, on entre dans round 1
 
   // Swap attack token : l'inverse du round précédent. Au tout premier
@@ -396,10 +403,22 @@ export function startRound(state: InternalState): InternalState {
     ? state.attackTokenSeatIdx
     : ((1 - state.attackTokenSeatIdx) as 0 | 1);
 
+  // Phase 3.61 : manaMax inclut manaSlotsBonus per-player (Catalyseur).
   const updatedPlayers: [InternalPlayer, InternalPlayer] = [
-    refreshPlayerForRound(state.players[0], newManaMax, newAttackTokenSeat === 0, isFirstRound),
-    refreshPlayerForRound(state.players[1], newManaMax, newAttackTokenSeat === 1, isFirstRound),
+    refreshPlayerForRound(
+      state.players[0],
+      Math.min(newRound + state.players[0].manaSlotsBonus, cfg.maxMana),
+      newAttackTokenSeat === 0,
+      isFirstRound,
+    ),
+    refreshPlayerForRound(
+      state.players[1],
+      Math.min(newRound + state.players[1].manaSlotsBonus, cfg.maxMana),
+      newAttackTokenSeat === 1,
+      isFirstRound,
+    ),
   ];
+  const newManaMax = updatedPlayers[0].manaMax; // pour le log (peu importe quel)
 
   const log = [
     ...state.log,
@@ -447,9 +466,10 @@ function refreshPlayerForRound(
     manaMax: newManaMax,
     mana: newManaMax,
     attackToken: hasToken,
-    // Phase 3.34 + 3.51 : reset compteurs/listes per-round.
+    // Phase 3.34 + 3.51 + 3.61 : reset compteurs/listes per-round.
     alliesDiedThisRound: 0,
     deadAlliesThisRound: [],
+    summonedUidsThisRound: [],
   };
 }
 
@@ -931,6 +951,8 @@ export function playUnit(
     mana: player.mana - effectiveCost,
     cardBuffs: newCardBuffs,
     uniqueCardCodesPlayedThisGame: uniqueCodes,
+    // Phase 3.61 : push uid à summonedUidsThisRound (pour 01SI019).
+    summonedUidsThisRound: [...player.summonedUidsThisRound, newUnit.uid],
     championCounters: {
       ...player.championCounters,
       techPowerSummoned:
@@ -2258,6 +2280,131 @@ function applySpellEffect(
           `${caster.username} ajoute une copie éphémère de ${cardName} à sa main.`,
         ],
       };
+    }
+    case "gain-mana-slot-and-heal-nexus": {
+      // Phase 3.61 : Catalyseur. +1 manaSlotsBonus permanent + heal nexus.
+      // Le manaMax sera bumpé au prochain startRound. Pour ce round on
+      // bumpe aussi manaMax + mana actuels pour que le bonus soit
+      // visible immédiatement.
+      const cfgMS = RUNETERRA_BATTLE_CONFIG;
+      const player = newPlayers[casterSeat];
+      const newSlots = player.manaSlotsBonus + 1;
+      const newManaMax = Math.min(player.manaMax + 1, cfgMS.maxMana);
+      newPlayers[casterSeat] = {
+        ...player,
+        manaSlotsBonus: newSlots,
+        manaMax: newManaMax,
+        mana: Math.min(player.mana + 1, newManaMax),
+        nexusHealth: Math.min(
+          cfgMS.initialNexusHealth,
+          player.nexusHealth + effect.healAmount,
+        ),
+      };
+      return {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} gagne un emplacement de mana (manaMax = ${newManaMax}).`,
+        ],
+      };
+    }
+    case "pay-all-mana-deal-damage-target-any": {
+      // Phase 3.61 : Rayon thermogénique. Pay all mana + spellMana,
+      // dmg = ce montant à une unité (any side).
+      const player = newPlayers[casterSeat];
+      const dmg = player.mana + player.spellMana;
+      if (dmg <= 0) return state;
+      newPlayers[casterSeat] = { ...player, mana: 0, spellMana: 0 };
+      // Apply damage à target.
+      let target: RuneterraBattleUnit | undefined;
+      let targetSeat: 0 | 1 | null = null;
+      const casterUnit = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (casterUnit) {
+        target = casterUnit;
+        targetSeat = casterSeat;
+      } else {
+        const oppUnit = newPlayers[oppSeat].bench.find(
+          (u) => u.uid === targetUid,
+        );
+        if (oppUnit) {
+          target = oppUnit;
+          targetSeat = oppSeat;
+        }
+      }
+      if (!target || targetSeat === null) {
+        return { ...state, players: newPlayers };
+      }
+      const targetPlayer = newPlayers[targetSeat];
+      const updatedBench = targetPlayer.bench.map((u) => {
+        if (u.uid !== targetUid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, dmg);
+        return copy;
+      });
+      const survivors = updatedBench.filter((u) => u.damage < u.health);
+      const deadUnit = updatedBench.find((u) => u.damage >= u.health);
+      newPlayers[targetSeat] = {
+        ...targetPlayer,
+        bench: survivors,
+        alliesDiedThisRound:
+          targetPlayer.alliesDiedThisRound + (deadUnit ? 1 : 0),
+        championCounters: {
+          ...targetPlayer.championCounters,
+          alliesDied:
+            targetPlayer.championCounters.alliesDied + (deadUnit ? 1 : 0),
+        },
+      };
+      let newState: InternalState = {
+        ...state,
+        players: newPlayers,
+        log: [
+          ...state.log,
+          `${player.username} dépense ${dmg} mana pour infliger ${dmg} dmg.`,
+        ],
+      };
+      if (deadUnit) newState = triggerLastBreath(newState, deadUnit, targetSeat);
+      return newState;
+    }
+    case "damage-summoned-this-round-enemies": {
+      // Phase 3.61 : La cage. Dmg amount à toutes les unités ennemies
+      // dont l'uid est dans opp.summonedUidsThisRound.
+      const opp = newPlayers[oppSeat];
+      const summonedSet = new Set(opp.summonedUidsThisRound);
+      const newBench = opp.bench.map((u) => {
+        if (!summonedSet.has(u.uid)) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, effect.amount);
+        return copy;
+      });
+      const survivors = newBench.filter((u) => u.damage < u.health);
+      const dead = newBench.filter((u) => u.damage >= u.health);
+      newPlayers[oppSeat] = {
+        ...opp,
+        bench: survivors,
+        alliesDiedThisRound: opp.alliesDiedThisRound + dead.length,
+        championCounters: {
+          ...opp.championCounters,
+          alliesDied: opp.championCounters.alliesDied + dead.length,
+          unitsDied: opp.championCounters.unitsDied + dead.length,
+        },
+      };
+      const caster = newPlayers[casterSeat];
+      newPlayers[casterSeat] = {
+        ...caster,
+        championCounters: {
+          ...caster.championCounters,
+          unitsDied: caster.championCounters.unitsDied + dead.length,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      for (const d of dead) {
+        newState = triggerLastBreath(newState, d, oppSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
     }
     case "revive-n-most-powerful-dead-allies-this-game-as-ephemeral": {
       // Phase 3.60 : pick les count cardCodes morts les plus puissants
