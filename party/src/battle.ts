@@ -1845,6 +1845,18 @@ export default class BattleServer implements Party.Server {
           seat.bench.push(this.makeBattleCard(card.cardId));
         }
       }
+      // ── Force opp switch (Krakos Dégagement) ──
+      // Identique à Morgane : on déplace l'Actif adverse dans son Banc et
+      // on flag mustPromoteActive → l'adversaire doit choisir un nouveau
+      // Actif. Le tour de l'attaquant est suspendu via requireOpponentReady
+      // jusqu'à ce que l'adversaire ait choisi.
+      else if (e.kind === "force-opp-switch") {
+        if (opp.active && opp.bench.length > 0) {
+          opp.bench.push(opp.active);
+          opp.active = null;
+          opp.mustPromoteActive = true;
+        }
+      }
       // ── Self swap (Abra Téléport : « Échangez ce Pokémon contre l'un
       //   de vos Pokémon de Banc. ») ──
       // Le texte officiel laisse le choix à l'attaquant. MVP : on
@@ -1868,17 +1880,6 @@ export default class BattleServer implements Party.Server {
           const newActive = seat.bench[bestIdx];
           seat.bench[bestIdx] = seat.active;
           seat.active = newActive;
-        }
-      }
-      // ── Force switch adverse (Krakos « Dégagement », Roucarnage Déroute) ──
-      // Identique à Morgane : l'Actif adverse rejoint son Banc, on flag
-      // mustPromoteActive → l'adversaire choisit son nouvel Actif via le
-      // mécanisme existant. L'attaquant attend (requireOpponentReady).
-      else if (e.kind === "force-opp-switch") {
-        if (opp.active && opp.bench.length > 0) {
-          opp.bench.push(opp.active);
-          opp.active = null;
-          opp.mustPromoteActive = true;
         }
       }
       // ── Hand discard random (avec ou sans coin flip) ──

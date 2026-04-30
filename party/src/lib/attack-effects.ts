@@ -179,11 +179,11 @@ export type AttackEffect =
    *  `copyFromUid` + `copyAttackIndex` au moment du `battle-attack` pour
    *  préciser quelle attaque copier. */
   | { kind: "copy-opp-attack" }
-  // ─── Force switch adverse (Krakos « Dégagement ») ────────────────────
+  // ─── Force-opp-switch (Krakos « Dégagement ») ───────────────────────
   /** « Échangez le Pokémon Actif de votre adversaire avec l'un de ses
    *  Pokémon de Banc. (Votre adversaire choisit le nouveau Pokémon
-   *  Actif.) » — Pose mustPromoteActive sur l'adversaire. Identique à
-   *  l'effet de Morgane mais déclenché par une attaque. */
+   *  Actif.) ». Identique à Morgane (Dresseur) mais en attaque : on déplace
+   *  opp.active dans opp.bench et on flag mustPromoteActive. */
   | { kind: "force-opp-switch" }
   // ─── Single coin avec branches symétriques (Élektek « Poing Éclair ») ─
   /** « Lancez une pièce. Si face, +N dégâts. Si pile, ce Pokémon s'inflige
@@ -652,9 +652,12 @@ export function parseAttackEffects(
     },
   );
 
-  // ── Force switch adverse (Krakos « Dégagement ») ──
-  // « Échangez le Pokémon Actif de votre adversaire avec l'un de ses
-  //   Pokémon de Banc. » — identique à l'effet Morgane.
+  // ── Force-opp-switch (Krakos « Dégagement ») ──
+  // Texte officiel : « Échangez le Pokémon Actif de votre adversaire avec
+  // l'un de ses Pokémon de Banc. (Votre adversaire choisit le nouveau
+  // Pokémon Actif.) ». Identique à Morgane mais déclenché par une attaque.
+  // On utilise une regex large (pas de parenthèse obligatoire) pour
+  // attraper d'éventuelles variations de phrasé.
   consume(
     /Échangez le Pokémon Actif de votre adversaire avec l'un de ses Pokémon de Banc\./i,
     () => {
