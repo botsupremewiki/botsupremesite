@@ -35,11 +35,15 @@ import {
   ONEPIECE_BASE_SET,
 } from "../../shared/tcg-onepiece-base";
 import {
+  fetchBattleAggregates,
   fetchTcgDeckById,
   recordBattleLogs,
   recordBattleResult,
   recordBotWin,
+  tryUnlockAchievement,
 } from "./lib/supabase";
+import { generateRandomBotDeck } from "./lib/onepiece-bot-decks";
+import { TCG_ACHIEVEMENTS } from "../../shared/tcg-achievements";
 import {
   applyAllCostMods,
   applyAllPowerMods,
@@ -275,10 +279,18 @@ export default class OnePieceBattleServer implements Party.Server {
       };
       this.connToSeat.set(conn.id, seatId);
 
-      // En mode bot : dès que p1 est seated, on remplit p2 avec le Bot Suprême
-      // (mirror du même deck pour un match équilibré).
+      // En mode bot : dès que p1 est seated, on remplit p2 avec le Bot
+      // Suprême. Par défaut, on génère un deck random (Leader random +
+      // 50 cartes matching la couleur). Ça donne plus de variété qu'un
+      // mirror du deck humain.
       if (this.botMode && seatId === "p1" && !this.seats.p2) {
-        this.fillBotSeat(deckRow.cards ?? [], deckRow.leader_id);
+        const useBotDeckRandom = !url.searchParams.has("mirror");
+        if (useBotDeckRandom) {
+          const bot = generateRandomBotDeck();
+          this.fillBotSeat(bot.cards, bot.leaderId);
+        } else {
+          this.fillBotSeat(deckRow.cards ?? [], deckRow.leader_id);
+        }
       }
     } else {
       // Reconnexion (même authId).
@@ -1674,6 +1686,45 @@ export default class OnePieceBattleServer implements Party.Server {
           this.broadcastState();
         })
         .catch(() => {});
+
+      // Achievements : check pour les 2 joueurs après le match (le
+      // perdant peut quand même débloquer "1er match", "50 matches"…).
+      void this.checkAndUnlockAchievements(w.authId, w.username);
+      void this.checkAndUnlockAchievements(l.authId, l.username);
+    }
+  }
+
+  /** Récupère les agrégats du joueur depuis Supabase et vérifie chaque
+   *  achievement du catalogue OnePiece. UNLOCK idempotent côté SQL. */
+  private async checkAndUnlockAchievements(
+    userId: string,
+    username: string,
+  ) {
+    if (!userId || userId === BOT_AUTH_ID) return;
+    const aggregates = await fetchBattleAggregates(
+      this.room,
+      userId,
+      "onepiece",
+    );
+    if (!aggregates) return;
+    for (const ach of TCG_ACHIEVEMENTS) {
+      if (!ach.check(aggregates)) continue;
+      try {
+        const newlyUnlocked = await tryUnlockAchievement(
+          this.room,
+          userId,
+          "onepiece",
+          ach.id,
+        );
+        if (newlyUnlocked) {
+          this.pushLog(
+            `🏅 ${username} débloque « ${ach.name} » ${ach.icon}`,
+          );
+          this.broadcastState();
+        }
+      } catch {
+        // best-effort
+      }
     }
   }
 

@@ -8,6 +8,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useOnePieceSfx } from "./use-onepiece-sfx";
 import type {
   ChatMessage,
   OnePieceBattleCardInPlay,
@@ -38,6 +39,9 @@ export function OnePieceBattleClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selfSeat, setSelfSeat] = useState<OnePieceBattleSeatId | null>(null);
   const [state, setState] = useState<OnePieceBattleState | null>(null);
+  const sfx = useOnePieceSfx();
+  // Trackers pour détecter les transitions et jouer les bons sons.
+  const prevStateRef = useRef<OnePieceBattleState | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatDraft, setChatDraft] = useState("");
   // Attaque en 2 étapes : clique "Attaquer" sur un de mes attackers → store
@@ -92,9 +96,62 @@ export function OnePieceBattleClient({
         case "op-welcome":
           setSelfSeat(msg.selfSeat);
           break;
-        case "op-state":
-          setState(msg.state);
+        case "op-state": {
+          // Trigger SFX selon les transitions d'état.
+          const prev = prevStateRef.current;
+          const next = msg.state;
+          // Détecter pendingAttack apparaît → son d'attaque.
+          if (!prev?.pendingAttack && next.pendingAttack) {
+            sfx.play("attack");
+          }
+          // Détecter une carte ajoutée à ma main (Vie ou pioche).
+          if (
+            prev?.self &&
+            next.self &&
+            next.self.handCount > prev.self.handCount
+          ) {
+            // Si la vie a baissé en même temps : Vie prise.
+            if (
+              prev.self.life > next.self.life ||
+              (prev.opponent && next.opponent && prev.opponent.life > next.opponent.life)
+            ) {
+              sfx.play("life-taken");
+            } else {
+              sfx.play("card-played");
+            }
+          }
+          // Détecter une carte qui quitte le terrain (KO).
+          if (
+            prev?.self &&
+            next.self &&
+            next.self.characters.length < prev.self.characters.length
+          ) {
+            sfx.play("ko");
+          }
+          if (
+            prev?.opponent &&
+            next.opponent &&
+            next.opponent.characters.length < prev.opponent.characters.length
+          ) {
+            sfx.play("ko");
+          }
+          // Détecter game over.
+          if (prev?.phase !== "ended" && next.phase === "ended") {
+            if (next.winner === next.selfSeat) sfx.play("win");
+            else sfx.play("lose");
+          }
+          // Détecter changement de tour actif.
+          if (
+            prev?.activeSeat &&
+            next.activeSeat &&
+            prev.activeSeat !== next.activeSeat
+          ) {
+            sfx.play("turn-end");
+          }
+          prevStateRef.current = next;
+          setState(next);
           break;
+        }
         case "op-error":
           setErrorMsg(msg.message);
           break;
@@ -102,6 +159,7 @@ export function OnePieceBattleClient({
           setChat((prev) => [...prev.slice(-29), msg.message]);
           break;
         case "op-trigger-reveal":
+          sfx.play("trigger-reveal");
           setRevealedTrigger({ cardId: msg.cardId, trigger: msg.trigger });
           // Auto-clear après 6s pour ne pas surcharger l'UI.
           setTimeout(() => setRevealedTrigger(null), 6000);
@@ -181,6 +239,13 @@ export function OnePieceBattleClient({
               >
                 📖 Règles
               </a>
+              <button
+                onClick={() => sfx.setEnabled(!sfx.enabled)}
+                className="rounded-md border border-zinc-500/40 bg-zinc-500/10 px-2 py-1 text-zinc-300 hover:bg-zinc-500/20"
+                title={sfx.enabled ? "Couper le son" : "Activer le son"}
+              >
+                {sfx.enabled ? "🔊" : "🔇"}
+              </button>
               <button
                 onClick={concede}
                 className={
