@@ -1072,6 +1072,26 @@ function validateSpellTarget(
         };
       }
     }
+    // Phase 3.48 : Jugement requiert que la cible soit au combat.
+    if (effect.type === "ally-strikes-all-enemies-in-combat") {
+      if (!state.attackInProgress) {
+        return {
+          ok: false,
+          error: "Ce sort ne peut être lancé que pendant un combat.",
+        };
+      }
+      const combatants = new Set<string>();
+      for (const lane of state.attackInProgress.lanes) {
+        combatants.add(lane.attackerUid);
+        if (lane.blockerUid) combatants.add(lane.blockerUid);
+      }
+      if (!combatants.has(targetUid)) {
+        return {
+          ok: false,
+          error: "La cible doit être un allié au combat.",
+        };
+      }
+    }
     return { ok: true };
   }
   if (side === "enemy") {
@@ -1946,6 +1966,88 @@ function applySpellEffect(
       };
       let newState: InternalState = { ...state, players: newPlayers };
       for (const d of dead) {
+        newState = triggerLastBreath(newState, d, oppSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      return newState;
+    }
+    case "ally-strikes-all-enemies-in-combat": {
+      // Phase 3.48 : Jugement. L'allié ciblé frappe tous les ennemis au
+      // combat (dmg = power allié) ; l'allié reçoit la somme des power
+      // ennemis. Last Breath déclenché pour chaque mort.
+      if (!state.attackInProgress) return state;
+      const combatants = new Set<string>();
+      for (const lane of state.attackInProgress.lanes) {
+        combatants.add(lane.attackerUid);
+        if (lane.blockerUid) combatants.add(lane.blockerUid);
+      }
+      const ally = newPlayers[casterSeat].bench.find(
+        (u) => u.uid === targetUid,
+      );
+      if (!ally) return state;
+      const enemyTargets = newPlayers[oppSeat].bench.filter((u) =>
+        combatants.has(u.uid),
+      );
+      if (enemyTargets.length === 0) return state;
+      const allyDamageOut = ally.power;
+      const allyDamageIn = enemyTargets.reduce((sum, e) => sum + e.power, 0);
+      // Apply damage à chaque ennemi.
+      const updatedEnemyBench = newPlayers[oppSeat].bench.map((u) => {
+        if (!combatants.has(u.uid)) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, allyDamageOut);
+        return copy;
+      });
+      const enemySurvivors = updatedEnemyBench.filter(
+        (u) => u.damage < u.health,
+      );
+      const enemyDead = updatedEnemyBench.filter((u) => u.damage >= u.health);
+      // Apply damage à l'allié.
+      const updatedAllyBench = newPlayers[casterSeat].bench.map((u) => {
+        if (u.uid !== ally.uid) return u;
+        const copy = { ...u };
+        applyDamageToUnit(copy, allyDamageIn);
+        return copy;
+      });
+      const allySurvivors = updatedAllyBench.filter((u) => u.damage < u.health);
+      const allyDead = updatedAllyBench.find((u) => u.damage >= u.health);
+      newPlayers[casterSeat] = {
+        ...newPlayers[casterSeat],
+        bench: allySurvivors,
+        alliesDiedThisRound:
+          newPlayers[casterSeat].alliesDiedThisRound + (allyDead ? 1 : 0),
+        championCounters: {
+          ...newPlayers[casterSeat].championCounters,
+          alliesDied:
+            newPlayers[casterSeat].championCounters.alliesDied +
+            (allyDead ? 1 : 0),
+          unitsDied:
+            newPlayers[casterSeat].championCounters.unitsDied +
+            (allyDead ? 1 : 0) +
+            enemyDead.length,
+        },
+      };
+      newPlayers[oppSeat] = {
+        ...newPlayers[oppSeat],
+        bench: enemySurvivors,
+        alliesDiedThisRound:
+          newPlayers[oppSeat].alliesDiedThisRound + enemyDead.length,
+        championCounters: {
+          ...newPlayers[oppSeat].championCounters,
+          alliesDied:
+            newPlayers[oppSeat].championCounters.alliesDied + enemyDead.length,
+          unitsDied:
+            newPlayers[oppSeat].championCounters.unitsDied +
+            (allyDead ? 1 : 0) +
+            enemyDead.length,
+        },
+      };
+      let newState: InternalState = { ...state, players: newPlayers };
+      if (allyDead) {
+        newState = triggerLastBreath(newState, allyDead, casterSeat);
+        if (newState.phase === "ended") return newState;
+      }
+      for (const d of enemyDead) {
         newState = triggerLastBreath(newState, d, oppSeat);
         if (newState.phase === "ended") return newState;
       }

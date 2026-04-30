@@ -1589,7 +1589,12 @@ export type SpellEffect =
   // Phase 3.47
   // Comme unit-strike-unit mais target1 + target2 doivent être au combat
   // (uid présent dans state.attackInProgress.lanes). Volée mortelle.
-  | { type: "unit-strike-unit-in-combat" };
+  | { type: "unit-strike-unit-in-combat" }
+  // Phase 3.48
+  // Cible : 1 allié au combat → frappe tous les ennemis au combat (dmg
+  // simultanés sur chacun = power de l'allié, l'allié reçoit la somme
+  // des power des ennemis touchés). Jugement.
+  | { type: "ally-strikes-all-enemies-in-combat" };
 
 export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // ── Demacia
@@ -1907,6 +1912,11 @@ export const RUNETERRA_SPELL_EFFECTS: Record<string, SpellEffect> = {
   // 01NX011 (Noxus, 3 Fast, Volée mortelle) — comme Combat singulier
   // mais target1 + target2 doivent être au combat.
   "01NX011": { type: "unit-strike-unit-in-combat" },
+
+  // ── Phase 3.48
+  // 01DE007 (Demacia, 8 Fast, Jugement) — un allié au combat frappe
+  // tous les ennemis au combat.
+  "01DE007": { type: "ally-strikes-all-enemies-in-combat" },
 };
 
 // ─── Imbue effects (Phase 3.22) ──────────────────────────────────────────
@@ -1980,6 +1990,7 @@ export function getSpellTargetSide(effect: SpellEffect): SpellTargetSide {
     case "damage-ally-buff-other-ally-round":
     case "heal-ally-and-draw":
     case "recall-ally-and-summon-token":
+    case "ally-strikes-all-enemies-in-combat":
       return "ally";
     case "deal-damage-anywhere":
     case "kill-target-any":
@@ -3195,6 +3206,23 @@ export type OnePieceBattleCardInPlay = {
   // tour (Limejuice OP09-014, Dawn Whip ST21-016 sub-effet). Reset
   // à end-turn.
   noBlockerThisTurn?: boolean;
+  // Si true, ce Persos ne peut pas attaquer jusqu'à la fin du prochain
+  // tour adverse (Smoker ST19-001). Reset à la fin de ce tour-là.
+  cannotAttackUntilNextOppTurnEnd?: boolean;
+  // Si true, quand ce Persos attaque, l'adversaire ne peut pas activer
+  // [Bloqueur] pour cette attaque (ST21-003 Sanji). Reset après le
+  // premier attaque déclenchée OU à end-turn si pas utilisé.
+  nextAttackPreventsBlock?: boolean;
+  // Mots-clés temporaires accordés par effet (Catarina Devon → Bloqueur
+  // / Double attaque / Exil jusqu'à fin du prochain tour adverse). Reset
+  // à end-turn de ce tour-là.
+  tempKeywords?: string[];
+  // Si true, ce Persos a une substitution KO active (Cracker ST20-002 :
+  // mill 1 vie au lieu d'être KO ; Monster OP09-012 : sacrifie ce Persos
+  // pour sauver un [Bonk Punch]). Le moteur consulte KO_SUBSTITUTES
+  // registry par cardNumber pour la sémantique exacte.
+  // Tracker "1/turn" pour les substitutions limitées.
+  koSubUsedThisTurn?: boolean;
 };
 
 export type OnePieceBattlePlayerPublicState = {

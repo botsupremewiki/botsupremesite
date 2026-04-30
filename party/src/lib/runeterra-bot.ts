@@ -212,6 +212,35 @@ export function botAct(
           .sort((a, b) => b.damage - a.damage);
         const target = wounded[0] ?? player.bench[0];
         targetUid = target.uid;
+      } else if (effect.type === "ally-strikes-all-enemies-in-combat") {
+        // Phase 3.48 : Jugement. Skip si pas d'attaque + pas d'allié au
+        // combat. Choisit l'allié au combat avec le plus de power.
+        if (!state.attackInProgress) continue;
+        const combatants = new Set<string>();
+        for (const lane of state.attackInProgress.lanes) {
+          combatants.add(lane.attackerUid);
+          if (lane.blockerUid) combatants.add(lane.blockerUid);
+        }
+        const eligibleAllies = player.bench.filter(
+          (u) => combatants.has(u.uid) && u.power > 0,
+        );
+        if (eligibleAllies.length === 0) continue;
+        const enemiesInCombat = opponent.bench.filter((u) =>
+          combatants.has(u.uid),
+        );
+        if (enemiesInCombat.length === 0) continue;
+        // Pick allié dont la power tue le plus d'ennemis tout en survivant.
+        const sorted = [...eligibleAllies].sort((a, b) => {
+          const aSurvives =
+            a.health - a.damage >
+            enemiesInCombat.reduce((s, e) => s + e.power, 0);
+          const bSurvives =
+            b.health - b.damage >
+            enemiesInCombat.reduce((s, e) => s + e.power, 0);
+          if (aSurvives !== bSurvives) return aSurvives ? -1 : 1;
+          return b.power - a.power;
+        });
+        targetUid = sorted[0].uid;
       } else if (effect.type === "recall-ally-and-summon-token") {
         // Phase 3.45 : Inversion spectrale. Recall l'allié le moins
         // intéressant (tap, faible) et summon Ombre vivante. Skip si
