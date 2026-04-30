@@ -29,15 +29,36 @@ export async function fetchEternumHero(
   // Recompute énergie au login (idempotent côté DB).
   await supabase.rpc("eternum_recompute_energy", { p_user_id: authId });
 
+  // SELECT principal sans prestige_stones — robuste si la migration F2
+  // n'a pas encore été appliquée côté Supabase. Sinon le SELECT plante en
+  // erreur 42703 et on bloque l'utilisateur sur la page de création.
   const { data } = await supabase
     .from("eternum_heroes")
     .select(
-      "user_id,class_id,element_id,job_id,level,xp,evolution_stage,prestige_count,prestige_stones,energy,energy_updated_at,idle_stage,idle_updated_at",
+      "user_id,class_id,element_id,job_id,level,xp,evolution_stage,prestige_count,energy,energy_updated_at,idle_stage,idle_updated_at",
     )
     .eq("user_id", authId)
     .maybeSingle();
   if (!data) return null;
-  return rowToHero(data as EternumHeroRow);
+
+  // SELECT séparé pour prestige_stones, best-effort. Si colonne absente,
+  // l'erreur est silencieusement ignorée et on retombe sur 0.
+  let prestigeStones = 0;
+  try {
+    const r = await supabase
+      .from("eternum_heroes")
+      .select("prestige_stones")
+      .eq("user_id", authId)
+      .maybeSingle();
+    prestigeStones =
+      ((r.data as { prestige_stones?: number } | null)?.prestige_stones ?? 0);
+  } catch {
+    // colonne absente — migration F2 pas appliquée, on tolère
+  }
+
+  return rowToHero(
+    { ...(data as Omit<EternumHeroRow, "prestige_stones">), prestige_stones: prestigeStones },
+  );
 }
 
 function rowToHero(row: EternumHeroRow): EternumHero {
