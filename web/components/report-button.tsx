@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Flag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const REASONS: { id: string; label: string; description: string }[] = [
@@ -75,10 +76,11 @@ export function ReportButton({
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Signaler ${targetUsername}`}
-        className="rounded-md border border-rose-400/30 bg-rose-400/5 px-2.5 py-1 text-[11px] text-rose-200 transition-colors hover:bg-rose-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+        className="inline-flex items-center gap-1.5 rounded-md border border-rose-400/30 bg-rose-400/5 px-2.5 py-1 text-[11px] text-rose-200 transition-colors hover:bg-rose-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
         title="Signaler un comportement"
       >
-        <span aria-hidden="true">🚩</span> Signaler
+        <Flag size={12} aria-hidden="true" />
+        Signaler
       </button>
     );
   }

@@ -1,5 +1,7 @@
 "use client";
 
+import { Moon, Sun, Monitor } from "lucide-react";
+
 /**
  * ThemeProvider : gère le thème global (light/dark/system).
  *
@@ -100,16 +102,18 @@ export function ThemeToggle() {
   const next: Theme =
     theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
   const label =
-    theme === "dark" ? "🌙 Sombre" : theme === "light" ? "☀️ Clair" : "🖥️ Auto";
+    theme === "dark" ? "Sombre" : theme === "light" ? "Clair" : "Auto";
+  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
   return (
     <button
       type="button"
       onClick={() => setTheme(next)}
       aria-label={`Thème actuel : ${label}. Cliquer pour changer.`}
       title="Changer le thème"
-      className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-white/10"
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-white/10"
     >
-      {label}
+      <Icon size={14} aria-hidden="true" />
+      <span>{label}</span>
     </button>
   );
 }

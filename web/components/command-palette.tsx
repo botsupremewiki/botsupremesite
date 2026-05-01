@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { Search } from "lucide-react";
 import { useFocusTrap } from "@/lib/a11y";
 
 type Cmd = {
@@ -117,9 +118,7 @@ export function CommandPalette() {
             className="w-full max-w-xl overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl"
           >
             <div className="flex items-center gap-2 border-b border-white/10 px-3 py-3">
-              <span aria-hidden="true" className="text-lg">
-                🔍
-              </span>
+              <Search size={18} aria-hidden="true" className="text-zinc-400" />
               <input
                 ref={inputRef}
                 type="text"

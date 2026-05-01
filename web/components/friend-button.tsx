@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserPlus, Check, Clock, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type FriendState =
@@ -50,17 +51,19 @@ export function FriendButton({
             setState({ kind: "outgoing" });
           }
         }}
-        className="rounded-md border border-cyan-300/40 bg-cyan-300/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200 transition-colors hover:bg-cyan-300/20 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-md border border-cyan-300/40 bg-cyan-300/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200 transition-colors hover:bg-cyan-300/20 disabled:opacity-50"
       >
-        🤝 Ajouter en ami
+        <UserPlus size={12} aria-hidden="true" />
+        Ajouter en ami
         {error ? ` · ${error}` : ""}
       </button>
     );
   }
   if (state.kind === "outgoing") {
     return (
-      <span className="rounded-md border border-zinc-400/30 bg-zinc-400/10 px-2.5 py-1 text-[11px] text-zinc-300">
-        ⏳ Demande envoyée
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-zinc-400/30 bg-zinc-400/10 px-2.5 py-1 text-[11px] text-zinc-300">
+        <Clock size={12} aria-hidden="true" />
+        Demande envoyée
       </span>
     );
   }
@@ -74,16 +77,18 @@ export function FriendButton({
             setState({ kind: "friends" });
           }
         }}
-        className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-bold text-emerald-200 transition-colors hover:bg-emerald-400/20 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-bold text-emerald-200 transition-colors hover:bg-emerald-400/20 disabled:opacity-50"
       >
-        ✅ Accepter la demande
+        <Check size={12} aria-hidden="true" />
+        Accepter la demande
       </button>
     );
   }
   // friends
   return (
-    <span className="rounded-md border border-emerald-300/40 bg-emerald-300/10 px-2.5 py-1 text-[11px] font-bold text-emerald-200">
-      🤝 Amis
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300/40 bg-emerald-300/10 px-2.5 py-1 text-[11px] font-bold text-emerald-200">
+      <Users size={12} aria-hidden="true" />
+      Amis
     </span>
   );
 }

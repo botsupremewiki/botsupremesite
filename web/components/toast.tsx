@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { CheckCircle, XCircle, Info, AlertTriangle } from "lucide-react";
 import { announce } from "@/lib/a11y";
 
 type ToastKind = "success" | "error" | "info" | "warning";
@@ -41,30 +42,38 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const COLORS: Record<ToastKind, { bg: string; border: string; text: string; icon: string }> = {
+const COLORS: Record<
+  ToastKind,
+  {
+    bg: string;
+    border: string;
+    text: string;
+    Icon: typeof CheckCircle;
+  }
+> = {
   success: {
     bg: "bg-emerald-500/15",
     border: "border-emerald-400/40",
     text: "text-emerald-100",
-    icon: "✓",
+    Icon: CheckCircle,
   },
   error: {
     bg: "bg-rose-500/15",
     border: "border-rose-400/40",
     text: "text-rose-100",
-    icon: "✕",
+    Icon: XCircle,
   },
   info: {
     bg: "bg-sky-500/15",
     border: "border-sky-400/40",
     text: "text-sky-100",
-    icon: "ℹ",
+    Icon: Info,
   },
   warning: {
     bg: "bg-amber-500/15",
     border: "border-amber-400/40",
     text: "text-amber-100",
-    icon: "⚠",
+    Icon: AlertTriangle,
   },
 };
 
@@ -102,6 +111,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <AnimatePresence>
           {toasts.map((t) => {
             const c = COLORS[t.kind];
+            const Icon = c.Icon;
             return (
               <motion.div
                 key={t.id}
@@ -112,9 +122,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 role="alert"
                 className={`pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${c.bg} ${c.border} ${c.text}`}
               >
-                <span aria-hidden="true" className="text-base font-bold">
-                  {c.icon}
-                </span>
+                <Icon
+                  size={16}
+                  aria-hidden="true"
+                  className="mt-0.5 shrink-0"
+                />
                 <span className="text-sm">{t.message}</span>
               </motion.div>
             );

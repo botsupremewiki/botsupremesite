@@ -1,11 +1,7 @@
 "use client";
 
+import { Globe } from "lucide-react";
 import { useLocale, type Locale } from "@/lib/i18n-client";
-
-const FLAGS: Record<Locale, string> = {
-  fr: "🇫🇷",
-  en: "🇬🇧",
-};
 
 export function LanguageSwitcher() {
   const { locale, setLocale } = useLocale();
@@ -14,10 +10,12 @@ export function LanguageSwitcher() {
     <button
       type="button"
       onClick={() => setLocale(next)}
+      aria-label={`Switch language to ${next.toUpperCase()}`}
       title={`Switch to ${next.toUpperCase()}`}
-      className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-white/10"
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-white/10"
     >
-      {FLAGS[locale]} {locale.toUpperCase()}
+      <Globe size={14} aria-hidden="true" />
+      <span>{locale.toUpperCase()}</span>
     </button>
   );
 }
