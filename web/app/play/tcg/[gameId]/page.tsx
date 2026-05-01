@@ -98,9 +98,30 @@ export default async function TcgGameHub({
       </header>
 
       <main
-        className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}
+        className={`relative flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}
       >
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        {/* Skinning thématique pour le hub OnePiece (vagues + Joly Roger
+            en filigrane). */}
+        {gameId === "onepiece" && (
+          <>
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.04]"
+              aria-hidden="true"
+              style={{
+                backgroundImage:
+                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><path d='M0 100 Q 25 50, 50 100 T 100 100 T 150 100 T 200 100' stroke='%23fbbf24' stroke-width='1' fill='none'/><path d='M0 130 Q 25 80, 50 130 T 100 130 T 150 130 T 200 130' stroke='%23dc2626' stroke-width='1' fill='none'/></svg>\")",
+                backgroundRepeat: "repeat",
+              }}
+            />
+            <div
+              className="pointer-events-none absolute right-8 top-8 text-9xl opacity-[0.06]"
+              aria-hidden="true"
+            >
+              🏴‍☠️
+            </div>
+          </>
+        )}
+        <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-6">
           {profile && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatTile
@@ -125,6 +146,50 @@ export default async function TcgGameHub({
                 value={elo !== null ? String(elo) : "—"}
                 accent="text-violet-300"
               />
+            </div>
+          )}
+
+          {/* Bannière de bienvenue OnePiece pour le 1er login (free packs
+              dispos = nouveau joueur ou n'a pas encore tout consommé). */}
+          {gameId === "onepiece" && profile && freePacks >= 5 && (
+            <div className="relative overflow-hidden rounded-xl border-2 border-amber-400/40 bg-gradient-to-br from-rose-950/60 via-amber-950/40 to-zinc-950/80 p-5 shadow-[0_0_40px_rgba(251,191,36,0.15)]">
+              <div className="pointer-events-none absolute -right-4 -top-4 text-7xl opacity-30">
+                🏴‍☠️
+              </div>
+              <div className="relative">
+                <div className="text-xs font-bold uppercase tracking-widest text-amber-300">
+                  ⚓ Bienvenue à bord, pirate
+                </div>
+                <h2 className="mt-1 text-2xl font-extrabold text-amber-100">
+                  Tu as {freePacks} boosters gratuits qui t'attendent !
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-amber-200/90">
+                  Ouvre tes packs pour constituer une collection, monte un
+                  deck (1 Leader + 50 cartes), puis pars à l'abordage du{" "}
+                  <strong>Bot Suprême</strong> pour t'entraîner. Lis les{" "}
+                  <Link
+                    href={`/play/tcg/${gameId}/regles`}
+                    className="underline hover:text-amber-100"
+                  >
+                    règles
+                  </Link>{" "}
+                  si tu débutes.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href={`/play/tcg/${gameId}/boosters`}
+                    className="rounded-full border-2 border-amber-300/80 bg-amber-500/20 px-4 py-1.5 text-sm font-bold text-amber-100 hover:bg-amber-500/40"
+                  >
+                    🎴 Ouvrir mes boosters
+                  </Link>
+                  <Link
+                    href={`/play/tcg/${gameId}/regles`}
+                    className="rounded-full border-2 border-amber-300/40 bg-amber-500/5 px-4 py-1.5 text-sm font-bold text-amber-200 hover:bg-amber-500/15"
+                  >
+                    📖 Lire les règles
+                  </Link>
+                </div>
+              </div>
             </div>
           )}
 
