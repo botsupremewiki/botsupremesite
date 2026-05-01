@@ -79,6 +79,12 @@ export function LorBattleClient({
   const [damagePopups, setDamagePopups] = useState<
     Record<string, { amount: number; ts: number }>
   >({});
+  // Phase 4.7 : annonce centre-écran « Round N » au début de chaque round
+  // (auto-fade après 1.5s). Détectée par diff state.round.
+  const [roundAnnouncement, setRoundAnnouncement] = useState<{
+    round: number;
+    ts: number;
+  } | null>(null);
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -176,6 +182,14 @@ export function LorBattleClient({
     const prev = prevStateRef.current;
     prevStateRef.current = state;
     if (!prev || !state) return;
+    // Phase 4.7 : nouveau round (state.round augmente) → annonce overlay.
+    if (state.round > prev.round && state.phase === "round") {
+      const ts = Date.now();
+      setRoundAnnouncement({ round: state.round, ts });
+      setTimeout(() => {
+        setRoundAnnouncement((curr) => (curr?.ts === ts ? null : curr));
+      }, 1500);
+    }
     // Helper : récupère TOUTES les unités sur les deux bancs (allié + ennemi).
     const getAllUnits = (s: RuneterraBattleState): RuneterraBattleUnit[] => {
       const out: RuneterraBattleUnit[] = [];
@@ -484,6 +498,25 @@ export function LorBattleClient({
           <HoverPreview cardCode={hoveredCardCode} />
         )}
 
+        {/* Phase 4.7 : annonce centrée « Round N » 1.5s à chaque nouveau
+            round. Ne bloque pas l'interaction (pointer-events-none). */}
+        {roundAnnouncement && (
+          <div
+            key={roundAnnouncement.ts}
+            className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
+            aria-hidden
+          >
+            <div className="animate-in fade-in zoom-in-50 duration-500 rounded-2xl border-2 border-amber-300/60 bg-zinc-950/80 px-12 py-6 text-center shadow-2xl backdrop-blur-md">
+              <div className="text-[10px] uppercase tracking-[0.4em] text-amber-300/80">
+                Round
+              </div>
+              <div className="mt-1 text-6xl font-black tabular-nums text-amber-200 drop-shadow-[0_4px_12px_rgba(252,211,77,0.6)]">
+                {roundAnnouncement.round}
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
@@ -606,14 +639,19 @@ function MulliganView({
   const done = state.self.hasMulliganed;
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-8">
-      <h1 className="text-2xl font-bold text-zinc-100">Mulligan</h1>
-      <p className="text-sm text-zinc-400">
-        {done
-          ? state.opponent?.hasMulliganed
-            ? "Mulligan terminé — démarrage du round 1..."
-            : "En attente de l'adversaire..."
-          : "Sélectionne les cartes à remplacer (0 à 4), puis confirme."}
-      </p>
+      {/* Phase 4.7 : header polish — gradient + border + glow */}
+      <div className="animate-in fade-in slide-in-from-top-4 duration-500 text-center">
+        <h1 className="text-3xl font-black bg-gradient-to-r from-amber-200 via-amber-300 to-orange-300 bg-clip-text text-transparent drop-shadow">
+          ⚡ Mulligan
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          {done
+            ? state.opponent?.hasMulliganed
+              ? "Mulligan terminé — démarrage du round 1..."
+              : "En attente de l'adversaire..."
+            : "Sélectionne les cartes à remplacer (0 à 4), puis confirme."}
+        </p>
+      </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
         {state.self.hand.map((cardCode, i) => {
           const isSelected = selection.has(i);
@@ -626,17 +664,22 @@ function MulliganView({
                 onZoom(cardCode);
               }}
               disabled={done}
-              className={`relative w-40 rounded-lg border-2 p-1 transition-transform disabled:cursor-not-allowed ${
+              // Phase 4.7 : entrée animée carte par carte (cascade 80ms),
+              // hover gain plus visible.
+              style={{ animationDelay: `${i * 80}ms` }}
+              className={`relative w-40 rounded-lg border-2 p-1 transition-all duration-200 disabled:cursor-not-allowed animate-in fade-in zoom-in-95 ${
                 isSelected
-                  ? "border-rose-400 scale-95 opacity-70"
-                  : "border-white/10 hover:scale-[1.02]"
+                  ? "border-rose-400 scale-95 opacity-60 rotate-1"
+                  : "border-white/10 hover:scale-[1.04] hover:-translate-y-2 hover:border-amber-400/40 hover:shadow-[0_8px_20px_rgba(251,191,36,0.3)]"
               }`}
               title="Click gauche : sélectionner · Click droit : zoom"
             >
               <CardFromCode cardCode={cardCode} />
               {isSelected && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-rose-900/40">
-                  <span className="text-2xl">✕</span>
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-rose-900/50 backdrop-blur-[1px]">
+                  <span className="text-4xl drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                    ✕
+                  </span>
                 </div>
               )}
             </button>
@@ -644,14 +687,18 @@ function MulliganView({
         })}
       </div>
       {!done && (
-        <div className="flex gap-3">
+        <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
           <button
             onClick={onConfirm}
-            className="rounded-md bg-emerald-500 px-5 py-2 text-sm font-bold text-emerald-950 shadow hover:bg-emerald-400"
+            className={`rounded-md px-6 py-2.5 text-sm font-bold shadow-lg transition-all hover:scale-105 ${
+              selection.size === 0
+                ? "bg-emerald-500 text-emerald-950 hover:bg-emerald-400 hover:shadow-emerald-500/30"
+                : "bg-amber-500 text-amber-950 hover:bg-amber-400 hover:shadow-amber-500/30"
+            }`}
           >
             {selection.size === 0
-              ? "Garder ma main"
-              : `Remplacer ${selection.size} carte${selection.size > 1 ? "s" : ""}`}
+              ? "✓ Garder ma main"
+              : `🔄 Remplacer ${selection.size} carte${selection.size > 1 ? "s" : ""}`}
           </button>
         </div>
       )}
