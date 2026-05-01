@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { ReportButton } from "@/components/report-button";
+import { FriendButton } from "@/components/friend-button";
 import { ACHIEVEMENTS } from "@shared/achievements";
 import { TCG_ACHIEVEMENTS, tierAccent } from "@shared/tcg-achievements";
 import { TCG_GAMES } from "@shared/types";
@@ -60,6 +61,11 @@ export default async function PublicProfilePage({
   let pokemonStats: TcgPlayerStats | null = null;
   let pokemonAchievementIds: string[] = [];
   let publicDecks: PublicDeckRow[] = [];
+  let friendState:
+    | { kind: "none" }
+    | { kind: "outgoing" }
+    | { kind: "incoming" }
+    | { kind: "friends" } = { kind: "none" };
 
   if (supabase) {
     const { data } = await supabase
@@ -109,6 +115,28 @@ export default async function PublicProfilePage({
           (a) => a.achievement_id,
         );
       publicDecks = (decksRes.data as PublicDeckRow[]) ?? [];
+
+      // Statut de friendship si user connecté.
+      if (me && me.id !== data.id) {
+        const a = me.id < data.id ? me.id : data.id;
+        const b = me.id < data.id ? data.id : me.id;
+        const { data: f } = await supabase
+          .from("friendships")
+          .select("status,requester")
+          .eq("user_a", a)
+          .eq("user_b", b)
+          .maybeSingle();
+        const fr = f as { status: string; requester: string } | null;
+        if (fr) {
+          if (fr.status === "accepted") {
+            friendState = { kind: "friends" };
+          } else if (fr.requester === me.id) {
+            friendState = { kind: "outgoing" };
+          } else {
+            friendState = { kind: "incoming" };
+          }
+        }
+      }
     }
   }
   const tcgWinrate =
@@ -187,10 +215,16 @@ export default async function PublicProfilePage({
                   pseudo dans le chat.
                 </div>
                 {me && me.id !== target.id ? (
-                  <ReportButton
-                    targetId={target.id}
-                    targetUsername={target.username}
-                  />
+                  <div className="flex items-center gap-2">
+                    <FriendButton
+                      targetId={target.id}
+                      initialState={friendState}
+                    />
+                    <ReportButton
+                      targetId={target.id}
+                      targetUsername={target.username}
+                    />
+                  </div>
                 ) : null}
               </div>
             </div>
