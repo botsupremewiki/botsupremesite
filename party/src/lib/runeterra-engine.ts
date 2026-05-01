@@ -926,8 +926,78 @@ export function triggerOnAttack(
   attackerUid: string,
 ): InternalState {
   const effect = RUNETERRA_ATTACK_EFFECTS[cardCode];
-  if (!effect) return state;
-  return applySpellEffect(state, attackerSeat, effect, null, null, null, 0, attackerUid);
+  let newState = state;
+  if (effect) {
+    newState = applySpellEffect(
+      newState,
+      attackerSeat,
+      effect,
+      null,
+      null,
+      null,
+      0,
+      attackerUid,
+    );
+  }
+  // Phase 5.8b : Hecarim L2 (01SI042T1) — même effet que L1 (summon 2
+  // Cavaliers) ET en plus +3|+0 aux alliés Éphémères en combat ce round.
+  if (cardCode === "01SI042T1") {
+    // Forcer aussi le summon-tokens (pas dans RUNETERRA_ATTACK_EFFECTS pour
+    // T1).
+    newState = applySpellEffect(
+      newState,
+      attackerSeat,
+      { type: "summon-tokens", cardCode: "01SI024", count: 2 },
+      null,
+      null,
+      null,
+      0,
+      attackerUid,
+    );
+    // +3|+0 round buff sur tous les alliés Éphémères ATTAQUANTS.
+    newState = applyHecarimLevel2EphemeralBuff(newState, attackerSeat);
+  }
+  return newState;
+}
+
+/** Phase 5.8b : Hecarim L2 — buff +3|+0 round sur les alliés Éphémères
+ *  qui attaquent (présents dans state.attackInProgress.lanes côté
+ *  attaquant). Si attackInProgress est null (pas dans une attaque), no-op. */
+function applyHecarimLevel2EphemeralBuff(
+  state: InternalState,
+  attackerSeat: 0 | 1,
+): InternalState {
+  if (state.attackInProgress === null) return state;
+  if (state.attackInProgress.attackerSeatIdx !== attackerSeat) return state;
+  const attackerUids = new Set(
+    state.attackInProgress.lanes.map((l) => l.attackerUid),
+  );
+  const player = state.players[attackerSeat];
+  let buffCount = 0;
+  const newBench = player.bench.map((u) => {
+    if (!attackerUids.has(u.uid)) return u;
+    if (!hasKeyword(u, "Ephemeral")) return u;
+    buffCount++;
+    return {
+      ...u,
+      power: u.power + 3,
+      endOfRoundPowerBuff: u.endOfRoundPowerBuff + 3,
+    };
+  });
+  if (buffCount === 0) return state;
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[attackerSeat] = { ...player, bench: newBench };
+  return {
+    ...state,
+    players: newPlayers,
+    log: [
+      ...state.log,
+      `${player.username} : Hecarim galvanise ${buffCount} allié${buffCount > 1 ? "s" : ""} Éphémère (+3|+0).`,
+    ],
+  };
 }
 
 /** Phase 3.76 : Heimerdinger (01PZ056) — quand un sort est lancé par le
