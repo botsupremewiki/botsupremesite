@@ -202,9 +202,17 @@ export function CardZoomModal({
         >
           ✕
         </button>
-        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/20 bg-zinc-900/95 px-3 py-1 text-xs text-zinc-200">
-          {card.name} · {RARITY_LABEL[card.rarity]}
-          {card.illustrator ? ` · 🎨 ${card.illustrator}` : ""}
+        <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-zinc-900/95 px-3 py-1 text-xs text-zinc-200">
+          <span>
+            {card.name} · {RARITY_LABEL[card.rarity]}
+            {card.illustrator ? ` · 🎨 ${card.illustrator}` : ""}
+          </span>
+          <a
+            href={`/play/tcg/pokemon/cards/${encodeURIComponent(card.id)}`}
+            className="rounded border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-200 hover:bg-amber-300/20"
+          >
+            📖 Détails
+          </a>
         </div>
       </div>
     </div>
