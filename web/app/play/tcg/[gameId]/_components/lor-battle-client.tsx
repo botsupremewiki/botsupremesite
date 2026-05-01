@@ -72,6 +72,13 @@ export function LorBattleClient({
   // panel à droite de l'écran avec le full art + texte. Ne nécessite pas
   // de clic, contrairement au zoom modal (qui prend tout l'écran).
   const [hoveredCardCode, setHoveredCardCode] = useState<string | null>(null);
+  // Phase 4.4 : VFX flash level-up et damage popups. Set d'uids qui ont
+  // récemment level-up (auto-clear après 2s). Map uid → damage taken pour
+  // afficher un "-N" floating qui fade out après 1s.
+  const [recentLevelUps, setRecentLevelUps] = useState<Set<string>>(new Set());
+  const [damagePopups, setDamagePopups] = useState<
+    Record<string, { amount: number; ts: number }>
+  >({});
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -158,6 +165,74 @@ export function LorBattleClient({
     const id = setTimeout(() => setQuestToast(null), 8000);
     return () => clearTimeout(id);
   }, [questToast]);
+
+  // Phase 4.4 : diff entre state précédent et nouveau pour détecter :
+  //   - level-ups : uid passe de level 1 à level 2 → flash gold 2s
+  //   - dégâts : damage augmente → popup "-N" rouge 1s
+  // Les deux sont des effets purement visuels, déclenchés au moment où
+  // le serveur push un nouveau state.
+  const prevStateRef = useRef<RuneterraBattleState | null>(null);
+  useEffect(() => {
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+    if (!prev || !state) return;
+    // Helper : récupère TOUTES les unités sur les deux bancs (allié + ennemi).
+    const getAllUnits = (s: RuneterraBattleState): RuneterraBattleUnit[] => {
+      const out: RuneterraBattleUnit[] = [];
+      if (s.self) out.push(...s.self.bench);
+      if (s.opponent) out.push(...s.opponent.bench);
+      return out;
+    };
+    const prevUnits = new Map(getAllUnits(prev).map((u) => [u.uid, u]));
+    const currUnits = getAllUnits(state);
+    const newLevelUps = new Set<string>();
+    const newDamage: Record<string, { amount: number; ts: number }> = {};
+    for (const u of currUnits) {
+      const old = prevUnits.get(u.uid);
+      if (!old) continue;
+      // Level-up détecté : 1 → 2
+      if (old.level < 2 && u.level >= 2) {
+        newLevelUps.add(u.uid);
+      }
+      // Damage augmenté
+      const dmgDelta = u.damage - old.damage;
+      if (dmgDelta > 0) {
+        newDamage[u.uid] = { amount: dmgDelta, ts: Date.now() };
+      }
+    }
+    if (newLevelUps.size > 0) {
+      setRecentLevelUps((prevSet) => {
+        const next = new Set(prevSet);
+        newLevelUps.forEach((uid) => next.add(uid));
+        return next;
+      });
+      // Auto-clear après 2s.
+      setTimeout(() => {
+        setRecentLevelUps((prevSet) => {
+          const next = new Set(prevSet);
+          newLevelUps.forEach((uid) => next.delete(uid));
+          return next;
+        });
+      }, 2000);
+    }
+    if (Object.keys(newDamage).length > 0) {
+      setDamagePopups((prev) => ({ ...prev, ...newDamage }));
+      // Auto-clear chaque popup après 1.2s.
+      setTimeout(() => {
+        setDamagePopups((prev) => {
+          const next = { ...prev };
+          for (const uid of Object.keys(newDamage)) {
+            // On ne clear que si le ts est le même (sinon un nouveau
+            // popup a remplacé celui-ci, on le laisse).
+            if (next[uid]?.ts === newDamage[uid].ts) {
+              delete next[uid];
+            }
+          }
+          return next;
+        });
+      }, 1200);
+    }
+  }, [state]);
 
   // Click sur carte main : unit → joue ; sort avec effet ciblé → entre en
   // targeting mode ; sort sans effet → joue sans cible (mana déduite).
@@ -347,6 +422,8 @@ export function LorBattleClient({
             onToggleSpellChoice={toggleSpellChoice}
             onZoom={(c) => setZoomedCard(c)}
             onHoverCode={setHoveredCardCode}
+            recentLevelUps={recentLevelUps}
+            damagePopups={damagePopups}
           />
         )}
 
@@ -542,6 +619,8 @@ function RoundView({
   onToggleSpellChoice,
   onZoom,
   onHoverCode,
+  recentLevelUps,
+  damagePopups,
 }: {
   state: RuneterraBattleState;
   onPlayHand: (handIndex: number) => void;
@@ -568,6 +647,9 @@ function RoundView({
   onZoom: (c: RuneterraBattleUnit | string) => void;
   // Phase 4.3 : hover preview à droite de l'écran. Propagé aux Bench/Hand.
   onHoverCode?: (code: string | null) => void;
+  // Phase 4.4 : VFX flash level-up et damage popups (propagés aux BenchRow).
+  recentLevelUps?: Set<string>;
+  damagePopups?: Record<string, { amount: number; ts: number }>;
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
   const [combatMode, setCombatMode] = useState<"none" | "attacker-pick">(
@@ -705,6 +787,8 @@ function RoundView({
         units={state.opponent.bench}
         onUnitClick={handleOpponentBenchClick}
         onHoverCode={onHoverCode}
+        recentLevelUps={recentLevelUps}
+        damagePopups={damagePopups}
         highlighted={
           pendingSpell &&
           (pendingSpell.side === "enemy" ||
@@ -898,6 +982,8 @@ function RoundView({
       <BenchRow
         units={state.self.bench}
         onHoverCode={onHoverCode}
+        recentLevelUps={recentLevelUps}
+        damagePopups={damagePopups}
         highlighted={
           combatMode === "attacker-pick"
             ? pickedAttackers
@@ -1046,6 +1132,8 @@ function BenchRow({
   firstSelectedUid,
   secondSelectedUid,
   attackerPickMode,
+  recentLevelUps,
+  damagePopups,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
@@ -1057,6 +1145,9 @@ function BenchRow({
   firstSelectedUid?: string | null;
   secondSelectedUid?: string | null;
   attackerPickMode?: boolean;
+  // Phase 4.4 : VFX
+  recentLevelUps?: Set<string>;
+  damagePopups?: Record<string, { amount: number; ts: number }>;
 }) {
   if (units.length === 0) {
     return (
@@ -1092,6 +1183,8 @@ function BenchRow({
               onHoverCode={onHoverCode}
               highlighted={isPicked}
               dimmed={attackerPickMode && !eligibleAttacker}
+              flashLevelUp={recentLevelUps?.has(u.uid)}
+              damagePopup={damagePopups?.[u.uid]}
             />
           </div>
         );
@@ -1290,6 +1383,8 @@ function UnitCard({
   onHoverCode,
   highlighted,
   dimmed,
+  flashLevelUp,
+  damagePopup,
 }: {
   unit: RuneterraBattleUnit;
   onClick: () => void;
@@ -1298,6 +1393,10 @@ function UnitCard({
   onHoverCode?: (code: string | null) => void;
   highlighted?: boolean;
   dimmed?: boolean;
+  // Phase 4.4 : VFX flash juste après le level-up (gold burst 2s).
+  flashLevelUp?: boolean;
+  // Phase 4.4 : damage popup floating "-N" (1.2s).
+  damagePopup?: { amount: number; ts: number };
 }) {
   const card = RUNETERRA_BASE_SET_BY_CODE.get(unit.cardCode);
   const aliveHealth = unit.health - unit.damage;
@@ -1345,6 +1444,23 @@ function UnitCard({
             ★ 2
           </div>
         </>
+      )}
+      {/* Phase 4.4 : flash gold-burst au moment du level-up (2s). */}
+      {flashLevelUp && (
+        <div
+          className="pointer-events-none absolute inset-0 animate-ping rounded bg-amber-300/30 ring-4 ring-amber-200"
+          aria-hidden
+        />
+      )}
+      {/* Phase 4.4 : damage popup flottant ("-N" rouge, slide-up + fade-out). */}
+      {damagePopup && (
+        <div
+          key={damagePopup.ts}
+          className="pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 animate-bounce text-2xl font-bold text-rose-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)]"
+          aria-hidden
+        >
+          -{damagePopup.amount}
+        </div>
       )}
       {unit.playedThisRound && (
         <div className="absolute left-0.5 top-0.5 rounded bg-zinc-700/70 px-1 text-[8px] text-zinc-300">
