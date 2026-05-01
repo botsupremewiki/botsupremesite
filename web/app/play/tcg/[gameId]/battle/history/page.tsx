@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
+import { HistoryFilters } from "./history-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +29,20 @@ type HistoryRow = {
 
 export default async function HistoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ gameId: string }>;
+  searchParams: Promise<{
+    opponent?: string;
+    deck?: string;
+    outcome?: "wins" | "losses";
+    mode?: "ranked" | "fun";
+    from?: string;
+    to?: string;
+  }>;
 }) {
   const { gameId } = await params;
+  const sp = await searchParams;
   if (!(gameId in TCG_GAMES)) notFound();
   const profile = await getProfile();
   const game = TCG_GAMES[gameId as TcgGameId];
@@ -40,12 +51,36 @@ export default async function HistoryPage({
   if (profile) {
     const supabase = await createClient();
     if (supabase) {
-      const { data } = await supabase
+      // Construit la query avec filtres URL.
+      let query = supabase
         .from("battle_history")
         .select("*")
-        .eq("game_id", gameId)
+        .eq("game_id", gameId);
+      // Filtre par adversaire (texte libre ilike sur winner ou loser).
+      if (sp.opponent && sp.opponent.trim()) {
+        const q = `%${sp.opponent.trim()}%`;
+        query = query.or(
+          `winner_username.ilike.${q},loser_username.ilike.${q}`,
+        );
+      }
+      if (sp.deck && sp.deck.trim()) {
+        const q = `%${sp.deck.trim()}%`;
+        query = query.or(
+          `winner_deck_name.ilike.${q},loser_deck_name.ilike.${q}`,
+        );
+      }
+      if (sp.outcome === "wins") query = query.eq("winner_id", profile.id);
+      if (sp.outcome === "losses") query = query.eq("loser_id", profile.id);
+      if (sp.mode === "ranked") query = query.eq("ranked", true);
+      if (sp.mode === "fun") query = query.eq("ranked", false);
+      if (sp.from) query = query.gte("ended_at", sp.from);
+      if (sp.to) {
+        // Inclut toute la journée : "<date>T23:59:59".
+        query = query.lte("ended_at", `${sp.to}T23:59:59`);
+      }
+      const { data } = await query
         .order("ended_at", { ascending: false })
-        .limit(50);
+        .limit(100);
       rows = (data ?? []) as HistoryRow[];
     }
   }
@@ -80,9 +115,10 @@ export default async function HistoryPage({
           </div>
           <h1 className="text-2xl font-bold text-zinc-100">📜 Historique</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Tes 50 derniers matchs PvP (fun et classés). Les combats vs Bot
+            Tes 100 derniers matchs PvP (fun et classés). Les combats vs Bot
             Suprême ne sont pas enregistrés.
           </p>
+          {profile ? <HistoryFilters /> : null}
 
           {!profile ? (
             <div className="mt-6 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
