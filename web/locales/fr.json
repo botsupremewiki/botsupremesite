@@ -18,7 +18,13 @@
     "share": "Partager",
     "search": "Rechercher",
     "filter": "Filtrer",
-    "reset": "Réinitialiser"
+    "reset": "Réinitialiser",
+    "settings": "Paramètres",
+    "help": "Aide",
+    "changelog": "Changelog",
+    "guest": "Invité",
+    "skipToContent": "Aller au contenu",
+    "home": "Accueil"
   },
   "nav": {
     "plaza": "Plaza",
@@ -45,5 +51,37 @@
     "trade": "Échange",
     "battlePass": "Battle Pass",
     "wonderPick": "Pioche Mystère"
+  },
+  "settings": {
+    "title": "⚙️ Paramètres",
+    "subtitle": "Tes préférences sont enregistrées et synchronisées sur tous tes appareils.",
+    "appearance": "🎨 Apparence",
+    "theme": "Thème",
+    "themeCurrent": "Actuellement",
+    "compactMode": "Mode compact",
+    "compactModeDesc": "Réduire les paddings et marges (densité d'info plus haute).",
+    "notifications": "🔔 Notifications",
+    "notifEnable": "Activer les notifications",
+    "notifEnableDesc": "Master switch — désactive tout d'un coup.",
+    "notifTrades": "Échanges (trades)",
+    "notifTradesDesc": "Quand un joueur te propose un échange ou répond au tien.",
+    "notifTournaments": "Tournois",
+    "notifTournamentsDesc": "Démarrage d'un tournoi auquel tu es inscrit.",
+    "notifSeasons": "Saisons ranked",
+    "notifSeasonsDesc": "Clôture d'une saison avec snapshot ELO + récompenses.",
+    "sounds": "🔊 Sons",
+    "sfx": "Effets sonores",
+    "sfxDesc": "Sons pendant les matchs (cartes posées, KO, victoire).",
+    "a11y": "♿ Accessibilité",
+    "a11yMotion": "Le site respecte automatiquement la préférence prefers-reduced-motion de ton OS — les animations longues sont désactivées si tu as coché \"réduire les animations\".",
+    "saved": "Préférence sauvegardée"
+  },
+  "help": {
+    "title": "❓ Aide",
+    "subtitle": "Réponses aux questions fréquentes. Si tu ne trouves pas, demande sur Discord."
+  },
+  "changelog": {
+    "title": "📝 Changelog",
+    "subtitle": "Les améliorations et nouveautés du site, dans l'ordre inverse chronologique."
   }
 }

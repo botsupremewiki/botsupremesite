@@ -18,7 +18,13 @@
     "share": "Share",
     "search": "Search",
     "filter": "Filter",
-    "reset": "Reset"
+    "reset": "Reset",
+    "settings": "Settings",
+    "help": "Help",
+    "changelog": "Changelog",
+    "guest": "Guest",
+    "skipToContent": "Skip to content",
+    "home": "Home"
   },
   "nav": {
     "plaza": "Plaza",
@@ -45,5 +51,37 @@
     "trade": "Trade",
     "battlePass": "Battle Pass",
     "wonderPick": "Wonder Pick"
+  },
+  "settings": {
+    "title": "⚙️ Settings",
+    "subtitle": "Your preferences are saved and synced across devices.",
+    "appearance": "🎨 Appearance",
+    "theme": "Theme",
+    "themeCurrent": "Currently",
+    "compactMode": "Compact mode",
+    "compactModeDesc": "Reduce padding and margins (higher info density).",
+    "notifications": "🔔 Notifications",
+    "notifEnable": "Enable notifications",
+    "notifEnableDesc": "Master switch — disable everything at once.",
+    "notifTrades": "Trades",
+    "notifTradesDesc": "When a player proposes a trade or responds to yours.",
+    "notifTournaments": "Tournaments",
+    "notifTournamentsDesc": "Start of a tournament you're registered for.",
+    "notifSeasons": "Ranked seasons",
+    "notifSeasonsDesc": "Season closure with ELO snapshot + rewards.",
+    "sounds": "🔊 Sounds",
+    "sfx": "Sound effects",
+    "sfxDesc": "Match sounds (card play, KO, victory).",
+    "a11y": "♿ Accessibility",
+    "a11yMotion": "The site automatically respects your OS's prefers-reduced-motion preference — long animations are disabled if you've enabled \"reduce animations\".",
+    "saved": "Preference saved"
+  },
+  "help": {
+    "title": "❓ Help",
+    "subtitle": "Answers to frequently asked questions. If you can't find yours, ask on Discord."
+  },
+  "changelog": {
+    "title": "📝 Changelog",
+    "subtitle": "Site improvements and new features, in reverse chronological order."
   }
 }

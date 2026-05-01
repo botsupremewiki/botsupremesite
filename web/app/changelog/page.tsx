@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 type Entry = {
   date: string;
@@ -10,6 +11,21 @@ type Entry = {
 };
 
 const CHANGELOG: Entry[] = [
+  {
+    date: "2026-05-01",
+    version: "1.19.0",
+    title: "Imports A1a/A2 + finitions deps",
+    items: [
+      "🃏 +293 cartes Pokémon (A1a L'Île Fabuleuse + A2 Choc Spatio-Temporel)",
+      "🎴 3 nouveaux packs : Mew, Dialga, Palkia",
+      "🧪 @playwright/test installé (19 tests E2E runnables)",
+      "📊 @sentry/nextjs installé (monitoring si SENTRY_DSN défini)",
+      "🎨 lucide-react installé (icônes pros disponibles)",
+      "🌐 Pages /help + /changelog traduites EN",
+      "🎯 Icon component avec 50 SVG inline (sans dep)",
+      "🌓 Light mode global via CSS overrides (toggle marche partout)",
+    ],
+  },
   {
     date: "2026-05-01",
     version: "1.18.0",
@@ -118,7 +134,8 @@ const CHANGELOG: Entry[] = [
   },
 ];
 
-export default function ChangelogPage() {
+export default async function ChangelogPage() {
+  const t = await getT();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
@@ -126,14 +143,14 @@ export default function ChangelogPage() {
           href="/"
           className="text-zinc-400 transition-colors hover:text-zinc-100"
         >
-          ← Accueil
+          ← {t("common.home")}
         </Link>
-        <span className="font-semibold">📝 Changelog</span>
+        <span className="font-semibold">{t("changelog.title")}</span>
         <Link
           href="/help"
           className="text-xs text-zinc-400 hover:text-zinc-100"
         >
-          ❓ Aide
+          {t("help.title")}
         </Link>
       </header>
       <main
@@ -141,10 +158,11 @@ export default function ChangelogPage() {
         className="flex flex-1 flex-col items-center overflow-y-auto p-6"
       >
         <div className="w-full max-w-2xl">
-          <h1 className="text-3xl font-bold text-zinc-100">📝 Changelog</h1>
+          <h1 className="text-3xl font-bold text-zinc-100">
+            {t("changelog.title")}
+          </h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Les améliorations et nouveautés du site, dans l&apos;ordre
-            inverse chronologique.
+            {t("changelog.subtitle")}
           </p>
           <div className="mt-6 flex flex-col gap-4">
             {CHANGELOG.map((e) => (
