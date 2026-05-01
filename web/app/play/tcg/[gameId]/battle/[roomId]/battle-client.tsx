@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Trophy, Swords, Smile, Bot } from "lucide-react";
 import type {
   BattleCard,
   BattleClientMessage,
@@ -981,8 +982,9 @@ function BattleBoard({
 
         {state.winner && (
           <div className="flex-shrink-0 bg-black/80 p-4 text-center">
-            <div className="text-2xl font-bold text-amber-300">
-              🏆 {state.winner === state.selfSeat ? "Victoire !" : "Défaite"}
+            <div className="flex items-center justify-center gap-2 text-2xl font-bold text-amber-300">
+              <Trophy size={24} aria-hidden="true" />
+              {state.winner === state.selfSeat ? "Victoire !" : "Défaite"}
             </div>
             <Link
               href={lobbyHref(gameId, roomId)}
@@ -1950,8 +1952,9 @@ function SelfControls({
   return (
     <div className="flex w-[280px] shrink-0 flex-col items-stretch gap-2">
       {/* Liste des attaques (à droite du board joueur) */}
-      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-        ⚔️ Attaques
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-zinc-500">
+        <Swords size={12} aria-hidden="true" />
+        Attaques
       </div>
       {attacks.length === 0 && (
         <div className="rounded-md border border-dashed border-white/10 p-2 text-center text-[11px] text-zinc-500">
@@ -3215,13 +3218,16 @@ function EmotePicker({
       <button
         onClick={onToggle}
         title="Envoyer une emote"
-        className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+        aria-label="Envoyer une emote"
+        aria-expanded={open}
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${
           open
             ? "border-amber-400/60 bg-amber-400/15 text-amber-100"
             : "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
         }`}
       >
-        😄 Emote
+        <Smile size={14} aria-hidden="true" />
+        Emote
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-50 mt-1.5 w-56 rounded-lg border border-white/10 bg-zinc-950/95 p-2 shadow-xl backdrop-blur">
