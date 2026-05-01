@@ -1,6 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import {
+  Bot,
+  Swords,
+  Trophy,
+  ScrollText,
+  BarChart3,
+  Calendar,
+  Tent,
+  Target,
+  Ticket,
+  TrendingUp,
+  Film,
+  Handshake,
+  type LucideIcon,
+} from "lucide-react";
 
 export type CombatNavMode =
   | "bot"
@@ -16,19 +31,19 @@ export type CombatNavMode =
   | "battle-pass"
   | "trade";
 
-const ITEMS: { mode: CombatNavMode; label: string; sub: string }[] = [
-  { mode: "bot", label: "🤖", sub: "Bot" },
-  { mode: "pvp", label: "🆚", sub: "PvP" },
-  { mode: "ranked", label: "🏆", sub: "Classé" },
-  { mode: "history", label: "📜", sub: "Historique" },
-  { mode: "stats", label: "📊", sub: "Stats" },
-  { mode: "seasons", label: "📅", sub: "Saisons" },
-  { mode: "tournaments", label: "🏟️", sub: "Tournois" },
-  { mode: "quests", label: "🎯", sub: "Quêtes" },
-  { mode: "battle-pass", label: "🎫", sub: "Pass" },
-  { mode: "meta", label: "📈", sub: "Méta" },
-  { mode: "replays", label: "🎬", sub: "Replays" },
-  { mode: "trade", label: "🤝", sub: "Trade" },
+const ITEMS: { mode: CombatNavMode; Icon: LucideIcon; sub: string }[] = [
+  { mode: "bot", Icon: Bot, sub: "Bot" },
+  { mode: "pvp", Icon: Swords, sub: "PvP" },
+  { mode: "ranked", Icon: Trophy, sub: "Classé" },
+  { mode: "history", Icon: ScrollText, sub: "Historique" },
+  { mode: "stats", Icon: BarChart3, sub: "Stats" },
+  { mode: "seasons", Icon: Calendar, sub: "Saisons" },
+  { mode: "tournaments", Icon: Tent, sub: "Tournois" },
+  { mode: "quests", Icon: Target, sub: "Quêtes" },
+  { mode: "battle-pass", Icon: Ticket, sub: "Pass" },
+  { mode: "meta", Icon: TrendingUp, sub: "Méta" },
+  { mode: "replays", Icon: Film, sub: "Replays" },
+  { mode: "trade", Icon: Handshake, sub: "Trade" },
 ];
 
 export function CombatNav({
@@ -39,12 +54,10 @@ export function CombatNav({
   current: CombatNavMode;
 }) {
   return (
-    <nav className="flex flex-wrap gap-1.5">
+    <nav className="flex flex-wrap gap-1.5" aria-label="Navigation combat">
       {ITEMS.map((it) => {
         const active = it.mode === current;
-        // Le mode "trade" vit hors du dossier /battle/ — c'est un autre
-        // sujet (échanges de cartes), pas un mode de combat. On garde
-        // l'ergonomie de la nav commune mais on adapte l'URL.
+        const Icon = it.Icon;
         const href =
           it.mode === "trade"
             ? `/play/tcg/${gameId}/trade`
@@ -65,13 +78,14 @@ export function CombatNav({
           <Link
             key={it.mode}
             href={href}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
+            aria-current={active ? "page" : undefined}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${
               active
                 ? "border-amber-400/60 bg-amber-400/10 text-amber-100"
                 : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
             }`}
           >
-            <span>{it.label}</span>
+            <Icon size={14} aria-hidden="true" />
             <span>{it.sub}</span>
           </Link>
         );
