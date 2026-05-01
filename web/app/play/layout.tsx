@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { isAuthConfigured } from "@/lib/supabase/server";
+import { ToastProvider } from "@/components/toast";
 
 // Toute la zone /play (plaza, casino, RPG, TCG, Imperium, Skyline, …) est
 // désormais réservée aux utilisateurs connectés via Discord. Plus de mode
@@ -22,5 +23,5 @@ export default async function PlayLayout({
       redirect("/join");
     }
   }
-  return <>{children}</>;
+  return <ToastProvider>{children}</ToastProvider>;
 }
