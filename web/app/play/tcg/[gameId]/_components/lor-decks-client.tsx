@@ -676,6 +676,23 @@ function DeckEditor({
         >
           Annuler
         </button>
+        {/* Phase 6.4 : import / export deck en texte (partage Discord). */}
+        <DeckIOButtons
+          draftEntries={draftEntries}
+          onImport={(entries) => {
+            // remplace le draft entièrement par l'import.
+            for (const code of Array.from(draftEntries.keys())) {
+              for (let i = 0; i < (draftEntries.get(code) ?? 0); i++) {
+                removeCard(code);
+              }
+            }
+            for (const [code, count] of entries) {
+              for (let i = 0; i < count; i++) {
+                addCard(code);
+              }
+            }
+          }}
+        />
         <button
           onClick={saveDeck}
           disabled={
@@ -1001,5 +1018,183 @@ function CostCurve({
         })}
       </div>
     </div>
+  );
+}
+
+// Phase 6.4 : import / export de deck en texte (format simple
+// `cardCode:count,cardCode:count`). Permet de partager un deck sur
+// Discord en 1 message et qu'un pote l'importe en 1 clic.
+function DeckIOButtons({
+  draftEntries,
+  onImport,
+}: {
+  draftEntries: Map<string, number>;
+  onImport: (entries: Map<string, number>) => void;
+}) {
+  const [showModal, setShowModal] = useState<"export" | "import" | null>(null);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const exportText = useMemo(() => {
+    return Array.from(draftEntries.entries())
+      .filter(([, count]) => count > 0)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, count]) => `${code}:${count}`)
+      .join(",");
+  }, [draftEntries]);
+
+  function tryImport() {
+    setImportError(null);
+    try {
+      const text = importText.trim();
+      if (!text) {
+        setImportError("Texte vide.");
+        return;
+      }
+      const entries = new Map<string, number>();
+      for (const part of text.split(/[,;\s\n]+/).filter(Boolean)) {
+        const [code, countStr] = part.split(":");
+        if (!code || !countStr) {
+          setImportError(`Format invalide pour : ${part}`);
+          return;
+        }
+        const count = parseInt(countStr, 10);
+        if (isNaN(count) || count < 1 || count > 3) {
+          setImportError(`Count invalide pour ${code} : ${countStr}`);
+          return;
+        }
+        if (!RUNETERRA_BASE_SET_BY_CODE.has(code)) {
+          setImportError(`CardCode inconnue : ${code}`);
+          return;
+        }
+        entries.set(code, count);
+      }
+      onImport(entries);
+      setShowModal(null);
+      setImportText("");
+    } catch (e) {
+      setImportError(`Erreur : ${(e as Error).message}`);
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setShowModal("export")}
+        disabled={draftEntries.size === 0}
+        className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 hover:bg-white/10 disabled:opacity-40"
+        title="Exporter le deck en texte (partage Discord)"
+      >
+        📤 Export
+      </button>
+      <button
+        onClick={() => {
+          setImportText("");
+          setImportError(null);
+          setShowModal("import");
+        }}
+        className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-200 hover:bg-sky-500/20"
+        title="Importer un deck depuis du texte (remplace l'éditeur courant)"
+      >
+        📥 Import
+      </button>
+
+      {showModal === "export" && (
+        <div
+          onClick={() => setShowModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-white/10 bg-zinc-950 p-5"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-zinc-100">📤 Exporter le deck</h2>
+              <button
+                onClick={() => setShowModal(null)}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Copie ce texte et colle-le sur Discord. Un pote peut le
+              récupérer via le bouton 📥 Import.
+            </p>
+            <textarea
+              value={exportText}
+              readOnly
+              className="h-40 w-full rounded-md border border-white/10 bg-black/60 p-3 font-mono text-xs text-zinc-100"
+              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(exportText).catch(() => {});
+                }}
+                className="rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-sky-950 hover:bg-sky-400"
+              >
+                📋 Copier dans le presse-papier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModal === "import" && (
+        <div
+          onClick={() => setShowModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-white/10 bg-zinc-950 p-5"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-zinc-100">📥 Importer un deck</h2>
+              <button
+                onClick={() => setShowModal(null)}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Colle le texte du deck ci-dessous. Format :{" "}
+              <code className="text-amber-200">cardCode:count,cardCode:count</code>
+              {" "}— exemple : <code>01IO012:3,01DE001:2</code>. ATTENTION :
+              ça remplace ton deck en cours d'édition.
+            </p>
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder="01IO012:3,01DE001:2,…"
+              className="h-40 w-full rounded-md border border-white/10 bg-black/60 p-3 font-mono text-xs text-zinc-100"
+            />
+            {importError && (
+              <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                {importError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowModal(null)}
+                className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300 hover:bg-white/10"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={tryImport}
+                className="rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-sky-950 hover:bg-sky-400"
+              >
+                ✓ Importer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
