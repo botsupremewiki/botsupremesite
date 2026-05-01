@@ -53,17 +53,48 @@ npx playwright test --headed
 - Carte encyclopédie A1-001 (Bulbizarre) se charge
 - Carte invalide → 404
 
-## Tests authentifiés (pas implémentés)
+## Tests authentifiés
 
-Tests qui nécessitent un user connecté (achat booster, build deck,
-match bot) ne sont pas implémentés en E2E faute de setup OAuth Discord
-mockable. Pour les ajouter :
+Le fixture `authedPage` (`tests/_fixtures.ts`) hit la route dev-only
+`/api/dev/login-as-test-user` qui set un cookie de session basique.
 
-1. Créer un user de test dans Supabase staging
-2. Setter manuellement un cookie de session avant chaque test
-3. Tester les flows complets
+### Activation
 
-Voir `playwright.config.ts` pour la config (storageState, baseURL).
+1. Créer un user de test dans Supabase (noter son UUID)
+2. Définir dans `.env.local` :
+   ```
+   E2E_TEST_SECRET=un-secret-aléatoire-long
+   E2E_TEST_USER_ID=uuid-du-user-de-test
+   ```
+3. `npx playwright test authed-pages.spec.ts`
+
+Si les vars manquent, les tests sont automatiquement skipped via
+`test.skip()` (pas d'échec en CI sans setup).
+
+**Sécurité** : la route `/api/dev/login-as-test-user` retourne 404
+si `E2E_TEST_SECRET` n'est pas défini en env. Impossible d'exploiter
+en production qui ne définit jamais cette var.
+
+### Tests inclus (`authed-pages.spec.ts`)
+
+- /play/objectifs charge
+- /play/settings affiche les sections
+- /play/profil/cosmetics charge
+- /play/tcg/pokemon hub charge
+- /play/tcg/pokemon/{quests,seasons,battle-pass,wonder-pick,replays,tournaments} chargent
+- Cmd+K ouvre la palette de commandes
+
+### Pour étendre vers des flows complets
+
+Tests interactifs (achat booster, build deck, match bot) nécessitent
+une session JWT Supabase valide pour passer la RLS. Plan :
+
+1. Étendre `/api/dev/login-as-test-user` pour générer un JWT via
+   `supabase.auth.admin.generateLink({ type: 'magiclink' })`
+2. Set le cookie `sb-access-token` + `sb-refresh-token` dans la
+   réponse de la route
+3. Le test peut alors faire de vraies actions (RPC calls qui
+   passent les RLS)
 
 ## CI
 
