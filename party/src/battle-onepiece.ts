@@ -40,6 +40,7 @@ import {
   recordBattleLogs,
   recordBattleResult,
   recordBotWin,
+  saveTcgReplay,
   tryUnlockAchievement,
 } from "./lib/supabase";
 import { generateRandomBotDeck } from "./lib/onepiece-bot-decks";
@@ -3496,11 +3497,12 @@ export default class OnePieceBattleServer implements Party.Server {
     const p1 = this.seats.p1;
     const p2 = this.seats.p2;
     if (!p1 || !p2) return;
+    const durationMs =
+      this.gameStartedAtMs !== null ? Date.now() - this.gameStartedAtMs : 0;
     try {
       await recordBattleLogs(this.room, {
         gameId: "onepiece",
-        battleHistoryId: null, // pas de lien avec battle_history pour
-                               // l'instant (PR distincte serait souhaitable)
+        battleHistoryId: null,
         roomId: this.room.id,
         p1Id: p1.authId,
         p2Id: p2.authId === BOT_AUTH_ID ? null : p2.authId,
@@ -3516,13 +3518,32 @@ export default class OnePieceBattleServer implements Party.Server {
         ranked: this.rankedMode,
         botMode: this.botMode,
         turnCount: this.turnNumber,
-        durationMs:
-          this.gameStartedAtMs !== null
-            ? Date.now() - this.gameStartedAtMs
-            : 0,
+        durationMs,
       });
     } catch (err) {
       console.warn("[op-battle] persistBattleLogs threw:", err);
+    }
+    // Pour les matchs PvP (non-bot), on sauve aussi un replay
+    // dans `tcg_replays` pour le viewer existant (list_my_replays).
+    if (!this.botMode && p2.authId !== BOT_AUTH_ID) {
+      try {
+        const winnerSeat = this.seats[winner]!;
+        const loserSeat = this.seats[winner === "p1" ? "p2" : "p1"]!;
+        await saveTcgReplay(this.room, {
+          gameId: "onepiece",
+          winnerId: winnerSeat.authId,
+          loserId: loserSeat.authId,
+          winnerUsername: winnerSeat.username,
+          loserUsername: loserSeat.username,
+          winnerDeckName: winnerSeat.deckName,
+          loserDeckName: loserSeat.deckName,
+          ranked: this.rankedMode,
+          durationSeconds: Math.round(durationMs / 1000),
+          log: this.fullLog,
+        });
+      } catch (err) {
+        console.warn("[op-battle] saveTcgReplay threw:", err);
+      }
     }
   }
 

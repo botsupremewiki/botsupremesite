@@ -77,11 +77,11 @@ const ONEPIECE_LOW: Record<OnePieceRarity, number> = {
 
 const ONEPIECE_HIGH: Record<OnePieceRarity, number> = {
   c: 0,
-  uc: 60,
-  r: 28,
+  uc: 55,
+  r: 27,
   sr: 9,
   sec: 1.5,
-  l: 0.5,
+  l: 2,
   p: 0,
   tr: 0,
   sp: 1,
@@ -91,13 +91,13 @@ const ONEPIECE_HIGH: Record<OnePieceRarity, number> = {
 const ONEPIECE_RARE: Record<OnePieceRarity, number> = {
   c: 0,
   uc: 0,
-  r: 60,
-  sr: 25,
+  r: 50,
+  sr: 24,
   sec: 5,
-  l: 4,
+  l: 14,
   p: 1,
   tr: 0.5,
-  sp: 4.5,
+  sp: 5.5,
   don: 0,
 };
 

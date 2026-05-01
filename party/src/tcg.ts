@@ -202,11 +202,11 @@ const OP_REGULAR_LOW_WEIGHTS: Record<OnePieceRarity, number> = {
 
 const OP_REGULAR_HIGH_WEIGHTS: Record<OnePieceRarity, number> = {
   c: 0,
-  uc: 60,
-  r: 28,
+  uc: 55,
+  r: 27,
   sr: 9,
   sec: 1.5,
-  l: 0.5,
+  l: 2, // Leader boost +1.5 (était 0.5)
   p: 0,
   tr: 0,
   sp: 1,
@@ -216,13 +216,14 @@ const OP_REGULAR_HIGH_WEIGHTS: Record<OnePieceRarity, number> = {
 const OP_RARE_SLOT_WEIGHTS: Record<OnePieceRarity, number> = {
   c: 0,
   uc: 0,
-  r: 60,
-  sr: 25,
+  r: 50,
+  sr: 24,
   sec: 5,
-  l: 4, // Leaders rarement (~4% du slot rare)
+  l: 14, // Leader boost +10 (était 4) — pour qu'avec 10 packs gratuits
+         // le joueur ait ~80% de chance d'avoir au moins 1 Leader.
   p: 1,
   tr: 0.5,
-  sp: 4.5,
+  sp: 5.5,
   don: 0,
 };
 

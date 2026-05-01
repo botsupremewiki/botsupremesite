@@ -495,10 +495,14 @@ export async function addToWonderPickPool(
   }
 }
 
-/** Persiste un replay (log textuel) du match Pokémon TCG fini dans
- *  `tcg_replays`. v1 minimaliste : juste le log ligne par ligne, pas de
- *  snapshots complets. */
-export async function savePokemonReplay(
+/** Alias pour saveTcgReplay (rétro-compat — utilisé par battle.ts
+ *  Pokémon pour l'instant). */
+export const savePokemonReplay = saveTcgReplay;
+
+/** Persiste un replay (log textuel) d'un match TCG fini (Pokémon ou
+ *  One Piece) dans `tcg_replays`. v1 minimaliste : juste le log ligne
+ *  par ligne, pas de snapshots complets. */
+export async function saveTcgReplay(
   room: Party.Room,
   args: {
     gameId: string;

@@ -299,6 +299,15 @@ export default async function TcgGameHub({
                 gradient="bg-[radial-gradient(ellipse_at_center,rgba(232,121,249,0.10),transparent_70%)]"
               />
             )}
+            <MenuButton
+              href={`/play/tcg/${gameId}/replays`}
+              icon="📼"
+              title="Mes Replays"
+              description="Rejoue tes 50 derniers matchs — pause / lecture / vitesse"
+              accent="text-indigo-200"
+              border="border-indigo-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(129,140,248,0.10),transparent_70%)]"
+            />
           </div>
         </div>
       </main>
