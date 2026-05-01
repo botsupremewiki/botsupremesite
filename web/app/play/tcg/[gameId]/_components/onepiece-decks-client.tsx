@@ -516,19 +516,30 @@ function DeckEditor({
   const [filterKind, setFilterKind] = useState<"all" | "character" | "event" | "stage">("all");
   const [filterCostMin, setFilterCostMin] = useState<number>(0);
   const [filterCostMax, setFilterCostMax] = useState<number>(10);
+  const [filterRarity, setFilterRarity] = useState<string>("all");
+  const [filterColor, setFilterColor] = useState<OnePieceColor | "all">("all");
   const [sortBy, setSortBy] = useState<"cost-asc" | "cost-desc" | "name" | "power">("cost-asc");
+
+  // Si Leader bi-couleur (ou plus), on propose un filtre de couleur entre
+  // les couleurs autorisées. Mono-couleur → pas besoin.
+  const leaderColors = draftLeader?.color ?? [];
+  const showColorFilter = leaderColors.length > 1;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let result = eligibleCards.filter((c) => {
-      // Filtre kind
       if (filterKind !== "all" && c.kind !== filterKind) return false;
-      // Filtre coût (Leaders n'ont pas de cost — toujours visibles)
       if (c.kind !== "leader" && "cost" in c) {
         if (c.cost < filterCostMin) return false;
         if (filterCostMax < 10 && c.cost > filterCostMax) return false;
       }
-      // Recherche texte
+      if (filterRarity !== "all" && c.rarity !== filterRarity) return false;
+      if (
+        filterColor !== "all" &&
+        c.kind !== "don" &&
+        !c.color.includes(filterColor)
+      )
+        return false;
       if (q) {
         const hay = (c.name + " " + c.id + " " + c.types.join(" "))
           .toLowerCase();
@@ -536,7 +547,6 @@ function DeckEditor({
       }
       return true;
     });
-    // Tri
     result = [...result].sort((a, b) => {
       const ca = "cost" in a ? a.cost : 99;
       const cb = "cost" in b ? b.cost : 99;
@@ -550,7 +560,16 @@ function DeckEditor({
       return a.name.localeCompare(b.name);
     });
     return result;
-  }, [eligibleCards, search, filterKind, filterCostMin, filterCostMax, sortBy]);
+  }, [
+    eligibleCards,
+    search,
+    filterKind,
+    filterCostMin,
+    filterCostMax,
+    filterRarity,
+    filterColor,
+    sortBy,
+  ]);
 
   // Mana curve : compte de cartes par coût (0-10+).
   const manaCurve = useMemo(() => {
@@ -644,14 +663,16 @@ function DeckEditor({
               <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">
                 Courbe de coût
               </div>
-              <div className="flex items-end justify-between gap-0.5 h-12">
+              <div className="flex items-end justify-between gap-0.5 h-14">
                 {manaCurve.map((n, i) => (
                   <div
                     key={i}
                     className="flex flex-col items-center gap-0.5"
                     title={`Coût ${i === 10 ? "10+" : i} : ${n} carte(s)`}
                   >
-                    <div className="text-[8px] text-zinc-500">{n || ""}</div>
+                    <div className="text-[10px] tabular-nums text-zinc-400">
+                      {n || ""}
+                    </div>
                     <div
                       className="w-3 rounded-t bg-gradient-to-t from-amber-700 to-amber-400 transition-all"
                       style={{
@@ -659,7 +680,7 @@ function DeckEditor({
                         opacity: n > 0 ? 1 : 0.2,
                       }}
                     />
-                    <div className="text-[8px] font-bold text-zinc-400">
+                    <div className="text-[10px] font-bold text-zinc-300 tabular-nums">
                       {i === 10 ? "10+" : i}
                     </div>
                   </div>
@@ -704,6 +725,7 @@ function DeckEditor({
                 value={filterKind}
                 onChange={(e) => setFilterKind(e.target.value as typeof filterKind)}
                 className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-rose-400/50 focus:outline-none"
+                aria-label="Filtrer par type de carte"
               >
                 <option value="all">Tous types</option>
                 <option value="character">Personnages</option>
@@ -711,9 +733,43 @@ function DeckEditor({
                 <option value="stage">Lieux</option>
               </select>
               <select
+                value={filterRarity}
+                onChange={(e) => setFilterRarity(e.target.value)}
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-rose-400/50 focus:outline-none"
+                aria-label="Filtrer par rareté"
+              >
+                <option value="all">Toutes raretés</option>
+                <option value="c">C — Commune</option>
+                <option value="uc">UC — Peu commune</option>
+                <option value="r">R — Rare</option>
+                <option value="sr">SR — Super rare</option>
+                <option value="sec">SEC — Secret rare</option>
+                <option value="sp">SP — Special</option>
+                <option value="tr">TR — Treasure</option>
+                <option value="p">P — Promo</option>
+              </select>
+              {showColorFilter && (
+                <select
+                  value={filterColor}
+                  onChange={(e) =>
+                    setFilterColor(e.target.value as OnePieceColor | "all")
+                  }
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-rose-400/50 focus:outline-none"
+                  aria-label="Filtrer par couleur"
+                >
+                  <option value="all">2 couleurs</option>
+                  {leaderColors.map((c) => (
+                    <option key={c} value={c}>
+                      {ONEPIECE_COLOR_GLYPH[c]} {ONEPIECE_COLOR_LABEL[c]}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                 className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-rose-400/50 focus:outline-none"
+                aria-label="Trier les cartes"
               >
                 <option value="cost-asc">Coût ↑</option>
                 <option value="cost-desc">Coût ↓</option>
@@ -1004,6 +1060,13 @@ function PickerCard({
         }}
         disabled={!canAdd && remaining <= 0}
         className="aspect-[5/7] overflow-hidden rounded"
+        aria-label={
+          canAdd
+            ? `Ajouter ${card.name} au deck (clic droit pour agrandir)`
+            : remaining <= 0
+              ? `${card.name} : aucune copie disponible (clic pour agrandir)`
+              : `${card.name} : 4 copies déjà dans le deck (clic pour agrandir)`
+        }
         title={
           canAdd
             ? `Click : ajouter au deck · Click droit : zoom`
@@ -1049,6 +1112,7 @@ function DeckCardRow({
     <div className="flex items-center gap-1.5 rounded border border-white/5 bg-black/30 p-1">
       <button
         onClick={onZoom}
+        aria-label={`Voir ${card.name} en grand`}
         className="h-12 w-9 shrink-0 overflow-hidden rounded border border-white/10"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1067,15 +1131,21 @@ function DeckCardRow({
       <div className="flex shrink-0 items-center gap-1">
         <button
           onClick={onRemove}
-          className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] text-zinc-200 hover:bg-white/10"
+          aria-label={`Retirer une copie de ${card.name}`}
+          disabled={count <= 0}
+          className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] text-zinc-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
         >
           −
         </button>
-        <span className="w-5 text-center text-xs tabular-nums text-zinc-100">
+        <span
+          className="w-5 text-center text-xs tabular-nums text-zinc-100"
+          aria-label={`${count} copie${count > 1 ? "s" : ""} dans le deck`}
+        >
           {count}
         </span>
         <button
           onClick={onAdd}
+          aria-label={`Ajouter une copie de ${card.name}`}
           className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] text-zinc-200 hover:bg-white/10"
         >
           +

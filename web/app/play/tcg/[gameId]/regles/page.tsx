@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
+import { getProfile, type Profile } from "@/lib/auth";
+import { UserPill } from "@/components/user-pill";
 
 export const dynamic = "force-static";
 
@@ -11,37 +13,66 @@ export default async function TcgRulesPage({
 }) {
   const { gameId } = await params;
   if (!(gameId in TCG_GAMES)) notFound();
+  const game = TCG_GAMES[gameId as TcgGameId];
+  const profile = await getProfile();
   if (gameId === "lol") {
-    return <LorRulesPage />;
+    return <LorRulesPage profile={profile} />;
   }
   if (gameId !== "onepiece") {
     // Page règles disponible uniquement pour One Piece TCG et LoR.
     return (
-      <div className="min-h-screen bg-zinc-950 p-8 text-zinc-100">
-        <Link
-          href={`/play/tcg/${gameId}`}
-          className="text-sm text-zinc-400 hover:text-white"
-        >
-          ← Retour au hub
-        </Link>
-        <p className="mt-4 text-zinc-400">
-          Page règles disponible uniquement pour One Piece TCG et LoL TCG
-          pour le moment.
-        </p>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/play/tcg/${gameId}`}
+              className="text-zinc-400 transition-colors hover:text-zinc-100"
+            >
+              ← {game.name}
+            </Link>
+            <div className="h-4 w-px bg-white/10" />
+            <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+            <span className="text-xs text-zinc-500">📖 Règles</span>
+          </div>
+          {profile ? (
+            <UserPill profile={profile} variant="play" />
+          ) : (
+            <span className="text-xs text-zinc-500">Invité</span>
+          )}
+        </header>
+        <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
+          <p className="text-zinc-400">
+            Page règles disponible uniquement pour One Piece TCG et LoL TCG
+            pour le moment.
+          </p>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-rose-950/30 to-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+        <div className="flex items-center gap-3">
           <Link
             href={`/play/tcg/${gameId}`}
-            className="text-sm text-zinc-400 hover:text-white"
+            className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Retour au hub
+            ← {game.name}
           </Link>
+          <div className="h-4 w-px bg-white/10" />
+          <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+          <span className="text-xs text-zinc-500">📖 Règles</span>
+        </div>
+        {profile ? (
+          <UserPill profile={profile} variant="play" />
+        ) : (
+          <span className="text-xs text-zinc-500">Invité</span>
+        )}
+      </header>
+      <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
+        <div className="mx-auto w-full max-w-4xl">
+        <div className="mb-6 flex items-center justify-end">
           <Link
             href={`/play/tcg/${gameId}/battle/bot`}
             className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-200 hover:bg-emerald-500/20"
@@ -341,7 +372,8 @@ export default async function TcgRulesPage({
           One Piece TCG est une création de Bandai. Ce site est un clone
           non-officiel à but de divertissement.
         </p>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -374,17 +406,31 @@ function Keyword({ name, desc }: { name: string; desc: string }) {
 
 // ─── LoR Rules page ──────────────────────────────────────────────────────
 
-function LorRulesPage() {
+function LorRulesPage({ profile }: { profile: Profile | null }) {
+  const game = TCG_GAMES.lol;
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-violet-950/30 to-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+        <div className="flex items-center gap-3">
           <Link
             href="/play/tcg/lol"
-            className="text-sm text-zinc-400 hover:text-white"
+            className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Retour au hub
+            ← {game.name}
           </Link>
+          <div className="h-4 w-px bg-white/10" />
+          <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+          <span className="text-xs text-zinc-500">📖 Règles</span>
+        </div>
+        {profile ? (
+          <UserPill profile={profile} variant="play" />
+        ) : (
+          <span className="text-xs text-zinc-500">Invité</span>
+        )}
+      </header>
+      <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
+        <div className="mx-auto w-full max-w-4xl">
+        <div className="mb-6 flex items-center justify-end">
           <Link
             href="/play/tcg/lol/battle/bot"
             className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-200 hover:bg-emerald-500/20"
@@ -661,7 +707,8 @@ function LorRulesPage() {
           divertissement. Les noms et illustrations appartiennent à Riot
           Games.
         </p>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

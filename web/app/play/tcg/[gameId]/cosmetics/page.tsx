@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { ONEPIECE_COSMETICS } from "@shared/tcg-onepiece-cosmetics";
+import { UserPill } from "@/components/user-pill";
 import { CosmeticsShopClient } from "./cosmetics-shop-client";
 
 export const dynamic = "force-dynamic";
@@ -15,33 +16,61 @@ export default async function TcgCosmeticsPage({
 }) {
   const { gameId } = await params;
   if (!(gameId in TCG_GAMES)) notFound();
+  const game = TCG_GAMES[gameId as TcgGameId];
+  const profile = await getProfile();
+
   if (gameId !== "onepiece") {
     return (
-      <div className="min-h-screen bg-zinc-950 p-8 text-zinc-100">
-        <Link
-          href={`/play/tcg/${gameId}`}
-          className="text-sm text-zinc-400 hover:text-white"
-        >
-          ← Retour au hub
-        </Link>
-        <p className="mt-4 text-zinc-400">
-          Boutique cosmétiques disponible uniquement pour One Piece TCG.
-        </p>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/play/tcg/${gameId}`}
+              className="text-zinc-400 transition-colors hover:text-zinc-100"
+            >
+              ← {game.name}
+            </Link>
+            <div className="h-4 w-px bg-white/10" />
+            <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+            <span className="text-xs text-zinc-500">🛒 Cosmétiques</span>
+          </div>
+          {profile ? (
+            <UserPill profile={profile} variant="play" />
+          ) : (
+            <span className="text-xs text-zinc-500">Invité</span>
+          )}
+        </header>
+        <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
+          <p className="text-zinc-400">
+            Boutique cosmétiques disponible uniquement pour One Piece TCG.
+          </p>
+        </main>
       </div>
     );
   }
 
-  const profile = await getProfile();
   if (!profile) {
     return (
-      <div className="min-h-screen bg-zinc-950 p-8 text-zinc-100">
-        <Link
-          href={`/play/tcg/${gameId}`}
-          className="text-sm text-zinc-400 hover:text-white"
-        >
-          ← Retour au hub
-        </Link>
-        <p className="mt-4 text-zinc-400">Connecte-toi pour accéder à la boutique.</p>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/play/tcg/${gameId}`}
+              className="text-zinc-400 transition-colors hover:text-zinc-100"
+            >
+              ← {game.name}
+            </Link>
+            <div className="h-4 w-px bg-white/10" />
+            <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+            <span className="text-xs text-zinc-500">🛒 Cosmétiques</span>
+          </div>
+          <span className="text-xs text-zinc-500">Invité</span>
+        </header>
+        <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
+          <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
+            Connecte-toi avec Discord pour accéder à la boutique cosmétique.
+          </div>
+        </main>
       </div>
     );
   }
@@ -70,44 +99,44 @@ export default async function TcgCosmeticsPage({
   const gameActive = (active[gameId] ?? {}) as Record<string, string>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-rose-950/20 to-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-5xl px-4 py-6">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
+        <div className="flex items-center gap-3">
           <Link
             href={`/play/tcg/${gameId}`}
-            className="text-sm text-zinc-400 hover:text-white"
+            className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            ← Retour au hub
+            ← {game.name}
           </Link>
-          <div className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-sm">
-            <span className="text-amber-300">⚱ </span>
-            <span className="text-amber-100">
-              {profile.gold.toLocaleString("fr-FR")}
-            </span>{" "}
-            <span className="text-amber-300">OS</span>
-          </div>
+          <div className="h-4 w-px bg-white/10" />
+          <span className={`font-semibold ${game.accent}`}>{game.name}</span>
+          <span className="text-xs text-zinc-500">🛒 Cosmétiques</span>
         </div>
+        <UserPill profile={profile} variant="play" />
+      </header>
+      <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
+        <div className="mx-auto w-full max-w-5xl">
+          <h1 className="font-pirate mb-2 text-5xl tracking-wide text-amber-200">
+            🛒 Boutique cosmétique
+          </h1>
+          <p className="mb-8 text-sm text-zinc-400">
+            Personnalise ton apparence : avatars Leader, dos de cartes (sleeves)
+            et playmats thématiques One Piece. Pure cosmétique — n&apos;affecte
+            pas le gameplay.
+          </p>
 
-        <h1 className="font-pirate mb-2 text-5xl tracking-wide text-amber-200">
-          🛒 Boutique cosmétique
-        </h1>
-        <p className="mb-8 text-sm text-zinc-400">
-          Personnalise ton apparence : avatars Leader, dos de cartes (sleeves)
-          et playmats thématiques One Piece. Pure cosmétique — n'affecte pas
-          le gameplay.
-        </p>
-
-        <CosmeticsShopClient
-          gameId={gameId}
-          profileId={profile.id}
-          initialGold={profile.gold}
-          ownedKeys={owned.map((o) => `${o.cosmetic_type}:${o.cosmetic_id}`)}
-          activeAvatar={gameActive.avatar ?? "default"}
-          activeSleeve={gameActive.sleeve ?? "default"}
-          activePlaymat={gameActive.playmat ?? "default"}
-          catalog={ONEPIECE_COSMETICS}
-        />
-      </div>
+          <CosmeticsShopClient
+            gameId={gameId}
+            profileId={profile.id}
+            initialGold={profile.gold}
+            ownedKeys={owned.map((o) => `${o.cosmetic_type}:${o.cosmetic_id}`)}
+            activeAvatar={gameActive.avatar ?? "default"}
+            activeSleeve={gameActive.sleeve ?? "default"}
+            activePlaymat={gameActive.playmat ?? "default"}
+            catalog={ONEPIECE_COSMETICS}
+          />
+        </div>
+      </main>
     </div>
   );
 }

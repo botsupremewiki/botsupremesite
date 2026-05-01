@@ -62,6 +62,10 @@ export function OnePieceBattleClient({
     cardId: string;
     trigger: string | null;
   } | null>(null);
+  // Ref pour le timeout d'auto-clear (cleanup au unmount).
+  const revealedTriggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const send = useCallback((msg: OnePieceBattleClientMessage) => {
     const ws = socketRef.current;
@@ -187,8 +191,14 @@ export function OnePieceBattleClient({
         case "op-trigger-reveal":
           sfx.play("trigger-reveal");
           setRevealedTrigger({ cardId: msg.cardId, trigger: msg.trigger });
-          // Auto-clear après 6s pour ne pas surcharger l'UI.
-          setTimeout(() => setRevealedTrigger(null), 6000);
+          // Auto-clear après 6s. Cleanup l'ancien si redéclenché entre-temps.
+          if (revealedTriggerTimerRef.current) {
+            clearTimeout(revealedTriggerTimerRef.current);
+          }
+          revealedTriggerTimerRef.current = setTimeout(() => {
+            setRevealedTrigger(null);
+            revealedTriggerTimerRef.current = null;
+          }, 6000);
           break;
       }
     });
@@ -196,6 +206,11 @@ export function OnePieceBattleClient({
       cancelled = true;
       ws.close();
       if (socketRef.current === ws) socketRef.current = null;
+      // Cleanup du timer auto-clear pour éviter setState après unmount.
+      if (revealedTriggerTimerRef.current) {
+        clearTimeout(revealedTriggerTimerRef.current);
+        revealedTriggerTimerRef.current = null;
+      }
     };
   }, [profile, roomId, deckId]);
 
@@ -333,6 +348,7 @@ export function OnePieceBattleClient({
                 onClick={() => sfx.setEnabled(!sfx.enabled)}
                 className="rounded-md border border-zinc-500/40 bg-zinc-500/10 px-2 py-1 text-zinc-300 hover:bg-zinc-500/20"
                 title={sfx.enabled ? "Couper le son" : "Activer le son"}
+                aria-label={sfx.enabled ? "Couper le son" : "Activer le son"}
               >
                 {sfx.enabled ? "🔊" : "🔇"}
               </button>
