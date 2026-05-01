@@ -112,6 +112,10 @@ export type InternalPlayer = {
   // Phase 3.68 : flag pour 01FR023 (Appel de la chef de guerre). Une
   // fois activé, summon le 1er Unit du deck à chaque startRound.
   hasRecurringTopDeckSummon: boolean;
+  // Phase 4.0b : flag Jinx L2 (01PZ040T1) — la 1re fois que la main
+  // devient vide à chaque round, elle créé Super roquette en main.
+  // Reset à startRound.
+  jinxFiredEmptyHandThisRound: boolean;
   // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
   // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
   // healthDelta directement sur la nouvelle unité, costDelta sur la mana
@@ -295,6 +299,7 @@ export function createInitialState(
     summonedUidsThisRound: [],
     stolenUidsThisRound: [],
     hasRecurringTopDeckSummon: false,
+    jinxFiredEmptyHandThisRound: false,
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -565,6 +570,8 @@ function refreshPlayerForRound(
     deadAlliesThisRound: [],
     summonedUidsThisRound: [],
     stolenUidsThisRound: [],
+    // Phase 4.0b : reset le flag Jinx L2 chaque round.
+    jinxFiredEmptyHandThisRound: false,
   };
 }
 
@@ -818,9 +825,15 @@ export function triggerHeimerdingerOnSpellCast(
 ): InternalState {
   const cfg = RUNETERRA_BATTLE_CONFIG;
   const player = state.players[casterSeat];
-  const heimerCount = player.bench.filter(
+  // Phase 4.0b : check les DEUX formes (level 1 = 01PZ056, level 2 = 01PZ056T10).
+  // Au level 2, chaque turret gagne +2|+2 au lieu de +1|+1 (Heimer L2 boost).
+  const heimerL1Count = player.bench.filter(
     (u) => u.cardCode === "01PZ056",
   ).length;
+  const heimerL2Count = player.bench.filter(
+    (u) => u.cardCode === "01PZ056T10",
+  ).length;
+  const heimerCount = heimerL1Count + heimerL2Count;
   if (heimerCount === 0) return state;
   const cappedCost = Math.min(spellCost, 7);
   const tokenCardCode = HEIMER_TURRETS_BY_COST[cappedCost];
@@ -828,15 +841,20 @@ export function triggerHeimerdingerOnSpellCast(
   const tokenCard = getCard(tokenCardCode);
   if (!tokenCard) return state;
   let newPlayer = player;
-  // 1 turret par Heimerdinger sur le banc.
-  for (let i = 0; i < heimerCount; i++) {
+  // 1 turret par Heimerdinger sur le banc. Le bonus dépend du level :
+  // L1 = +1|+1, L2 = +2|+2 (cumulé : si 1 L1 + 1 L2, alors 2 turrets,
+  // 1 avec +1|+1 et 1 avec +2|+2).
+  const buffsToApply = [
+    ...Array(heimerL2Count).fill({ power: 2, health: 2 }),
+    ...Array(heimerL1Count).fill({ power: 1, health: 1 }),
+  ];
+  for (let i = 0; i < buffsToApply.length; i++) {
     if (newPlayer.hand.length >= cfg.maxHand) break;
     const newUid = `${casterSeat}-htur-${state.round}-${state.log.length}-${i}`;
     const newCardBuffs = { ...newPlayer.cardBuffs };
-    // +1|+1 et cost 0 (printed cost = X, costDelta = -X pour 0 effectif).
     newCardBuffs[newUid] = {
-      powerDelta: 1,
-      healthDelta: 1,
+      powerDelta: buffsToApply[i].power,
+      healthDelta: buffsToApply[i].health,
       costDelta: -cappedCost,
       addKeywords: [],
     };
@@ -873,12 +891,20 @@ export function triggerYasuoOnEnemyStunned(
   const oppSeatIdx = otherSeat(casterSeat);
   const caster = state.players[casterSeat];
   const opp = state.players[oppSeatIdx];
-  const yasuoCount = caster.bench.filter((u) => u.cardCode === "01IO015").length;
+  // Phase 4.0b : check les DEUX formes (level 1 = 01IO015, level 2 = 01IO015T1).
+  // Au level 2, Yasuo deal 4 dmg au lieu de 2 (Yasuo L2 boost de Riot).
+  const yasuoL1Count = caster.bench.filter(
+    (u) => u.cardCode === "01IO015",
+  ).length;
+  const yasuoL2Count = caster.bench.filter(
+    (u) => u.cardCode === "01IO015T1",
+  ).length;
+  const yasuoCount = yasuoL1Count + yasuoL2Count;
   if (yasuoCount === 0) return state;
   const target = opp.bench.find((u) => u.uid === stunnedEnemyUid);
   if (!target) return state;
-  // 2 dmg par Yasuo allié sur le banc.
-  const totalDmg = 2 * yasuoCount;
+  // L1 deal 2, L2 deal 4 — somme cumulée par count.
+  const totalDmg = 2 * yasuoL1Count + 4 * yasuoL2Count;
   const updatedBench = opp.bench.map((u) => {
     if (u.uid !== stunnedEnemyUid) return u;
     const c = { ...u };
@@ -1549,10 +1575,91 @@ export function playSpell(
     seatIdx,
     effectiveSpellCost,
   );
+  // Phase 4.0b : Lux L2 — chaque fois que spellManaSpent crosse un
+  // multiple de 6 dans le round, créer 1 Éclat final (01DE042T3) en main.
+  // Trigger continu vs uniquement à level-up (qui était l'ancien
+  // comportement bug).
+  postSpellState = triggerLuxLevel2OnSpellCast(
+    postSpellState,
+    seatIdx,
+    player.championCounters.spellManaSpent,
+    player.championCounters.spellManaSpent + effectiveSpellCost,
+  );
+  // Phase 4.0b : Jinx L2 — si la main devient vide pour la 1re fois de
+  // ce round, créer 1 Super roquette de la mort ! (01PZ040T2) en main.
+  postSpellState = triggerJinxLevel2OnHandEmpty(postSpellState, seatIdx);
   return {
     ok: true,
     state: checkLevelUps(postSpellState),
   };
+}
+
+/** Phase 4.0b : Lux niveau 2 (01DE042T2) — quand spellManaSpent du round
+ *  crosse un multiple de 6, créer Éclat final (01DE042T3) en main. */
+function triggerLuxLevel2OnSpellCast(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  beforeSpellMana: number,
+  afterSpellMana: number,
+): InternalState {
+  const player = state.players[casterSeat];
+  const luxL2Count = player.bench.filter(
+    (u) => u.cardCode === "01DE042T2",
+  ).length;
+  if (luxL2Count === 0) return state;
+  // Combien de "buckets de 6" on vient de crosser.
+  const bucketsBefore = Math.floor(beforeSpellMana / 6);
+  const bucketsAfter = Math.floor(afterSpellMana / 6);
+  const crossings = bucketsAfter - bucketsBefore;
+  if (crossings <= 0) return state;
+  // 1 Éclat final par crossing × par Lux L2 sur le banc.
+  let newState = state;
+  for (let i = 0; i < crossings * luxL2Count; i++) {
+    newState = applySpellEffect(
+      newState,
+      casterSeat,
+      { type: "create-card-in-hand", cardCode: "01DE042T3" },
+      null,
+    );
+  }
+  return newState;
+}
+
+/** Phase 4.0b : Jinx niveau 2 (01PZ040T1) — la première fois que la main
+ *  devient vide à chaque round, créer Super roquette de la mort !
+ *  (01PZ040T2) en main. Track le flag jinxFiredEmptyHandThisRound dans
+ *  alliesDiedThisRound's container — on va l'ajouter au player state. */
+function triggerJinxLevel2OnHandEmpty(
+  state: InternalState,
+  casterSeat: 0 | 1,
+): InternalState {
+  const player = state.players[casterSeat];
+  if (player.hand.length > 0) return state; // main pas encore vide
+  if (player.jinxFiredEmptyHandThisRound) return state; // déjà fait ce round
+  const jinxL2Count = player.bench.filter(
+    (u) => u.cardCode === "01PZ040T1",
+  ).length;
+  if (jinxL2Count === 0) return state;
+  // Set le flag d'abord pour éviter ré-entrée.
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[casterSeat] = {
+    ...player,
+    jinxFiredEmptyHandThisRound: true,
+  };
+  let newState: InternalState = { ...state, players: newPlayers };
+  // Crée 1 Super roquette par Jinx L2.
+  for (let i = 0; i < jinxL2Count; i++) {
+    newState = applySpellEffect(
+      newState,
+      casterSeat,
+      { type: "create-card-in-hand", cardCode: "01PZ040T2" },
+      null,
+    );
+  }
+  return newState;
 }
 
 // ────────────────────── Phase 3.7 : résolution des sorts ────────────────
