@@ -70,6 +70,37 @@ export function DmView({
     [selfAuthId],
   );
 
+  // Intent en provenance du profil public (/u/[username] → bouton
+  // "Message privé"). Stocké dans sessionStorage avant navigation, lu ici
+  // au montage pour ouvrir directement la bonne conversation.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem("dm:open-with");
+      if (!raw) return;
+      const intent = JSON.parse(raw) as {
+        id: string;
+        name: string;
+        avatarUrl?: string | null;
+        ts: number;
+      };
+      // Expire après 30s pour éviter d'ouvrir un vieil intent.
+      if (Date.now() - intent.ts > 30_000) {
+        sessionStorage.removeItem("dm:open-with");
+        return;
+      }
+      sessionStorage.removeItem("dm:open-with");
+      if (intent.id === selfAuthId) return;
+      setActivePartner({
+        id: intent.id,
+        name: intent.name,
+        avatarUrl: intent.avatarUrl ?? undefined,
+      });
+    } catch {
+      // ignore parse errors
+    }
+  }, [selfAuthId]);
+
   const sendComposer = useCallback(
     (e?: FormEvent) => {
       e?.preventDefault();

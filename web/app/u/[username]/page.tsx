@@ -5,6 +5,7 @@ import { getProfile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { ReportButton } from "@/components/report-button";
 import { FriendButton } from "@/components/friend-button";
+import { MessageButton } from "@/components/message-button";
 import { ACHIEVEMENTS } from "@shared/achievements";
 import { TCG_ACHIEVEMENTS, tierAccent } from "@shared/tcg-achievements";
 import { TCG_GAMES } from "@shared/types";
@@ -215,10 +216,15 @@ export default async function PublicProfilePage({
                   pseudo dans le chat.
                 </div>
                 {me && me.id !== target.id ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <FriendButton
                       targetId={target.id}
                       initialState={friendState}
+                    />
+                    <MessageButton
+                      targetId={target.id}
+                      targetUsername={target.username}
+                      targetAvatarUrl={target.avatar_url}
                     />
                     <ReportButton
                       targetId={target.id}
