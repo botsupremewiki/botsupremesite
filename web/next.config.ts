@@ -12,6 +12,28 @@ const nextConfig: NextConfig = {
       static: 30,
     },
   },
+  // Hosts externes autorisés pour next/image. Permet l'optimisation
+  // automatique (resize/format/lazy) des images de cartes Pokémon
+  // (tcgdex.net) et des avatars Discord.
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "assets.tcgdex.net",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+        pathname: "/avatars/**",
+      },
+      {
+        protocol: "https",
+        hostname: "images.pokemontcg.io",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

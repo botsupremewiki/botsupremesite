@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/auth";
@@ -76,11 +77,13 @@ export default async function CardEncyclopediaPage({
             {/* ─── Image carte ─── */}
             <div className="flex flex-col items-center">
               {"image" in card && card.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={card.image}
                   alt={card.name}
-                  className="w-full max-w-sm rounded-xl border border-white/10 shadow-2xl"
+                  width={367}
+                  height={512}
+                  priority
+                  className="h-auto w-full max-w-sm rounded-xl border border-white/10 shadow-2xl"
                 />
               ) : null}
               <div className="mt-3 text-center">

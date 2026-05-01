@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/auth";
@@ -274,11 +275,13 @@ export default async function MetaPage({
                       className="rounded-lg border border-white/10 bg-black/30 p-2"
                     >
                       {card && "image" in card && card.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <Image
                           src={card.image}
                           alt={card.name}
+                          width={245}
+                          height={342}
                           className="h-32 w-full rounded border border-white/10 object-contain"
+                          unoptimized
                         />
                       ) : (
                         <div className="flex h-32 w-full items-center justify-center rounded border border-white/10 bg-white/[0.02] text-[10px] text-zinc-500">
@@ -324,11 +327,13 @@ export default async function MetaPage({
                       className="group rounded-lg border border-white/10 bg-black/30 p-2 transition-colors hover:border-amber-300/40"
                     >
                       {card && "image" in card && card.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <Image
                           src={card.image}
                           alt={card.name}
+                          width={245}
+                          height={342}
                           className="h-28 w-full rounded border border-white/10 object-contain group-hover:scale-105 transition-transform"
+                          unoptimized
                         />
                       ) : (
                         <div className="flex h-28 w-full items-center justify-center rounded border border-white/10 bg-white/[0.02] text-[10px] text-zinc-500">
