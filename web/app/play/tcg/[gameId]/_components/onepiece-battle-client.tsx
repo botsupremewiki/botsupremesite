@@ -8,6 +8,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CardPreview } from "./card-hover-preview";
 import {
   DefeatScreen,
   LeaderShowdown,
@@ -16,7 +17,6 @@ import {
 import { BattleEffects } from "./onepiece-battle-effects";
 import { useOnePieceSfx } from "./use-onepiece-sfx";
 import type {
-  ChatMessage,
   OnePieceBattleCardInPlay,
   OnePieceBattleClientMessage,
   OnePieceBattleSeatId,
@@ -53,8 +53,6 @@ export function OnePieceBattleClient({
   const [showVictoryScreen, setShowVictoryScreen] = useState(false);
   const [showDefeatScreen, setShowDefeatScreen] = useState(false);
   const [endReason, setEndReason] = useState<string | null>(null);
-  const [chat, setChat] = useState<ChatMessage[]>([]);
-  const [chatDraft, setChatDraft] = useState("");
   // Attaque en 2 étapes : clique "Attaquer" sur un de mes attackers → store
   // l'uid ici. Puis le click sur une cible adverse envoie op-attack.
   const [attackerSelected, setAttackerSelected] = useState<string | null>(null);
@@ -183,7 +181,8 @@ export function OnePieceBattleClient({
           setErrorMsg(msg.message);
           break;
         case "chat":
-          setChat((prev) => [...prev.slice(-29), msg.message]);
+          // Le chat in-combat est désactivé (cf. layout principal :
+          // utiliser le chat global du site en sidebar à la place).
           break;
         case "op-trigger-reveal":
           sfx.play("trigger-reveal");
@@ -199,13 +198,6 @@ export function OnePieceBattleClient({
       if (socketRef.current === ws) socketRef.current = null;
     };
   }, [profile, roomId, deckId]);
-
-  function sendChat() {
-    const text = chatDraft.trim();
-    if (!text) return;
-    send({ type: "chat", text });
-    setChatDraft("");
-  }
 
   function concede() {
     if (!confirm("Abandonner la partie ?")) return;
@@ -496,7 +488,7 @@ export function OnePieceBattleClient({
               </div>
             )}
 
-            {/* Vue board minimaliste : 2 zones (adversaire en haut, soi en bas). */}
+            {/* Vue board : adversaire en haut, soi en bas (full width). */}
             {state &&
               (() => {
                 const isMyTurn =
@@ -507,7 +499,7 @@ export function OnePieceBattleClient({
                   !state.pendingTrigger;
                 const canAttack = isMyTurn && state.turnNumber > 1;
                 return (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-3">
                     <PlayerPanel
                       title={
                         state.opponent
@@ -561,9 +553,11 @@ export function OnePieceBattleClient({
               })()}
 
             {state && state.self && (
-              <div className="rounded-md border border-white/10 bg-black/30 p-3">
+              <div className="sticky bottom-0 -mx-2 mt-2 rounded-md border border-amber-400/30 bg-zinc-950/95 p-3 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] backdrop-blur sm:-mx-4">
                 <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-widest text-zinc-400">
-                  <span>Ma main ({state.self.handCount} cartes)</span>
+                  <span className="font-bold text-amber-200">
+                    🃏 Ma main ({state.self.handCount} cartes)
+                  </span>
                   {state.phase === "playing" &&
                     state.activeSeat === state.selfSeat &&
                     state.turnPhase === "main" && (
@@ -614,40 +608,25 @@ export function OnePieceBattleClient({
                         key={`${cardId}-${i}`}
                         className="flex w-16 flex-col gap-1 sm:w-20 md:w-24"
                       >
-                        <div
-                          className="group relative overflow-visible rounded border border-white/10 bg-zinc-950"
-                          title={meta?.name ?? cardId}
-                        >
-                          {meta && (
-                            <>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={meta.image}
-                                alt={meta.name}
-                                className="h-32 w-full rounded object-contain"
-                              />
-                              {/* Hover zoom preview — absolu, ne déplace pas le layout. */}
-                              <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
-                                <div className="rounded-lg border-2 border-amber-400/60 bg-zinc-950 p-2 shadow-2xl shadow-black/80">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={meta.image}
-                                    alt={meta.name}
-                                    className="w-full rounded"
-                                  />
-                                  <div className="mt-1 text-[10px] font-semibold text-amber-200">
-                                    {meta.name}
-                                  </div>
-                                  {meta.effect && (
-                                    <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
-                                      {meta.effect}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        {meta ? (
+                          <CardPreview
+                            cardId={meta.id}
+                            imageUrl={meta.image}
+                            name={meta.name}
+                            effect={meta.effect}
+                            trigger={meta.trigger}
+                            className="rounded border border-white/10 bg-zinc-950"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={meta.image}
+                              alt={meta.name}
+                              className="h-32 w-full rounded object-contain"
+                            />
+                          </CardPreview>
+                        ) : (
+                          <div className="rounded border border-white/10 bg-zinc-950 h-32" />
+                        )}
                         {meta?.kind === "character" && (
                           <button
                             onClick={() =>
@@ -726,48 +705,19 @@ export function OnePieceBattleClient({
               </div>
             )}
 
-            {/* Log + chat */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md border border-white/10 bg-black/30 p-3">
-                <div className="mb-2 text-[11px] uppercase tracking-widest text-zinc-400">
-                  Journal
-                </div>
-                <ul className="space-y-0.5 text-xs text-zinc-300">
-                  {(state?.log ?? []).slice(-15).map((line, i) => (
-                    <li key={i}>· {line}</li>
-                  ))}
-                </ul>
+            {/* Journal du combat (chat retiré : utiliser le chat global
+                du site en sidebar). */}
+            <div className="rounded-md border border-white/10 bg-black/30 p-3">
+              <div className="mb-2 text-[11px] uppercase tracking-widest text-zinc-400">
+                Journal du combat
               </div>
-              <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-black/30 p-3">
-                <div className="text-[11px] uppercase tracking-widest text-zinc-400">
-                  Chat
-                </div>
-                <ul className="flex-1 space-y-0.5 text-xs">
-                  {chat.slice(-10).map((m) => (
-                    <li key={m.id}>
-                      <span className="text-zinc-500">{m.playerName}:</span>{" "}
-                      <span className="text-zinc-200">{m.text}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex gap-2">
-                  <input
-                    value={chatDraft}
-                    onChange={(e) => setChatDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") sendChat();
-                    }}
-                    placeholder="Message…"
-                    className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-rose-400/50 focus:outline-none"
-                  />
-                  <button
-                    onClick={sendChat}
-                    className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-200 hover:bg-white/10"
-                  >
-                    Envoyer
-                  </button>
-                </div>
-              </div>
+              <ul className="max-h-48 space-y-0.5 overflow-y-auto text-xs text-zinc-300">
+                {(state?.log ?? []).slice(-30).map((line, i) => (
+                  <li key={i} className="leading-relaxed">
+                    · {line}
+                  </li>
+                ))}
+              </ul>
             </div>
 
           </>
@@ -832,89 +782,72 @@ function PlayerPanel({
         <div className="text-xs text-zinc-500">Aucun joueur.</div>
       ) : (
         <>
-          <div className="flex items-center gap-3">
-            {data.leader && (
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  onClick={() => {
-                    if (targetMode && onPickTarget) {
-                      // Le Leader adverse est toujours une cible valide.
-                      onPickTarget("leader");
-                    }
-                  }}
-                  disabled={!targetMode}
-                  className={`group relative w-24 overflow-visible rounded-md border-2 transition-transform sm:w-28 md:w-32 ${
-                    data.leader.rested
-                      ? "border-zinc-500/60 grayscale"
-                      : "border-rose-400/80 shadow-[0_0_24px_rgba(251,113,133,0.3)]"
-                  } ${
-                    targetMode
-                      ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
-                      : "cursor-default"
-                  } ${attackerSelected === "leader" && isSelf ? "ring-2 ring-emerald-400" : ""}`}
-                >
-                  {(() => {
-                    const meta = ONEPIECE_BASE_SET_BY_ID.get(
-                      data.leader.cardId,
-                    );
-                    return meta ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={meta.image}
-                          alt={meta.name}
-                          className={`h-36 w-full rounded object-contain sm:h-40 md:h-44 ${
-                            data.leader.rested ? "rotate-90" : ""
-                          }`}
-                        />
-                        {/* Badge "LEADER" doré comme un parchemin */}
-                        <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 rounded-full border-2 border-amber-300/90 bg-gradient-to-br from-amber-400 to-amber-600 px-2 py-0.5 text-[8px] font-extrabold tracking-widest text-amber-950 shadow-md">
-                          ⭐ LEADER
-                        </div>
-                        {/* Hover preview agrandi */}
-                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
-                          <div className="rounded-lg border-2 border-amber-400/60 bg-zinc-950 p-2 text-left shadow-2xl shadow-black/80">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={meta.image}
-                              alt={meta.name}
-                              className="w-full rounded"
-                            />
-                            <div className="mt-1 text-[10px] font-semibold text-amber-200">
-                              {meta.name}
-                            </div>
-                            {meta.effect && (
-                              <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
-                                {meta.effect}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    ) : null;
-                  })()}
-                  {data.leader.attachedDon > 0 && (
-                    <motion.span
-                      key={data.leader.attachedDon}
-                      initial={{ scale: 1.5 }}
-                      animate={{ scale: 1 }}
-                      transition={{ duration: 0.3 }}
-                      className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-200 bg-gradient-to-br from-amber-300 to-amber-600 text-[10px] font-extrabold text-amber-950 shadow-lg"
-                    >
-                      +{data.leader.attachedDon}
-                    </motion.span>
-                  )}
-                </button>
-                {isSelf && canAttack && data.leader && !data.leader.rested && (
-                  <button
-                    onClick={() => onPickAttacker?.("leader")}
-                    className="rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[9px] text-rose-200 hover:bg-rose-500/20"
+          {/* Layout horizontal : Leader (gauche) + Persos (centre, scrollable
+              si débordement) + Lieu (droite). Stats compactes au-dessus. */}
+          <div className="flex flex-wrap items-stretch gap-3">
+            {data.leader && (() => {
+              const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(data.leader.cardId);
+              if (!leaderMeta) return null;
+              return (
+                <div className="flex flex-col items-center gap-1">
+                  <CardPreview
+                    cardId={leaderMeta.id}
+                    imageUrl={leaderMeta.image}
+                    name={leaderMeta.name}
+                    effect={leaderMeta.effect}
+                    className={`relative w-24 rounded-md border-2 transition-transform sm:w-28 md:w-32 ${
+                      data.leader.rested
+                        ? "border-zinc-500/60 grayscale"
+                        : "border-rose-400/80 shadow-[0_0_24px_rgba(251,113,133,0.3)]"
+                    } ${
+                      targetMode
+                        ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
+                        : "cursor-default"
+                    } ${attackerSelected === "leader" && isSelf ? "ring-2 ring-emerald-400" : ""}`}
                   >
-                    ⚔️ Attaquer
-                  </button>
-                )}
-              </div>
-            )}
+                    <button
+                      onClick={() => {
+                        if (targetMode && onPickTarget) onPickTarget("leader");
+                      }}
+                      disabled={!targetMode}
+                      className="block w-full"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={leaderMeta.image}
+                        alt={leaderMeta.name}
+                        className={`h-36 w-full rounded object-contain sm:h-40 md:h-44 ${
+                          data.leader.rested ? "rotate-90" : ""
+                        }`}
+                      />
+                      {/* Badge "LEADER" parchemin doré */}
+                      <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 rounded-full border-2 border-amber-300/90 bg-gradient-to-br from-amber-400 to-amber-600 px-2 py-0.5 text-[8px] font-extrabold tracking-widest text-amber-950 shadow-md">
+                        ⭐ LEADER
+                      </div>
+                      {data.leader.attachedDon > 0 && (
+                        <motion.span
+                          key={data.leader.attachedDon}
+                          initial={{ scale: 1.5 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.3 }}
+                          className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-200 bg-gradient-to-br from-amber-300 to-amber-600 text-[10px] font-extrabold text-amber-950 shadow-lg"
+                        >
+                          +{data.leader.attachedDon}
+                        </motion.span>
+                      )}
+                    </button>
+                  </CardPreview>
+                  {isSelf && canAttack && data.leader && !data.leader.rested && (
+                    <button
+                      onClick={() => onPickAttacker?.("leader")}
+                      className="rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[9px] text-rose-200 hover:bg-rose-500/20"
+                    >
+                      ⚔️ Attaquer
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             <div className="flex flex-1 flex-col gap-2 text-[11px] text-zinc-300">
               {/* Vies : pile de cartes face-cachée */}
               <div className="flex items-center gap-1">
@@ -1029,9 +962,10 @@ function PlayerPanel({
             </div>
           </div>
 
-          {/* Persos en jeu */}
+          {/* Persos en jeu (sur la même ligne que le Leader visuel via
+              flex-wrap, mais peuvent passer dessous si pas de place). */}
           {data.characters.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1.5 border-t border-white/5 pt-2">
+            <div className="flex flex-wrap items-end gap-1.5">
               <AnimatePresence mode="popLayout">
               {data.characters.map((c) => {
                 const meta = ONEPIECE_BASE_SET_BY_ID.get(c.cardId);
@@ -1079,23 +1013,30 @@ function PlayerPanel({
                     }`}
                     title={meta?.name ?? c.cardId}
                   >
-                    <button
-                      onClick={() => {
-                        if (targetable && onPickTarget) onPickTarget(c.uid);
-                      }}
-                      disabled={!targetable}
-                      className={`group relative overflow-visible rounded border bg-zinc-950 transition-transform ${
-                        c.playedThisTurn
-                          ? "border-amber-400/40"
-                          : "border-white/10"
-                      } ${
-                        targetable
-                          ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
-                          : "cursor-default"
-                      } ${isSelected ? "ring-2 ring-emerald-400" : ""}`}
-                    >
-                      {meta && (
-                        <>
+                    {meta ? (
+                      <CardPreview
+                        cardId={meta.id}
+                        imageUrl={meta.image}
+                        name={meta.name}
+                        effect={meta.effect}
+                        trigger={meta.trigger}
+                        className={`relative rounded border bg-zinc-950 transition-transform ${
+                          c.playedThisTurn
+                            ? "border-amber-400/40"
+                            : "border-white/10"
+                        } ${
+                          targetable
+                            ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
+                            : "cursor-default"
+                        } ${isSelected ? "ring-2 ring-emerald-400" : ""}`}
+                      >
+                        <button
+                          onClick={() => {
+                            if (targetable && onPickTarget) onPickTarget(c.uid);
+                          }}
+                          disabled={!targetable}
+                          className="block w-full"
+                        >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={meta.image}
@@ -1104,42 +1045,23 @@ function PlayerPanel({
                               c.rested ? "rotate-90" : ""
                             }`}
                           />
-                          {/* Hover preview agrandi */}
-                          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
-                            <div className="rounded-lg border-2 border-amber-400/60 bg-zinc-950 p-2 text-left shadow-2xl shadow-black/80">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={meta.image}
-                                alt={meta.name}
-                                className="w-full rounded"
-                              />
-                              <div className="mt-1 text-[10px] font-semibold text-amber-200">
-                                {meta.name}
-                              </div>
-                              {meta.effect && (
-                                <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
-                                  {meta.effect}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                      <span className="absolute bottom-0 left-0 rounded-tr bg-black/80 px-1 text-[9px] text-amber-200">
-                        {totalPower}
-                      </span>
-                      {c.attachedDon > 0 && (
-                        <motion.span
-                          key={c.attachedDon}
-                          initial={{ scale: 1.5, backgroundColor: "#fef3c7" }}
-                          animate={{ scale: 1, backgroundColor: "#fbbf24" }}
-                          transition={{ duration: 0.3 }}
-                          className="absolute right-0 top-0 rounded-bl px-1 text-[9px] font-bold text-amber-950"
-                        >
-                          +{c.attachedDon}
-                        </motion.span>
-                      )}
-                    </button>
+                          <span className="absolute bottom-0 left-0 rounded-tr bg-black/80 px-1 text-[9px] text-amber-200">
+                            {totalPower}
+                          </span>
+                          {c.attachedDon > 0 && (
+                            <motion.span
+                              key={c.attachedDon}
+                              initial={{ scale: 1.5, backgroundColor: "#fef3c7" }}
+                              animate={{ scale: 1, backgroundColor: "#fbbf24" }}
+                              transition={{ duration: 0.3 }}
+                              className="absolute right-0 top-0 rounded-bl px-1 text-[9px] font-bold text-amber-950"
+                            >
+                              +{c.attachedDon}
+                            </motion.span>
+                          )}
+                        </button>
+                      </CardPreview>
+                    ) : null}
                     {isSelf && canAttachDon && (
                       <button
                         onClick={() =>
@@ -1184,38 +1106,23 @@ function PlayerPanel({
                 <span className="text-[9px] uppercase tracking-widest text-purple-400">
                   🏛️ Lieu
                 </span>
-                <div className="group relative">
-                  {stageMeta && (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={stageMeta.image}
-                        alt={stageMeta.name}
-                        className={`h-16 w-12 rounded border-2 border-purple-500/60 object-contain shadow-[0_0_12px_rgba(168,85,247,0.3)] ${
-                          data.stage!.rested ? "grayscale opacity-60" : ""
-                        }`}
-                      />
-                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
-                        <div className="rounded-lg border-2 border-purple-400/60 bg-zinc-950 p-2 text-left shadow-2xl shadow-black/80">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={stageMeta.image}
-                            alt={stageMeta.name}
-                            className="w-full rounded"
-                          />
-                          <div className="mt-1 text-[10px] font-semibold text-purple-200">
-                            {stageMeta.name}
-                          </div>
-                          {stageMeta.effect && (
-                            <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
-                              {stageMeta.effect}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                {stageMeta && (
+                  <CardPreview
+                    cardId={stageMeta.id}
+                    imageUrl={stageMeta.image}
+                    name={stageMeta.name}
+                    effect={stageMeta.effect}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={stageMeta.image}
+                      alt={stageMeta.name}
+                      className={`h-16 w-12 rounded border-2 border-purple-500/60 object-contain shadow-[0_0_12px_rgba(168,85,247,0.3)] ${
+                        data.stage!.rested ? "grayscale opacity-60" : ""
+                      }`}
+                    />
+                  </CardPreview>
+                )}
                 <span className="text-[10px] text-zinc-300">
                   {stageMeta?.name ?? data.stage.cardId}
                 </span>
