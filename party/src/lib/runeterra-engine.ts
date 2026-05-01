@@ -1503,6 +1503,22 @@ export function playSpell(
     };
   }
 
+  // Phase 5.0 : validation spell speed.
+  //   - Slow : ne peut PAS être joué en combat (attaque en cours).
+  //   - Burst/Focus : caster GARDE la priorité après cast (combos).
+  //   - Fast : caster passe la priorité (réaction adverse possible).
+  // Le spell speed est sur card.spellSpeed ("Burst" | "Fast" | "Slow" | "Focus").
+  const spellSpeed = card.spellSpeed;
+  if (spellSpeed === "Slow" && state.attackInProgress !== null) {
+    return {
+      ok: false,
+      error: `${card.name} (Lent) ne peut pas être joué pendant un combat.`,
+    };
+  }
+  // Burst/Focus = pas de fenêtre de réaction adverse → caster keeps priority.
+  const keepsPriorityAfterCast =
+    spellSpeed === "Burst" || spellSpeed === "Focus";
+
   // Phase 3.7 + 3.37 + 3.70 : valide le ciblage (1, 2 ou 3 cibles selon
   // l'effet).
   const effect = RUNETERRA_SPELL_EFFECTS[handCard.cardCode];
@@ -1586,13 +1602,15 @@ export function playSpell(
   }
 
   // Phase 3.22 : déclenche Imbue sur tous les alliés du caster qui en ont.
+  // Phase 5.0 : Burst/Focus → caster GARDE la priorité (active reste seatIdx).
+  // Fast/Slow → priorité passe à l'adversaire (réaction possible).
   let postSpellState: InternalState = {
     ...intermediateState,
-    activeSeatIdx: otherSeat(seatIdx),
+    activeSeatIdx: keepsPriorityAfterCast ? seatIdx : otherSeat(seatIdx),
     consecutivePasses: 0,
     log: [
       ...intermediateState.log,
-      `${player.username} lance ${card.name} (coût ${card.cost}).`,
+      `${player.username} lance ${card.name} (coût ${card.cost}, ${spellSpeed ?? "?"}).`,
     ],
   };
   postSpellState = triggerImbue(postSpellState, seatIdx);

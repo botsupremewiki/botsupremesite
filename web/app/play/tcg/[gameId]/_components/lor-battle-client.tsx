@@ -589,12 +589,49 @@ function HoverPreview({ cardCode }: { cardCode: string }) {
         )}
       </div>
       <div className="border-t border-white/10 p-2">
-        <div className="text-sm font-semibold text-zinc-100">{card.name}</div>
+        <div className="flex items-start justify-between gap-1">
+          <div className="text-sm font-semibold text-zinc-100">{card.name}</div>
+          {/* Phase 5.0 : badge spell speed coloré pour repérer Burst/Fast/Slow. */}
+          {card.spellSpeed && (
+            <span
+              className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest ${
+                card.spellSpeed === "Burst"
+                  ? "bg-amber-400/20 text-amber-200 ring-1 ring-amber-400/50"
+                  : card.spellSpeed === "Fast"
+                    ? "bg-sky-400/20 text-sky-200 ring-1 ring-sky-400/50"
+                    : card.spellSpeed === "Slow"
+                      ? "bg-rose-400/20 text-rose-200 ring-1 ring-rose-400/50"
+                      : "bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50"
+              }`}
+              title={
+                card.spellSpeed === "Burst"
+                  ? "Instantané — non interruptible"
+                  : card.spellSpeed === "Fast"
+                    ? "Rapide — l'adversaire peut réagir"
+                    : card.spellSpeed === "Slow"
+                      ? "Lent — pas en combat, l'adversaire peut réagir"
+                      : "Focalisé"
+              }
+            >
+              {card.spellSpeed === "Burst"
+                ? "⚡ Inst."
+                : card.spellSpeed === "Fast"
+                  ? "💨 Rap."
+                  : card.spellSpeed === "Slow"
+                    ? "🐢 Lent"
+                    : "🎯 Foc."}
+            </span>
+          )}
+        </div>
         <div className="text-[10px] text-zinc-400">
           💧 {card.cost}
           {card.attack !== undefined && ` · ⚔️ ${card.attack}/${card.health}`}
-          {card.spellSpeed && ` · ${card.spellSpeed}`}
           {card.supertype === "Champion" && " · ★ Champion"}
+          {card.keywordRefs?.includes("Fleeting") && (
+            <span className="ml-1 rounded bg-orange-500/20 px-1 py-0.5 text-[8px] text-orange-200">
+              ⏳ Fugace
+            </span>
+          )}
         </div>
         {card.descriptionRaw && (
           <div className="mt-1 max-h-24 overflow-y-auto text-[11px] leading-tight text-zinc-300">
@@ -1703,6 +1740,38 @@ function HandRow({
               {card?.type === "Unit" && hasBuff && (
                 <div className="absolute right-1 top-1 rounded bg-fuchsia-500/90 px-1 text-[9px] font-bold text-white">
                   {effectiveAttack}/{effectiveHealth}
+                </div>
+              )}
+              {/* Phase 5.0 : badge spell speed sur sorts (Burst/Fast/Slow). */}
+              {card?.type === "Spell" && card.spellSpeed && (
+                <div
+                  className={`absolute right-1 top-1 rounded px-1 text-[8px] font-bold ${
+                    card.spellSpeed === "Burst"
+                      ? "bg-amber-400 text-amber-950"
+                      : card.spellSpeed === "Fast"
+                        ? "bg-sky-400 text-sky-950"
+                        : card.spellSpeed === "Slow"
+                          ? "bg-rose-400 text-rose-950"
+                          : "bg-violet-400 text-violet-950"
+                  }`}
+                  title={card.spellSpeed}
+                >
+                  {card.spellSpeed === "Burst"
+                    ? "⚡"
+                    : card.spellSpeed === "Fast"
+                      ? "💨"
+                      : card.spellSpeed === "Slow"
+                        ? "🐢"
+                        : "🎯"}
+                </div>
+              )}
+              {/* Phase 5.0 : badge Fleeting si défaussé EOR. */}
+              {card?.keywordRefs?.includes("Fleeting") && (
+                <div
+                  className="absolute bottom-6 right-1 rounded bg-orange-500 px-1 text-[8px] font-bold text-orange-950 shadow"
+                  title="Fugace : défaussée à la fin du round si en main"
+                >
+                  ⏳
                 </div>
               )}
               {/* Phase 3.67 : badge keywords ajoutés */}
