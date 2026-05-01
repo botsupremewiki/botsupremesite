@@ -2524,6 +2524,9 @@ export default class BattleServer implements Party.Server {
         let flips = 0;
         // Cap raisonnable pour éviter une boucle pathologique (1/2 de pile à
         // chaque lancer, donc 20 = ~1 chance sur 1M).
+        // Note : on garde un label STABLE (« Ondine ») pour que le récap
+        // côté client groupe tous les flips ensemble. `total` reste undef
+        // (flip-until-tails = nombre de flips inconnu d'avance).
         while (flips < 20) {
           flips++;
           const isHeads = this.coinFlip();
@@ -2531,14 +2534,14 @@ export default class BattleServer implements Party.Server {
             heads++;
             target.attachedEnergies.push("water");
             this.emitCoinFlip(
-              `Ondine — lancer ${flips}`,
+              "Ondine",
               true,
               `+1 Énergie 💧 (total ${heads})`,
               flips,
             );
           } else {
             this.emitCoinFlip(
-              `Ondine — lancer ${flips}`,
+              "Ondine",
               false,
               heads === 0
                 ? "Aucune Énergie attachée."

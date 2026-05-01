@@ -307,7 +307,11 @@ export function BattleClient({
           setCoinQueue(coinQueueRef.current);
           // Met à jour le récap de la série en cours. Si le label
           // change, on démarre une nouvelle série. Sinon on append.
-          if (msg.total && msg.total > 1 && msg.index) {
+          // Inclut aussi les séries "open-ended" (Ondine, Léviator
+          // Langue Sans Fin) : pas de `total` mais label stable +
+          // `index` qui incrémente. Le récap s'affiche dès qu'on a
+          // ≥1 entry (donc visible dès le 1er flip d'une série).
+          if (msg.index !== undefined) {
             setCoinSeries((prev) => {
               if (prev.label !== msg.label) {
                 return {
@@ -315,7 +319,7 @@ export function BattleClient({
                   entries: [
                     {
                       index: msg.index ?? 1,
-                      total: msg.total ?? 1,
+                      total: msg.total ?? 0,
                       result: msg.result,
                     },
                   ],
@@ -327,7 +331,7 @@ export function BattleClient({
                   ...prev.entries,
                   {
                     index: msg.index ?? 1,
-                    total: msg.total ?? 1,
+                    total: msg.total ?? 0,
                     result: msg.result,
                   },
                 ],
@@ -2912,8 +2916,13 @@ function CoinFlipOverlay({
     series.label === event.label ? series.entries : [];
   const headsCount = seriesEntries.filter((e) => e.result === "heads").length;
   const tailsCount = seriesEntries.filter((e) => e.result === "tails").length;
-  const total = event.total ?? 0;
-  const remaining = total > 0 ? total - seriesEntries.length : 0;
+  const fixedTotal = event.total && event.total > 1 ? event.total : 0;
+  const remaining = fixedTotal > 0 ? fixedTotal - seriesEntries.length : 0;
+  // Mode "open-ended" : pas de total fixe (Ondine, Léviator Langue
+  // Sans Fin). On affiche le récap dès le 2e flip de la série.
+  const isOpenEnded = !fixedTotal && seriesEntries.length >= 2;
+  const showRecap =
+    (fixedTotal > 1 && seriesEntries.length > 0) || isOpenEnded;
 
   return (
     <motion.div
@@ -2996,8 +3005,10 @@ function CoinFlipOverlay({
       )}
 
       {/* Récap série multi-coin : badges P/F + compteur Pile/Face/Restant.
-       *  Visible uniquement quand on est dans une série ≥ 2 lancers. */}
-      {seriesEntries.length > 0 && total > 1 && (
+       *  Visible pour les séries à total fixe (Rafale d'Éclairs : 4)
+       *  OU pour les séries "open-ended" dès le 2e flip (Ondine, Léviator
+       *  Langue Sans Fin — flip until tails). */}
+      {showRecap && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -3019,21 +3030,33 @@ function CoinFlipOverlay({
                     ? "bg-amber-300 text-amber-950 ring-1 ring-amber-200"
                     : "bg-zinc-300 text-zinc-900 ring-1 ring-zinc-200"
                 }`}
-                title={`Lancer ${e.index}/${e.total} : ${e.result === "heads" ? "FACE" : "PILE"}`}
+                title={`Lancer ${e.index}${e.total ? `/${e.total}` : ""} : ${
+                  e.result === "heads" ? "FACE" : "PILE"
+                }`}
               >
                 {e.result === "heads" ? "F" : "P"}
               </span>
             ))}
-            {/* Slots vides pour les flips à venir */}
-            {Array.from({ length: Math.max(0, remaining - 1) }, (_, i) => (
+            {/* Slots vides pour les flips à venir (uniquement si total fixe) */}
+            {fixedTotal > 0 &&
+              Array.from({ length: Math.max(0, remaining - 1) }, (_, i) => (
+                <span
+                  key={`empty-${i}`}
+                  aria-hidden="true"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-white/20 text-[10px] text-white/30"
+                >
+                  ?
+                </span>
+              ))}
+            {/* Indicateur "..." pour les séries open-ended (jusqu'à pile) */}
+            {isOpenEnded && (
               <span
-                key={`empty-${i}`}
                 aria-hidden="true"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-white/20 text-[10px] text-white/30"
+                className="inline-flex h-7 items-center justify-center px-1 text-[12px] text-white/30"
               >
-                ?
+                …
               </span>
-            ))}
+            )}
           </div>
           {/* Compteur cumulé */}
           <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-widest">
@@ -3044,11 +3067,19 @@ function CoinFlipOverlay({
             <span className="text-zinc-300">
               Pile : <span className="tabular-nums">{tailsCount}</span>
             </span>
-            {remaining > 1 && (
+            {fixedTotal > 0 && remaining > 1 && (
               <>
                 <span className="text-zinc-600">·</span>
                 <span className="text-zinc-500">
                   Restant : <span className="tabular-nums">{remaining - 1}</span>
+                </span>
+              </>
+            )}
+            {isOpenEnded && (
+              <>
+                <span className="text-zinc-600">·</span>
+                <span className="text-zinc-500">
+                  jusqu&apos;à pile
                 </span>
               </>
             )}
