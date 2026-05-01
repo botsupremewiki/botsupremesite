@@ -96,6 +96,8 @@ export function LorBattleClient({
   const [recentlySummoned, setRecentlySummoned] = useState<Set<string>>(
     new Set(),
   );
+  // Phase 5.8 : modal confirmation concede (vs native confirm).
+  const [concedeModalOpen, setConcedeModalOpen] = useState(false);
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -481,11 +483,7 @@ export function LorBattleClient({
             state={state}
             onPlayHand={playHandCard}
             onPass={() => send({ type: "lor-pass" })}
-            onConcede={() => {
-              if (confirm("Concéder la partie ?")) {
-                send({ type: "lor-concede" });
-              }
-            }}
+            onConcede={() => setConcedeModalOpen(true)}
             onDeclareAttack={(uids, forcedBlockerUids) =>
               send({
                 type: "lor-declare-attack",
@@ -564,6 +562,49 @@ export function LorBattleClient({
             sur targeting). */}
         {hoveredCardCode && pendingSpell === null && (
           <HoverPreview cardCode={hoveredCardCode} />
+        )}
+
+        {/* Phase 5.8 : modal de confirmation concede stylé. */}
+        {concedeModalOpen && (
+          <div
+            onClick={() => setConcedeModalOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm animate-in fade-in duration-200"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl border-2 border-rose-500/40 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-300"
+            >
+              <div className="text-center">
+                <div className="text-5xl">🏳️</div>
+                <h2 className="mt-2 text-xl font-bold text-zinc-100">
+                  Concéder la partie ?
+                </h2>
+                <p className="mt-2 text-sm text-zinc-400">
+                  Tu perds immédiatement le match. Cette action est
+                  irréversible.
+                </p>
+              </div>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => setConcedeModalOpen(false)}
+                  className="flex-1 rounded-md border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200 hover:bg-white/10"
+                >
+                  Continuer le combat
+                </button>
+                <button
+                  onClick={() => {
+                    send({ type: "lor-concede" });
+                    setConcedeModalOpen(false);
+                  }}
+                  className="flex-1 rounded-md bg-rose-500 px-4 py-2 text-sm font-bold text-rose-950 hover:bg-rose-400"
+                >
+                  ✓ Concéder
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Phase 4.7 : annonce centrée « Round N » 1.5s à chaque nouveau
