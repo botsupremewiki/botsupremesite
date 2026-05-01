@@ -3823,6 +3823,9 @@ function applySpellEffect(
     case "summon-token-copy-self-stats": {
       // Phase 3.74 : Zed attack. Summon 1 × tokenCardCode avec les stats
       // CURRENT du triggerSourceUid (Zed). Capé à maxBench.
+      // Phase 6.0 : si Zed L2 (01IO009T2), copie AUSSI les keywords
+      // positifs (Quick Strike, Elusive, etc. — pas les négatifs comme
+      // Stunned).
       const cfgZ = RUNETERRA_BATTLE_CONFIG;
       const player = newPlayers[casterSeat];
       const sourceUnit = player.bench.find((u) => u.uid === triggerSourceUid);
@@ -3832,21 +3835,43 @@ function applySpellEffect(
       if (!tokenCard || tokenCard.type !== "Unit") return state;
       const newUid = `${casterSeat}-zs-${state.round}-${state.log.length}`;
       const baseUnit = createUnit(newUid, effect.tokenCardCode);
+      // Phase 6.0 : Zed L2 copy positive keywords (filter out negatives).
+      const POSITIVE_KEYWORDS = [
+        "QuickStrike",
+        "DoubleStrike",
+        "Elusive",
+        "Fearsome",
+        "Lifesteal",
+        "Tough",
+        "Regeneration",
+        "Barrier",
+        "Challenger",
+        "Overwhelm",
+        "Imbue",
+        "Support",
+      ];
+      const copiedKeywords =
+        sourceUnit.cardCode === "01IO009T2"
+          ? sourceUnit.keywords.filter((k) => POSITIVE_KEYWORDS.includes(k))
+          : [];
       const newUnit: RuneterraBattleUnit = {
         ...baseUnit,
         power: sourceUnit.power,
         health: sourceUnit.health,
+        keywords: Array.from(new Set([...baseUnit.keywords, ...copiedKeywords])),
       };
       newPlayers[casterSeat] = {
         ...player,
         bench: [...player.bench, newUnit],
       };
+      const kwSuffix =
+        copiedKeywords.length > 0 ? ` + ${copiedKeywords.length} mot-clé(s)` : "";
       return {
         ...state,
         players: newPlayers,
         log: [
           ...state.log,
-          `${player.username} invoque ${tokenCard.name} (${sourceUnit.power}|${sourceUnit.health}).`,
+          `${player.username} invoque ${tokenCard.name} (${sourceUnit.power}|${sourceUnit.health}${kwSuffix}).`,
         ],
       };
     }
@@ -6084,6 +6109,36 @@ function resolveCombat(state: InternalState): InternalState {
           `${getCard(blocker.cardCode)?.name ?? blocker.cardCode} (Fureur) gagne +1|+1.`,
         );
       }
+    }
+  }
+
+  // Phase 6.1 : Fiora L2 (01DE045T1) win condition — si Fiora L2 vient
+  // de tuer son 4e ennemi ET est encore vivante, le contrôleur gagne
+  // immédiatement la partie (« Lorsque j'ai tué 4 ennemis et survécu,
+  // vous remportez la partie. »). Check sur les 2 bancs.
+  for (const seat of [0, 1] as const) {
+    const bench = seat === attackerSeat ? attackerBench : defenderBench;
+    const fioraL2 = bench.find(
+      (u) =>
+        u.cardCode === "01DE045T1" &&
+        u.kills >= 4 &&
+        u.damage < u.health,
+    );
+    if (fioraL2) {
+      events.push(
+        `🏆 Fiora a vaincu 4 ennemis — ${state.players[seat].username} remporte la partie !`,
+      );
+      // Force le nexus de l'adversaire à 0 pour déclencher la fin de partie
+      // dans le flow normal (sera détecté plus bas par le check nexus).
+      const oppSeatIdx = otherSeat(seat);
+      const opp = state.players[oppSeatIdx];
+      const newPlayersFiora: [InternalPlayer, InternalPlayer] = [
+        state.players[0],
+        state.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      newPlayersFiora[oppSeatIdx] = { ...opp, nexusHealth: 0 };
+      state = { ...state, players: newPlayersFiora };
+      break;
     }
   }
 

@@ -2506,20 +2506,32 @@ export const RUNETERRA_PLAY_EFFECTS: Record<string, SpellEffect> = {
 // summon-token-copy-self-stats).
 
 export const RUNETERRA_ATTACK_EFFECTS: Record<string, SpellEffect> = {
-  // 01FR024 Anivia : « Attaque : 1 dmg à tous les ennemis + nexus ennemi. »
+  // 01FR024 Anivia L1 : « Attaque : 1 dmg à tous les ennemis + nexus. »
   "01FR024": { type: "damage-all-enemies-and-nexus", amount: 1 },
-  // 01FR038 Ashe : « Attaque : gelez l'ennemi le plus fort. »
+  // 01FR024T3 Anivia L2 : 2 dmg au lieu de 1 (Phase 6.0).
+  "01FR024T3": { type: "damage-all-enemies-and-nexus", amount: 2 },
+  // 01FR038 Ashe L1 : « Attaque : gelez l'ennemi le plus fort. »
   "01FR038": { type: "frostbite-strongest-enemy" },
-  // 01IO009 Zed : « Attaque : invoquez 1 Ombre vivante avec mes stats. »
-  // Simplification : la token est summon sur le banc (pas « in attack »).
+  // 01FR038T2 Ashe L2 : même effet (le L2 boost vient des stats, pas de
+  // l'effet — Riot a augmenté power/health uniquement).
+  "01FR038T2": { type: "frostbite-strongest-enemy" },
+  // 01IO009 Zed L1 : « Attaque : invoquez 1 Ombre vivante avec mes stats. »
   "01IO009": {
     type: "summon-token-copy-self-stats",
     tokenCardCode: "01IO009T1",
   },
-  // 01SI042 Hecarim : « Attaque : invoquez 2 Cavaliers spectraux. »
+  // 01IO009T2 Zed L2 : copie aussi les positive keywords (Phase 6.0).
+  "01IO009T2": {
+    type: "summon-token-copy-self-stats",
+    tokenCardCode: "01IO009T1",
+  },
+  // 01SI042 Hecarim L1 : « Attaque : invoquez 2 Cavaliers spectraux. »
   "01SI042": { type: "summon-tokens", cardCode: "01SI024", count: 2 },
-  // 01SI053 Elise : « Attaque : invoquez 1 Jeune araignée. »
+  // 01SI053 Elise L1 : « Attaque : invoquez 1 Jeune araignée. »
   "01SI053": { type: "summon-tokens", cardCode: "01SI002", count: 1 },
+  // 01SI053T2 Elise L2 : invoquez 1 Jeune araignée à l'attaque aussi
+  // (le Round Start summon est ailleurs).
+  "01SI053T2": { type: "summon-tokens", cardCode: "01SI002", count: 1 },
 };
 
 // ─── Support effects (Phase 3.78) ────────────────────────────────────────
