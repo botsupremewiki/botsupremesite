@@ -209,6 +209,27 @@ export function OnePieceBattleClient({
       <main
         className={`relative flex flex-1 flex-col gap-3 overflow-y-auto p-2 sm:gap-4 sm:p-4 ${game.gradient}`}
       >
+        {/* Background thématique pirate : grain + vague Hokusai en
+            filigrane. Pointer-events none, derrière tout le contenu. */}
+        <div
+          className="pointer-events-none fixed inset-0 z-0 opacity-[0.035]"
+          aria-hidden="true"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse_at_top,_rgba(251,191,36,0.4),_transparent_50%),radial-gradient(ellipse_at_bottom,_rgba(220,38,38,0.4),_transparent_60%)",
+            backgroundSize: "100% 100%",
+          }}
+        />
+        <div
+          className="pointer-events-none fixed inset-0 z-0 mix-blend-overlay"
+          aria-hidden="true"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><path d='M0 100 Q 25 50, 50 100 T 100 100 T 150 100 T 200 100' stroke='%23fbbf24' stroke-width='1' fill='none' opacity='0.15'/><path d='M0 130 Q 25 80, 50 130 T 100 130 T 150 130 T 200 130' stroke='%23dc2626' stroke-width='1' fill='none' opacity='0.10'/></svg>\")",
+            backgroundRepeat: "repeat",
+          }}
+        />
+        <div className="relative z-10 flex flex-1 flex-col gap-3 sm:gap-4">
         {!profile ? (
           <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
             Connecte-toi pour rejoindre la partie.
@@ -664,6 +685,7 @@ export function OnePieceBattleClient({
 
           </>
         )}
+        </div>
       </main>
     </div>
   );
@@ -732,10 +754,10 @@ function PlayerPanel({
                     }
                   }}
                   disabled={!targetMode}
-                  className={`relative w-20 overflow-hidden rounded border-2 transition-transform ${
+                  className={`group relative w-24 overflow-visible rounded-md border-2 transition-transform sm:w-28 md:w-32 ${
                     data.leader.rested
                       ? "border-zinc-500/60 grayscale"
-                      : "border-rose-400/60"
+                      : "border-rose-400/80 shadow-[0_0_24px_rgba(251,113,133,0.3)]"
                   } ${
                     targetMode
                       ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
@@ -747,20 +769,51 @@ function PlayerPanel({
                       data.leader.cardId,
                     );
                     return meta ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={meta.image}
-                        alt={meta.name}
-                        className={`h-28 w-full object-contain ${
-                          data.leader.rested ? "rotate-90" : ""
-                        }`}
-                      />
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={meta.image}
+                          alt={meta.name}
+                          className={`h-36 w-full rounded object-contain sm:h-40 md:h-44 ${
+                            data.leader.rested ? "rotate-90" : ""
+                          }`}
+                        />
+                        {/* Badge "LEADER" doré comme un parchemin */}
+                        <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 rounded-full border-2 border-amber-300/90 bg-gradient-to-br from-amber-400 to-amber-600 px-2 py-0.5 text-[8px] font-extrabold tracking-widest text-amber-950 shadow-md">
+                          ⭐ LEADER
+                        </div>
+                        {/* Hover preview agrandi */}
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
+                          <div className="rounded-lg border-2 border-amber-400/60 bg-zinc-950 p-2 text-left shadow-2xl shadow-black/80">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={meta.image}
+                              alt={meta.name}
+                              className="w-full rounded"
+                            />
+                            <div className="mt-1 text-[10px] font-semibold text-amber-200">
+                              {meta.name}
+                            </div>
+                            {meta.effect && (
+                              <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
+                                {meta.effect}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
                     ) : null;
                   })()}
                   {data.leader.attachedDon > 0 && (
-                    <span className="absolute right-0 top-0 rounded-bl bg-amber-400 px-1 text-[9px] font-bold text-amber-950">
+                    <motion.span
+                      key={data.leader.attachedDon}
+                      initial={{ scale: 1.5 }}
+                      animate={{ scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                      className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-200 bg-gradient-to-br from-amber-300 to-amber-600 text-[10px] font-extrabold text-amber-950 shadow-lg"
+                    >
                       +{data.leader.attachedDon}
-                    </span>
+                    </motion.span>
                   )}
                 </button>
                 {isSelf && canAttack && data.leader && !data.leader.rested && (
@@ -773,44 +826,117 @@ function PlayerPanel({
                 )}
               </div>
             )}
-            <div className="flex flex-1 flex-col gap-1 text-[11px] text-zinc-300">
-              <Stat label="Vies" value={`❤️ ${data.life}`} />
-              <Stat
-                label="DON"
-                value={`${data.donActive} prêts · ${data.donRested} épuisés · ${data.donDeckSize} en deck`}
-              />
-              <Stat
-                label="Deck / Main / Défausse"
-                value={`${data.deckSize} / ${data.handCount} / ${data.discardSize}`}
-              />
-              <Stat
-                label="Persos en jeu"
-                value={`${data.characters.length} / 5`}
-              />
+            <div className="flex flex-1 flex-col gap-2 text-[11px] text-zinc-300">
+              {/* Vies : pile de cartes face-cachée */}
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] uppercase tracking-widest text-zinc-500">
+                  Vie
+                </span>
+                <div className="flex h-7 items-center">
+                  {Array.from({ length: data.life }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="-ml-2 h-7 w-5 rounded-sm border border-rose-500/60 bg-gradient-to-br from-rose-900 via-rose-700 to-rose-900 shadow-[inset_0_0_8px_rgba(0,0,0,0.5)] first:ml-0"
+                      style={{ transform: `rotate(${(i - 1) * 1.5}deg)` }}
+                      title={`Vie ${i + 1}`}
+                    />
+                  ))}
+                  {data.life === 0 && (
+                    <span className="text-rose-400 text-base">💀</span>
+                  )}
+                </div>
+                <span className="text-rose-300 font-bold">{data.life}</span>
+                {data.faceUpLifeCardIds.length > 0 && (
+                  <span className="text-[9px] text-amber-300" title="Vies face-up">
+                    👁 {data.faceUpLifeCardIds.length}
+                  </span>
+                )}
+              </div>
+
+              {/* DON : jetons dorés */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] uppercase tracking-widest text-zinc-500">
+                  DON
+                </span>
+                <div className="flex flex-wrap items-center gap-0.5">
+                  {Array.from({ length: data.donActive }).map((_, i) => (
+                    <span
+                      key={`act-${i}`}
+                      className="inline-block h-3 w-3 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 ring-1 ring-amber-200 shadow-sm"
+                      title="DON prête"
+                    />
+                  ))}
+                  {Array.from({ length: data.donRested }).map((_, i) => (
+                    <span
+                      key={`rest-${i}`}
+                      className="inline-block h-3 w-3 rounded-full bg-gradient-to-br from-zinc-500 to-zinc-700 ring-1 ring-zinc-400 shadow-sm opacity-60"
+                      title="DON épuisée"
+                    />
+                  ))}
+                </div>
+                <span className="ml-1 text-[10px] text-zinc-400">
+                  ({data.donActive}/{data.donActive + data.donRested + data.donDeckSize})
+                </span>
+              </div>
+
+              {/* Deck / Défausse : piles 3D-ish */}
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-center gap-0.5" title={`${data.deckSize} cartes`}>
+                  <div className="relative h-9 w-7">
+                    <div className="absolute left-0.5 top-0.5 h-9 w-7 rounded-sm border border-indigo-500/40 bg-gradient-to-br from-indigo-900 to-indigo-950" />
+                    <div className="absolute left-0 top-0 h-9 w-7 rounded-sm border border-indigo-500/60 bg-gradient-to-br from-indigo-800 via-indigo-900 to-indigo-950 flex items-center justify-center text-[8px] font-bold text-indigo-200">
+                      {data.deckSize}
+                    </div>
+                  </div>
+                  <span className="text-[8px] text-zinc-500">Deck</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5" title={`${data.discardSize} cartes`}>
+                  <div className="relative h-9 w-7">
+                    {data.discardSize > 0 && (
+                      <div className="absolute left-0.5 top-0.5 h-9 w-7 rounded-sm border border-zinc-600/40 bg-zinc-800" />
+                    )}
+                    <div className="absolute left-0 top-0 h-9 w-7 rounded-sm border border-zinc-600/60 bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center text-[8px] font-bold text-zinc-300">
+                      {data.discardSize}
+                    </div>
+                  </div>
+                  <span className="text-[8px] text-zinc-500">Défausse</span>
+                </div>
+                <div className="flex flex-col items-center gap-0.5" title={`${data.handCount} cartes`}>
+                  <div className="h-9 w-7 rounded-sm border border-emerald-600/60 bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[8px] font-bold text-emerald-200">
+                    {data.handCount}
+                  </div>
+                  <span className="text-[8px] text-zinc-500">Main</span>
+                </div>
+                <div className="ml-auto text-[10px] text-zinc-500">
+                  {data.characters.length} / 5 Persos
+                </div>
+              </div>
+
               {isSelf && canAttachDon && data.leader && (
-                <button
-                  onClick={() =>
-                    send({ type: "op-attach-don", targetUid: "leader" })
-                  }
-                  className="self-start rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/20"
-                >
-                  + DON au Leader
-                </button>
-              )}
-              {isSelf && canAttachDon && data.leader &&
-                hasKeywordClient(
-                  ONEPIECE_BASE_SET_BY_ID.get(data.leader.cardId)?.effect,
-                  "Activation\\s*:\\s*Principale",
-                ) && (
+                <div className="flex flex-wrap gap-1">
                   <button
                     onClick={() =>
-                      send({ type: "op-activate-main", uid: "leader" })
+                      send({ type: "op-attach-don", targetUid: "leader" })
                     }
-                    className="self-start rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                    className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/20"
                   >
-                    ✨ Activer Leader
+                    + DON au Leader
                   </button>
-                )}
+                  {hasKeywordClient(
+                    ONEPIECE_BASE_SET_BY_ID.get(data.leader.cardId)?.effect,
+                    "Activation\\s*:\\s*Principale",
+                  ) && (
+                    <button
+                      onClick={() =>
+                        send({ type: "op-activate-main", uid: "leader" })
+                      }
+                      className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                    >
+                      ✨ Activer Leader
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -941,6 +1067,61 @@ function PlayerPanel({
               </AnimatePresence>
             </div>
           )}
+
+          {/* Lieu actif (Stage) */}
+          {data.stage && (() => {
+            const stageMeta = ONEPIECE_BASE_SET_BY_ID.get(data.stage.cardId);
+            return (
+              <div className="mt-1 flex items-center gap-2 border-t border-purple-500/20 pt-2">
+                <span className="text-[9px] uppercase tracking-widest text-purple-400">
+                  🏛️ Lieu
+                </span>
+                <div className="group relative">
+                  {stageMeta && (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={stageMeta.image}
+                        alt={stageMeta.name}
+                        className={`h-16 w-12 rounded border-2 border-purple-500/60 object-contain shadow-[0_0_12px_rgba(168,85,247,0.3)] ${
+                          data.stage!.rested ? "grayscale opacity-60" : ""
+                        }`}
+                      />
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover:block">
+                        <div className="rounded-lg border-2 border-purple-400/60 bg-zinc-950 p-2 text-left shadow-2xl shadow-black/80">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={stageMeta.image}
+                            alt={stageMeta.name}
+                            className="w-full rounded"
+                          />
+                          <div className="mt-1 text-[10px] font-semibold text-purple-200">
+                            {stageMeta.name}
+                          </div>
+                          {stageMeta.effect && (
+                            <div className="mt-1 max-h-32 overflow-y-auto text-[9px] leading-tight text-zinc-300">
+                              {stageMeta.effect}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <span className="text-[10px] text-zinc-300">
+                  {stageMeta?.name ?? data.stage.cardId}
+                </span>
+                {isSelf && canAttachDon && hasKeywordClient(stageMeta?.effect, "Activation\\s*:\\s*Principale") && (
+                  <button
+                    onClick={() => send({ type: "op-activate-main", uid: data.stage!.uid })}
+                    className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                  >
+                    ✨ Activer Lieu
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
