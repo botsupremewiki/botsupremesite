@@ -68,6 +68,10 @@ export function LorBattleClient({
   const [zoomedCard, setZoomedCard] = useState<RuneterraBattleUnit | string | null>(
     null,
   );
+  // Phase 4.3 : preview au survol — un cardCode hovered affiche un grand
+  // panel à droite de l'écran avec le full art + texte. Ne nécessite pas
+  // de clic, contrairement au zoom modal (qui prend tout l'écran).
+  const [hoveredCardCode, setHoveredCardCode] = useState<string | null>(null);
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -342,6 +346,7 @@ export function LorBattleClient({
             onCancelSpell={cancelSpell}
             onToggleSpellChoice={toggleSpellChoice}
             onZoom={(c) => setZoomedCard(c)}
+            onHoverCode={setHoveredCardCode}
           />
         )}
 
@@ -393,7 +398,59 @@ export function LorBattleClient({
           card={zoomedCard}
           onClose={() => setZoomedCard(null)}
         />
+
+        {/* Phase 4.3 : preview au survol — affiche une grande version
+            de la carte hovered en bas-droite. Pointer-events none pour
+            ne pas bloquer le clic. Hidden quand pendingSpell (focus
+            sur targeting). */}
+        {hoveredCardCode && pendingSpell === null && (
+          <HoverPreview cardCode={hoveredCardCode} />
+        )}
+
       </main>
+    </div>
+  );
+}
+
+// Phase 4.3 : preview large de la carte hovered (bas-droite, fixed, pas
+// d'interaction). Affiche full-art si dispo + texte description.
+function HoverPreview({ cardCode }: { cardCode: string }) {
+  const card = RUNETERRA_BASE_SET_BY_CODE.get(cardCode);
+  if (!card) return null;
+  return (
+    <div
+      className="pointer-events-none fixed bottom-4 right-4 z-30 w-64 overflow-hidden rounded-xl border-2 border-white/20 bg-zinc-950/95 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-right-4"
+      aria-hidden
+    >
+      <div className="aspect-[2/3] w-full">
+        {card.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={card.image}
+            alt={card.name}
+            className="h-full w-full object-contain"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-xs text-zinc-500">
+            {card.name}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-white/10 p-2">
+        <div className="text-sm font-semibold text-zinc-100">{card.name}</div>
+        <div className="text-[10px] text-zinc-400">
+          💧 {card.cost}
+          {card.attack !== undefined && ` · ⚔️ ${card.attack}/${card.health}`}
+          {card.spellSpeed && ` · ${card.spellSpeed}`}
+          {card.supertype === "Champion" && " · ★ Champion"}
+        </div>
+        {card.descriptionRaw && (
+          <div className="mt-1 max-h-32 overflow-y-auto text-[11px] leading-tight text-zinc-300">
+            {card.descriptionRaw}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -484,6 +541,7 @@ function RoundView({
   onCancelSpell,
   onToggleSpellChoice,
   onZoom,
+  onHoverCode,
 }: {
   state: RuneterraBattleState;
   onPlayHand: (handIndex: number) => void;
@@ -508,6 +566,8 @@ function RoundView({
   onCancelSpell: () => void;
   onToggleSpellChoice: () => void;
   onZoom: (c: RuneterraBattleUnit | string) => void;
+  // Phase 4.3 : hover preview à droite de l'écran. Propagé aux Bench/Hand.
+  onHoverCode?: (code: string | null) => void;
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
   const [combatMode, setCombatMode] = useState<"none" | "attacker-pick">(
@@ -644,6 +704,7 @@ function RoundView({
       <BenchRow
         units={state.opponent.bench}
         onUnitClick={handleOpponentBenchClick}
+        onHoverCode={onHoverCode}
         highlighted={
           pendingSpell &&
           (pendingSpell.side === "enemy" ||
@@ -836,6 +897,7 @@ function RoundView({
           target selon spell targeting). */}
       <BenchRow
         units={state.self.bench}
+        onHoverCode={onHoverCode}
         highlighted={
           combatMode === "attacker-pick"
             ? pickedAttackers
@@ -874,6 +936,7 @@ function RoundView({
         }
         onPlay={onPlayHand}
         onZoom={(c) => onZoom(c)}
+        onHoverCode={onHoverCode}
       />
 
       {/* Log expandable + help button */}
@@ -978,6 +1041,7 @@ function PlayerStrip({
 function BenchRow({
   units,
   onUnitClick,
+  onHoverCode,
   highlighted,
   firstSelectedUid,
   secondSelectedUid,
@@ -985,6 +1049,8 @@ function BenchRow({
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
+  // Phase 4.3 : preview survol — propagé depuis LorBattleClient.
+  onHoverCode?: (code: string | null) => void;
   highlighted?: Set<string>;
   // Phase 3.39 : pour les sorts 2-cibles, marque la 1re cible déjà
   // sélectionnée. Phase 3.70 : 2e cible pour sorts 3-cibles.
@@ -1023,6 +1089,7 @@ function BenchRow({
             <UnitCard
               unit={u}
               onClick={() => onUnitClick(u)}
+              onHoverCode={onHoverCode}
               highlighted={isPicked}
               dimmed={attackerPickMode && !eligibleAttacker}
             />
@@ -1220,11 +1287,15 @@ function AttackLanesView({
 function UnitCard({
   unit,
   onClick,
+  onHoverCode,
   highlighted,
   dimmed,
 }: {
   unit: RuneterraBattleUnit;
   onClick: () => void;
+  // Phase 4.3 : appelé avec cardCode au survol (mouseenter), null à la
+  // sortie. Permet d'afficher une preview large à droite de l'écran.
+  onHoverCode?: (code: string | null) => void;
   highlighted?: boolean;
   dimmed?: boolean;
 }) {
@@ -1234,14 +1305,16 @@ function UnitCard({
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => onHoverCode?.(unit.cardCode)}
+      onMouseLeave={() => onHoverCode?.(null)}
       disabled={dimmed}
-      className={`relative flex w-24 flex-col items-stretch overflow-hidden rounded border bg-black/40 ${
+      className={`relative flex w-24 flex-col items-stretch overflow-hidden rounded border bg-black/40 transition-transform ${
         highlighted
           ? "border-rose-400 ring-2 ring-rose-400/60 shadow-[0_0_20px_rgba(244,114,128,0.5)] -translate-y-1"
           : card
             ? LOR_RARITY_COLOR[card.rarity]
             : "border-white/10"
-      } ${dimmed ? "opacity-40 cursor-not-allowed" : "hover:scale-[1.03]"}`}
+      } ${dimmed ? "opacity-40 cursor-not-allowed" : "hover:scale-[1.05] hover:-translate-y-1"}`}
       title={card?.name ?? unit.cardCode}
     >
       <div className="aspect-[2/3]">
@@ -1265,9 +1338,13 @@ function UnitCard({
         </span>
       </div>
       {isChampion && unit.level >= 2 && (
-        <div className="absolute right-0.5 top-0.5 rounded bg-amber-400 px-1 text-[8px] font-bold text-amber-950">
-          ★ 2
-        </div>
+        <>
+          {/* Phase 4.3 : aura dorée pulsante autour des champions level 2. */}
+          <div className="pointer-events-none absolute inset-0 animate-pulse rounded ring-2 ring-amber-300/60 shadow-[0_0_18px_rgba(252,211,77,0.55)]" />
+          <div className="absolute right-0.5 top-0.5 rounded bg-amber-400 px-1 text-[8px] font-bold text-amber-950 shadow">
+            ★ 2
+          </div>
+        </>
       )}
       {unit.playedThisRound && (
         <div className="absolute left-0.5 top-0.5 rounded bg-zinc-700/70 px-1 text-[8px] text-zinc-300">
@@ -1283,11 +1360,14 @@ function HandRow({
   myTurn,
   onPlay,
   onZoom,
+  onHoverCode,
 }: {
   self: RuneterraSelfState;
   myTurn: boolean;
   onPlay: (handIndex: number) => void;
   onZoom: (cardCode: string) => void;
+  // Phase 4.3 : preview survol
+  onHoverCode?: (code: string | null) => void;
 }) {
   return (
     <div className="flex shrink-0 gap-2 overflow-x-auto rounded-md border border-white/10 bg-black/30 p-2">
@@ -1323,10 +1403,12 @@ function HandRow({
                 e.preventDefault();
                 onZoom(cardCode);
               }}
+              onMouseEnter={() => onHoverCode?.(cardCode)}
+              onMouseLeave={() => onHoverCode?.(null)}
               disabled={!myTurn}
               className={`relative w-28 shrink-0 overflow-hidden rounded border-2 transition-transform ${
                 playable
-                  ? "border-emerald-400/60 cursor-pointer hover:scale-[1.05] hover:-translate-y-2"
+                  ? "border-emerald-400/60 cursor-pointer hover:scale-[1.08] hover:-translate-y-3"
                   : "border-white/10 opacity-70 cursor-not-allowed"
               }`}
               title={`${card?.name ?? cardCode}${hasBuff ? " (buffé)" : ""} · click pour jouer · clic-droit pour zoomer`}
