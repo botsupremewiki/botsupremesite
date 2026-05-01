@@ -227,14 +227,16 @@ const OP_RARE_SLOT_WEIGHTS: Record<OnePieceRarity, number> = {
 };
 
 // ─── Weights Legends of Runeterra ──────────────────────────────────────────
-// Distribution par slot (5 cartes/pack — packSize=5). Raretés Riot :
-//   Common, Rare, Epic, Champion. None est exclu (tokens non-collectibles).
+// Distribution par slot (15 cartes/pack — packSize=15, plus généreux que
+// Pokemon/OnePiece pour aligner le ratio de complétion sur un set ~20% plus
+// grand). Raretés Riot : Common, Rare, Epic, Champion. None est exclu
+// (tokens non-collectibles). Variantes Holographic/Prismatic ultra-rares.
 //
-//   • LOR_REGULAR_LOW   → slots 1-3 : Common dominant
-//   • LOR_REGULAR_HIGH  → slot 4    : Rare dominant + ~5% Champion
-//   • LOR_RARE_SLOT     → slot 5    : Rare garanti + ~12% Champion
+//   • LOR_REGULAR_LOW   → slots 1-13 : Common dominant
+//   • LOR_REGULAR_HIGH  → slot 14    : Rare dominant + ~8% Champion + 2% Holo
+//   • LOR_RARE_SLOT     → slot 15    : Rare+ garanti + ~18% Champion + 12% ultra-rare
 //
-// Taux global Champion par pack ≈ 17% (5% slot 4 + 12% slot 5, indépendants).
+// Taux global Champion par pack ≈ 26% (8% slot 14 + 18% slot 15, indépendants).
 const LOR_REGULAR_LOW_WEIGHTS: Record<RuneterraRarity, number> = {
   Common: 90,
   Rare: 9,

@@ -969,7 +969,13 @@ export const TCG_GAMES: Record<TcgGameId, TcgGameConfig> = {
     tagline:
       "Legends of Runeterra — Set 1 « Fondations » (318 cartes FR — collection seulement, combat à venir)",
     packPrice: 10_000,
-    packSize: 10,
+    // packSize 15 (vs 10 ailleurs) car le set Runeterra est ~20% plus gros
+    // que Pokemon (318 vs 266) et 90% plus gros que OnePiece (318 vs 166).
+    // Bump à 15 aligne le ratio « 10 packs gratuits couvrent ~37% du set »
+    // avec celui de Pokemon. Slots 1-13 regular-low (Common dominant),
+    // slot 14 regular-high (Rare dominant + 8% Champion),
+    // slot 15 rare-slot (Rare+ garanti + 18% Champion + 12% ultra-rare).
+    packSize: 15,
     active: true,
     accent: "text-sky-300",
     border: "border-sky-400/40",

@@ -163,8 +163,9 @@ export function LorBoostersClient({ profile }: { profile: Profile | null }) {
                 🎴 Boosters Runeterra
               </h1>
               <p className="mt-1 text-sm text-zinc-400">
-                5 cartes par paquet · slots 1-3 majoritairement Commune ·
-                slot 4 Rare+ (5% Champion) · slot 5 garanti Rare+ (12% Champion).
+                15 cartes par paquet · slots 1-13 majoritairement Commune ·
+                slot 14 Rare+ (8% Champion) · slot 15 garanti Rare+ (18%
+                Champion + 12% ultra-rare).
               </p>
             </div>
             <div className="flex items-center gap-4">
@@ -459,11 +460,14 @@ function PackRevealOverlay({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-md"
     >
-      <div className="flex w-full max-w-4xl flex-col items-center gap-4">
+      <div className="flex max-h-full w-full max-w-6xl flex-col items-center gap-4 overflow-hidden">
         <div className="text-[11px] uppercase tracking-widest text-zinc-400">
           Pack ouvert · {cards.length} cartes
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        {/* 15 cartes/pack en LoR : on utilise un grid plus compact qu'avant
+            pour que tout reste visible sans scroll. Card size adaptée à
+            packSize : h-64 w-44 pour 6 cards/row sur écran wide. */}
+        <div className="flex w-full flex-wrap items-center justify-center gap-2 overflow-y-auto px-2">
           {cards.map((card, i) => (
             <RevealCard
               key={`${pack.id}-${i}`}
@@ -518,7 +522,7 @@ function RevealCard({
   return (
     <button
       onClick={clickable ? onClick : undefined}
-      className={`relative h-72 w-48 [perspective:1000px] ${
+      className={`relative h-64 w-44 [perspective:1000px] ${
         clickable ? "cursor-pointer" : "cursor-default"
       }`}
     >

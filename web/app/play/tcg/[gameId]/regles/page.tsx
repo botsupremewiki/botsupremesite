@@ -650,7 +650,8 @@ function LorRulesPage() {
             </li>
             <li>
               <strong>Boosters</strong> : 6 packs régions (1 par région).
-              Chaque pack = 5 cartes de cette région.
+              Chaque pack = 15 cartes de cette région (slots 1-13 majoritairement
+              Communes, slot 14 Rare+, slot 15 Rare+ garanti avec 18% Champion).
             </li>
           </ul>
         </LorSection>
