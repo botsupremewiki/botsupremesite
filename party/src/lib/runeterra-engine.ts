@@ -524,7 +524,12 @@ export function startRound(state: InternalState): InternalState {
     );
   }
 
-  return {
+  // Phase 5.7 : Round Start triggers data-driven.
+  // - Garen L2 (01DE012T1) : Rally (donne le jeton d'attaque ce round).
+  // - Elise L2 (01SI053T2) : invoque 1 Jeune araignée si autre araignée alliée.
+  // - Jinx L2 (01PZ040T1) : pioche 1 carte.
+  // - Œuf d'Anivia (01FR024T4) : retransforme en Anivia si Illumination.
+  let baseState: InternalState = {
     ...restoredState,
     phase: "round",
     players: withSummons,
@@ -534,6 +539,101 @@ export function startRound(state: InternalState): InternalState {
     consecutivePasses: 0,
     log,
   };
+  baseState = applyRoundStartChampionTriggers(baseState);
+  return baseState;
+}
+
+/** Phase 5.7 : Round Start triggers spécifiques aux champions L2. */
+function applyRoundStartChampionTriggers(state: InternalState): InternalState {
+  let newState = state;
+  for (const seat of [0, 1] as const) {
+    const player = newState.players[seat];
+    // Jinx L2 : pioche 1 carte au round start.
+    const jinxL2Count = player.bench.filter(
+      (u) => u.cardCode === "01PZ040T1",
+    ).length;
+    for (let i = 0; i < jinxL2Count; i++) {
+      const drawn = drawCards(newState, seat, 1);
+      newState = drawn.state;
+    }
+    // Garen L2 : Rally (gagne le jeton d'attaque ce round).
+    const garenL2Count = newState.players[seat].bench.filter(
+      (u) => u.cardCode === "01DE012T1",
+    ).length;
+    if (garenL2Count > 0 && !newState.players[seat].attackToken) {
+      const newPlayers: [InternalPlayer, InternalPlayer] = [
+        newState.players[0],
+        newState.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      newPlayers[seat] = { ...newPlayers[seat], attackToken: true };
+      newState = {
+        ...newState,
+        players: newPlayers,
+        log: [
+          ...newState.log,
+          `${player.username} : Garen rallie — gagne le jeton d'attaque.`,
+        ],
+      };
+    }
+    // Elise L2 : invoque 1 Jeune araignée si autre araignée alliée présente.
+    const eliseL2Bench = newState.players[seat].bench.filter(
+      (u) => u.cardCode === "01SI053T2",
+    );
+    for (const elise of eliseL2Bench) {
+      const otherSpiders = newState.players[seat].bench.filter(
+        (u) =>
+          u.uid !== elise.uid &&
+          getCard(u.cardCode)?.subtypes?.includes("ARAIGNÉE"),
+      );
+      if (otherSpiders.length === 0) continue;
+      newState = applySpellEffect(
+        newState,
+        seat,
+        { type: "summon-tokens", cardCode: "01SI002", count: 1 },
+        null,
+      );
+    }
+    // Œuf d'Anivia (01FR024T4) : si Illumination atteinte, retransforme
+    // en Anivia (01FR024T3) niveau 2.
+    if (newState.players[seat].manaMax >= 10) {
+      const eggIdxs: number[] = [];
+      newState.players[seat].bench.forEach((u, idx) => {
+        if (u.cardCode === "01FR024T4") eggIdxs.push(idx);
+      });
+      if (eggIdxs.length > 0) {
+        const aniviaCard = getCard("01FR024T3");
+        if (aniviaCard) {
+          const newBench = [...newState.players[seat].bench];
+          for (const idx of eggIdxs) {
+            const egg = newBench[idx];
+            newBench[idx] = {
+              ...egg,
+              cardCode: "01FR024T3",
+              power: aniviaCard.attack ?? egg.power,
+              health: aniviaCard.health ?? egg.health,
+              damage: 0, // reset damage à la transformation
+              keywords: aniviaCard.keywordRefs ?? egg.keywords,
+              level: 2,
+            };
+          }
+          const newPlayers: [InternalPlayer, InternalPlayer] = [
+            newState.players[0],
+            newState.players[1],
+          ] as [InternalPlayer, InternalPlayer];
+          newPlayers[seat] = { ...newPlayers[seat], bench: newBench };
+          newState = {
+            ...newState,
+            players: newPlayers,
+            log: [
+              ...newState.log,
+              `${player.username} : Anivia renaît de son Œuf au niveau supérieur !`,
+            ],
+          };
+        }
+      }
+    }
+  }
+  return newState;
 }
 
 function refreshPlayerForRound(
