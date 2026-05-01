@@ -91,6 +91,11 @@ export function LorBattleClient({
     self?: { amount: number; ts: number; isHeal: boolean };
     opponent?: { amount: number; ts: number; isHeal: boolean };
   }>({});
+  // Phase 5.6 : Set d'uids qui viennent d'apparaître sur le banc (animation
+  // entrée slide-in). Auto-clear après 600ms.
+  const [recentlySummoned, setRecentlySummoned] = useState<Set<string>>(
+    new Set(),
+  );
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -207,9 +212,15 @@ export function LorBattleClient({
     const currUnits = getAllUnits(state);
     const newLevelUps = new Set<string>();
     const newDamage: Record<string, { amount: number; ts: number }> = {};
+    // Phase 5.6 : nouveaux uids sur le banc (summon animation).
+    const newSummonedUids = new Set<string>();
     for (const u of currUnits) {
       const old = prevUnits.get(u.uid);
-      if (!old) continue;
+      if (!old) {
+        // Nouveau uid → summon animation
+        newSummonedUids.add(u.uid);
+        continue;
+      }
       // Level-up détecté : 1 → 2
       if (old.level < 2 && u.level >= 2) {
         newLevelUps.add(u.uid);
@@ -219,6 +230,20 @@ export function LorBattleClient({
       if (dmgDelta > 0) {
         newDamage[u.uid] = { amount: dmgDelta, ts: Date.now() };
       }
+    }
+    if (newSummonedUids.size > 0) {
+      setRecentlySummoned((prevSet) => {
+        const next = new Set(prevSet);
+        newSummonedUids.forEach((uid) => next.add(uid));
+        return next;
+      });
+      setTimeout(() => {
+        setRecentlySummoned((prevSet) => {
+          const next = new Set(prevSet);
+          newSummonedUids.forEach((uid) => next.delete(uid));
+          return next;
+        });
+      }, 600);
     }
     if (newLevelUps.size > 0) {
       setRecentLevelUps((prevSet) => {
@@ -480,6 +505,7 @@ export function LorBattleClient({
             recentLevelUps={recentLevelUps}
             damagePopups={damagePopups}
             nexusDamagePopups={nexusDamagePopups}
+            recentlySummoned={recentlySummoned}
           />
         )}
 
@@ -803,6 +829,7 @@ function RoundView({
   recentLevelUps,
   damagePopups,
   nexusDamagePopups,
+  recentlySummoned,
 }: {
   state: RuneterraBattleState;
   onPlayHand: (handIndex: number) => void;
@@ -837,6 +864,8 @@ function RoundView({
     self?: { amount: number; ts: number; isHeal: boolean };
     opponent?: { amount: number; ts: number; isHeal: boolean };
   };
+  // Phase 5.6 : summon animation entrée banc (slide-in 600ms).
+  recentlySummoned?: Set<string>;
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
   const [combatMode, setCombatMode] = useState<"none" | "attacker-pick">(
@@ -979,6 +1008,7 @@ function RoundView({
         onHoverCode={onHoverCode}
         recentLevelUps={recentLevelUps}
         damagePopups={damagePopups}
+        recentlySummoned={recentlySummoned}
         highlighted={
           pendingSpell &&
           (pendingSpell.side === "enemy" ||
@@ -1174,6 +1204,7 @@ function RoundView({
         onHoverCode={onHoverCode}
         recentLevelUps={recentLevelUps}
         damagePopups={damagePopups}
+        recentlySummoned={recentlySummoned}
         highlighted={
           combatMode === "attacker-pick"
             ? pickedAttackers
@@ -1375,6 +1406,7 @@ function BenchRow({
   attackerPickMode,
   recentLevelUps,
   damagePopups,
+  recentlySummoned,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
@@ -1389,6 +1421,8 @@ function BenchRow({
   // Phase 4.4 : VFX
   recentLevelUps?: Set<string>;
   damagePopups?: Record<string, { amount: number; ts: number }>;
+  // Phase 5.6 : animation summon entrée (slide-in 600ms).
+  recentlySummoned?: Set<string>;
 }) {
   if (units.length === 0) {
     return (
@@ -1426,6 +1460,7 @@ function BenchRow({
               dimmed={attackerPickMode && !eligibleAttacker}
               flashLevelUp={recentLevelUps?.has(u.uid)}
               damagePopup={damagePopups?.[u.uid]}
+              justSummoned={recentlySummoned?.has(u.uid)}
             />
           </div>
         );
@@ -1641,6 +1676,7 @@ function UnitCard({
   dimmed,
   flashLevelUp,
   damagePopup,
+  justSummoned,
 }: {
   unit: RuneterraBattleUnit;
   onClick: () => void;
@@ -1653,6 +1689,9 @@ function UnitCard({
   flashLevelUp?: boolean;
   // Phase 4.4 : damage popup floating "-N" (1.2s).
   damagePopup?: { amount: number; ts: number };
+  // Phase 5.6 : animation d'entrée slide-in quand l'unité vient d'être
+  // invoquée sur le banc (600ms).
+  justSummoned?: boolean;
 }) {
   const card = RUNETERRA_BASE_SET_BY_CODE.get(unit.cardCode);
   const aliveHealth = unit.health - unit.damage;
@@ -1669,7 +1708,11 @@ function UnitCard({
           : card
             ? LOR_RARITY_COLOR[card.rarity]
             : "border-white/10"
-      } ${dimmed ? "opacity-40 cursor-not-allowed" : "hover:scale-[1.05] hover:-translate-y-1"}`}
+      } ${dimmed ? "opacity-40 cursor-not-allowed" : "hover:scale-[1.05] hover:-translate-y-1"} ${
+        justSummoned
+          ? "animate-in zoom-in-50 fade-in slide-in-from-bottom-4 duration-500"
+          : ""
+      }`}
       title={card?.name ?? unit.cardCode}
     >
       <div className="aspect-[2/3]">
