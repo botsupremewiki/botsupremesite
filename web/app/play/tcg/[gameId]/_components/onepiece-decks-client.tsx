@@ -26,6 +26,7 @@ import {
   ONEPIECE_RARITY_COLOR,
   ONEPIECE_RARITY_TIER,
 } from "./onepiece-card-visuals";
+import { CardPreview } from "./card-hover-preview";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 type View = "list" | "editor";
@@ -489,16 +490,57 @@ function DeckEditor({
   onZoomCard: (c: OnePieceCardData) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [filterKind, setFilterKind] = useState<"all" | "character" | "event" | "stage">("all");
+  const [filterCostMin, setFilterCostMin] = useState<number>(0);
+  const [filterCostMax, setFilterCostMax] = useState<number>(10);
+  const [sortBy, setSortBy] = useState<"cost-asc" | "cost-desc" | "name" | "power">("cost-asc");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return eligibleCards;
-    return eligibleCards.filter((c) => {
-      const hay = (c.name + " " + c.id + " " + c.types.join(" "))
-        .toLowerCase();
-      return hay.includes(q);
+    let result = eligibleCards.filter((c) => {
+      // Filtre kind
+      if (filterKind !== "all" && c.kind !== filterKind) return false;
+      // Filtre coût (Leaders n'ont pas de cost — toujours visibles)
+      if (c.kind !== "leader" && "cost" in c) {
+        if (c.cost < filterCostMin) return false;
+        if (filterCostMax < 10 && c.cost > filterCostMax) return false;
+      }
+      // Recherche texte
+      if (q) {
+        const hay = (c.name + " " + c.id + " " + c.types.join(" "))
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
     });
-  }, [eligibleCards, search]);
+    // Tri
+    result = [...result].sort((a, b) => {
+      const ca = "cost" in a ? a.cost : 99;
+      const cb = "cost" in b ? b.cost : 99;
+      const pa = "power" in a ? (a.power as number) : 0;
+      const pb = "power" in b ? (b.power as number) : 0;
+      if (sortBy === "cost-asc")
+        return ca - cb || a.name.localeCompare(b.name);
+      if (sortBy === "cost-desc")
+        return cb - ca || a.name.localeCompare(b.name);
+      if (sortBy === "power") return pb - pa || a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name);
+    });
+    return result;
+  }, [eligibleCards, search, filterKind, filterCostMin, filterCostMax, sortBy]);
+
+  // Mana curve : compte de cartes par coût (0-10+).
+  const manaCurve = useMemo(() => {
+    const buckets = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; // 0..10+
+    for (const [cardId, count] of draftEntries) {
+      const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
+      if (!meta || !("cost" in meta)) continue;
+      const idx = Math.min(10, meta.cost);
+      buckets[idx] += count;
+    }
+    return buckets;
+  }, [draftEntries]);
+  const maxBucket = Math.max(...manaCurve, 1);
 
   const cardsInDeck = useMemo(() => {
     const arr: { card: OnePieceCardData; count: number }[] = [];
@@ -569,6 +611,35 @@ function DeckEditor({
           {/* Colonne gauche : Leader + cartes du deck */}
           <div className="flex w-[320px] shrink-0 flex-col gap-2 overflow-hidden">
             <LeaderPanel leader={draftLeader} onChange={() => pickLeader("")} />
+
+            {/* Mana curve : histogramme des coûts dans le deck. */}
+            <div className="rounded-lg border border-white/10 bg-black/30 p-2">
+              <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-500">
+                Courbe de coût
+              </div>
+              <div className="flex items-end justify-between gap-0.5 h-12">
+                {manaCurve.map((n, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col items-center gap-0.5"
+                    title={`Coût ${i === 10 ? "10+" : i} : ${n} carte(s)`}
+                  >
+                    <div className="text-[8px] text-zinc-500">{n || ""}</div>
+                    <div
+                      className="w-3 rounded-t bg-gradient-to-t from-amber-700 to-amber-400 transition-all"
+                      style={{
+                        height: `${(n / maxBucket) * 32}px`,
+                        opacity: n > 0 ? 1 : 0.2,
+                      }}
+                    />
+                    <div className="text-[8px] font-bold text-zinc-400">
+                      {i === 10 ? "10+" : i}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2">
               <div className="text-[11px] uppercase tracking-widest text-zinc-500">
                 Cartes ({totalCount}/{DECK_SIZE})
@@ -594,13 +665,61 @@ function DeckEditor({
 
           {/* Colonne droite : picker */}
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔍 Rechercher dans tes cartes éligibles…"
-              className="shrink-0 rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-rose-400/50 focus:outline-none"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 Recherche…"
+                className="flex-1 min-w-[160px] rounded-md border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-rose-400/50 focus:outline-none"
+              />
+              <select
+                value={filterKind}
+                onChange={(e) => setFilterKind(e.target.value as typeof filterKind)}
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-rose-400/50 focus:outline-none"
+              >
+                <option value="all">Tous types</option>
+                <option value="character">Personnages</option>
+                <option value="event">Évents</option>
+                <option value="stage">Lieux</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-rose-400/50 focus:outline-none"
+              >
+                <option value="cost-asc">Coût ↑</option>
+                <option value="cost-desc">Coût ↓</option>
+                <option value="power">Power ↓</option>
+                <option value="name">Nom A-Z</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+              <span>Coût :</span>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={filterCostMin}
+                onChange={(e) => setFilterCostMin(Number(e.target.value) || 0)}
+                className="w-12 rounded border border-white/10 bg-black/40 px-1 py-0.5 text-center"
+              />
+              <span>—</span>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={filterCostMax}
+                onChange={(e) => setFilterCostMax(Number(e.target.value) || 10)}
+                className="w-12 rounded border border-white/10 bg-black/40 px-1 py-0.5 text-center"
+              />
+              <span className="text-zinc-500">
+                ({filtered.length} carte{filtered.length > 1 ? "s" : ""})
+              </span>
+              <span className="ml-auto text-zinc-500">
+                💡 click = ajouter · click droit = zoom
+              </span>
+            </div>
             <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2">
               {filtered.length === 0 ? (
                 <div className="py-8 text-center text-sm text-zinc-500">
@@ -745,16 +864,33 @@ function PickerCard({
   onZoom: () => void;
 }) {
   const remaining = owned - inDeck;
+  const canAdd = remaining > 0 && inDeck < MAX_COPIES;
   return (
-    <div
-      className={`relative flex flex-col gap-1 rounded-md border bg-black/40 p-1 transition-opacity ${ONEPIECE_RARITY_COLOR[card.rarity]} ${
-        remaining <= 0 ? "opacity-50" : ""
+    <CardPreview
+      cardId={card.id}
+      imageUrl={card.image}
+      name={card.name}
+      effect={card.effect}
+      trigger={card.trigger}
+      className={`relative flex flex-col gap-1 rounded-md border bg-black/40 p-1 transition-all ${ONEPIECE_RARITY_COLOR[card.rarity]} ${
+        canAdd ? "hover:scale-105 hover:border-emerald-400/60" : "opacity-50"
       }`}
     >
       <button
-        onClick={onZoom}
+        onClick={canAdd ? onAdd : onZoom}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onZoom();
+        }}
+        disabled={!canAdd && remaining <= 0}
         className="aspect-[5/7] overflow-hidden rounded"
-        title={card.name}
+        title={
+          canAdd
+            ? `Click : ajouter au deck · Click droit : zoom`
+            : remaining <= 0
+              ? "Aucune copie disponible"
+              : "4 copies déjà dans le deck"
+        }
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -764,14 +900,15 @@ function PickerCard({
           loading="lazy"
         />
       </button>
-      <button
-        onClick={onAdd}
-        disabled={remaining <= 0}
-        className="rounded bg-emerald-500/80 px-1 py-0.5 text-[10px] font-bold text-emerald-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-30"
-      >
-        + Ajouter ({inDeck}/{Math.min(owned, MAX_COPIES)})
-      </button>
-    </div>
+      <div className="flex items-center justify-between rounded bg-black/60 px-1 py-0.5 text-[10px]">
+        <span className="font-bold text-emerald-200">
+          {inDeck} / {Math.min(owned, MAX_COPIES)}
+        </span>
+        <span className="text-zinc-400">
+          {"cost" in card ? `🟡${card.cost}` : ""}
+        </span>
+      </div>
+    </CardPreview>
   );
 }
 
