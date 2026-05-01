@@ -41,7 +41,16 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100">
+        <a href="#main-content" className="skip-link">
+          Aller au contenu
+        </a>
         {children}
+        <div
+          id="a11y-live-region"
+          role="status"
+          aria-live="polite"
+          className="sr-only"
+        />
       </body>
     </html>
   );

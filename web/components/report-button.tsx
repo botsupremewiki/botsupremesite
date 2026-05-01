@@ -74,10 +74,11 @@ export function ReportButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-rose-400/30 bg-rose-400/5 px-2.5 py-1 text-[11px] text-rose-200 transition-colors hover:bg-rose-400/10"
+        aria-label={`Signaler ${targetUsername}`}
+        className="rounded-md border border-rose-400/30 bg-rose-400/5 px-2.5 py-1 text-[11px] text-rose-200 transition-colors hover:bg-rose-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
         title="Signaler un comportement"
       >
-        🚩 Signaler
+        <span aria-hidden="true">🚩</span> Signaler
       </button>
     );
   }
@@ -86,12 +87,15 @@ export function ReportButton({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={() => !busy && setOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="report-dialog-title"
     >
       <div
         className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-bold text-zinc-100">
+        <h3 id="report-dialog-title" className="text-lg font-bold text-zinc-100">
           Signaler {targetUsername}
         </h3>
         {done ? (
