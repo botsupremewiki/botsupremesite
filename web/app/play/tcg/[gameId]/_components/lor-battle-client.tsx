@@ -878,6 +878,8 @@ function RoundView({
       <PlayerStrip
         player={state.opponent}
         isOpponent
+        isActive={state.activeSeat !== state.selfSeat}
+        hasAttackToken={state.opponent.attackToken}
         nexusTargetable={
           pendingSpell?.side === "any-or-nexus" ||
           (pendingSpell?.side === "ally-and-any-or-nexus" &&
@@ -1107,6 +1109,8 @@ function RoundView({
       <PlayerStrip
         player={state.self}
         isOpponent={false}
+        isActive={state.activeSeat === state.selfSeat}
+        hasAttackToken={state.self.attackToken}
         nexusTargetable={
           pendingSpell?.side === "any-or-nexus" ||
           (pendingSpell?.side === "ally-and-any-or-nexus" &&
@@ -1182,6 +1186,8 @@ function PlayerStrip({
   onZoom,
   nexusTargetable,
   onNexusClick,
+  isActive,
+  hasAttackToken,
 }: {
   player: RuneterraPlayerPublicState | RuneterraSelfState;
   isOpponent: boolean;
@@ -1189,19 +1195,49 @@ function PlayerStrip({
   // Phase 3.41 : nexus comme cible cliquable pour sorts any-or-nexus.
   nexusTargetable?: boolean;
   onNexusClick?: () => void;
+  // Phase 4.9 : ce joueur a la priorité ce tour ? Active glow distinct.
+  isActive?: boolean;
+  // Phase 4.9 : ce joueur a le jeton d'attaque ce round ?
+  hasAttackToken?: boolean;
 }) {
   void onZoom;
   const nexusClass = nexusTargetable
     ? "cursor-pointer rounded-md bg-violet-500/20 px-2 py-0.5 text-violet-200 ring-1 ring-violet-300 hover:bg-violet-500/40"
     : "text-emerald-300";
+  // Phase 4.9 : border + glow différents selon le tour actif.
+  const activeClass = isActive
+    ? isOpponent
+      ? "border-rose-400/60 bg-rose-950/40 shadow-[0_0_24px_rgba(244,63,94,0.35)]"
+      : "border-sky-400/60 bg-sky-950/40 shadow-[0_0_24px_rgba(56,189,248,0.4)] ring-1 ring-sky-400/30"
+    : "border-white/10 bg-black/40";
   return (
-    <div className="flex shrink-0 items-center justify-between rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm">
+    <div
+      className={`flex shrink-0 items-center justify-between rounded-lg border px-3 py-1.5 text-sm transition-all ${activeClass}`}
+    >
       <div className="flex items-center gap-3">
+        {/* Phase 4.9 : indicateur de tour visible à gauche */}
+        {isActive && (
+          <span
+            className="text-base animate-pulse"
+            title={isOpponent ? "Tour adverse" : "Ton tour"}
+          >
+            ▶
+          </span>
+        )}
         <span
           className={`font-semibold ${isOpponent ? "text-rose-300" : "text-sky-300"}`}
         >
           {player.username}
         </span>
+        {/* Phase 4.9 : badge jeton d'attaque (⚔️ si en main ce round) */}
+        {hasAttackToken && (
+          <span
+            className="rounded bg-orange-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-orange-200 ring-1 ring-orange-400/40"
+            title="Jeton d'attaque ce round"
+          >
+            ⚔️ Attaque
+          </span>
+        )}
         <span className="text-[11px] text-zinc-500">
           🎴 {player.handCount} · 📦 {player.deckSize}
         </span>
