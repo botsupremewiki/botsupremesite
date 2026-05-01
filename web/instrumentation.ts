@@ -1,42 +1,27 @@
 // Next.js instrumentation hook — appelé une fois au démarrage du
-// serveur. Sert à initialiser le monitoring (Sentry, OpenTelemetry…).
+// serveur. Sert à initialiser le monitoring (Sentry).
 //
-// On charge Sentry dynamiquement si la variable SENTRY_DSN est définie
-// ET si le package est installé. Sinon, no-op. Cela permet de déployer
-// sans bloc dépendance.
-//
-// Pour activer Sentry :
-//   1. npm i @sentry/nextjs (dans web/)
-//   2. ajoute SENTRY_DSN=https://xxx@sentry.io/yyy dans .env
-//   3. redéploie
+// Pour activer Sentry : ajouter SENTRY_DSN=https://xxx@sentry.io/yyy
+// dans les variables d'env Vercel. Sans cette var, instrumentation
+// ne fait rien (pas de coût en prod si tu ne veux pas).
+
+import * as Sentry from "@sentry/nextjs";
 
 export async function register() {
   if (!process.env.SENTRY_DSN) return;
-  try {
-    // @ts-expect-error — package optionnel, peut ne pas être installé.
-    const Sentry = await import("@sentry/nextjs");
-    Sentry.init({
-      dsn: process.env.SENTRY_DSN,
-      tracesSampleRate: 0.1,
-      environment: process.env.VERCEL_ENV ?? "development",
-    });
-  } catch {
-    // Sentry pas installé : on log juste, pas d'erreur.
-    console.warn(
-      "[instrumentation] SENTRY_DSN défini mais @sentry/nextjs pas installé.",
-    );
-  }
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    tracesSampleRate: 0.1,
+    environment: process.env.VERCEL_ENV ?? "development",
+    // Skip les erreurs ResizeObserver et abort signal qui sont du bruit.
+    ignoreErrors: [
+      "ResizeObserver loop limit exceeded",
+      "ResizeObserver loop completed with undelivered notifications",
+      "AbortError",
+    ],
+  });
 }
 
-export const onRequestError =
-  process.env.SENTRY_DSN
-    ? async (...args: unknown[]) => {
-        try {
-          // @ts-expect-error — package optionnel.
-          const Sentry = await import("@sentry/nextjs");
-          Sentry.captureRequestError?.(...args);
-        } catch {
-          // ignore
-        }
-      }
-    : undefined;
+export const onRequestError = process.env.SENTRY_DSN
+  ? Sentry.captureRequestError
+  : undefined;
