@@ -116,6 +116,10 @@ export type InternalPlayer = {
   // devient vide à chaque round, elle créé Super roquette en main.
   // Reset à startRound.
   jinxFiredEmptyHandThisRound: boolean;
+  // Phase 5.10 : flag Lucian L2 (01DE022T1) — la 1re fois qu'un allié
+  // meurt chaque round, le caster gagne le jeton d'attaque. Reset à
+  // startRound.
+  lucianRalliedThisRound: boolean;
   // Phase 3.54 : buffs persistants attachés aux cartes (par uid). Couvre
   // hand + deck. Appliqués au moment de jouer (playUnit) : powerDelta /
   // healthDelta directement sur la nouvelle unité, costDelta sur la mana
@@ -300,6 +304,7 @@ export function createInitialState(
     stolenUidsThisRound: [],
     hasRecurringTopDeckSummon: false,
     jinxFiredEmptyHandThisRound: false,
+    lucianRalliedThisRound: false,
     championCounters: {
       alliesDied: 0,
       spellsCast: 0,
@@ -672,6 +677,8 @@ function refreshPlayerForRound(
     stolenUidsThisRound: [],
     // Phase 4.0b : reset le flag Jinx L2 chaque round.
     jinxFiredEmptyHandThisRound: false,
+    // Phase 5.10 : reset le flag Lucian L2 rally chaque round.
+    lucianRalliedThisRound: false,
   };
 }
 
@@ -1338,6 +1345,51 @@ export function triggerLastBreath(
           `${owner.username} : Senna pleure Lucian (+1|+1 et Double frappe).`,
         ],
       };
+    }
+  }
+  // Phase 5.10 : Lucian L2 (01DE022T1) — la 1re fois qu'un allié meurt
+  // chaque round, le contrôleur de Lucian L2 gagne le jeton d'attaque
+  // (rally). Triggered une seule fois par round par côté.
+  {
+    const owner = stateWithDeath.players[dyingUnitSeat];
+    const lucianL2OnBench = owner.bench.some(
+      (u) => u.cardCode === "01DE022T1",
+    );
+    if (
+      lucianL2OnBench &&
+      !owner.lucianRalliedThisRound &&
+      !owner.attackToken
+    ) {
+      const psLucian: [InternalPlayer, InternalPlayer] = [
+        stateWithDeath.players[0],
+        stateWithDeath.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      psLucian[dyingUnitSeat] = {
+        ...owner,
+        attackToken: true,
+        lucianRalliedThisRound: true,
+      };
+      stateWithDeath = {
+        ...stateWithDeath,
+        players: psLucian,
+        log: [
+          ...stateWithDeath.log,
+          `${owner.username} : Lucian rallie — gagne le jeton d'attaque !`,
+        ],
+      };
+    } else if (
+      lucianL2OnBench &&
+      !owner.lucianRalliedThisRound &&
+      owner.attackToken
+    ) {
+      // Marque comme used même si déjà attack token (le trigger one-shot
+      // se consomme au premier ally death même sans effet visible).
+      const psLucian: [InternalPlayer, InternalPlayer] = [
+        stateWithDeath.players[0],
+        stateWithDeath.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      psLucian[dyingUnitSeat] = { ...owner, lucianRalliedThisRound: true };
+      stateWithDeath = { ...stateWithDeath, players: psLucian };
     }
   }
   if (!dyingUnit.keywords.includes("LastBreath")) return stateWithDeath;
@@ -2444,7 +2496,42 @@ function applySpellEffect(
             player.championCounters.barriersGranted + grantedBarrier,
         },
       };
-      return { ...state, players: newPlayers };
+      // Phase 5.10 : Shen L2 (01IO032T1) — quand un allié reçoit Barrière,
+      // conférez-lui +3|+0 pour ce round. 1 buff par Shen L2 sur le banc.
+      let resultState: InternalState = { ...state, players: newPlayers };
+      if (grantedBarrier > 0) {
+        const shenL2Count = newPlayers[casterSeat].bench.filter(
+          (u) => u.cardCode === "01IO032T1",
+        ).length;
+        if (shenL2Count > 0) {
+          const totalBuff = 3 * shenL2Count;
+          const buffedBench = newPlayers[casterSeat].bench.map((u) => {
+            if (u.uid !== targetUid) return u;
+            return {
+              ...u,
+              power: u.power + totalBuff,
+              endOfRoundPowerBuff: u.endOfRoundPowerBuff + totalBuff,
+            };
+          });
+          const newPlayersWithBuff: [InternalPlayer, InternalPlayer] = [
+            newPlayers[0],
+            newPlayers[1],
+          ] as [InternalPlayer, InternalPlayer];
+          newPlayersWithBuff[casterSeat] = {
+            ...newPlayers[casterSeat],
+            bench: buffedBench,
+          };
+          resultState = {
+            ...resultState,
+            players: newPlayersWithBuff,
+            log: [
+              ...resultState.log,
+              `${player.username} : Shen donne +${totalBuff}|+0 à l'allié protégé.`,
+            ],
+          };
+        }
+      }
+      return resultState;
     }
     case "frostbite-enemy": {
       // Cherche l'ennemi (côté opposé de caster).
