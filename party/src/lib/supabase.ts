@@ -459,6 +459,42 @@ export async function recordBattleLogs(
   }
 }
 
+/** Ajoute un pack ouvert au pool Wonder Pick (table tcg_wonder_pick_pool).
+ *  Trigger SQL nettoie automatiquement (max 100 par game). Best effort. */
+export async function addToWonderPickPool(
+  room: Party.Room,
+  args: {
+    gameId: string;
+    openerId: string;
+    openerUsername: string;
+    packType: string | null;
+    cards: string[];
+  },
+): Promise<void> {
+  const env = getSupabaseEnv(room);
+  if (!env) return;
+  try {
+    await fetch(`${env.url}/rest/v1/tcg_wonder_pick_pool`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        game_id: args.gameId,
+        opener_id: args.openerId,
+        opener_username: args.openerUsername,
+        pack_type: args.packType,
+        cards: args.cards,
+      }),
+    });
+  } catch (err) {
+    console.warn("[wonder-pick] addToPool threw:", err);
+  }
+}
+
 /** Persiste un replay (log textuel) du match Pokémon TCG fini dans
  *  `tcg_replays`. v1 minimaliste : juste le log ligne par ligne, pas de
  *  snapshots complets. */

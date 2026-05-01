@@ -32,6 +32,7 @@ import {
 } from "../../shared/tcg-runeterra-base";
 import {
   addTcgCards,
+  addToWonderPickPool,
   consumeTcgFreePack,
   deleteTcgDeck,
   fetchProfile,
@@ -994,6 +995,17 @@ export default class TcgServer implements Party.Server {
       freePacks: info.freePacks,
       usedFreePack,
     });
+
+    // Wonder Pick : ajout du pack au pool global (best effort, async).
+    if (info.authId) {
+      void addToWonderPickPool(this.room, {
+        gameId: this.gameId,
+        openerId: info.authId,
+        openerUsername: info.name,
+        packType: packTypeId ?? null,
+        cards: cardIds,
+      }).catch(() => {});
+    }
   }
 
   private drawOnePieceCard(
