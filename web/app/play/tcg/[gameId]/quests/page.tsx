@@ -6,6 +6,7 @@ import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../_components/combat-nav";
 import { QuestsClient } from "./quests-client";
+import { getT } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function QuestsPage({
   if (!(gameId in TCG_GAMES)) notFound();
   const game = TCG_GAMES[gameId as TcgGameId];
   const profile = await getProfile();
+  const t = await getT();
 
   let quests: QuestRow[] = [];
   if (profile) {
@@ -70,17 +72,15 @@ export default async function QuestsPage({
           </div>
           <div>
             <h1 className="text-2xl font-bold text-zinc-100">
-              🎯 Quêtes journalières
+              {t("tcg.questsTitle")}
             </h1>
             <p className="mt-1 text-sm text-zinc-400">
-              5 défis à compléter chaque jour. Reset à minuit UTC. Les
-              progrès sont automatiques quand tu joues — il suffit de
-              venir réclamer la récompense.
+              {t("tcg.questsSubtitle")}
             </p>
           </div>
           {!profile ? (
             <div className="mt-6 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
-              Connecte-toi pour voir tes quêtes.
+              {t("tcg.questsLoginRequired")}
             </div>
           ) : quests.length === 0 ? (
             <div className="mt-6 rounded-md border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">

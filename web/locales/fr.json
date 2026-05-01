@@ -50,7 +50,22 @@
     "replays": "Replays",
     "trade": "Échange",
     "battlePass": "Battle Pass",
-    "wonderPick": "Pioche Mystère"
+    "wonderPick": "Pioche Mystère",
+    "loginRequired": "Connecte-toi pour voir tes stats.",
+    "myMatches": "Tes 100 derniers matchs PvP (fun et classés). Les combats vs Bot Suprême ne sont pas enregistrés.",
+    "noMatch": "Aucun match enregistré pour l'instant.",
+    "victory": "Victoire",
+    "defeat": "Défaite",
+    "ranked": "Classé",
+    "fun": "Fun",
+    "vs": "vs",
+    "questsTitle": "🎯 Quêtes journalières",
+    "questsSubtitle": "5 défis à compléter chaque jour. Reset à minuit UTC. Les progrès sont automatiques quand tu joues — il suffit de venir réclamer la récompense.",
+    "questsLoginRequired": "Connecte-toi pour voir tes quêtes.",
+    "replaysTitle": "🎬 Replays",
+    "replaysSubtitle": "Les logs textuels de tes 50 derniers matchs PvP. Cliquez sur un match pour rejouer son déroulé pas-à-pas.",
+    "replaysEmpty": "Pas encore de replay enregistré. Joue quelques matchs PvP !",
+    "againstPlayer": "contre"
   },
   "settings": {
     "title": "⚙️ Paramètres",

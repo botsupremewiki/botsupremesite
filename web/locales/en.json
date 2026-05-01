@@ -50,7 +50,22 @@
     "replays": "Replays",
     "trade": "Trade",
     "battlePass": "Battle Pass",
-    "wonderPick": "Wonder Pick"
+    "wonderPick": "Wonder Pick",
+    "loginRequired": "Sign in to see your stats.",
+    "myMatches": "Your last 100 PvP matches (casual and ranked). Bot battles are not recorded.",
+    "noMatch": "No match recorded yet.",
+    "victory": "Victory",
+    "defeat": "Defeat",
+    "ranked": "Ranked",
+    "fun": "Casual",
+    "vs": "vs",
+    "questsTitle": "🎯 Daily quests",
+    "questsSubtitle": "5 challenges to complete daily. Resets at midnight UTC. Progress tracks automatically as you play — just come back to claim the rewards.",
+    "questsLoginRequired": "Sign in to see your quests.",
+    "replaysTitle": "🎬 Replays",
+    "replaysSubtitle": "Text logs of your last 50 PvP matches. Click a match to replay it step by step.",
+    "replaysEmpty": "No replays yet. Play some PvP matches!",
+    "againstPlayer": "vs"
   },
   "settings": {
     "title": "⚙️ Settings",

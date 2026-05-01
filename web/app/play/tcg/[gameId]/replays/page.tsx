@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../_components/combat-nav";
+import { getT } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ export default async function ReplaysPage({
   if (!(gameId in TCG_GAMES)) notFound();
   const game = TCG_GAMES[gameId as TcgGameId];
   const profile = await getProfile();
+  const t = await getT();
 
   let replays: ReplayRow[] = [];
   if (profile) {
@@ -68,19 +70,20 @@ export default async function ReplaysPage({
             <CombatNav gameId={gameId} current="replays" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-zinc-100">🎬 Replays</h1>
+            <h1 className="text-2xl font-bold text-zinc-100">
+              {t("tcg.replaysTitle")}
+            </h1>
             <p className="mt-1 text-sm text-zinc-400">
-              Les logs textuels de tes 50 derniers matchs PvP. Cliquez sur
-              un match pour rejouer son déroulé pas-à-pas.
+              {t("tcg.replaysSubtitle")}
             </p>
           </div>
           {!profile ? (
             <div className="mt-6 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
-              Connecte-toi pour voir tes replays.
+              {t("tcg.loginRequired")}
             </div>
           ) : replays.length === 0 ? (
             <div className="mt-6 rounded-md border border-dashed border-white/10 p-10 text-center text-sm text-zinc-500">
-              Pas encore de replay enregistré. Joue quelques matchs PvP !
+              {t("tcg.replaysEmpty")}
             </div>
           ) : (
             <div className="mt-6 grid grid-cols-1 gap-2">
