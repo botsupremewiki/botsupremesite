@@ -31,6 +31,14 @@ type CardUsage = {
   total_copies: number;
 };
 
+type CardWinrate = {
+  card_id: string;
+  total: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+};
+
 type TopPlayer = {
   user_id: string;
   username: string | null;
@@ -55,10 +63,11 @@ export default async function MetaPage({
   let archetypes: Archetype[] = [];
   let topCards: CardUsage[] = [];
   let topPlayers: TopPlayer[] = [];
+  let cardWinrates: CardWinrate[] = [];
 
   const supabase = await createClient();
   if (supabase) {
-    const [oRes, aRes, cRes, pRes] = await Promise.all([
+    const [oRes, aRes, cRes, pRes, wrRes] = await Promise.all([
       supabase.rpc("tcg_meta_overview", { p_game_id: gameId }),
       supabase.rpc("tcg_meta_top_archetypes", {
         p_game_id: gameId,
@@ -66,11 +75,17 @@ export default async function MetaPage({
       }),
       supabase.rpc("tcg_meta_top_cards", { p_game_id: gameId, p_limit: 12 }),
       supabase.rpc("tcg_meta_top_players", { p_game_id: gameId, p_limit: 10 }),
+      supabase.rpc("tcg_meta_card_winrates", {
+        p_game_id: gameId,
+        p_min_matches: 10,
+        p_limit: 15,
+      }),
     ]);
     overview = (oRes.data as Overview) ?? null;
     archetypes = (aRes.data as Archetype[]) ?? [];
     topCards = (cRes.data as CardUsage[]) ?? [];
     topPlayers = (pRes.data as TopPlayer[]) ?? [];
+    cardWinrates = (wrRes.data as CardWinrate[]) ?? [];
   }
 
   return (
@@ -280,6 +295,64 @@ export default async function MetaPage({
                         </span>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* ─── Top cartes par winrate ──────────────────────── */}
+          {cardWinrates.length > 0 ? (
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-zinc-100">
+                🎯 Top cartes par winrate (min 10 matchs)
+              </h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                Pourcentage de victoires des decks contenant la carte.
+                Recalculé chaque jour à 02:00 UTC.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+                {cardWinrates.map((c) => {
+                  const card =
+                    gameId === "pokemon"
+                      ? POKEMON_BASE_SET_BY_ID.get(c.card_id)
+                      : null;
+                  return (
+                    <Link
+                      key={c.card_id}
+                      href={`/play/tcg/${gameId}/cards/${encodeURIComponent(c.card_id)}`}
+                      className="group rounded-lg border border-white/10 bg-black/30 p-2 transition-colors hover:border-amber-300/40"
+                    >
+                      {card && "image" in card && card.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={card.image}
+                          alt={card.name}
+                          className="h-28 w-full rounded border border-white/10 object-contain group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="flex h-28 w-full items-center justify-center rounded border border-white/10 bg-white/[0.02] text-[10px] text-zinc-500">
+                          {c.card_id}
+                        </div>
+                      )}
+                      <div className="mt-1.5 truncate text-xs font-bold text-zinc-100">
+                        {card?.name ?? c.card_id}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-zinc-500">{c.total} matchs</span>
+                        <span
+                          className={`font-bold tabular-nums ${
+                            c.winrate >= 55
+                              ? "text-emerald-300"
+                              : c.winrate >= 45
+                                ? "text-zinc-200"
+                                : "text-rose-300"
+                          }`}
+                        >
+                          {c.winrate}%
+                        </span>
+                      </div>
+                    </Link>
                   );
                 })}
               </div>

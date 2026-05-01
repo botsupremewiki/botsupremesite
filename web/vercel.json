@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/close-tcg-season",
       "schedule": "5 0 1 * *"
+    },
+    {
+      "path": "/api/cron/refresh-meta-stats",
+      "schedule": "0 2 * * *"
     }
   ]
 }
