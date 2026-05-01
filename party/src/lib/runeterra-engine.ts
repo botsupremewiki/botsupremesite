@@ -147,6 +147,8 @@ export type InternalPlayer = {
     techPowerSummoned: number; // puissance totale d'alliés TECHNOLOGIE invoqués (Heimerdinger : 12)
     // Phase 3.13
     mushroomsPlanted: number; // pour Teemo : 5 par frappe Teemo au nexus
+    // Phase 4.0 : Lucian peut level-up sur 1 Senna (01DE038) alliée morte.
+    sennaAlliedDied: number;
   };
 };
 
@@ -306,6 +308,7 @@ export function createInitialState(
       ephemeralAttackers: 0,
       techPowerSummoned: 0,
       mushroomsPlanted: 0,
+      sennaAlliedDied: 0,
     },
   });
 
@@ -1057,6 +1060,24 @@ export function triggerLastBreath(
     deadAlliesThisGame: [...dyingPlayer.deadAlliesThisGame, deathEntry],
   };
   let stateWithDeath: InternalState = { ...state, players: newPlayers };
+  // Phase 4.0 : si une Senna (01DE038) alliée meurt, bumpe le compteur
+  // sennaAlliedDied pour que Lucian puisse level-up immédiatement (sa
+  // condition est « 4+ alliés OR 1 Senna meurent »).
+  if (dyingUnit.cardCode === "01DE038") {
+    const owner = stateWithDeath.players[dyingUnitSeat];
+    const psSenna: [InternalPlayer, InternalPlayer] = [
+      stateWithDeath.players[0],
+      stateWithDeath.players[1],
+    ] as [InternalPlayer, InternalPlayer];
+    psSenna[dyingUnitSeat] = {
+      ...owner,
+      championCounters: {
+        ...owner.championCounters,
+        sennaAlliedDied: owner.championCounters.sennaAlliedDied + 1,
+      },
+    };
+    stateWithDeath = { ...stateWithDeath, players: psSenna };
+  }
   // Phase 3.77 : Senna trigger — si un Lucian allié meurt, +1|+1 et
   // Double frappe à toutes les Sennas allies non-déjà-triggered.
   if (dyingUnit.cardCode === "01DE022") {
@@ -5852,24 +5873,31 @@ const LEVEL_UP_REGISTRY: Record<
   }
 > = {
   // ── Demacia
-  // Garen — « J'ai frappé deux fois. »
+  // Phase 4.0 : 14 mappings sur 24 pointaient vers le SPELL Champion
+  // (T2) au lieu de la vraie forme niveau 2 Unit. Le check
+  // `lvl2.type !== "Unit"` skippait silencieusement → champions ne
+  // levelaient jamais. Convention LoR Set 1 inconsistente : pour
+  // certains champions T1 = level 2 Unit, pour d'autres T2 ou T3.
+  // Garen — « J'ai frappé deux fois. » (T1 = "Garen" Unit 6|6 + Reg + RoundStart Rally)
   "01DE012": {
-    levelUpCardCode: "01DE012T2",
+    levelUpCardCode: "01DE012T1",
     check: (_s, u) => u.strikes >= 2,
   },
-  // Fiora — « J'ai tué 2 ennemis. »
+  // Fiora — « J'ai tué 2 ennemis. » (T1 = "Fiora" Unit 5|5 + Challenger)
   "01DE045": {
-    levelUpCardCode: "01DE045T2",
+    levelUpCardCode: "01DE045T1",
     check: (_s, u) => u.kills >= 2,
   },
   // Lucian — « J'ai vu au moins 4 alliés ou 1 Senna alliée mourir. »
-  // Simplification 3.8d : on track uniquement les 4 alliés morts (Senna
-  // check requiert vérif de carte spécifique — futur 3.8d.x).
+  // Senna trigger : si une Senna (01DE038) alliée meurt, set un flag qui
+  // permet à Lucian de level-up immédiatement. (T1 = "Lucian" Unit 3|2 + DoubleStrike)
   "01DE022": {
-    levelUpCardCode: "01DE022T2",
-    check: (s, _u, seat) => s.players[seat].championCounters.alliesDied >= 4,
+    levelUpCardCode: "01DE022T1",
+    check: (s, _u, seat) =>
+      s.players[seat].championCounters.alliesDied >= 4 ||
+      s.players[seat].championCounters.sennaAlliedDied >= 1,
   },
-  // Lux — « Vous avez lancé au moins 6 mana en sorts. »
+  // Lux — « Vous avez lancé au moins 6 mana en sorts. » (T2 = "Lux" Unit 4|6 + Barrier)
   "01DE042": {
     levelUpCardCode: "01DE042T2",
     check: (s, _u, seat) =>
@@ -5878,15 +5906,17 @@ const LEVEL_UP_REGISTRY: Record<
 
   // ── Freljord
   // Anivia — « Vous avez atteint l'Illumination. » (manaMax = 10)
+  // (T3 = "Anivia" Unit 4|6 + LastBreath revive Egg, attack +1 dmg → 2)
   "01FR024": {
-    levelUpCardCode: "01FR024T2",
+    levelUpCardCode: "01FR024T3",
     check: (s, _u, seat) => s.players[seat].manaMax >= 10,
   },
 
   // ── Ionia
   // Karma — « Vous avez atteint l'Illumination. »
+  // (T1 = "Karma" Unit 5|4 + RoundEnd random spell + spell double-cast)
   "01IO041": {
-    levelUpCardCode: "01IO041T2",
+    levelUpCardCode: "01IO041T1",
     check: (s, _u, seat) => s.players[seat].manaMax >= 10,
   },
 
@@ -5905,36 +5935,39 @@ const LEVEL_UP_REGISTRY: Record<
 
   // ── Piltover & Zaun
   // Jinx — « Je vois que votre main est vide. »
+  // (T1 = "Jinx" Unit 5|4 + Quick Attack, on cast spell create Get Excited)
   "01PZ040": {
-    levelUpCardCode: "01PZ040T2",
+    levelUpCardCode: "01PZ040T1",
     check: (s, _u, seat) => s.players[seat].hand.length === 0,
   },
 
   // ── Îles obscures
-  // Kalista — « J'ai vu au moins 3 alliés mourir. »
+  // Kalista — « J'ai vu au moins 3 alliés mourir. » (T2 = Unit "Kalista")
   "01SI030": {
     levelUpCardCode: "01SI030T2",
     check: (s, _u, seat) => s.players[seat].championCounters.alliesDied >= 3,
   },
-  // Thresh (Phase 3.9c) — « J'ai vu au moins 6 unités mourir. »
+  // Thresh — « J'ai vu au moins 6 unités mourir. » (T1 = "Thresh" Unit)
   // unitsDied compte des deux côtés (toute mort observée).
   "01SI052": {
-    levelUpCardCode: "01SI052T2",
+    levelUpCardCode: "01SI052T1",
     check: (s, _u, seat) => s.players[seat].championCounters.unitsDied >= 6,
   },
 
   // ── Ionia (Phase 3.9c)
   // Shen — « J'ai vu des alliés bénéficier de Barrière 5 fois. »
+  // (T1 = "Shen" Unit 4|6, on barrier-grant +3|+0)
   "01IO032": {
-    levelUpCardCode: "01IO032T2",
+    levelUpCardCode: "01IO032T1",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.barriersGranted >= 5,
   },
 
   // ── Piltover & Zaun (Phase 3.9c)
   // Ezreal — « Vous avez ciblé des ennemis au moins 8 fois. »
+  // (T1 = "Ezreal" Unit, on enemy-target deal 2 to enemy nexus)
   "01PZ036": {
-    levelUpCardCode: "01PZ036T2",
+    levelUpCardCode: "01PZ036T1",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.enemyTargetCount >= 8,
   },
@@ -5951,20 +5984,22 @@ const LEVEL_UP_REGISTRY: Record<
 
   // ── Phase 3.10
   // Braum (Freljord) — « J'ai survécu à au moins 10 pts de dégâts au total. »
+  // (T1 = "Braum" Unit 1|7 + Tough, on survive damage summon Mighty Poro)
   "01FR009": {
-    levelUpCardCode: "01FR009T2",
+    levelUpCardCode: "01FR009T1",
     check: (_s, u) => u.damageTaken >= 10,
   },
   // Vladimir (Noxus) — « Au moins 5 alliés ont survécu à des dégâts. »
+  // (T1 = "Vladimir" Unit 6|6 + Skill drain ally for damage to enemy)
   "01NX006": {
-    levelUpCardCode: "01NX006T2",
+    levelUpCardCode: "01NX006T1",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.alliesSurvivedDamage >= 5,
   },
   // Hécarim (Îles obscures) — « Vous avez attaqué avec au moins 7 alliés
-  // éphémères. »
+  // éphémères. » (T1 = "Hecarim" Unit, attack +3|+0 to ephemeral allies)
   "01SI042": {
-    levelUpCardCode: "01SI042T2",
+    levelUpCardCode: "01SI042T1",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.ephemeralAttackers >= 7,
   },
@@ -5997,10 +6032,10 @@ const LEVEL_UP_REGISTRY: Record<
   // ── Phase 3.11 : Yasuo
   // Yasuo (Ionia) — « Vous avez étourdi ou rappelé au moins 5 unités. »
   // Le compteur enemyStunned est incrémenté par : recall-ally, recall-any,
-  // stun-enemy (cf applySpellEffect). Pour cumuler étourdissements et
-  // rappels dans le même compteur (Riot les regroupe dans la condition).
+  // stun-enemy (cf applySpellEffect). (T1 = "Yasuo" Unit 5|5, stun/recall
+  // trigger gives him a free strike)
   "01IO015": {
-    levelUpCardCode: "01IO015T2",
+    levelUpCardCode: "01IO015T1",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.enemyStunned >= 5,
   },
@@ -6025,8 +6060,9 @@ const LEVEL_UP_REGISTRY: Record<
   // Technologie que je vous ai vu invoquer est d'au moins 12. »
   // techPowerSummoned cumule la puissance imprimée de chaque allié
   // TECHNOLOGIE joué (incrémenté dans playUnit).
+  // (T10 = "Heimerdinger" Unit 3|5 — convention bizarre, T1-T9 = turrets)
   "01PZ056": {
-    levelUpCardCode: "01PZ056T2",
+    levelUpCardCode: "01PZ056T10",
     check: (s, _u, seat) =>
       s.players[seat].championCounters.techPowerSummoned >= 12,
   },
@@ -6046,8 +6082,9 @@ const LEVEL_UP_REGISTRY: Record<
   // au total. » Approximation : check u.strikes >= 2 (Draven génère une
   // Hache à chaque frappe ou ETB par sa description, on assume qu'il l'a
   // toujours équipée — fidélité partielle, pas le vrai item system).
+  // (T3 = "Draven" Unit, T1 = Hache token, T2 = Volée Spell)
   "01NX020": {
-    levelUpCardCode: "01NX020T2",
+    levelUpCardCode: "01NX020T3",
     check: (_s, u) => u.strikes >= 2,
   },
 
