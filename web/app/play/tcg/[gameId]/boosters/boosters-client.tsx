@@ -118,7 +118,10 @@ export function BoostersClient({
     );
   }, []);
 
-  const packs = Object.values(POKEMON_PACK_TYPES);
+  // Seuls les packs `active: true` apparaissent. Les nouveaux sets
+  // (Mew/Dialga/Palkia) sont désactivés tant que la logique de tirage
+  // côté PartyKit ne les supporte pas.
+  const packs = Object.values(POKEMON_PACK_TYPES).filter((p) => p.active);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

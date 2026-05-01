@@ -2975,13 +2975,17 @@ export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
     accent: "text-yellow-300",
     border: "border-yellow-500/50",
   },
+  // Les 3 packs ci-dessous sont désactivés pour l'instant — leur
+  // implémentation côté PartyKit (draw logic, pools de cartes) n'est
+  // pas encore prête. Réactiver `active: true` après vérification du
+  // tirage sur les nouvelles cartes (~2 semaines après prod).
   mew: {
     id: "mew",
     name: "Pack Mew (A1a)",
     description:
       "Booster L'Île Fabuleuse — Mew + Pokémon mythiques d'Hoenn et Sinnoh.",
     glyph: "🌸",
-    active: true,
+    active: false,
     accent: "text-pink-300",
     border: "border-pink-500/50",
   },
@@ -2991,7 +2995,7 @@ export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
     description:
       "Booster Espace-Temps Triomphal — Dialga, Métal, Acier, Combat dominants.",
     glyph: "🕰️",
-    active: true,
+    active: false,
     accent: "text-sky-300",
     border: "border-sky-500/50",
   },
@@ -3001,7 +3005,7 @@ export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
     description:
       "Booster Espace-Temps Triomphal — Palkia, Eau, Dragon, Plante dominants.",
     glyph: "🌌",
-    active: true,
+    active: false,
     accent: "text-purple-300",
     border: "border-purple-500/50",
   },

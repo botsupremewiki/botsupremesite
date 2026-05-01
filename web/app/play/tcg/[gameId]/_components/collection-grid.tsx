@@ -349,7 +349,7 @@ export function CollectionGrid({
             label="EX seulement"
             title="N'afficher que les Pokémon EX"
           />
-          {POKEMON_SETS.length > 1 ? (
+          {POKEMON_SETS.filter((s) => s.active).length > 1 ? (
             <>
               <FilterSeparator />
               {POKEMON_SETS.filter((s) => s.active).map((s) => (

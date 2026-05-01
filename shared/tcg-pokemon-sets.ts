@@ -42,19 +42,23 @@ export const POKEMON_SETS: PokemonSetMeta[] = [
     releasedAt: "2024-10-30",
     active: true,
   },
+  // Les 2 sets ci-dessous sont désactivés pour l'instant. La data est
+  // gardée (cartes importées dans tcg-pokemon-a1a.ts et tcg-pokemon-a2.ts)
+  // pour réactivation rapide ~2 semaines après la mise en production,
+  // une fois la draw logic PartyKit validée pour les nouvelles raretés.
   {
     id: "A1a",
     name: "L'Île Fabuleuse",
     cards: POKEMON_A1A_SET,
     releasedAt: "2024-12-17",
-    active: true,
+    active: false,
   },
   {
     id: "A2",
     name: "Choc Spatio-Temporel",
     cards: POKEMON_A2_SET,
     releasedAt: "2025-01-30",
-    active: true,
+    active: false,
   },
 ];
 
