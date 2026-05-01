@@ -15,6 +15,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Site Ultime",
   description: "Univers 2D multijoueur — casino, RPG, jeux de cartes et plus.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Site Ultime",
+  },
 };
 
 export const viewport: Viewport = {
