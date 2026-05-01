@@ -1319,6 +1319,9 @@ export type RuneterraPlayerPublicState = {
   nexusHealth: number;
   attackToken: boolean;
   hasMulliganed: boolean;
+  // Phase 6.3 : régions du deck du joueur (1 ou 2 max). Sert à afficher
+  // les icônes/couleurs régionales dans le PlayerStrip côté client.
+  deckRegions?: string[];
 };
 
 // État "self" : public + ta main visible (cardCodes).

@@ -1519,6 +1519,35 @@ export function projectStateForSeat(
 }
 
 function projectPublic(p: InternalPlayer): RuneterraPlayerPublicState {
+  // Phase 6.3 : extraire les régions du deck via les cartes (initial deck
+  // composition). On scan toutes les cartes encore en deck + main pour
+  // trouver les régions présentes.
+  const REGION_SET = new Set([
+    "Demacia",
+    "Noxus",
+    "Ionia",
+    "Freljord",
+    "PiltoverZaun",
+    "ShadowIsles",
+  ]);
+  const regions = new Set<string>();
+  for (const c of [...p.deck, ...p.hand]) {
+    const card = getCard(c.cardCode);
+    if (!card) continue;
+    for (const r of card.regions) {
+      if (REGION_SET.has(r)) regions.add(r);
+    }
+  }
+  // Fallback : scan le banc si deck+hand vides en fin de partie.
+  if (regions.size === 0) {
+    for (const u of p.bench) {
+      const card = getCard(u.cardCode);
+      if (!card) continue;
+      for (const r of card.regions) {
+        if (REGION_SET.has(r)) regions.add(r);
+      }
+    }
+  }
   return {
     authId: p.authId,
     username: p.username,
@@ -1531,6 +1560,7 @@ function projectPublic(p: InternalPlayer): RuneterraPlayerPublicState {
     nexusHealth: p.nexusHealth,
     attackToken: p.attackToken,
     hasMulliganed: p.hasMulliganed,
+    deckRegions: Array.from(regions).slice(0, 2), // max 2 régions LoR
   };
 }
 

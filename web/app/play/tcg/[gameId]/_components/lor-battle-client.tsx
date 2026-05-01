@@ -1423,6 +1423,20 @@ function PlayerStrip({
         >
           {player.username}
         </span>
+        {/* Phase 6.3 : icônes des régions du deck du joueur. */}
+        {player.deckRegions && player.deckRegions.length > 0 && (
+          <span className="flex items-center gap-0.5">
+            {player.deckRegions.map((r) => (
+              <span
+                key={r}
+                className="text-base"
+                title={REGION_LABELS[r] ?? r}
+              >
+                {REGION_GLYPHS[r] ?? "❓"}
+              </span>
+            ))}
+          </span>
+        )}
         {/* Phase 4.9 : badge jeton d'attaque (⚔️ si en main ce round) */}
         {hasAttackToken && (
           <span
@@ -1479,6 +1493,24 @@ function PlayerStrip({
     </div>
   );
 }
+
+// Phase 6.3 : glyphes + labels par région LoR pour PlayerStrip.
+const REGION_GLYPHS: Record<string, string> = {
+  Demacia: "⚔️",
+  Noxus: "🔥",
+  Ionia: "🌸",
+  Freljord: "❄️",
+  PiltoverZaun: "⚙️",
+  ShadowIsles: "👻",
+};
+const REGION_LABELS: Record<string, string> = {
+  Demacia: "Demacia",
+  Noxus: "Noxus",
+  Ionia: "Ionia",
+  Freljord: "Freljord",
+  PiltoverZaun: "Piltover & Zaun",
+  ShadowIsles: "Îles obscures",
+};
 
 // Phase 5.13 : visuel mana sous forme de pastilles circulaires.
 // `mana` = cercles bleus pleins (mana dispo) ; `manaMax - mana` =
