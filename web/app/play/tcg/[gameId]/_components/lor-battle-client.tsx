@@ -1887,26 +1887,111 @@ function CardZoomFromBattle({
 
 function EndView({ state }: { state: RuneterraBattleState }) {
   const won = state.winner === state.selfSeat;
+  const isDraw = state.winner === null;
+  // Phase 5.5 : EndView polish — gros titre gradient, résumé stats, log
+  // expandable, bouton retour + revanche.
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 py-12">
-      <h1 className={`text-3xl font-bold ${won ? "text-emerald-300" : "text-rose-300"}`}>
-        {won ? "🏆 Victoire !" : state.winner === null ? "Égalité" : "Défaite"}
-      </h1>
-      <p className="text-sm text-zinc-400">
-        Round {state.round} · Nexus {state.self?.nexusHealth ?? 0} vs{" "}
-        {state.opponent?.nexusHealth ?? 0}
-      </p>
-      <div className="max-h-60 w-full overflow-y-auto rounded-md border border-white/10 bg-black/40 p-3 text-[11px] text-zinc-400">
-        {state.log.map((entry, i) => (
-          <div key={i}>{entry}</div>
-        ))}
+    <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-6 py-10">
+      {/* Background overlay coloré selon résultat */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 ${
+          won
+            ? "bg-gradient-to-b from-emerald-500/10 via-emerald-500/5 to-transparent"
+            : isDraw
+              ? "bg-gradient-to-b from-zinc-500/10 to-transparent"
+              : "bg-gradient-to-b from-rose-500/10 via-rose-500/5 to-transparent"
+        }`}
+      />
+      <div className="animate-in fade-in zoom-in-90 duration-500 text-center">
+        <div className="text-6xl">
+          {won ? "🏆" : isDraw ? "🤝" : "💀"}
+        </div>
+        <h1
+          className={`mt-2 text-5xl font-black tracking-tight drop-shadow-lg ${
+            won
+              ? "bg-gradient-to-r from-emerald-200 to-emerald-400 bg-clip-text text-transparent"
+              : isDraw
+                ? "text-zinc-200"
+                : "bg-gradient-to-r from-rose-200 to-rose-400 bg-clip-text text-transparent"
+          }`}
+        >
+          {won ? "VICTOIRE" : isDraw ? "ÉGALITÉ" : "DÉFAITE"}
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          {won
+            ? "Tu as réduit le Nexus adverse à 0 — bien joué !"
+            : isDraw
+              ? "Les deux Nexus sont tombés ce round."
+              : "Ton Nexus est tombé. Réessaye avec un autre deck !"}
+        </p>
       </div>
-      <Link
-        href="/play/tcg/lol"
-        className="rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-sky-950 hover:bg-sky-400"
-      >
-        Retour au menu
-      </Link>
+
+      {/* Résumé stats du match */}
+      <div className="grid w-full max-w-md grid-cols-3 gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
+        <div className="rounded-md border border-white/10 bg-black/40 p-2 text-center">
+          <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+            Round
+          </div>
+          <div className="text-lg font-bold tabular-nums text-zinc-200">
+            {state.round}
+          </div>
+        </div>
+        <div className="rounded-md border border-white/10 bg-black/40 p-2 text-center">
+          <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+            Ton Nexus
+          </div>
+          <div
+            className={`text-lg font-bold tabular-nums ${(state.self?.nexusHealth ?? 0) > 0 ? "text-emerald-300" : "text-rose-400"}`}
+          >
+            {state.self?.nexusHealth ?? 0}
+          </div>
+        </div>
+        <div className="rounded-md border border-white/10 bg-black/40 p-2 text-center">
+          <div className="text-[9px] uppercase tracking-widest text-zinc-500">
+            Adverse
+          </div>
+          <div
+            className={`text-lg font-bold tabular-nums ${(state.opponent?.nexusHealth ?? 0) > 0 ? "text-emerald-300" : "text-rose-400"}`}
+          >
+            {state.opponent?.nexusHealth ?? 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Log scrollable */}
+      <details className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
+        <summary className="cursor-pointer rounded-md border border-white/10 bg-black/40 px-3 py-2 text-xs text-zinc-400 hover:bg-black/60">
+          📜 Voir le journal du combat ({state.log.length} événements)
+        </summary>
+        <div className="mt-2 max-h-60 w-full overflow-y-auto rounded-md border border-white/10 bg-black/40 p-3 text-[11px] text-zinc-400">
+          {state.log.map((entry, i) => (
+            <div key={i} className="border-b border-white/5 py-0.5 last:border-0">
+              {entry}
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-500">
+        <Link
+          href="/play/tcg/lol"
+          className="rounded-md border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200 hover:bg-white/10"
+        >
+          ← Retour au menu
+        </Link>
+        <Link
+          href="/play/tcg/lol/decks"
+          className="rounded-md bg-violet-500 px-4 py-2 text-sm font-bold text-violet-950 hover:bg-violet-400"
+        >
+          🛠️ Mes decks
+        </Link>
+        <Link
+          href="/play/tcg/lol/battle/bot"
+          className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
+        >
+          🤖 Rejouer vs bot
+        </Link>
+      </div>
     </div>
   );
 }
