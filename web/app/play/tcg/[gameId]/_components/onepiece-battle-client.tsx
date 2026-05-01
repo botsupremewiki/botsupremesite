@@ -8,6 +8,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BattleEffects } from "./onepiece-battle-effects";
 import { useOnePieceSfx } from "./use-onepiece-sfx";
 import type {
   ChatMessage,
@@ -187,6 +188,8 @@ export function OnePieceBattleClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* Effets visuels overlay plein écran */}
+      <BattleEffects state={state} />
       <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-2 py-2 text-sm sm:px-4 sm:py-3">
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
@@ -454,6 +457,11 @@ export function OnePieceBattleClient({
                         });
                         setAttackerSelected(null);
                       }}
+                      pendingAttackTargetUid={
+                        state.pendingAttack?.attackerSeat === state.selfSeat
+                          ? state.pendingAttack.targetUid
+                          : null
+                      }
                     />
                     <PlayerPanel
                       title={`Moi — ${state.self?.username ?? "?"}`}
@@ -468,6 +476,11 @@ export function OnePieceBattleClient({
                       attackerSelected={attackerSelected}
                       onPickAttacker={(uid) => setAttackerSelected(uid)}
                       onPickTarget={null}
+                      pendingAttackTargetUid={
+                        state.pendingAttack?.attackerSeat !== state.selfSeat
+                          ? state.pendingAttack?.targetUid ?? null
+                          : null
+                      }
                     />
                   </div>
                 );
@@ -710,6 +723,7 @@ function PlayerPanel({
   attackerSelected,
   onPickAttacker,
   onPickTarget,
+  pendingAttackTargetUid,
 }: {
   title: string;
   data: import("@shared/types").OnePieceBattlePlayerPublicState | null;
@@ -721,6 +735,7 @@ function PlayerPanel({
   attackerSelected: string | null;
   onPickAttacker: ((uid: string) => void) | null;
   onPickTarget: ((uid: string) => void) | null;
+  pendingAttackTargetUid: string | null;
 }) {
   // Quand un de mes attackers est sélectionné, l'adversaire devient cible
   // cliquable (Leader + Persos rested).
@@ -962,12 +977,31 @@ function PlayerPanel({
                   <motion.div
                     layout
                     initial={{ opacity: 0, scale: 0.6, y: -20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    animate={
+                      // Si ce Persos est la cible d'une attaque pendante,
+                      // on le fait trembler pour le mettre en valeur.
+                      pendingAttackTargetUid === c.uid
+                        ? {
+                            opacity: 1,
+                            scale: 1,
+                            y: 0,
+                            x: [0, -3, 3, -3, 3, 0],
+                          }
+                        : { opacity: 1, scale: 1, y: 0 }
+                    }
                     exit={{ opacity: 0, scale: 0.4, rotate: -8 }}
-                    transition={{ duration: 0.25 }}
+                    transition={
+                      pendingAttackTargetUid === c.uid
+                        ? { x: { duration: 0.5, repeat: Infinity } }
+                        : { duration: 0.25 }
+                    }
                     key={c.uid}
                     className={`flex w-14 flex-col gap-1 sm:w-16 md:w-20 ${
                       c.rested ? "opacity-60" : ""
+                    } ${
+                      pendingAttackTargetUid === c.uid
+                        ? "ring-2 ring-rose-500"
+                        : ""
                     }`}
                     title={meta?.name ?? c.cardId}
                   >
