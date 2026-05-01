@@ -1447,12 +1447,13 @@ function PlayerStrip({
         </span>
       </div>
       <div className="flex items-center gap-3 text-xs tabular-nums">
-        <span className="text-amber-300">
-          💧 {player.mana}/{player.manaMax}
-        </span>
-        {player.spellMana > 0 && (
-          <span className="text-violet-300">✨ {player.spellMana}</span>
-        )}
+        {/* Phase 5.13 : mana orbs visuels — chaque mana = un cercle.
+            Bleu plein = disponible, gris vide = utilisé. Cap à 10 (manaMax max). */}
+        <ManaDisplay
+          mana={player.mana}
+          manaMax={player.manaMax}
+          spellMana={player.spellMana}
+        />
         <button
           type="button"
           disabled={!nexusTargetable}
@@ -1475,6 +1476,52 @@ function PlayerStrip({
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+// Phase 5.13 : visuel mana sous forme de pastilles circulaires.
+// `mana` = cercles bleus pleins (mana dispo) ; `manaMax - mana` =
+// cercles gris (utilisée ce round). `spellMana` = bonus violet à droite.
+function ManaDisplay({
+  mana,
+  manaMax,
+  spellMana,
+}: {
+  mana: number;
+  manaMax: number;
+  spellMana: number;
+}) {
+  // Affichage compact pour ≤6, plus condensé au-delà.
+  const orbs = Array.from({ length: manaMax }).map((_, i) => i < mana);
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="flex items-center gap-0.5" title={`${mana}/${manaMax} mana`}>
+        {orbs.map((filled, i) => (
+          <span
+            key={i}
+            className={`h-2 w-2 rounded-full ring-1 ${
+              filled
+                ? "bg-sky-400 ring-sky-200/60 shadow-[0_0_4px_rgba(56,189,248,0.6)]"
+                : "bg-zinc-700 ring-zinc-600"
+            }`}
+          />
+        ))}
+      </span>
+      {spellMana > 0 && (
+        <span
+          className="flex items-center gap-0.5"
+          title={`${spellMana} spell mana banked`}
+        >
+          <span className="text-[10px] text-violet-300">✨</span>
+          {Array.from({ length: spellMana }).map((_, i) => (
+            <span
+              key={i}
+              className="h-2 w-2 rounded-full bg-violet-400 ring-1 ring-violet-200/60 shadow-[0_0_4px_rgba(167,139,250,0.6)]"
+            />
+          ))}
+        </span>
+      )}
     </div>
   );
 }
