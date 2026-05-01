@@ -82,9 +82,12 @@ export function BotLobbyClient({
   const validDecks = useMemo(
     () =>
       decks.filter(
-        (d) => d.cards.reduce((s, c) => s + c.count, 0) === expectedDeckSize,
+        (d) =>
+          d.cards.reduce((s, c) => s + c.count, 0) === expectedDeckSize &&
+          // OnePiece exige un Leader (Pokémon non).
+          (gameId !== "onepiece" || !!d.leaderId),
       ),
-    [decks, expectedDeckSize],
+    [decks, expectedDeckSize, gameId],
   );
 
   function startBotMatch() {

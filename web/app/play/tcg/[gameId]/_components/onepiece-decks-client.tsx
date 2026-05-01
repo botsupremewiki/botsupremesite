@@ -163,17 +163,37 @@ export function OnePieceDecksClient({
     return out;
   }, [draftLeader, collection, allowedColors]);
 
-  // Leaders possédés (pour la sélection).
+  // Leaders possédés (pour la sélection). DÉDUPLIQUÉ par cardNumber :
+  // si l'utilisateur possède Shanks `OP09-001` et l'alt-art `OP09-001_p1`,
+  // une seule entrée "Shanks" apparaît (avec préférence pour l'alt-art si
+  // possédé, sinon la version normale). Évite les doublons confus.
   const ownedLeaders = useMemo(() => {
-    const out: OnePieceLeaderCard[] = [];
+    const byNumber = new Map<string, OnePieceLeaderCard>();
     for (const card of ONEPIECE_BASE_SET) {
       if (card.kind !== "leader") continue;
       if ((collection.get(card.id) ?? 0) <= 0) continue;
-      out.push(card);
+      const existing = byNumber.get(card.cardNumber);
+      // Préfère l'alt-art (id contient `_p`) si possédé, sinon la base.
+      const isAlt = /_p\d+$/.test(card.id);
+      if (!existing) {
+        byNumber.set(card.cardNumber, card);
+      } else if (isAlt) {
+        byNumber.set(card.cardNumber, card);
+      }
     }
-    out.sort((a, b) => a.id.localeCompare(b.id));
-    return out;
+    return Array.from(byNumber.values()).sort((a, b) =>
+      a.cardNumber.localeCompare(b.cardNumber),
+    );
   }, [collection]);
+
+  // Total de leaders uniques dans le base set (pour afficher progression).
+  const totalUniqueLeaders = useMemo(() => {
+    const set = new Set<string>();
+    for (const card of ONEPIECE_BASE_SET) {
+      if (card.kind === "leader") set.add(card.cardNumber);
+    }
+    return set.size;
+  }, []);
 
   function startNewDeck() {
     setDraftId(null);
@@ -327,6 +347,7 @@ export function OnePieceDecksClient({
             setDraftName={setDraftName}
             draftLeader={draftLeader}
             ownedLeaders={ownedLeaders}
+            totalUniqueLeaders={totalUniqueLeaders}
             pickLeader={pickLeader}
             draftEntries={draftEntries}
             totalCount={totalCount}
@@ -461,6 +482,7 @@ function DeckEditor({
   setDraftName,
   draftLeader,
   ownedLeaders,
+  totalUniqueLeaders,
   pickLeader,
   draftEntries,
   totalCount,
@@ -477,6 +499,7 @@ function DeckEditor({
   setDraftName: (v: string) => void;
   draftLeader: OnePieceLeaderCard | undefined;
   ownedLeaders: OnePieceLeaderCard[];
+  totalUniqueLeaders: number;
   pickLeader: (id: string) => void;
   draftEntries: Map<string, number>;
   totalCount: number;
@@ -605,7 +628,11 @@ function DeckEditor({
       )}
 
       {!draftLeader ? (
-        <LeaderPicker leaders={ownedLeaders} onPick={pickLeader} />
+        <LeaderPicker
+          leaders={ownedLeaders}
+          totalUniqueLeaders={totalUniqueLeaders}
+          onPick={pickLeader}
+        />
       ) : (
         <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           {/* Colonne gauche : Leader + cartes du deck */}
@@ -755,11 +782,41 @@ function DeckEditor({
 
 function LeaderPicker({
   leaders,
+  totalUniqueLeaders,
   onPick,
 }: {
   leaders: OnePieceLeaderCard[];
+  totalUniqueLeaders: number;
   onPick: (id: string) => void;
 }) {
+  // Filtre par couleur — chips multi-select.
+  const [colorFilter, setColorFilter] = useState<Set<OnePieceColor>>(
+    new Set(),
+  );
+  // Couleurs présentes dans la collection du joueur (pour ne pas afficher
+  // une chip "Vert" s'il n'a aucun Leader vert).
+  const availableColors = useMemo(() => {
+    const set = new Set<OnePieceColor>();
+    for (const l of leaders) for (const c of l.color) set.add(c);
+    return set;
+  }, [leaders]);
+
+  const filtered = useMemo(() => {
+    if (colorFilter.size === 0) return leaders;
+    return leaders.filter((l) =>
+      l.color.some((c) => colorFilter.has(c)),
+    );
+  }, [leaders, colorFilter]);
+
+  function toggleColor(c: OnePieceColor) {
+    setColorFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-lg border border-white/10 bg-black/40 p-4">
       <div className="shrink-0">
@@ -770,41 +827,104 @@ function LeaderPicker({
           cartes de l&apos;une OU l&apos;autre couleur sont jouables (au moins
           une partagée).
         </p>
+        <p className="mt-2 text-xs text-zinc-500">
+          Tu possèdes <span className="font-bold text-amber-300">{leaders.length}</span> leader{leaders.length > 1 ? "s" : ""} unique{leaders.length > 1 ? "s" : ""}{" "}
+          / {totalUniqueLeaders} dans le base set (variantes alt-art dédupliquées).
+        </p>
       </div>
+
       {leaders.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
-          Tu n&apos;as encore aucun Leader. Ouvre des boosters — le slot rare
-          peut donner un Leader (≈ 4% par pack).
+        <div className="flex flex-1 items-center justify-center text-center text-sm text-zinc-500">
+          <div className="max-w-md">
+            <p>Tu n&apos;as encore aucun Leader.</p>
+            <p className="mt-2 text-xs">
+              Ouvre tes boosters gratuits ! Le slot rare a ≈ 15% de chance de
+              donner un Leader. Avec tes 10 packs au signup, tu as ≈ 80% de
+              chance d&apos;en obtenir au moins un.
+            </p>
+            <Link
+              href="/play/tcg/onepiece/boosters"
+              className="mt-4 inline-block rounded-md border border-amber-400/40 bg-amber-400/10 px-4 py-1.5 text-sm font-bold text-amber-100 hover:bg-amber-400/20"
+            >
+              🎴 Ouvrir mes boosters
+            </Link>
+          </div>
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {leaders.map((leader) => (
-            <button
-              key={leader.id}
-              onClick={() => onPick(leader.id)}
-              className={`group flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-colors ${ONEPIECE_RARITY_COLOR[leader.rarity]} hover:bg-white/5`}
-            >
-              <div className="aspect-[5/7] overflow-hidden rounded">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={leader.image}
-                  alt={leader.name}
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <div className="text-center">
-                <div className="text-xs font-semibold text-zinc-100">
-                  {leader.name}
+        <>
+          {/* Chips de filtre couleur */}
+          {availableColors.size > 1 && (
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                Filtrer :
+              </span>
+              {(["rouge", "vert", "bleu", "violet", "noir", "jaune"] as const).map(
+                (c) => {
+                  if (!availableColors.has(c)) return null;
+                  const active = colorFilter.has(c);
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => toggleColor(c)}
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                        active
+                          ? "border-amber-400/70 bg-amber-400/20 text-amber-100"
+                          : "border-white/10 bg-black/30 text-zinc-400 hover:border-white/20"
+                      }`}
+                      aria-pressed={active}
+                    >
+                      {ONEPIECE_COLOR_GLYPH[c]} {ONEPIECE_COLOR_LABEL[c]}
+                    </button>
+                  );
+                },
+              )}
+              {colorFilter.size > 0 && (
+                <button
+                  onClick={() => setColorFilter(new Set())}
+                  className="ml-1 text-[10px] text-zinc-500 underline hover:text-zinc-300"
+                >
+                  effacer
+                </button>
+              )}
+            </div>
+          )}
+          {/* Grille — content-start évite l'étirement vertical sur peu d'items.
+              auto-rows-max garantit que les rangées ne s'étirent pas non plus. */}
+          <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-y-auto sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {filtered.map((leader) => (
+              <button
+                key={leader.id}
+                onClick={() => onPick(leader.id)}
+                className={`group flex flex-col gap-1 rounded-lg border bg-black/40 p-2 transition-all ${ONEPIECE_RARITY_COLOR[leader.rarity]} hover:scale-105 hover:border-amber-400/60 hover:bg-white/5`}
+                aria-label={`Choisir le Leader ${leader.name}`}
+              >
+                <div className="aspect-[5/7] overflow-hidden rounded">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={leader.image}
+                    alt={leader.name}
+                    className="h-full w-full object-contain"
+                  />
                 </div>
-                <div className="text-[10px] text-zinc-400">
-                  {leader.color
-                    .map((c) => ONEPIECE_COLOR_LABEL[c])
-                    .join(" / ")}
+                <div className="text-center">
+                  <div className="text-xs font-semibold text-zinc-100">
+                    {leader.name}
+                  </div>
+                  <div className="text-[10px] text-zinc-400">
+                    {leader.color
+                      .map((c) => `${ONEPIECE_COLOR_GLYPH[c]} ${ONEPIECE_COLOR_LABEL[c]}`)
+                      .join(" / ")}
+                  </div>
                 </div>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="col-span-full py-6 text-center text-sm text-zinc-500">
+                Aucun Leader ne matche ce filtre.
               </div>
-            </button>
-          ))}
-        </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
