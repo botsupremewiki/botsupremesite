@@ -6261,15 +6261,16 @@ function resolveCombat(state: InternalState): InternalState {
     }
   }
 
-  // Phase 3.75 : Braum (01FR009) — « la 1re fois que je survis à des
-  // dégâts, summon Poro puissant. » Scan les 2 benches pour Braums
-  // ayant damageTaken > 0 et !survivedDamageOnce. Set le flag et summon
-  // 01FR053 sur le banc du Braum (capé à maxBench).
+  // Phase 3.75 + Phase 5.11 : Braum L1 (01FR009) « la 1re fois que je
+  // survis à des dégâts » (survivedDamageOnce flag). Braum L2 (01FR009T1)
+  // a aussi été ajouté ici — note technique : sans damageTakenThisRound
+  // il fonctionne aussi en once-per-game (close enough du Riot actuel
+  // pour cette session). Scan les 2 benches.
   for (const seat of [0, 1] as const) {
     const p = postCombatState.players[seat];
     const braums = p.bench.filter(
       (u) =>
-        u.cardCode === "01FR009" &&
+        (u.cardCode === "01FR009" || u.cardCode === "01FR009T1") &&
         u.damageTaken > 0 &&
         !u.survivedDamageOnce,
     );
