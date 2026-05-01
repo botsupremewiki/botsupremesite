@@ -10,6 +10,7 @@ import {
 } from "@shared/tcg-achievements";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
+import { PinnableAchievementsGrid } from "./pinnable-achievements";
 
 export const dynamic = "force-dynamic";
 
@@ -47,10 +48,11 @@ export default async function StatsPage({
   let stats: Stats | null = null;
   let deckWinrates: DeckWinrate[] = [];
   let unlockedAchievements: UnlockedAchievement[] = [];
+  let pinnedAchievements: string[] = [];
   if (profile) {
     const supabase = await createClient();
     if (supabase) {
-      const [statsRes, decksRes, achRes] = await Promise.all([
+      const [statsRes, decksRes, achRes, profRes] = await Promise.all([
         supabase.rpc("get_tcg_player_stats", {
           p_user_id: profile.id,
           p_game_id: gameId,
@@ -63,10 +65,19 @@ export default async function StatsPage({
           p_user_id: profile.id,
           p_game_id: gameId,
         }),
+        supabase
+          .from("profiles")
+          .select("pinned_achievements")
+          .eq("id", profile.id)
+          .maybeSingle(),
       ]);
       stats = (statsRes.data as Stats) ?? null;
       deckWinrates = (decksRes.data as DeckWinrate[]) ?? [];
       unlockedAchievements = (achRes.data as UnlockedAchievement[]) ?? [];
+      const prof = profRes.data as
+        | { pinned_achievements: string[] | null }
+        | null;
+      pinnedAchievements = prof?.pinned_achievements ?? [];
     }
   }
 
@@ -236,54 +247,11 @@ export default async function StatsPage({
                   {unlockedSet.size} / {TCG_ACHIEVEMENTS.length}
                 </span>
               </h2>
-              <p className="text-xs text-zinc-500">
-                Débloque des badges en jouant des matchs PvP / classés.
-              </p>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {TCG_ACHIEVEMENTS.map((ach: Achievement) => {
-                  const unlocked = unlockedSet.has(ach.id);
-                  const date = unlockedDates.get(ach.id);
-                  return (
-                    <div
-                      key={ach.id}
-                      className={`rounded-lg border p-3 transition-opacity ${
-                        unlocked
-                          ? tierAccent(ach.tier)
-                          : "border-white/5 bg-black/30 opacity-50"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span
-                          className={`text-2xl ${
-                            unlocked ? "" : "grayscale"
-                          }`}
-                        >
-                          {ach.icon}
-                        </span>
-                        <div className="flex-1">
-                          <div className="text-sm font-bold">
-                            {ach.name}
-                            {unlocked && (
-                              <span className="ml-1 text-[10px] uppercase tracking-widest opacity-70">
-                                {ach.tier}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-zinc-400">
-                            {ach.description}
-                          </div>
-                          {unlocked && date && (
-                            <div className="mt-1 text-[10px] text-zinc-500">
-                              Débloqué le{" "}
-                              {new Date(date).toLocaleDateString("fr-FR")}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <PinnableAchievementsGrid
+                unlockedIds={Array.from(unlockedSet)}
+                unlockedDates={Object.fromEntries(unlockedDates)}
+                initialPins={pinnedAchievements}
+              />
             </div>
           )}
 

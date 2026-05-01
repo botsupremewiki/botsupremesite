@@ -6,6 +6,7 @@ import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
 import { ReplayPlayer } from "./replay-player";
+import { ShareReplayButton } from "./share-button";
 
 export const dynamic = "force-dynamic";
 
@@ -91,9 +92,12 @@ export default async function ReplayDetailPage({
                   {replay.loser_username}
                 </Link>
               </h1>
-              <div className="text-xs text-zinc-400">
-                {new Date(replay.ended_at).toLocaleString("fr-FR")}
-                {replay.ranked ? " · 🏆 classé" : ""}
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="text-xs text-zinc-400">
+                  {new Date(replay.ended_at).toLocaleString("fr-FR")}
+                  {replay.ranked ? " · 🏆 classé" : ""}
+                </div>
+                <ShareReplayButton />
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-[11px]">

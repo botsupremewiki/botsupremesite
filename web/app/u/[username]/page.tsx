@@ -17,6 +17,7 @@ type PublicTarget = {
   avatar_url: string | null;
   created_at: string;
   tcg_elo: Record<string, number> | null;
+  pinned_achievements: string[] | null;
 };
 
 type PublicDeckRow = {
@@ -63,7 +64,7 @@ export default async function PublicProfilePage({
   if (supabase) {
     const { data } = await supabase
       .from("profiles")
-      .select("id,username,avatar_url,created_at,tcg_elo")
+      .select("id,username,avatar_url,created_at,tcg_elo,pinned_achievements")
       .eq("username", decoded)
       .maybeSingle();
     if (data) {
@@ -155,6 +156,30 @@ export default async function PublicProfilePage({
                 <Stat label="Streak daily" value={`${streak}/30`} />
                 <Stat label="Statut" value="Joueur actif" />
               </div>
+              {target.pinned_achievements &&
+              target.pinned_achievements.length > 0 ? (
+                <div className="mt-4 border-t border-white/5 pt-3">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    📌 Achievements épinglés
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {target.pinned_achievements.map((id) => {
+                      const ach = TCG_ACHIEVEMENTS.find((a) => a.id === id);
+                      if (!ach) return null;
+                      return (
+                        <div
+                          key={id}
+                          className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${tierAccent(ach.tier)}`}
+                          title={ach.description}
+                        >
+                          <span className="text-base">{ach.icon}</span>
+                          <span className="font-bold">{ach.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-5 flex items-center justify-between gap-3">
                 <div className="text-[11px] text-zinc-500">
                   Plus de détails (gold, inventaire) sont privés. Pour
