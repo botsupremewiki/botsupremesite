@@ -360,7 +360,12 @@ export default async function StatsPage({
               <h2 className="text-lg font-bold text-zinc-100">
                 🏅 Achievements
                 <span className="ml-2 text-sm font-normal text-zinc-500">
-                  {unlockedSet.size} / {TCG_ACHIEVEMENTS.length}
+                  {unlockedSet.size} /{" "}
+                  {
+                    TCG_ACHIEVEMENTS.filter(
+                      (a) => !a.gameId || a.gameId === gameId,
+                    ).length
+                  }
                 </span>
               </h2>
               <PinnableAchievementsGrid
@@ -368,6 +373,7 @@ export default async function StatsPage({
                 unlockedDates={Object.fromEntries(unlockedDates)}
                 initialPins={pinnedAchievements}
                 aggregates={aggregates}
+                gameId={gameId}
               />
             </div>
           )}

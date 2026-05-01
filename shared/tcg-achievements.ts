@@ -42,6 +42,9 @@ export type Achievement = {
   description: string;
   icon: string;
   tier: AchievementTier;
+  /** Si défini, l'achievement n'est unlockable QUE pour ce jeu. Sinon
+   *  s'applique à tous les jeux TCG (rétro-compat). */
+  gameId?: TcgGameId;
   /** Renvoie true si débloqué selon les stats actuelles. */
   check: (ctx: AchievementContext) => boolean;
   /** Optionnel : retourne la progression actuelle vs target pour
@@ -214,6 +217,107 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     tier: "gold",
     check: (c) => c.elo >= 1800,
     progress: (c) => ({ current: Math.min(c.elo, 1800), target: 1800 }),
+  },
+
+  // ─── OnePiece TCG : achievements thématiques pirate ──────────────────
+  // Ne s'unlock que pour le game_id "onepiece" (gameId field).
+  {
+    id: "op_first_blood",
+    name: "Premier sang",
+    description: "Remporte ta toute première victoire One Piece TCG.",
+    icon: "🩸",
+    tier: "bronze",
+    gameId: "onepiece",
+    check: (c) => c.wins >= 1,
+  },
+  {
+    id: "op_pirate_apprentice",
+    name: "Apprenti pirate",
+    description: "Cumule 5 victoires en One Piece TCG.",
+    icon: "⚓",
+    tier: "bronze",
+    gameId: "onepiece",
+    check: (c) => c.wins >= 5,
+    progress: (c) => ({ current: Math.min(c.wins, 5), target: 5 }),
+  },
+  {
+    id: "op_supernova",
+    name: "Supernova",
+    description: "Gagne 25 matches One Piece TCG.",
+    icon: "☄️",
+    tier: "silver",
+    gameId: "onepiece",
+    check: (c) => c.wins >= 25,
+    progress: (c) => ({ current: Math.min(c.wins, 25), target: 25 }),
+  },
+  {
+    id: "op_warlord",
+    name: "Corsaire reconnu",
+    description: "Atteins 1300 d'ELO en classé One Piece TCG.",
+    icon: "🗡️",
+    tier: "silver",
+    gameId: "onepiece",
+    check: (c) => c.elo >= 1300,
+    progress: (c) => ({ current: Math.min(c.elo, 1300), target: 1300 }),
+  },
+  {
+    id: "op_yonkou",
+    name: "Empereur",
+    description: "Atteins 1700 d'ELO en classé One Piece TCG.",
+    icon: "🌊",
+    tier: "gold",
+    gameId: "onepiece",
+    check: (c) => c.elo >= 1700,
+    progress: (c) => ({ current: Math.min(c.elo, 1700), target: 1700 }),
+  },
+  {
+    id: "op_pirate_king",
+    name: "Roi des Pirates",
+    description: "Atteins 2000 d'ELO en classé One Piece TCG.",
+    icon: "👑",
+    tier: "gold",
+    gameId: "onepiece",
+    check: (c) => c.elo >= 2000,
+    progress: (c) => ({ current: Math.min(c.elo, 2000), target: 2000 }),
+  },
+  {
+    id: "op_grand_line",
+    name: "Grand Line",
+    description: "Joue 100 matches One Piece TCG.",
+    icon: "🗺️",
+    tier: "silver",
+    gameId: "onepiece",
+    check: (c) => c.totalMatches >= 100,
+    progress: (c) => ({
+      current: Math.min(c.totalMatches, 100),
+      target: 100,
+    }),
+  },
+  {
+    id: "op_crew_master",
+    name: "Capitaine d'équipage",
+    description: "Gagne avec 4 decks One Piece TCG différents.",
+    icon: "🏴‍☠️",
+    tier: "silver",
+    gameId: "onepiece",
+    check: (c) => c.winningDecks.length >= 4,
+    progress: (c) => ({
+      current: Math.min(c.winningDecks.length, 4),
+      target: 4,
+    }),
+  },
+  {
+    id: "op_devil_fruit",
+    name: "Fruit du Démon",
+    description: "Enchaîne 7 victoires consécutives One Piece TCG.",
+    icon: "🍎",
+    tier: "gold",
+    gameId: "onepiece",
+    check: (c) => c.bestWinStreak >= 7,
+    progress: (c) => ({
+      current: Math.min(c.bestWinStreak, 7),
+      target: 7,
+    }),
   },
 ];
 

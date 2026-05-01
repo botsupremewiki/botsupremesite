@@ -1708,6 +1708,8 @@ export default class OnePieceBattleServer implements Party.Server {
     );
     if (!aggregates) return;
     for (const ach of TCG_ACHIEVEMENTS) {
+      // Filter par gameId si l'achievement est game-specific.
+      if (ach.gameId && ach.gameId !== "onepiece") continue;
       if (!ach.check(aggregates)) continue;
       try {
         const newlyUnlocked = await tryUnlockAchievement(

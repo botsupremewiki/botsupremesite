@@ -18,11 +18,13 @@ export function PinnableAchievementsGrid({
   unlockedDates,
   initialPins,
   aggregates,
+  gameId,
 }: {
   unlockedIds: string[];
   unlockedDates: Record<string, string>;
   initialPins: string[];
   aggregates: AchievementContext | null;
+  gameId: string;
 }) {
   const router = useRouter();
   const [pins, setPins] = useState<string[]>(initialPins);
@@ -69,7 +71,9 @@ export function PinnableAchievementsGrid({
         <div className="mt-1 text-xs text-rose-300">{error}</div>
       ) : null}
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {TCG_ACHIEVEMENTS.map((ach: Achievement) => {
+        {TCG_ACHIEVEMENTS.filter(
+          (ach) => !ach.gameId || ach.gameId === gameId,
+        ).map((ach: Achievement) => {
           const unlocked = unlockedSet.has(ach.id);
           const date = unlockedDates[ach.id];
           const pinned = pins.includes(ach.id);

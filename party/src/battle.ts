@@ -3133,6 +3133,8 @@ export default class BattleServer implements Party.Server {
     const aggregates = await fetchBattleAggregates(this.room, userId, gameId);
     if (!aggregates) return;
     for (const ach of TCG_ACHIEVEMENTS) {
+      // Filter par gameId si l'achievement est game-specific.
+      if (ach.gameId && ach.gameId !== gameId) continue;
       if (!ach.check(aggregates)) continue;
       try {
         const newlyUnlocked = await tryUnlockAchievement(
