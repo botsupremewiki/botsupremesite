@@ -1346,7 +1346,14 @@ function AttackLanesView({
   onZoom: (u: RuneterraBattleUnit) => void;
 }) {
   return (
-    <div className="flex shrink-0 gap-3 overflow-x-auto rounded-md border border-rose-500/30 bg-rose-900/10 p-2">
+    <div className="flex shrink-0 gap-3 overflow-x-auto rounded-md border border-rose-500/40 bg-gradient-to-b from-rose-900/30 to-rose-900/10 p-2 shadow-[inset_0_0_20px_rgba(244,63,94,0.2)] animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* Phase 4.5 : header animé pour mettre en valeur le moment combat. */}
+      <div className="flex shrink-0 flex-col items-center justify-center px-2">
+        <div className="text-2xl animate-pulse">⚔️</div>
+        <div className="text-[9px] uppercase tracking-widest text-rose-300">
+          Combat
+        </div>
+      </div>
       {lanes.map((lane, i) => {
         const attackerUnit = attackerBench.find(
           (u) => u.uid === lane.attackerUid,
@@ -1385,13 +1392,19 @@ function AttackLanesView({
         return (
           <div
             key={i}
-            className="flex flex-col items-center gap-1 rounded border border-white/10 bg-black/40 p-1.5"
+            className="flex flex-col items-center gap-1 rounded border border-white/10 bg-black/40 p-1.5 animate-in fade-in slide-in-from-top-2 duration-300"
+            style={{ animationDelay: `${i * 60}ms` }}
           >
             <div className="text-[9px] uppercase tracking-widest text-rose-300">
               Lane {i + 1}
             </div>
             {attackerUnit ? (
-              <UnitCard unit={attackerUnit} onClick={() => onZoom(attackerUnit)} />
+              <div className="animate-in zoom-in-95 duration-300">
+                <UnitCard
+                  unit={attackerUnit}
+                  onClick={() => onZoom(attackerUnit)}
+                />
+              </div>
             ) : (
               <div className="h-32 w-24" />
             )}
