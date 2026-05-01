@@ -102,6 +102,7 @@ export default class BattleServer implements Party.Server {
     p2: null,
   };
   private connToSeat = new Map<string, BattleSeatId>();
+  private spectatorIds = new Set<string>();
   private phase: BattlePhase = "waiting";
   private activeSeat: BattleSeatId | null = null;
   private turnNumber = 0;
@@ -135,8 +136,32 @@ export default class BattleServer implements Party.Server {
         : null;
     const username = sanitizeName(url.searchParams.get("name"));
     const deckId = url.searchParams.get("deck");
-    if (!authId || !username || !deckId) {
-      this.sendError(conn, "Connexion invalide (auth/deck manquant).");
+    const isSpectator = url.searchParams.get("spectate") === "1";
+
+    if (!authId || !username) {
+      this.sendError(conn, "Connexion invalide (auth manquant).");
+      conn.close();
+      return;
+    }
+
+    // Mode spectateur : pas besoin de deck. On reçoit les broadcasts
+    // mais on ne peut envoyer aucune action (filtré dans onMessage).
+    if (isSpectator) {
+      // Pas de bot mode pour spectator (les bots sont privés).
+      if (this.botMode) {
+        this.sendError(conn, "Spectateur impossible sur les matchs Bot.");
+        conn.close();
+        return;
+      }
+      this.spectatorIds.add(conn.id);
+      // Envoie l'état actuel.
+      this.sendTo(conn, { type: "battle-welcome", selfId: authId, selfSeat: null });
+      this.broadcastState();
+      return;
+    }
+
+    if (!deckId) {
+      this.sendError(conn, "Connexion invalide (deck manquant).");
       conn.close();
       return;
     }
@@ -150,9 +175,10 @@ export default class BattleServer implements Party.Server {
     else if (!this.seats.p2) seatId = "p2";
 
     if (!seatId) {
-      // Spectateur — pour MVP on close.
-      this.sendError(conn, "Cette partie est complète.");
-      conn.close();
+      // Plus de sièges libres → on accepte en tant que spectateur.
+      this.spectatorIds.add(conn.id);
+      this.sendTo(conn, { type: "battle-welcome", selfId: authId, selfSeat: null });
+      this.broadcastState();
       return;
     }
 
@@ -909,6 +935,7 @@ export default class BattleServer implements Party.Server {
   }
 
   onClose(conn: Party.Connection) {
+    this.spectatorIds.delete(conn.id);
     const seatId = this.connToSeat.get(conn.id);
     this.connToSeat.delete(conn.id);
     if (!seatId) return;
@@ -3154,6 +3181,24 @@ export default class BattleServer implements Party.Server {
     const opponentSeatId: BattleSeatId | null =
       seatId === "p1" ? "p2" : seatId === "p2" ? "p1" : null;
     const opponentSeat = opponentSeatId ? this.seats[opponentSeatId] : null;
+    // Mode spectateur (seatId null) : on montre p1 dans `self` (en mode
+    // public, pas de hand révélée) et p2 dans `opponent`. Ça permet au
+    // client existant de tout afficher sans modification.
+    if (seatId === null) {
+      const p1Seat = this.seats.p1;
+      const p2Seat = this.seats.p2;
+      return {
+        roomId: this.room.id,
+        phase: this.phase,
+        self: p1Seat ? (this.snapshotPublic(p1Seat) as never) : null,
+        opponent: this.snapshotPublic(p2Seat),
+        selfSeat: null,
+        activeSeat: this.activeSeat,
+        turnNumber: this.turnNumber,
+        winner: this.winner,
+        log: [...this.log],
+      };
+    }
     return {
       roomId: this.room.id,
       phase: this.phase,

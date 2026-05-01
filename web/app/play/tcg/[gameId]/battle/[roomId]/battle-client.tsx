@@ -81,11 +81,16 @@ export function BattleClient({
   gameId,
   roomId,
   deckId,
+  spectator = false,
 }: {
   profile: Profile | null;
   gameId: TcgGameId;
   roomId: string;
   deckId: string;
+  /** Mode spectateur : WS connecté avec ?spectate=1, aucune action
+   *  envoyable. Le serveur PartyKit envoie l'état complet sans
+   *  révéler les mains des joueurs. */
+  spectator?: boolean;
 }) {
   const game = TCG_GAMES[gameId];
   const cardById = POKEMON_BASE_SET_BY_ID;
@@ -195,7 +200,11 @@ export function BattleClient({
     const params = new URLSearchParams();
     params.set("authId", profile.id);
     params.set("name", profile.username);
-    params.set("deck", deckId);
+    if (spectator) {
+      params.set("spectate", "1");
+    } else {
+      params.set("deck", deckId);
+    }
     const url = `${scheme}://${partyHost}/parties/battle/${roomId}?${params.toString()}`;
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -281,11 +290,17 @@ export function BattleClient({
     };
   }, [profile, gameId, roomId, deckId]);
 
-  const send = useCallback((msg: BattleClientMessage) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify(msg));
-  }, []);
+  const send = useCallback(
+    (msg: BattleClientMessage) => {
+      // En mode spectateur, on bloque toutes les actions côté client.
+      // Le serveur les rejetterait de toute façon (pas de seatId).
+      if (spectator) return;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify(msg));
+    },
+    [spectator],
+  );
 
   const setActive = (handIndex: number) =>
     send({ type: "battle-set-active", handIndex });
