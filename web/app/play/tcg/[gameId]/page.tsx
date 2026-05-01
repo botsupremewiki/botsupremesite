@@ -308,6 +308,15 @@ export default async function TcgGameHub({
               border="border-indigo-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(129,140,248,0.10),transparent_70%)]"
             />
+            <MenuButton
+              href={`/play/tcg/${gameId}/tournaments`}
+              icon="🏟️"
+              title="Tournois"
+              description="Rejoins ou crée un tournoi single-elim entre amis"
+              accent="text-orange-200"
+              border="border-orange-400/40"
+              gradient="bg-[radial-gradient(ellipse_at_center,rgba(251,146,60,0.10),transparent_70%)]"
+            />
           </div>
         </div>
       </main>
