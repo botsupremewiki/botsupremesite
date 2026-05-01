@@ -1150,35 +1150,43 @@ function RoundView({
             </button>
           )}
           {pendingSpell && (
-            <span className="text-violet-300">
+            <span className="flex items-center gap-2 rounded-md border border-violet-400/40 bg-violet-500/10 px-2 py-1 text-violet-200 animate-pulse">
               ✨{" "}
-              {pendingSpell.targetCount === 1
-                ? "Choisis une cible"
-                : pendingSpell.firstTargetUid === null
-                  ? `Choisis la 1re cible (${pendingSpell.targetCount} au total)`
-                  : pendingSpell.targetCount === 3 &&
-                      pendingSpell.secondTargetUid === null
-                    ? "Choisis la 2e cible (distincte)"
-                    : pendingSpell.targetCount === 3
-                      ? "Choisis la 3e cible (distincte)"
-                      : "Choisis la 2e cible (distincte)"}{" "}
-              (
-              {pendingSpell.side === "ally"
-                ? "allié"
-                : pendingSpell.side === "enemy"
-                  ? "ennemi"
-                  : pendingSpell.side === "any-or-nexus"
-                    ? "unité ou nexus"
-                    : pendingSpell.side === "ally-and-enemy"
-                      ? pendingSpell.firstTargetUid === null
-                        ? "1er = allié"
-                        : "2e = ennemi"
-                      : pendingSpell.side === "ally-and-any-or-nexus"
+              <strong>
+                {RUNETERRA_BASE_SET_BY_CODE.get(pendingSpell.cardCode)?.name ??
+                  pendingSpell.cardCode}
+              </strong>{" "}
+              <span className="text-violet-300">
+                {pendingSpell.targetCount === 1
+                  ? "→ choisis une cible"
+                  : pendingSpell.firstTargetUid === null
+                    ? `→ choisis la 1re cible (${pendingSpell.targetCount} au total)`
+                    : pendingSpell.targetCount === 3 &&
+                        pendingSpell.secondTargetUid === null
+                      ? "→ choisis la 2e cible (distincte)"
+                      : pendingSpell.targetCount === 3
+                        ? "→ choisis la 3e cible (distincte)"
+                        : "→ choisis la 2e cible (distincte)"}
+              </span>
+              <span className="text-[10px] text-zinc-400">
+                (
+                {pendingSpell.side === "ally"
+                  ? "allié"
+                  : pendingSpell.side === "enemy"
+                    ? "ennemi"
+                    : pendingSpell.side === "any-or-nexus"
+                      ? "unité ou nexus"
+                      : pendingSpell.side === "ally-and-enemy"
                         ? pendingSpell.firstTargetUid === null
-                          ? "1er = allié à sacrifier"
-                          : "2e = unité ou nexus"
-                        : "n'importe quelle unité"}
-              )
+                          ? "1er = allié"
+                          : "2e = ennemi"
+                        : pendingSpell.side === "ally-and-any-or-nexus"
+                          ? pendingSpell.firstTargetUid === null
+                            ? "1er = allié à sacrifier"
+                            : "2e = unité ou nexus"
+                          : "n'importe quelle unité"}
+                )
+              </span>
             </span>
           )}
         </div>
@@ -1910,6 +1918,13 @@ function UnitCard({
       {flashLevelUp && (
         <div
           className="pointer-events-none absolute inset-0 animate-ping rounded bg-amber-300/30 ring-4 ring-amber-200"
+          aria-hidden
+        />
+      )}
+      {/* Phase 6.2 : pulsation rose pour les cibles valides en mode targeting. */}
+      {highlighted && (
+        <div
+          className="pointer-events-none absolute inset-0 animate-pulse rounded ring-2 ring-rose-300/80 shadow-[0_0_18px_rgba(244,114,128,0.7)]"
           aria-hidden
         />
       )}
