@@ -85,6 +85,12 @@ export function LorBattleClient({
     round: number;
     ts: number;
   } | null>(null);
+  // Phase 5.4 : popup -N rouge sur le nexus quand il prend des dégâts
+  // (et +N vert si soigné). 2 entries : seatIdx → {amount, ts}.
+  const [nexusDamagePopups, setNexusDamagePopups] = useState<{
+    self?: { amount: number; ts: number; isHeal: boolean };
+    opponent?: { amount: number; ts: number; isHeal: boolean };
+  }>({});
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -245,6 +251,41 @@ export function LorBattleClient({
           return next;
         });
       }, 1200);
+    }
+    // Phase 5.4 : nexus health diff → popup -N (dégâts) ou +N (heal).
+    const nexusDiffSelf = prev.self && state.self
+      ? state.self.nexusHealth - prev.self.nexusHealth
+      : 0;
+    const nexusDiffOpp = prev.opponent && state.opponent
+      ? state.opponent.nexusHealth - prev.opponent.nexusHealth
+      : 0;
+    if (nexusDiffSelf !== 0 || nexusDiffOpp !== 0) {
+      const ts = Date.now();
+      setNexusDamagePopups((prev) => ({
+        ...prev,
+        ...(nexusDiffSelf !== 0 && {
+          self: {
+            amount: Math.abs(nexusDiffSelf),
+            ts,
+            isHeal: nexusDiffSelf > 0,
+          },
+        }),
+        ...(nexusDiffOpp !== 0 && {
+          opponent: {
+            amount: Math.abs(nexusDiffOpp),
+            ts,
+            isHeal: nexusDiffOpp > 0,
+          },
+        }),
+      }));
+      setTimeout(() => {
+        setNexusDamagePopups((prev) => {
+          const next = { ...prev };
+          if (next.self?.ts === ts) delete next.self;
+          if (next.opponent?.ts === ts) delete next.opponent;
+          return next;
+        });
+      }, 1500);
     }
   }, [state]);
 
@@ -438,6 +479,7 @@ export function LorBattleClient({
             onHoverCode={setHoveredCardCode}
             recentLevelUps={recentLevelUps}
             damagePopups={damagePopups}
+            nexusDamagePopups={nexusDamagePopups}
           />
         )}
 
@@ -760,6 +802,7 @@ function RoundView({
   onHoverCode,
   recentLevelUps,
   damagePopups,
+  nexusDamagePopups,
 }: {
   state: RuneterraBattleState;
   onPlayHand: (handIndex: number) => void;
@@ -789,6 +832,11 @@ function RoundView({
   // Phase 4.4 : VFX flash level-up et damage popups (propagés aux BenchRow).
   recentLevelUps?: Set<string>;
   damagePopups?: Record<string, { amount: number; ts: number }>;
+  // Phase 5.4 : popups -N/+N nexus (propagés aux PlayerStrip).
+  nexusDamagePopups?: {
+    self?: { amount: number; ts: number; isHeal: boolean };
+    opponent?: { amount: number; ts: number; isHeal: boolean };
+  };
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
   const [combatMode, setCombatMode] = useState<"none" | "attacker-pick">(
@@ -917,6 +965,7 @@ function RoundView({
         isOpponent
         isActive={state.activeSeat !== state.selfSeat}
         hasAttackToken={state.opponent.attackToken}
+        nexusPopup={nexusDamagePopups?.opponent}
         nexusTargetable={
           pendingSpell?.side === "any-or-nexus" ||
           (pendingSpell?.side === "ally-and-any-or-nexus" &&
@@ -1148,6 +1197,7 @@ function RoundView({
         isOpponent={false}
         isActive={state.activeSeat === state.selfSeat}
         hasAttackToken={state.self.attackToken}
+        nexusPopup={nexusDamagePopups?.self}
         nexusTargetable={
           pendingSpell?.side === "any-or-nexus" ||
           (pendingSpell?.side === "ally-and-any-or-nexus" &&
@@ -1225,6 +1275,7 @@ function PlayerStrip({
   onNexusClick,
   isActive,
   hasAttackToken,
+  nexusPopup,
 }: {
   player: RuneterraPlayerPublicState | RuneterraSelfState;
   isOpponent: boolean;
@@ -1236,6 +1287,8 @@ function PlayerStrip({
   isActive?: boolean;
   // Phase 4.9 : ce joueur a le jeton d'attaque ce round ?
   hasAttackToken?: boolean;
+  // Phase 5.4 : popup -N rouge (dégâts) ou +N vert (heal) au-dessus du nexus.
+  nexusPopup?: { amount: number; ts: number; isHeal: boolean };
 }) {
   void onZoom;
   const nexusClass = nexusTargetable
@@ -1290,9 +1343,22 @@ function PlayerStrip({
           type="button"
           disabled={!nexusTargetable}
           onClick={() => onNexusClick?.()}
-          className={nexusClass}
+          className={`${nexusClass} relative`}
         >
           ❤️ {player.nexusHealth}
+          {/* Phase 5.4 : popup -N rouge ou +N vert au-dessus du nexus. */}
+          {nexusPopup && (
+            <span
+              key={nexusPopup.ts}
+              className={`pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 animate-bounce text-2xl font-bold drop-shadow-[0_2px_2px_rgba(0,0,0,0.9)] ${
+                nexusPopup.isHeal ? "text-emerald-300" : "text-rose-400"
+              }`}
+              aria-hidden
+            >
+              {nexusPopup.isHeal ? "+" : "-"}
+              {nexusPopup.amount}
+            </span>
+          )}
         </button>
       </div>
     </div>
