@@ -103,6 +103,10 @@ export default class BattleServer implements Party.Server {
   };
   private connToSeat = new Map<string, BattleSeatId>();
   private spectatorIds = new Set<string>();
+  // Anti-AFK : timeout déclenché si le joueur dont c'est le tour ne fait
+  // rien pendant 3 minutes. Auto-concede.
+  private idleTimerHandle: ReturnType<typeof setTimeout> | null = null;
+  private readonly idleTimeoutMs = 3 * 60 * 1000;
   private phase: BattlePhase = "waiting";
   private activeSeat: BattleSeatId | null = null;
   private turnNumber = 0;
@@ -838,6 +842,10 @@ export default class BattleServer implements Party.Server {
       data = JSON.parse(raw) as BattleClientMessage;
     } catch {
       return;
+    }
+    // Anti-AFK : tout message du joueur actif réarme le timer.
+    if (this.activeSeat === seatId && this.phase === "playing") {
+      this.armIdleTimer(seatId);
     }
     switch (data.type) {
       case "chat": {
@@ -2973,6 +2981,8 @@ export default class BattleServer implements Party.Server {
     }
     // Pas de log « Tour X — Y joue » : le numéro de tour s'affiche déjà
     // dans le bandeau du header.
+    // Arme le timer anti-AFK pour le nouveau joueur actif.
+    this.armIdleTimer(next);
     this.broadcastState();
   }
 
@@ -2995,9 +3005,28 @@ export default class BattleServer implements Party.Server {
     this.declareWinner(winner, `${this.seats[seatId]?.username} abandonne.`);
   }
 
+  /** Arme le timer anti-AFK pour le joueur actif. Si pas d'action en
+   *  3 minutes, auto-concede. Bot mode skip (le bot peut être lent). */
+  private armIdleTimer(activeSeat: BattleSeatId) {
+    if (this.idleTimerHandle) clearTimeout(this.idleTimerHandle);
+    if (this.botMode) return;
+    this.idleTimerHandle = setTimeout(() => {
+      if (this.phase !== "playing") return;
+      if (this.activeSeat !== activeSeat) return;
+      this.pushLog(
+        `⏰ ${this.seats[activeSeat]?.username ?? "Joueur"} inactif depuis 3 minutes — auto-concède.`,
+      );
+      this.handleConcede(activeSeat);
+    }, this.idleTimeoutMs);
+  }
+
   private declareWinner(winner: BattleSeatId, reason: string) {
     this.phase = "ended";
     this.winner = winner;
+    if (this.idleTimerHandle) {
+      clearTimeout(this.idleTimerHandle);
+      this.idleTimerHandle = null;
+    }
     this.pushLog(`🏆 ${this.seats[winner]?.username} gagne — ${reason}`);
     this.broadcastState();
 
