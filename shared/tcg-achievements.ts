@@ -44,7 +44,20 @@ export type Achievement = {
   tier: AchievementTier;
   /** Renvoie true si débloqué selon les stats actuelles. */
   check: (ctx: AchievementContext) => boolean;
+  /** Optionnel : retourne la progression actuelle vs target pour
+   *  afficher une barre de progression dans l'UI. Si absent, fallback
+   *  binaire : { current: check() ? 1 : 0, target: 1 }. */
+  progress?: (ctx: AchievementContext) => { current: number; target: number };
 };
+
+/** Helper : retourne progress pour un achievement, avec fallback binaire. */
+export function achievementProgress(
+  ach: Achievement,
+  ctx: AchievementContext,
+): { current: number; target: number } {
+  if (ach.progress) return ach.progress(ctx);
+  return { current: ach.check(ctx) ? 1 : 0, target: 1 };
+}
 
 export const TCG_ACHIEVEMENTS: Achievement[] = [
   // ─── Tier Bronze (premiers pas) ──────────────────────────────────────
@@ -55,6 +68,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "⚔️",
     tier: "bronze",
     check: (c) => c.totalMatches >= 1,
+    progress: (c) => ({ current: Math.min(c.totalMatches, 1), target: 1 }),
   },
   {
     id: "first_win",
@@ -63,6 +77,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🏆",
     tier: "bronze",
     check: (c) => c.wins >= 1,
+    progress: (c) => ({ current: Math.min(c.wins, 1), target: 1 }),
   },
   {
     id: "first_ranked_win",
@@ -71,6 +86,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🥇",
     tier: "bronze",
     check: (c) => c.rankedWins >= 1,
+    progress: (c) => ({ current: Math.min(c.rankedWins, 1), target: 1 }),
   },
 
   // ─── Tier Silver (engagement régulier) ───────────────────────────────
@@ -81,6 +97,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🔟",
     tier: "silver",
     check: (c) => c.wins >= 10,
+    progress: (c) => ({ current: Math.min(c.wins, 10), target: 10 }),
   },
   {
     id: "fifty_matches",
@@ -89,6 +106,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🎮",
     tier: "silver",
     check: (c) => c.totalMatches >= 50,
+    progress: (c) => ({ current: Math.min(c.totalMatches, 50), target: 50 }),
   },
   {
     id: "elo_1200",
@@ -97,6 +115,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "📈",
     tier: "silver",
     check: (c) => c.elo >= 1200,
+    progress: (c) => ({ current: Math.min(c.elo, 1200), target: 1200 }),
   },
   {
     id: "win_streak_5",
@@ -105,6 +124,10 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🔥",
     tier: "silver",
     check: (c) => c.bestWinStreak >= 5,
+    progress: (c) => ({
+      current: Math.min(c.bestWinStreak, 5),
+      target: 5,
+    }),
   },
   {
     id: "three_decks_winner",
@@ -113,6 +136,10 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🃏",
     tier: "silver",
     check: (c) => c.winningDecks.length >= 3,
+    progress: (c) => ({
+      current: Math.min(c.winningDecks.length, 3),
+      target: 3,
+    }),
   },
 
   // ─── Tier Gold (joueurs assidus) ─────────────────────────────────────
@@ -123,6 +150,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "💯",
     tier: "gold",
     check: (c) => c.wins >= 100,
+    progress: (c) => ({ current: Math.min(c.wins, 100), target: 100 }),
   },
   {
     id: "elo_1500",
@@ -131,6 +159,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "⭐",
     tier: "gold",
     check: (c) => c.elo >= 1500,
+    progress: (c) => ({ current: Math.min(c.elo, 1500), target: 1500 }),
   },
   {
     id: "ten_ranked_wins",
@@ -139,6 +168,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🎖️",
     tier: "gold",
     check: (c) => c.rankedWins >= 10,
+    progress: (c) => ({ current: Math.min(c.rankedWins, 10), target: 10 }),
   },
   {
     id: "win_streak_10",
@@ -147,6 +177,10 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🔥",
     tier: "gold",
     check: (c) => c.bestWinStreak >= 10,
+    progress: (c) => ({
+      current: Math.min(c.bestWinStreak, 10),
+      target: 10,
+    }),
   },
   {
     id: "five_decks_winner",
@@ -155,6 +189,10 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🎴",
     tier: "gold",
     check: (c) => c.winningDecks.length >= 5,
+    progress: (c) => ({
+      current: Math.min(c.winningDecks.length, 5),
+      target: 5,
+    }),
   },
   {
     id: "two_hundred_matches",
@@ -163,6 +201,10 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "🛡️",
     tier: "gold",
     check: (c) => c.totalMatches >= 200,
+    progress: (c) => ({
+      current: Math.min(c.totalMatches, 200),
+      target: 200,
+    }),
   },
   {
     id: "elo_1800",
@@ -171,6 +213,7 @@ export const TCG_ACHIEVEMENTS: Achievement[] = [
     icon: "👑",
     tier: "gold",
     check: (c) => c.elo >= 1800,
+    progress: (c) => ({ current: Math.min(c.elo, 1800), target: 1800 }),
   },
 ];
 

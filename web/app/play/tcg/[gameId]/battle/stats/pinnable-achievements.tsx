@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TCG_ACHIEVEMENTS,
+  achievementProgress,
   tierAccent,
   type Achievement,
+  type AchievementContext,
 } from "@shared/tcg-achievements";
 import { createClient } from "@/lib/supabase/client";
 
@@ -15,10 +17,12 @@ export function PinnableAchievementsGrid({
   unlockedIds,
   unlockedDates,
   initialPins,
+  aggregates,
 }: {
   unlockedIds: string[];
   unlockedDates: Record<string, string>;
   initialPins: string[];
+  aggregates: AchievementContext | null;
 }) {
   const router = useRouter();
   const [pins, setPins] = useState<string[]>(initialPins);
@@ -97,7 +101,7 @@ export function PinnableAchievementsGrid({
                 <span className={`text-2xl ${unlocked ? "" : "grayscale"}`}>
                   {ach.icon}
                 </span>
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-bold">
                     {ach.name}
                     {unlocked ? (
@@ -109,6 +113,29 @@ export function PinnableAchievementsGrid({
                   <div className="mt-0.5 text-[11px] text-zinc-400">
                     {ach.description}
                   </div>
+                  {!unlocked && aggregates ? (
+                    (() => {
+                      const p = achievementProgress(ach, aggregates);
+                      if (p.target <= 1) return null;
+                      const ratio = Math.min(1, p.current / p.target);
+                      return (
+                        <div className="mt-1.5">
+                          <div className="flex items-center justify-between text-[10px] tabular-nums text-zinc-500">
+                            <span>
+                              {p.current} / {p.target}
+                            </span>
+                            <span>{Math.round(ratio * 100)}%</span>
+                          </div>
+                          <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-white/5">
+                            <div
+                              className="h-full rounded-full bg-amber-400/80"
+                              style={{ width: `${ratio * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : null}
                   {unlocked && date ? (
                     <div className="mt-1 text-[10px] text-zinc-500">
                       Débloqué le{" "}

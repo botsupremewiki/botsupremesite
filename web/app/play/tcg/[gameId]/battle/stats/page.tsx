@@ -49,28 +49,42 @@ export default async function StatsPage({
   let deckWinrates: DeckWinrate[] = [];
   let unlockedAchievements: UnlockedAchievement[] = [];
   let pinnedAchievements: string[] = [];
+  let aggregates: {
+    totalMatches: number;
+    wins: number;
+    losses: number;
+    rankedWins: number;
+    elo: number;
+    winningDecks: string[];
+    bestWinStreak: number;
+  } | null = null;
   if (profile) {
     const supabase = await createClient();
     if (supabase) {
-      const [statsRes, decksRes, achRes, profRes] = await Promise.all([
-        supabase.rpc("get_tcg_player_stats", {
-          p_user_id: profile.id,
-          p_game_id: gameId,
-        }),
-        supabase.rpc("get_user_deck_winrates", {
-          p_user_id: profile.id,
-          p_game_id: gameId,
-        }),
-        supabase.rpc("get_user_achievements", {
-          p_user_id: profile.id,
-          p_game_id: gameId,
-        }),
-        supabase
-          .from("profiles")
-          .select("pinned_achievements")
-          .eq("id", profile.id)
-          .maybeSingle(),
-      ]);
+      const [statsRes, decksRes, achRes, profRes, aggRes] =
+        await Promise.all([
+          supabase.rpc("get_tcg_player_stats", {
+            p_user_id: profile.id,
+            p_game_id: gameId,
+          }),
+          supabase.rpc("get_user_deck_winrates", {
+            p_user_id: profile.id,
+            p_game_id: gameId,
+          }),
+          supabase.rpc("get_user_achievements", {
+            p_user_id: profile.id,
+            p_game_id: gameId,
+          }),
+          supabase
+            .from("profiles")
+            .select("pinned_achievements")
+            .eq("id", profile.id)
+            .maybeSingle(),
+          supabase.rpc("get_user_battle_aggregates", {
+            p_user_id: profile.id,
+            p_game_id: gameId,
+          }),
+        ]);
       stats = (statsRes.data as Stats) ?? null;
       deckWinrates = (decksRes.data as DeckWinrate[]) ?? [];
       unlockedAchievements = (achRes.data as UnlockedAchievement[]) ?? [];
@@ -78,6 +92,26 @@ export default async function StatsPage({
         | { pinned_achievements: string[] | null }
         | null;
       pinnedAchievements = prof?.pinned_achievements ?? [];
+      const agg = aggRes.data as {
+        total_matches: number;
+        wins: number;
+        losses: number;
+        ranked_wins: number;
+        elo: number;
+        winning_decks: string[];
+        best_win_streak: number;
+      } | null;
+      aggregates = agg
+        ? {
+            totalMatches: agg.total_matches,
+            wins: agg.wins,
+            losses: agg.losses,
+            rankedWins: agg.ranked_wins,
+            elo: agg.elo,
+            winningDecks: agg.winning_decks ?? [],
+            bestWinStreak: agg.best_win_streak,
+          }
+        : null;
     }
   }
 
@@ -251,6 +285,7 @@ export default async function StatsPage({
                 unlockedIds={Array.from(unlockedSet)}
                 unlockedDates={Object.fromEntries(unlockedDates)}
                 initialPins={pinnedAchievements}
+                aggregates={aggregates}
               />
             </div>
           )}
