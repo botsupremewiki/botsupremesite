@@ -949,6 +949,12 @@ export function triggerOnAttack(
       attackerUid,
     );
   }
+  // Phase 6.5 : Vladimir L2 (01NX006T1) attack — pour chaque allié
+  // attaquant à droite de Vladimir, inflige 1 dmg à cet allié et
+  // drain 1 PV au Nexus ennemi (heal Vladimir's nexus).
+  if (cardCode === "01NX006T1") {
+    newState = applyVladimirLevel2OnAttack(newState, attackerSeat, attackerUid);
+  }
   // Phase 5.8b : Hecarim L2 (01SI042T1) — même effet que L1 (summon 2
   // Cavaliers) ET en plus +3|+0 aux alliés Éphémères en combat ce round.
   if (cardCode === "01SI042T1") {
@@ -968,6 +974,61 @@ export function triggerOnAttack(
     newState = applyHecarimLevel2EphemeralBuff(newState, attackerSeat);
   }
   return newState;
+}
+
+/** Phase 6.5 : Vladimir L2 (01NX006T1) attack trigger.
+ *  « Pour chaque allié attaquant à ma droite, infligez 1 dmg à cet allié
+ *  et drainez 1 PV au Nexus ennemi. »
+ *  Drain = inflige dmg au nexus ennemi ET heal Vladimir's nexus du même
+ *  montant. */
+function applyVladimirLevel2OnAttack(
+  state: InternalState,
+  attackerSeat: 0 | 1,
+  vladUid: string,
+): InternalState {
+  if (state.attackInProgress === null) return state;
+  if (state.attackInProgress.attackerSeatIdx !== attackerSeat) return state;
+  const lanes = state.attackInProgress.lanes;
+  const vladLaneIdx = lanes.findIndex((l) => l.attackerUid === vladUid);
+  if (vladLaneIdx === -1) return state;
+  // Alliés à droite = lanes[vladLaneIdx+1..]
+  const rightAttackerUids = lanes
+    .slice(vladLaneIdx + 1)
+    .map((l) => l.attackerUid);
+  if (rightAttackerUids.length === 0) return state;
+  const player = state.players[attackerSeat];
+  const oppSeat = otherSeat(attackerSeat);
+  const opp = state.players[oppSeat];
+  let damageCount = 0;
+  const newBench = player.bench.map((u) => {
+    if (!rightAttackerUids.includes(u.uid)) return u;
+    const c = { ...u };
+    applyDamageToUnit(c, 1);
+    damageCount++;
+    return c;
+  });
+  const drainAmount = damageCount;
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[attackerSeat] = {
+    ...player,
+    bench: newBench,
+    nexusHealth: Math.min(player.nexusHealth + drainAmount, 20),
+  };
+  newPlayers[oppSeat] = {
+    ...opp,
+    nexusHealth: opp.nexusHealth - drainAmount,
+  };
+  return {
+    ...state,
+    players: newPlayers,
+    log: [
+      ...state.log,
+      `${player.username} : Vladimir draine ${drainAmount} PV (${damageCount} alliés à droite).`,
+    ],
+  };
 }
 
 /** Phase 5.8b : Hecarim L2 — buff +3|+0 round sur les alliés Éphémères
