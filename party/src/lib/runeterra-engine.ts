@@ -688,7 +688,10 @@ export function endRound(state: InternalState): InternalState {
   let stateForEor: InternalState = state;
   for (const seat of [0, 1] as const) {
     const p = stateForEor.players[seat];
-    const karmaCount = p.bench.filter((u) => u.cardCode === "01IO041").length;
+    // Phase 5.9 : compte les 2 formes (L1 + L2 = 01IO041 + 01IO041T1).
+    const karmaCount = p.bench.filter(
+      (u) => u.cardCode === "01IO041" || u.cardCode === "01IO041T1",
+    ).length;
     for (let i = 0; i < karmaCount; i++) {
       // Crée un random spell des régions du caster (réutilise la logique
       // de Sagesse ancestrale via applySpellEffect).
@@ -1835,9 +1838,43 @@ export function playSpell(
   // Phase 4.0b : Jinx L2 — si la main devient vide pour la 1re fois de
   // ce round, créer 1 Super roquette de la mort ! (01PZ040T2) en main.
   postSpellState = triggerJinxLevel2OnHandEmpty(postSpellState, seatIdx);
+  // Phase 5.9 : Ezreal L2 — si le sort vient de cibler un ennemi, deal
+  // 2 dmg au nexus ennemi (par Ezreal L2 sur le banc).
+  if (targetIsEnemy && (targetSide === "enemy" || targetSide === "any")) {
+    postSpellState = triggerEzrealLevel2OnEnemyTarget(postSpellState, seatIdx);
+  }
   return {
     ok: true,
     state: checkLevelUps(postSpellState),
+  };
+}
+
+/** Phase 5.9 : Ezreal niveau 2 (01PZ036T1) — quand vous ciblez un ennemi,
+ *  infligez 2 dmg au nexus ennemi par Ezreal L2 sur le banc. */
+function triggerEzrealLevel2OnEnemyTarget(
+  state: InternalState,
+  casterSeat: 0 | 1,
+): InternalState {
+  const player = state.players[casterSeat];
+  const ezrealL2Count = player.bench.filter(
+    (u) => u.cardCode === "01PZ036T1",
+  ).length;
+  if (ezrealL2Count === 0) return state;
+  const oppSeat = otherSeat(casterSeat);
+  const opp = state.players[oppSeat];
+  const dmg = 2 * ezrealL2Count;
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayers[oppSeat] = { ...opp, nexusHealth: opp.nexusHealth - dmg };
+  return {
+    ...state,
+    players: newPlayers,
+    log: [
+      ...state.log,
+      `${player.username} : Ezreal frappe le Nexus adverse pour ${dmg} dmg.`,
+    ],
   };
 }
 
