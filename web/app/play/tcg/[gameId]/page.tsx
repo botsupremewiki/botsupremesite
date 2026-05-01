@@ -160,7 +160,7 @@ export default async function TcgGameHub({
                 <div className="text-xs font-bold uppercase tracking-widest text-amber-300">
                   ⚓ Bienvenue à bord, pirate
                 </div>
-                <h2 className="mt-1 text-2xl font-extrabold text-amber-100">
+                <h2 className="font-pirate mt-1 text-3xl tracking-wide text-amber-100">
                   Tu as {freePacks} boosters gratuits qui t'attendent !
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-amber-200/90">

@@ -50,7 +50,7 @@ export default async function TcgRulesPage({
           </Link>
         </div>
 
-        <h1 className="mb-2 text-3xl font-bold text-rose-200">
+        <h1 className="font-pirate mb-2 text-5xl tracking-wide text-rose-200">
           📖 Règles One Piece TCG
         </h1>
         <p className="mb-8 text-sm text-zinc-400">

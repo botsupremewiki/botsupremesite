@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Pirata_One } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -11,6 +11,15 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Police pirate pour les titres OnePiece TCG (cinematics, victoire,
+// défaite, leader showdown). Utilisée via la classe Tailwind
+// `font-pirate` (cf. globals.css).
+const pirataOne = Pirata_One({
+  variable: "--font-pirata-one",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -40,7 +49,7 @@ export default function RootLayout({
     <html
       lang="fr"
       data-theme="dark"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${pirataOne.variable} h-full antialiased`}
     >
       <body className="flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100">
         <a href="#main-content" className="skip-link">

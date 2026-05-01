@@ -88,10 +88,10 @@ export function LeaderShowdown({
               transition={{ duration: 0.7, delay: 0.6 }}
               className="flex flex-col items-center gap-2 text-center"
             >
-              <div className="text-6xl font-extrabold tracking-widest text-amber-300 sm:text-8xl">
+              <div className="font-pirate text-7xl tracking-widest text-amber-300 drop-shadow-[0_0_24px_rgba(251,191,36,0.5)] sm:text-9xl">
                 VS
               </div>
-              <div className="text-xs uppercase tracking-widest text-amber-200">
+              <div className="font-pirate text-xl uppercase tracking-widest text-amber-200">
                 À l'abordage !
               </div>
             </motion.div>
@@ -177,7 +177,7 @@ export function VictoryScreen({
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: [0, 1.4, 1], opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.3 }}
-              className="bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 bg-clip-text text-7xl font-extrabold tracking-widest text-transparent drop-shadow-[0_0_30px_rgba(251,191,36,0.6)] sm:text-9xl"
+              className="font-pirate bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 bg-clip-text text-7xl tracking-widest text-transparent drop-shadow-[0_0_30px_rgba(251,191,36,0.6)] sm:text-9xl"
             >
               VICTOIRE
             </motion.div>
@@ -239,7 +239,7 @@ export function DefeatScreen({
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.4 }}
-              className="text-6xl font-extrabold tracking-widest text-zinc-300 drop-shadow-md sm:text-7xl"
+              className="font-pirate text-7xl tracking-widest text-zinc-300 drop-shadow-md sm:text-8xl"
             >
               DÉFAITE
             </motion.div>

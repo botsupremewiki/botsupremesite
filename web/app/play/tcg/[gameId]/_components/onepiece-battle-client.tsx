@@ -258,15 +258,15 @@ export function OnePieceBattleClient({
       <main
         className={`relative flex flex-1 flex-col gap-3 overflow-y-auto p-2 sm:gap-4 sm:p-4 ${game.gradient}`}
       >
-        {/* Background thématique pirate : grain + vague Hokusai en
-            filigrane. Pointer-events none, derrière tout le contenu. */}
+        {/* Playmat illustré OnePiece : grain + vagues Hokusai + halo
+            radial top/bottom + boussole décorative + Joly Roger en
+            arrière-plan très discret. Pointer-events none, z-0. */}
         <div
-          className="pointer-events-none fixed inset-0 z-0 opacity-[0.035]"
+          className="pointer-events-none fixed inset-0 z-0"
           aria-hidden="true"
           style={{
-            backgroundImage:
-              "radial-gradient(ellipse_at_top,_rgba(251,191,36,0.4),_transparent_50%),radial-gradient(ellipse_at_bottom,_rgba(220,38,38,0.4),_transparent_60%)",
-            backgroundSize: "100% 100%",
+            background:
+              "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(251,191,36,0.06), transparent 70%), radial-gradient(ellipse 80% 50% at 50% 100%, rgba(220,38,38,0.07), transparent 70%), linear-gradient(180deg, #18181b 0%, #0c0a09 100%)",
           }}
         />
         <div
@@ -274,10 +274,38 @@ export function OnePieceBattleClient({
           aria-hidden="true"
           style={{
             backgroundImage:
-              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><path d='M0 100 Q 25 50, 50 100 T 100 100 T 150 100 T 200 100' stroke='%23fbbf24' stroke-width='1' fill='none' opacity='0.15'/><path d='M0 130 Q 25 80, 50 130 T 100 130 T 150 130 T 200 130' stroke='%23dc2626' stroke-width='1' fill='none' opacity='0.10'/></svg>\")",
+              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'><path d='M0 120 Q 30 60, 60 120 T 120 120 T 180 120 T 240 120' stroke='%23fbbf24' stroke-width='1' fill='none' opacity='0.15'/><path d='M0 160 Q 30 100, 60 160 T 120 160 T 180 160 T 240 160' stroke='%23dc2626' stroke-width='1' fill='none' opacity='0.10'/><path d='M0 80 Q 30 40, 60 80 T 120 80 T 180 80 T 240 80' stroke='%2360a5fa' stroke-width='0.5' fill='none' opacity='0.08'/></svg>\")",
             backgroundRepeat: "repeat",
+            opacity: 0.6,
           }}
         />
+        {/* Boussole décorative au centre — très discrète */}
+        <div
+          className="pointer-events-none fixed left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2 opacity-[0.025]"
+          aria-hidden="true"
+        >
+          <svg width="600" height="600" viewBox="0 0 100 100" fill="none">
+            <circle cx="50" cy="50" r="48" stroke="#fbbf24" strokeWidth="0.5" />
+            <circle cx="50" cy="50" r="40" stroke="#fbbf24" strokeWidth="0.3" />
+            <circle cx="50" cy="50" r="30" stroke="#fbbf24" strokeWidth="0.2" />
+            <line x1="50" y1="2" x2="50" y2="98" stroke="#fbbf24" strokeWidth="0.3" />
+            <line x1="2" y1="50" x2="98" y2="50" stroke="#fbbf24" strokeWidth="0.3" />
+            <line x1="14.6" y1="14.6" x2="85.4" y2="85.4" stroke="#fbbf24" strokeWidth="0.2" />
+            <line x1="85.4" y1="14.6" x2="14.6" y2="85.4" stroke="#fbbf24" strokeWidth="0.2" />
+            <text x="50" y="6" fontSize="4" textAnchor="middle" fill="#fbbf24">N</text>
+            <text x="50" y="98" fontSize="4" textAnchor="middle" fill="#fbbf24">S</text>
+            <text x="2" y="52" fontSize="4" fill="#fbbf24">O</text>
+            <text x="94" y="52" fontSize="4" fill="#fbbf24">E</text>
+            <polygon points="50,18 53,50 50,82 47,50" fill="#fbbf24" opacity="0.5" />
+          </svg>
+        </div>
+        {/* Joly Roger très discret en bas */}
+        <div
+          className="pointer-events-none fixed bottom-4 right-4 z-0 text-[14rem] opacity-[0.035]"
+          aria-hidden="true"
+        >
+          🏴‍☠️
+        </div>
         <div className="relative z-10 flex flex-1 flex-col gap-3 sm:gap-4">
         {!profile ? (
           <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
