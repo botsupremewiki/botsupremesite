@@ -38,6 +38,17 @@ type CoinFlipEvent = {
   followUp?: string;
 };
 
+/** Historique des résultats déjà passés DANS LA SÉRIE EN COURS, plus le
+ *  flip actuel. Permet d'afficher un récap visuel "Pile X · Face Y" et
+ *  les badges P/F pour chaque lancer déjà tombé. La série est groupée
+ *  par `label` (toutes les Rafales d'Éclairs d'un même Pokémon = une
+ *  série). On reset quand le label change ou quand la queue se vide. */
+type CoinSeriesEntry = {
+  index: number;
+  total: number;
+  result: "heads" | "tails";
+};
+
 /** Animation d'un projectile qui part d'une position de départ vers une
  *  position d'arrivée (ex énergie qui vole du logo vers une carte). */
 type FlyAnim = {
@@ -112,6 +123,12 @@ export function BattleClient({
   // que la queue n'est pas vide pour que les conséquences (dégâts,
   // statuts, énergies) n'apparaissent qu'APRÈS l'animation.
   const [coinQueue, setCoinQueue] = useState<CoinFlipEvent[]>([]);
+  // Historique des flips déjà passés dans la série en cours (pour le
+  // récap visuel "Pile X · Face Y" + badges).
+  const [coinSeries, setCoinSeries] = useState<{
+    label: string;
+    entries: CoinSeriesEntry[];
+  }>({ label: "", entries: [] });
   // Refs en miroir pour pouvoir prendre des décisions synchrones dans
   // le handler WebSocket (les setState sont async/batched).
   const coinQueueRef = useRef<CoinFlipEvent[]>([]);
@@ -180,9 +197,40 @@ export function BattleClient({
         pendingStateRef.current = null;
         applyStateNow(s);
       }
+      // Si plus aucun flip en attente, on reset le récap après un court
+      // délai (laisse le temps de voir le résultat final).
+      if (coinQueueRef.current.length === 0) {
+        window.setTimeout(() => {
+          // Reset uniquement si toujours pas de nouveau flip arrivé
+          // entre-temps (un nouveau flip aurait écrasé coinSeries).
+          if (coinQueueRef.current.length === 0) {
+            setCoinSeries({ label: "", entries: [] });
+          }
+        }, 1500);
+      }
     },
     [applyStateNow],
   );
+
+  /** Safety net : si la queue de coin flips reste bloquée plus de 15s
+   *  alors qu'un state est en attente, force l'application. Évite que
+   *  le jeu se "fige" à cause d'une animation manquée. */
+  useEffect(() => {
+    if (coinQueue.length === 0) return;
+    const t = window.setTimeout(() => {
+      if (coinQueueRef.current.length > 0 && pendingStateRef.current) {
+        console.warn(
+          "[battle] coin queue stuck for 15s, forcing state apply",
+        );
+        coinQueueRef.current = [];
+        setCoinQueue([]);
+        const s = pendingStateRef.current;
+        pendingStateRef.current = null;
+        applyStateNow(s);
+      }
+    }, 15000);
+    return () => window.clearTimeout(t);
+  }, [coinQueue, applyStateNow]);
 
   useEffect(() => {
     if (!profile) {
@@ -257,6 +305,35 @@ export function BattleClient({
           };
           coinQueueRef.current = [...coinQueueRef.current, ev];
           setCoinQueue(coinQueueRef.current);
+          // Met à jour le récap de la série en cours. Si le label
+          // change, on démarre une nouvelle série. Sinon on append.
+          if (msg.total && msg.total > 1 && msg.index) {
+            setCoinSeries((prev) => {
+              if (prev.label !== msg.label) {
+                return {
+                  label: msg.label,
+                  entries: [
+                    {
+                      index: msg.index ?? 1,
+                      total: msg.total ?? 1,
+                      result: msg.result,
+                    },
+                  ],
+                };
+              }
+              return {
+                label: prev.label,
+                entries: [
+                  ...prev.entries,
+                  {
+                    index: msg.index ?? 1,
+                    total: msg.total ?? 1,
+                    result: msg.result,
+                  },
+                ],
+              };
+            });
+          }
           break;
         }
         case "battle-trainer-reveal":
@@ -553,7 +630,11 @@ export function BattleClient({
           )}
 
           {/* Animation pile/face : on consomme la queue un par un. */}
-          <CoinFlipQueue queue={coinQueue} onConsume={consumeCoin} />
+          <CoinFlipQueue
+            queue={coinQueue}
+            series={coinSeries}
+            onConsume={consumeCoin}
+          />
 
           {/* Bandeau « À toi ! » / « Tour adverse » à chaque changement de tour. */}
           {turnBanner && (
@@ -2783,9 +2864,11 @@ function HandCard({
  *  évènement. Quand l'animation finit, le parent retire l'évènement. */
 function CoinFlipQueue({
   queue,
+  series,
   onConsume,
 }: {
   queue: CoinFlipEvent[];
+  series: { label: string; entries: CoinSeriesEntry[] };
   onConsume: (id: string) => void;
 }) {
   const head = queue[0];
@@ -2794,6 +2877,7 @@ function CoinFlipQueue({
     <CoinFlipOverlay
       key={head.id}
       event={head}
+      series={series}
       onComplete={() => onConsume(head.id)}
     />
   );
@@ -2804,9 +2888,11 @@ function CoinFlipQueue({
  *  après ~1.8s. */
 function CoinFlipOverlay({
   event,
+  series,
   onComplete,
 }: {
   event: CoinFlipEvent;
+  series: { label: string; entries: CoinSeriesEntry[] };
   onComplete: () => void;
 }) {
   // Phase 0 → 0.9s : la pièce tourne. Le `result` détermine où elle s'arrête
@@ -2819,6 +2905,15 @@ function CoinFlipOverlay({
     const t = window.setTimeout(onComplete, TOTAL_MS);
     return () => window.clearTimeout(t);
   }, [event.id, onComplete]);
+
+  // Agrégats de la série : seul les entries de la même série que
+  // l'event actuel comptent (label match).
+  const seriesEntries =
+    series.label === event.label ? series.entries : [];
+  const headsCount = seriesEntries.filter((e) => e.result === "heads").length;
+  const tailsCount = seriesEntries.filter((e) => e.result === "tails").length;
+  const total = event.total ?? 0;
+  const remaining = total > 0 ? total - seriesEntries.length : 0;
 
   return (
     <motion.div
@@ -2897,6 +2992,67 @@ function CoinFlipOverlay({
           className="text-lg font-semibold text-zinc-100"
         >
           {event.followUp}
+        </motion.div>
+      )}
+
+      {/* Récap série multi-coin : badges P/F + compteur Pile/Face/Restant.
+       *  Visible uniquement quand on est dans une série ≥ 2 lancers. */}
+      {seriesEntries.length > 0 && total > 1 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.25 }}
+          className="mt-4 flex flex-col items-center gap-2"
+        >
+          {/* Badges des résultats déjà tombés */}
+          <div
+            className="flex flex-wrap items-center justify-center gap-1.5"
+            role="list"
+            aria-label={`Résultats déjà obtenus : ${headsCount} face, ${tailsCount} pile`}
+          >
+            {seriesEntries.map((e, i) => (
+              <span
+                key={i}
+                role="listitem"
+                className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black shadow ${
+                  e.result === "heads"
+                    ? "bg-amber-300 text-amber-950 ring-1 ring-amber-200"
+                    : "bg-zinc-300 text-zinc-900 ring-1 ring-zinc-200"
+                }`}
+                title={`Lancer ${e.index}/${e.total} : ${e.result === "heads" ? "FACE" : "PILE"}`}
+              >
+                {e.result === "heads" ? "F" : "P"}
+              </span>
+            ))}
+            {/* Slots vides pour les flips à venir */}
+            {Array.from({ length: Math.max(0, remaining - 1) }, (_, i) => (
+              <span
+                key={`empty-${i}`}
+                aria-hidden="true"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-white/20 text-[10px] text-white/30"
+              >
+                ?
+              </span>
+            ))}
+          </div>
+          {/* Compteur cumulé */}
+          <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-widest">
+            <span className="text-amber-300">
+              Face : <span className="tabular-nums">{headsCount}</span>
+            </span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-300">
+              Pile : <span className="tabular-nums">{tailsCount}</span>
+            </span>
+            {remaining > 1 && (
+              <>
+                <span className="text-zinc-600">·</span>
+                <span className="text-zinc-500">
+                  Restant : <span className="tabular-nums">{remaining - 1}</span>
+                </span>
+              </>
+            )}
+          </div>
         </motion.div>
       )}
     </motion.div>
