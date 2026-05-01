@@ -2926,7 +2926,13 @@ export type TcgClientMessage =
 // 3 boosters thématiques officiels comme dans l'app Pocket. Chaque carte
 // appartient à 1 booster principal (et parfois plusieurs : ex. les couronnes).
 
-export type PokemonPackTypeId = "mewtwo" | "charizard" | "pikachu";
+export type PokemonPackTypeId =
+  | "mewtwo"
+  | "charizard"
+  | "pikachu"
+  | "mew"
+  | "dialga"
+  | "palkia";
 
 export type PokemonPackType = {
   id: PokemonPackTypeId;
@@ -2968,6 +2974,36 @@ export const POKEMON_PACK_TYPES: Record<PokemonPackTypeId, PokemonPackType> = {
     active: true,
     accent: "text-yellow-300",
     border: "border-yellow-500/50",
+  },
+  mew: {
+    id: "mew",
+    name: "Pack Mew (A1a)",
+    description:
+      "Booster L'Île Fabuleuse — Mew + Pokémon mythiques d'Hoenn et Sinnoh.",
+    glyph: "🌸",
+    active: true,
+    accent: "text-pink-300",
+    border: "border-pink-500/50",
+  },
+  dialga: {
+    id: "dialga",
+    name: "Pack Dialga (A2)",
+    description:
+      "Booster Espace-Temps Triomphal — Dialga, Métal, Acier, Combat dominants.",
+    glyph: "🕰️",
+    active: true,
+    accent: "text-sky-300",
+    border: "border-sky-500/50",
+  },
+  palkia: {
+    id: "palkia",
+    name: "Pack Palkia (A2)",
+    description:
+      "Booster Espace-Temps Triomphal — Palkia, Eau, Dragon, Plante dominants.",
+    glyph: "🌌",
+    active: true,
+    accent: "text-purple-300",
+    border: "border-purple-500/50",
   },
 };
 

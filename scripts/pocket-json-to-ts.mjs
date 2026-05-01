@@ -25,6 +25,10 @@ const OUTPUT = path.resolve(
   arg("out", "shared/tcg-pokemon-base.ts"),
 );
 const EXPORT_NAME = arg("export", "POKEMON_BASE_SET");
+// Si --default-pack=mewtwo, les cartes sans booster officiel reçoivent
+// ce pack par défaut (utile pour A1a/A2 qui n'ont pas de boosters dans
+// la même structure que A1).
+const DEFAULT_PACK = arg("default-pack", "");
 
 function tsValue(v) {
   if (v === null || v === undefined) return "undefined";
@@ -104,10 +108,21 @@ async function main() {
     .join(" + ");
   console.log(`Loaded ${data.cards.length} cartes depuis : ${setLabel}`);
 
-  const cards = data.cards.filter((c) => c.boosters.length > 0);
-  const skippedNoBooster = data.cards.length - cards.length;
-  if (skippedNoBooster > 0) {
-    console.log(`  ⚠ ${skippedNoBooster} cartes sans booster, ignorées.`);
+  let cards;
+  if (DEFAULT_PACK) {
+    // Mode "tout garder" : les cartes sans booster reçoivent DEFAULT_PACK.
+    cards = data.cards.map((c) => ({
+      ...c,
+      boosters: c.boosters.length > 0 ? c.boosters : [DEFAULT_PACK],
+    }));
+    const filled = cards.filter((c) => c.boosters[0] === DEFAULT_PACK).length;
+    console.log(`  ⓘ ${filled} cartes assignées au pack par défaut "${DEFAULT_PACK}".`);
+  } else {
+    cards = data.cards.filter((c) => c.boosters.length > 0);
+    const skippedNoBooster = data.cards.length - cards.length;
+    if (skippedNoBooster > 0) {
+      console.log(`  ⚠ ${skippedNoBooster} cartes sans booster, ignorées.`);
+    }
   }
 
   // Tri : par booster (mewtwo, charizard, pikachu) puis par localId.

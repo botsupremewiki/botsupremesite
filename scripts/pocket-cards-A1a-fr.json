@@ -1,0 +1,2928 @@
+{
+  "sets": [
+    {
+      "id": "A1a",
+      "name": "L’Île Fabuleuse"
+    }
+  ],
+  "boosters": [
+    {
+      "id": "mewtwo",
+      "name": "Mewtwo"
+    },
+    {
+      "id": "charizard",
+      "name": "Dracaufeu"
+    },
+    {
+      "id": "pikachu",
+      "name": "Pikachu"
+    }
+  ],
+  "cards": [
+    {
+      "kind": "pokemon",
+      "id": "A1a-001",
+      "localId": 1,
+      "name": "Noeunoeuf",
+      "pokedexId": 102,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 50,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Jaillissement",
+          "cost": [
+            "colorless"
+          ],
+          "text": "Prenez une Énergie {G} de votre zone Énergie et attachez-la à ce Pokémon."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/001/high.webp",
+      "illustrator": "Yuka Morii",
+      "description": "Même s'il ressemble à un tas d'œufs,\nil s'agit bien d'un Pokémon. Il paraît qu'ils\ncommuniquent entre eux par télépathie.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-002",
+      "localId": 2,
+      "name": "Noadkoko",
+      "pokedexId": 103,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 130,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Psyko",
+          "cost": [
+            "grass",
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 80,
+          "damageSuffix": "+",
+          "text": "Cette attaque inflige 20 dégâts de plus pour chaque Énergie attachée au Pokémon Actif de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/002/high.webp",
+      "illustrator": "Masakazu Fukuda",
+      "description": "Chacune de ses trois têtes pense de manière autonome.\nElles ne semblent s'intéresser qu'à elles-mêmes.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Noeunoeuf"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-003",
+      "localId": 3,
+      "name": "Celebi-ex",
+      "pokedexId": 251,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Éclosion Éclatante",
+          "cost": [
+            "grass",
+            "colorless"
+          ],
+          "damage": 50,
+          "damageSuffix": "x",
+          "text": "Lancez une pièce pour chaque Énergie attachée à ce Pokémon. Cette attaque inflige 50 dégâts pour chaque côté face."
+        }
+      ],
+      "rarity": "diamond-4",
+      "rarityFr": "Quatre Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/003/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-004",
+      "localId": 4,
+      "name": "Vipélierre",
+      "pokedexId": 495,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 70,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Fouet Lianes",
+          "cost": [
+            "grass",
+            "colorless"
+          ],
+          "damage": 40,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/004/high.webp",
+      "illustrator": "Kagemaru Himeno",
+      "description": "La lumière du soleil augmente fortement son agilité.\nSes lianes sont plus habiles que ses mains.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-005",
+      "localId": 5,
+      "name": "Lianaja",
+      "pokedexId": 496,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 80,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Fouet Lianes",
+          "cost": [
+            "grass",
+            "colorless"
+          ],
+          "damage": 50,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/005/high.webp",
+      "illustrator": "Shigenori Negishi",
+      "description": "Il court comme s'il glissait sur le sol. Il déroute l'ennemi\npar ses mouvements et l'assomme d'un coup de liane.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Vipélierre"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-006",
+      "localId": 6,
+      "name": "Majaspic",
+      "pokedexId": 497,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 110,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Lance-Soleil",
+          "cost": [
+            "grass",
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 70,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/006/high.webp",
+      "illustrator": "Yoshioka",
+      "description": "Il ne donnera tout son potentiel que contre un ennemi\npuissant indifférent à son regard écrasant de noblesse.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Lianaja"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-007",
+      "localId": 7,
+      "name": "Spododo",
+      "pokedexId": 755,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Collision",
+          "cost": [
+            "grass"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/007/high.webp",
+      "illustrator": "Saya Tsuruta",
+      "description": "Ses chapeaux sont délicieux, et les Pokémon\nde la forêt s'en délectent. Heureusement pour lui,\nses couvre-chefs repoussent en une nuit.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-008",
+      "localId": 8,
+      "name": "Lampignon",
+      "pokedexId": 756,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 90,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Spores Scintillantes",
+          "cost": [
+            "grass",
+            "grass"
+          ],
+          "damage": 50,
+          "text": "Le Pokémon Actif de votre adversaire est maintenant Endormi."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/008/high.webp",
+      "illustrator": "Mizue",
+      "description": "Il attire ses proies et les endort grâce au\nclignotement de ses spores. Il aspire ensuite\nleur énergie vitale du bout de ses doigts.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Spododo"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-009",
+      "localId": 9,
+      "name": "Sinistrail",
+      "pokedexId": 781,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 100,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Fouet d'Énergie",
+          "cost": [
+            "grass"
+          ],
+          "damage": 20,
+          "damageSuffix": "+",
+          "text": "Si ce Pokémon a au moins 3 Énergies {G} de plus, cette attaque inflige 70 dégâts supplémentaires."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/009/high.webp",
+      "illustrator": "Hasuno",
+      "description": "Ce Pokémon Spectre naît lorsque les algues\ndérivant au fond de l'océan se fixent sur\ndes morceaux d'épaves de navire.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-010",
+      "localId": 10,
+      "name": "Ponyta",
+      "pokedexId": 77,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Écrasement",
+          "cost": [
+            "fire"
+          ],
+          "damage": 10,
+          "damageSuffix": "+",
+          "text": "Lancez une pièce. Si c'est face, cette attaque inflige 30 dégâts de plus."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/010/high.webp",
+      "illustrator": "Tomokazu Komiya",
+      "description": "À la naissance, il ne court pas très vite. C'est en faisant\nla course avec ses camarades qu'il se muscle les jambes.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-011",
+      "localId": 11,
+      "name": "Galopa",
+      "pokedexId": 78,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 100,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Botte Secrète",
+          "cost": [
+            "fire",
+            "colorless"
+          ],
+          "damage": 40,
+          "damageSuffix": "+",
+          "text": "Lancez une pièce. Si c'est face, cette attaque inflige 60 dégâts de plus."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/011/high.webp",
+      "illustrator": "AKIRA EGAWA",
+      "description": "Ce Pokémon traverse les plaines à plus de 240 km/h,\nsa crinière flamboyante flottant au vent.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Ponyta"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-012",
+      "localId": 12,
+      "name": "Magmar",
+      "pokedexId": 126,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Déflagration",
+          "cost": [
+            "fire",
+            "fire"
+          ],
+          "damage": 80,
+          "text": "Défaussez 2 Énergies {R} de ce Pokémon."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/012/high.webp",
+      "illustrator": "sui",
+      "description": "Il achève ses proies avec ses flammes, mais\nil lui arrive de les calciner accidentellement,\nà son plus grand regret.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-013",
+      "localId": 13,
+      "name": "Pyronille",
+      "pokedexId": 636,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Fournaise",
+          "cost": [
+            "fire",
+            "colorless"
+          ],
+          "damage": 30,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/013/high.webp",
+      "illustrator": "kawayoo",
+      "description": "On l'appelait autrefois \" la larve qui a dérobé\nle soleil \". Les flammes qui jaillissent de ses\ncornes peuvent découper une plaque de fer.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-014",
+      "localId": 14,
+      "name": "Pyrax",
+      "pokedexId": 637,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 120,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Cendres volcaniques",
+          "cost": [
+            "fire",
+            "fire",
+            "colorless"
+          ],
+          "text": "Défaussez 2 Énergie {R} de ce Pokémon. Cette attaque inflige 80 dégâts à l'un des Pokémon de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/014/high.webp",
+      "illustrator": "DOM",
+      "description": "Son corps brûlant le rend impopulaire dans les\nrégions chaudes. Toutefois, on le vénère comme\nl'incarnation du soleil dans les régions froides.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Pyronille"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-015",
+      "localId": 15,
+      "name": "Tritox",
+      "pokedexId": 757,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Choc Venin",
+          "cost": [
+            "colorless"
+          ],
+          "damage": 10,
+          "damageSuffix": "+",
+          "text": "Si le Pokémon Actif de votre adversaire est Empoisonné, cette attaque inflige 40 dégâts de plus."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/015/high.webp",
+      "illustrator": "Naoki Saito",
+      "description": "Il provoque ses proies afin de les attirer dans\nd'étroites zones rocheuses, puis il les étourdit\navec son gaz toxique avant de les achever.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-016",
+      "localId": 16,
+      "name": "Malamandre",
+      "pokedexId": 758,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 80,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Griffes Empoisonnées",
+          "cost": [
+            "fire"
+          ],
+          "damage": 30,
+          "text": "Le Pokémon Actif de votre adversaire est maintenant Empoisonné."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/016/high.webp",
+      "illustrator": "Mitsuhiro Arita",
+      "description": "Il étourdit ses adversaires avec son gaz toxique,\npuis il les asservit en exécutant une danse envoûtante.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Tritox"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-017",
+      "localId": 17,
+      "name": "Magicarpe",
+      "pokedexId": 129,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 30,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Bondir",
+          "cost": [
+            "water"
+          ],
+          "text": "Échangez ce Pokémon contre l'un de vos Pokémon de Banc."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/017/high.webp",
+      "illustrator": "Mitsuhiro Arita",
+      "description": "Un Pokémon tout à fait pathétique. En de très\nrares occasions, il est capable de sauter haut,\nmais jamais à plus de deux mètres.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-018",
+      "localId": 18,
+      "name": "Léviator-ex",
+      "pokedexId": 130,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 180,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Tourbillon Tempétueux",
+          "cost": [
+            "water",
+            "water",
+            "water",
+            "colorless"
+          ],
+          "damage": 140,
+          "text": "Défaussez une Énergie au hasard parmi celles attachées à tous les Pokémon en jeu (les vôtres et ceux de votre adversaire)."
+        }
+      ],
+      "rarity": "diamond-4",
+      "rarityFr": "Quatre Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/018/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": "Magicarpe"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-019",
+      "localId": 19,
+      "name": "Aquali",
+      "pokedexId": 134,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 120,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Grosse Vague",
+          "cost": [
+            "water",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 60,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/019/high.webp",
+      "illustrator": "LINNE",
+      "description": "Il vit au bord de l'eau. Sa queue semblable à celle\nd'un poisson lui donne l'apparence d'une sirène.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Évoli"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-020",
+      "localId": 20,
+      "name": "Écayon",
+      "pokedexId": 456,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Pistolet à O",
+          "cost": [
+            "water"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/020/high.webp",
+      "illustrator": "sui",
+      "description": "La ligne qui fait le tour de son corps emmagasine\nl'énergie solaire et brille intensément la nuit.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-021",
+      "localId": 21,
+      "name": "Luminéon",
+      "pokedexId": 457,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 80,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 0,
+      "attacks": [
+        {
+          "name": "Aqua-Paquebot",
+          "cost": [
+            "water",
+            "water"
+          ],
+          "text": "Cette attaque inflige 50 dégâts à un des Pokémon de Banc de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/021/high.webp",
+      "illustrator": "Sekio",
+      "description": "La lumière qu'il émet pour attirer ses\nproies attire également ses prédateurs,\ndes Pokémon poissons féroces.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Écayon"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-022",
+      "localId": 22,
+      "name": "Khélocrok",
+      "pokedexId": 833,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Morsure",
+          "cost": [
+            "water",
+            "colorless"
+          ],
+          "damage": 30,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/022/high.webp",
+      "illustrator": "Taiga Kayama",
+      "description": "Son incisive continue à pousser.\nLorsqu'elle le démange, il joue avec un\nde ses congénères et lui mord la corne.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-023",
+      "localId": 23,
+      "name": "Torgamord",
+      "pokedexId": 834,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 130,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Mâchouille",
+          "cost": [
+            "water",
+            "water",
+            "water"
+          ],
+          "damage": 70,
+          "text": "Lancez une pièce. Si c'est face, défaussez au hasard une Énergie du Pokémon Actif de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/023/high.webp",
+      "illustrator": "nisimono",
+      "description": "Ce Pokémon très agressif peut\nfacilement broyer des rochers grâce à\nson énorme mâchoire en dents de scie.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Khélocrok"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-024",
+      "localId": 24,
+      "name": "Nigosier",
+      "pokedexId": 845,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Plongée",
+          "cost": [
+            "water",
+            "water",
+            "colorless"
+          ],
+          "damage": 60,
+          "text": "Lancez une pièce. Si c'est face, pendant le prochain tour de votre adversaire, évitez tous les dégâts et les effets d'attaques infligés à ce Pokémon."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/024/high.webp",
+      "illustrator": "Jerky",
+      "description": "Il est assez puissant pour terrasser un\nennemi d'un seul coup, mais il est tellement\nnigaud qu'il oublie contre qui il se bat.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-025",
+      "localId": 25,
+      "name": "Pikachu",
+      "pokedexId": 25,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Cercle Électrik",
+          "cost": [
+            "lightning"
+          ],
+          "damage": 10,
+          "damageSuffix": "x",
+          "text": "Cette attaque inflige 10 dégâts pour chaque Pokémon {L} sur votre Banc."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/025/high.webp",
+      "illustrator": "Naoyo Kimura",
+      "description": "Quand il s'énerve, il libère instantanément\nl'énergie emmagasinée dans les poches de\nses joues.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-026",
+      "localId": 26,
+      "name": "Raichu",
+      "pokedexId": 26,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 120,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Electrochok",
+          "cost": [
+            "lightning",
+            "lightning",
+            "lightning"
+          ],
+          "damage": 60,
+          "text": "Cette attaque inflige aussi 20 dégâts à chaque Pokémon de Banc de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/026/high.webp",
+      "illustrator": "hncl",
+      "description": "Il se protège des décharges grâce à sa queue,\nqui dissipe l'électricité dans le sol.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Pikachu"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-027",
+      "localId": 27,
+      "name": "Élektek",
+      "pokedexId": 125,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 70,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Lance-Éclair",
+          "cost": [
+            "lightning",
+            "lightning"
+          ],
+          "text": "Cette attaque inflige 40 dégâts à l'un des Pokémon de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/027/high.webp",
+      "illustrator": "Naoyo Kimura",
+      "description": "De nombreuses centrales électriques gardent\ndes Pokémon Sol à proximité afin d'empêcher\nles Élektek de leur voler de l'électricité.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-028",
+      "localId": 28,
+      "name": "Statitik",
+      "pokedexId": 595,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 40,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Piqûre",
+          "cost": [
+            "lightning"
+          ],
+          "damage": 30,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/028/high.webp",
+      "illustrator": "MINAMINAMI Take",
+      "description": "Il s'accroche au corps des autres Pokémon\npour absorber leur électricité statique.\nIl est incapable d'en produire tout seul.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-029",
+      "localId": 29,
+      "name": "Mygavolt",
+      "pokedexId": 596,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 80,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Toile Élek",
+          "cost": [
+            "lightning",
+            "lightning"
+          ],
+          "damage": 70,
+          "text": "Pendant le prochain tour de votre adversaire, le Pokémon Défenseur ne peut pas battre en retraite."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/029/high.webp",
+      "illustrator": "Mitsuhiro Arita",
+      "description": "Il attaque en projetant les poils de son abdomen\nchargés en électricité. La victime reste alors\nparalysée pendant trois jours et trois nuits.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Statitik"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-030",
+      "localId": 30,
+      "name": "Dedenne",
+      "pokedexId": 702,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Éclair",
+          "cost": [
+            "lightning"
+          ],
+          "damage": 10,
+          "text": "Lancez une pièce. Si c'est face, le Pokémon Actif de votre adversaire est maintenant Paralysé."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/030/high.webp",
+      "illustrator": "Taiga Kayama",
+      "description": "Son corps étant petit et son organe générateur\nd'électricité peu développé, il se recharge en\naspirant l'électricité des maisons avec sa queue.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-031",
+      "localId": 31,
+      "name": "Mew",
+      "pokedexId": 151,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Observation Psychique",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": "Votre adversaire dévoile sa main."
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/031/high.webp",
+      "illustrator": "Saya Tsuruta",
+      "description": "Nombre de scientifiques voient en lui l'ancêtre des Pokémon\ncar il maîtrise toutes leurs capacités.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-032",
+      "localId": 32,
+      "name": "Mew-ex",
+      "pokedexId": 151,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Piqûre Psy",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": null
+        },
+        {
+          "name": "Piratage de Génome",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "text": "Choisissez l'une des attaques du Pokémon Actif de votre adversaire et utilisez-la en tant que cette attaque."
+        }
+      ],
+      "rarity": "diamond-4",
+      "rarityFr": "Quatre Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/032/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-033",
+      "localId": 33,
+      "name": "Cryptéro",
+      "pokedexId": 561,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Pique-Pioche",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 10,
+          "text": "Piochez une carte."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/033/high.webp",
+      "illustrator": "Shigenori Negishi",
+      "description": "Il vole grâce à ses pouvoirs psychiques. Certains disent qu'il était\nle dieu protecteur d'une ville antique, d'autres, son messager.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-034",
+      "localId": 34,
+      "name": "Lewsor",
+      "pokedexId": 605,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Coup d'Boule",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/034/high.webp",
+      "illustrator": "Kouki Saitou",
+      "description": "S'il se tient près d'une télé, d'étranges panoramas\napparaissent à l'écran. On raconte qu'il s'agirait\nde paysages venus des terres natales de Lewsor.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-035",
+      "localId": 35,
+      "name": "Neitram",
+      "pokedexId": 606,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 90,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Emprise Mentale",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 10,
+          "damageSuffix": "+",
+          "text": "Cette attaque inflige 20 dégâts supplémentaires pour chaque Pokémon de Banc de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/035/high.webp",
+      "illustrator": "sowsow",
+      "description": "À chaque fois que Neitram se matérialise dans une pâture,\nun Moumouflon disparaît dans des circonstances mystérieuses.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Lewsor"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-036",
+      "localId": 36,
+      "name": "Flabébé",
+      "pokedexId": 669,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 40,
+      "weakness": "metal",
+      "weaknessFr": "Métal",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Regard Hypnotique",
+          "cost": [
+            "psychic"
+          ],
+          "text": "Le Pokémon Actif de votre adversaire est maintenant Endormi."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/036/high.webp",
+      "illustrator": "Cona Nitanda",
+      "description": "Ce Pokémon parvient à extraire l'énergie\ncachée des fleurs sauvages. Il aime\nparticulièrement les fleurs rouges.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-037",
+      "localId": 37,
+      "name": "Floette",
+      "pokedexId": 670,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 70,
+      "weakness": "metal",
+      "weaknessFr": "Métal",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Feuille Sangsue",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 40,
+          "text": "Soignez 10 dégâts de ce Pokémon."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/037/high.webp",
+      "illustrator": "Cona Nitanda",
+      "description": "Ce Pokémon parvient à canaliser le peu d'énergie\nencore présent dans les fleurs fanées pour leur\nredonner du tonus. Il tient une fleur rouge.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Flabébé"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-038",
+      "localId": 38,
+      "name": "Florges",
+      "pokedexId": 671,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 120,
+      "weakness": "metal",
+      "weaknessFr": "Métal",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Éclobrillance",
+          "cost": [
+            "psychic",
+            "psychic"
+          ],
+          "damage": 80,
+          "text": "Soignez 20 dégâts de chacun de vos Pokémon."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/038/high.webp",
+      "illustrator": "Cona Nitanda",
+      "description": "Ce Pokémon transforme son territoire en\nmagnifique jardin fleuri. Il tire sa puissance\ndes fleurs rouges qui ornent son cou.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Floette"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-039",
+      "localId": 39,
+      "name": "Sucroquin",
+      "pokedexId": 684,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "metal",
+      "weaknessFr": "Métal",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Vent Féérique",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/039/high.webp",
+      "illustrator": "5ban Graphics",
+      "description": "Il mange son propre poids en sucre chaque\njour. S'il n'a pas sa dose de sucreries,\nil devient horriblement grognon.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-040",
+      "localId": 40,
+      "name": "Cupcanaille",
+      "pokedexId": 685,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 100,
+      "weakness": "metal",
+      "weaknessFr": "Métal",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Coup Magique",
+          "cost": [
+            "psychic",
+            "colorless"
+          ],
+          "damage": 60,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/040/high.webp",
+      "illustrator": "Kagemaru Himeno",
+      "description": "Il peut diagnostiquer l'état de santé mentale et\nphysique de quelqu'un rien qu'à l'odorat. Un tel\ndon pourrait avoir des applications en médecine.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Sucroquin"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-041",
+      "localId": 41,
+      "name": "Férosinge",
+      "pokedexId": 56,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 50,
+      "weakness": "psychic",
+      "weaknessFr": "Psy",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Poing Concentré",
+          "cost": [
+            "fighting"
+          ],
+          "damage": 50,
+          "text": "Lancez une pièce. Si c'est pile, cette attaque ne fait rien."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/041/high.webp",
+      "illustrator": "Akira Komayama",
+      "description": "Il vit en groupe au sommet des arbres. S'il perd\nses congénères de vue, la solitude le rend furieux.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-042",
+      "localId": 42,
+      "name": "Colossinge",
+      "pokedexId": 57,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 80,
+      "weakness": "psychic",
+      "weaknessFr": "Psy",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Koud'Poing",
+          "cost": [
+            "fighting"
+          ],
+          "damage": 50,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/042/high.webp",
+      "illustrator": "Taiga Kayama",
+      "description": "Il devient fou furieux s'il se sent observé\net pourchasse tout être qui croise son regard.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Férosinge"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-043",
+      "localId": 43,
+      "name": "Racaillou",
+      "pokedexId": 74,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 70,
+      "weakness": "grass",
+      "weaknessFr": "Plante",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Poing Léger",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 30,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/043/high.webp",
+      "illustrator": "GOSSAN",
+      "description": "Les aspérités de Racaillou s'adoucissent au fil\ndes années, tout comme sa personnalité.\nIl devient tout lisse, tout rond, et tout calme.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-044",
+      "localId": 44,
+      "name": "Gravalanch",
+      "pokedexId": 75,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 100,
+      "weakness": "grass",
+      "weaknessFr": "Plante",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Allonger",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 40,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/044/high.webp",
+      "illustrator": "Ayaka Yoshida",
+      "description": "Il escalade les falaises pour en atteindre\nles sommets. Une fois tout en haut, il se\nlaisse rouler par le chemin d'où il est arrivé.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Racaillou"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-045",
+      "localId": 45,
+      "name": "Grolem",
+      "pokedexId": 76,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 160,
+      "weakness": "grass",
+      "weaknessFr": "Plante",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Pression de Garde",
+          "cost": [
+            "fighting",
+            "fighting",
+            "fighting",
+            "colorless"
+          ],
+          "damage": 120,
+          "text": "Pendant le prochain tour de votre adversaire, ce Pokémon subit − 30 dégâts provenant des attaques."
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/045/high.webp",
+      "illustrator": "Masakazu Fukuda",
+      "description": "Lorsqu'il arrive à un âge avancé, il arrête de muer.\nUn Grolem ayant vécu très longtemps est recouvert\nde mousse verte.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Gravalanch"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-046",
+      "localId": 46,
+      "name": "Ptéra-ex",
+      "pokedexId": 142,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 140,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Écras'Terre",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 80,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-4",
+      "rarityFr": "Quatre Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/046/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-047",
+      "localId": 47,
+      "name": "Marshadow",
+      "pokedexId": 802,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "psychic",
+      "weaknessFr": "Psy",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Vendetta",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 40,
+          "damageSuffix": "+",
+          "text": "Si au moins l'un de vos Pokémon a été mis K.O. par les dégâts d'une attaque pendant le dernier tour de votre adversaire, cette attaque inflige 60 dégâts supplémentaires."
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/047/high.webp",
+      "illustrator": "kantaro",
+      "description": "Il se fond dans l'ombre de son adversaire pour imiter sa\nforce et ses attaques. La copie surpasse alors l'original.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-048",
+      "localId": 48,
+      "name": "Dolman",
+      "pokedexId": 874,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 120,
+      "weakness": "grass",
+      "weaknessFr": "Plante",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Ultimawashi",
+          "cost": [
+            "fighting",
+            "fighting",
+            "fighting"
+          ],
+          "damage": 90,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/048/high.webp",
+      "illustrator": "Teeziro",
+      "description": "Les éléments rocheux qui constituent son corps\ncorrespondent à ceux qu'on trouve dans le sol\nd'une zone très éloignée de son habitat actuel.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-049",
+      "localId": 49,
+      "name": "Smogo",
+      "pokedexId": 109,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 70,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Division",
+          "cost": [
+            "darkness"
+          ],
+          "text": "Placez une carte Smogo au hasard de votre deck sur votre Banc."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/049/high.webp",
+      "illustrator": "Naoyo Kimura",
+      "description": "Son corps est gonflé de gaz toxique. Il se rend dans les décharges,\nattiré par l'odeur des déchets alimentaires en décomposition.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-050",
+      "localId": 50,
+      "name": "Smogogo",
+      "pokedexId": 110,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 110,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Brouillard",
+          "cost": [
+            "darkness",
+            "darkness"
+          ],
+          "damage": 50,
+          "text": "Pendant le prochain tour de votre adversaire, si le Pokémon Défenseur essaie d'utiliser une attaque, votre adversaire lance une pièce. Si c'est pile, l'attaque n'est pas lancée."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/050/high.webp",
+      "illustrator": "Mousho",
+      "description": "Si l'un des deux Smogo se gonfle, l'autre se dégonfle.\nIls mélangent leurs gaz en permanence.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Smogo"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-051",
+      "localId": 51,
+      "name": "Chacripan",
+      "pokedexId": 509,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "grass",
+      "weaknessFr": "Plante",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Griffe",
+          "cost": [
+            "darkness"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/051/high.webp",
+      "illustrator": "Kagemaru Himeno",
+      "description": "Il vole les biens des personnes rien que pour voir leur\nvisage désemparé. Son plus grand rival est Goupilou.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-052",
+      "localId": 52,
+      "name": "Léopardus",
+      "pokedexId": 510,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 90,
+      "weakness": "grass",
+      "weaknessFr": "Plante",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Tranche",
+          "cost": [
+            "darkness"
+          ],
+          "damage": 40,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/052/high.webp",
+      "illustrator": "GIDORA",
+      "description": "On se laisse facilement éblouir par son pelage\nmagnifique et son allure élégante, mais gare\nà son caractère imprévisible et agressif.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Chacripan"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-053",
+      "localId": 53,
+      "name": "Venipatte",
+      "pokedexId": 543,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Collision",
+          "cost": [
+            "darkness"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/053/high.webp",
+      "illustrator": "Yukiko Baba",
+      "description": "Bien qu'appartenant à des espèces similaires,\nles Venipatte et les Grillepattes se livrent\nà des conflits violents lorsqu'ils se croisent.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-054",
+      "localId": 54,
+      "name": "Scobolide",
+      "pokedexId": 544,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 90,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Dard-Venin",
+          "cost": [
+            "darkness"
+          ],
+          "damage": 20,
+          "text": "Le Pokémon Actif de votre adversaire est maintenant Empoisonné."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/054/high.webp",
+      "illustrator": "Shin Nagasawa",
+      "description": "Il se propulse sur ses ennemis en tournant\ntrès vite sur lui-même. Il peut ainsi atteindre\nune vitesse d'environ 100 km/h.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Venipatte"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-055",
+      "localId": 55,
+      "name": "Brutapode",
+      "pokedexId": 545,
+      "type": "darkness",
+      "typeFr": "Obscurité",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 140,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Choc Venin",
+          "cost": [
+            "darkness",
+            "colorless"
+          ],
+          "damage": 70,
+          "damageSuffix": "+",
+          "text": "Si le Pokémon Actif de votre adversaire est Empoisonné, cette attaque inflige 50 dégâts de plus."
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/055/high.webp",
+      "illustrator": "5ban Graphics",
+      "description": "Après avoir saisi sa proie à l'aide des\ngriffes de son cou, il la plaque au sol puis la\ntransperce avec ses épines empoisonnées.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Scobolide"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-056",
+      "localId": 56,
+      "name": "Drakkarmin",
+      "pokedexId": 621,
+      "type": "dragon",
+      "typeFr": "Dragon",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 100,
+      "weakness": null,
+      "weaknessFr": null,
+      "weaknessValue": null,
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Draco-Griffe",
+          "cost": [
+            "fire",
+            "water",
+            "colorless"
+          ],
+          "damage": 90,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/056/high.webp",
+      "illustrator": "Ryota Murayama",
+      "description": "Il vit sous terre, mais il doit impérativement\ns'exposer au soleil, car il devient incapable\nde bouger lorsque son corps se refroidit.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-057",
+      "localId": 57,
+      "name": "Roucool",
+      "pokedexId": 16,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 50,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Battement",
+          "cost": [
+            "colorless"
+          ],
+          "damage": 20,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/057/high.webp",
+      "illustrator": "Shigenori Negishi",
+      "description": "On l'aperçoit souvent dans les forêts. Avec ses ailes,\nil brasse l'air près du sol pour projeter du sable.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-058",
+      "localId": 58,
+      "name": "Roucoups",
+      "pokedexId": 17,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 90,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Cru-Ailes",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 50,
+          "text": null
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/058/high.webp",
+      "illustrator": "Taiga Kayama",
+      "description": "Grâce à ses griffes très puissantes, il est capable de transporter\ndes Noeunoeuf vers un nid éloigné de plus de 100 km.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Roucool"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-059",
+      "localId": 59,
+      "name": "Roucarnage-ex",
+      "pokedexId": 18,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 170,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Cyclone Ravageur",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 80,
+          "damageSuffix": "+",
+          "text": "Cette attaque inflige 20 dégâts supplémentaires pour chaque Pokémon de Banc de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-4",
+      "rarityFr": "Quatre Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/059/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": "Roucoups"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-060",
+      "localId": 60,
+      "name": "Tauros",
+      "pokedexId": 128,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 100,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Charge Combative",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 40,
+          "damageSuffix": "+",
+          "text": "Si le Pokémon Actif de votre adversaire est un Pokémon-{ex}, cette attaque inflige 80 dégâts supplémentaires."
+        }
+      ],
+      "rarity": "diamond-3",
+      "rarityFr": "Trois Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/060/high.webp",
+      "illustrator": "KEIICHIRO ITO",
+      "description": "Il faut prendre garde quand un Tauros fouette\nson corps avec ses queues. Cela signifie qu'il\ns'apprête à charger à une vitesse démentielle.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-061",
+      "localId": 61,
+      "name": "Évoli",
+      "pokedexId": 133,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Pas Continus",
+          "cost": [
+            "colorless"
+          ],
+          "damage": 20,
+          "text": "Lancez une pièce jusqu'à ce que vous obteniez pile. Cette attaque inflige 20 dégâts pour chaque côté face."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/061/high.webp",
+      "illustrator": "Hitoshi Ariga",
+      "description": "Ses multiples évolutions lui permettent\nde s'adapter à tout type de milieu naturel.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-062",
+      "localId": 62,
+      "name": "Pijako",
+      "pokedexId": 441,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Copie",
+          "cost": [
+            "colorless"
+          ],
+          "text": "Mélangez votre main avec votre deck. Piochez une carte pour chaque carte dans la main de votre adversaire."
+        }
+      ],
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/062/high.webp",
+      "illustrator": "Masako Tomii",
+      "description": "Il reproduit le cri de ses ennemis pour faire\ncroire qu'il est des leurs et éviter d'être attaqué.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-063",
+      "localId": 63,
+      "name": "Vieil Ambre",
+      "rarity": "diamond-1",
+      "rarityFr": "Un Diamant",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/063/high.webp",
+      "illustrator": "Toyste Beach",
+      "effect": "Jouez cette carte comme si c'était un Pokémon {C} de base avec 40 PV. N'importe quand pendant votre tour, vous pouvez défausser cette carte du jeu. Cette carte ne peut pas battre en retraite.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-064",
+      "localId": 64,
+      "name": "Flûte Pokémon",
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/064/high.webp",
+      "illustrator": "Toyste Beach",
+      "effect": "Placez un Pokémon de base de la pile de défausse de votre adversaire sur son Banc.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-065",
+      "localId": 65,
+      "name": "Dalle Fabuleuse",
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/065/high.webp",
+      "illustrator": "AYUMI ODASHIMA",
+      "effect": "Regardez la carte du dessus de votre deck. Si cette carte est un Pokémon {P}, ajoutez-la à votre main. Si ce n'est pas un Pokémon {P}, placez-la en dessous de votre deck.",
+      "trainerType": "item",
+      "trainerTypeFr": "Objet",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-066",
+      "localId": 66,
+      "name": "Jeune Explorateur",
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/066/high.webp",
+      "illustrator": "Yuu Nishida",
+      "effect": "Ajoutez votre Mew-ex sur le Poste Actif à votre main.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-067",
+      "localId": 67,
+      "name": "Blue",
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/067/high.webp",
+      "illustrator": "Ryuta Fuse",
+      "effect": "Pendant le prochain tour de votre adversaire, tous vos Pokémon subissent − 10 dégâts provenant des attaques des Pokémon de votre adversaire.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-068",
+      "localId": 68,
+      "name": "Leaf",
+      "rarity": "diamond-2",
+      "rarityFr": "Deux Diamants",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/068/high.webp",
+      "illustrator": "En Morikura",
+      "effect": "Pendant ce tour, le Coût de Retraite de votre Pokémon Actif est diminué de 2 Énergies.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-069",
+      "localId": 69,
+      "name": "Noadkoko",
+      "pokedexId": 103,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 130,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Psyko",
+          "cost": [
+            "grass",
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 80,
+          "damageSuffix": "+",
+          "text": "Cette attaque inflige 20 dégâts de plus pour chaque Énergie attachée au Pokémon Actif de votre adversaire."
+        }
+      ],
+      "rarity": "star-1",
+      "rarityFr": "Une Étoile",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/069/high.webp",
+      "illustrator": "Gapao",
+      "description": "Chacune de ses trois têtes pense de manière autonome.\nElles ne semblent s'intéresser qu'à elles-mêmes.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Noeunoeuf"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-070",
+      "localId": 70,
+      "name": "Majaspic",
+      "pokedexId": 497,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 110,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Lance-Soleil",
+          "cost": [
+            "grass",
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 70,
+          "text": null
+        }
+      ],
+      "rarity": "star-1",
+      "rarityFr": "Une Étoile",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/070/high.webp",
+      "illustrator": "rika",
+      "description": "Il ne donnera tout son potentiel que contre un ennemi\npuissant indifférent à son regard écrasant de noblesse.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Lianaja"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-071",
+      "localId": 71,
+      "name": "Tritox",
+      "pokedexId": 757,
+      "type": "fire",
+      "typeFr": "Feu",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "water",
+      "weaknessFr": "Eau",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Choc Venin",
+          "cost": [
+            "colorless"
+          ],
+          "damage": 10,
+          "damageSuffix": "+",
+          "text": "Si le Pokémon Actif de votre adversaire est Empoisonné, cette attaque inflige 40 dégâts de plus."
+        }
+      ],
+      "rarity": "star-1",
+      "rarityFr": "Une Étoile",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/071/high.webp",
+      "illustrator": "Nurikabe",
+      "description": "Il provoque ses proies afin de les attirer dans\nd'étroites zones rocheuses, puis il les étourdit\navec son gaz toxique avant de les achever.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-072",
+      "localId": 72,
+      "name": "Aquali",
+      "pokedexId": 134,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 120,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 2,
+      "attacks": [
+        {
+          "name": "Grosse Vague",
+          "cost": [
+            "water",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 60,
+          "text": null
+        }
+      ],
+      "rarity": "star-1",
+      "rarityFr": "Une Étoile",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/072/high.webp",
+      "illustrator": "aspara",
+      "description": "Il vit au bord de l'eau. Sa queue semblable à celle\nd'un poisson lui donne l'apparence d'une sirène.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": "Évoli"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-073",
+      "localId": 73,
+      "name": "Dedenne",
+      "pokedexId": 702,
+      "type": "lightning",
+      "typeFr": "Électrique",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 60,
+      "weakness": "fighting",
+      "weaknessFr": "Combat",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Éclair",
+          "cost": [
+            "lightning"
+          ],
+          "damage": 10,
+          "text": "Lancez une pièce. Si c'est face, le Pokémon Actif de votre adversaire est maintenant Paralysé."
+        }
+      ],
+      "rarity": "star-1",
+      "rarityFr": "Une Étoile",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/073/high.webp",
+      "illustrator": "Yuu Nishida",
+      "description": "Son corps étant petit et son organe générateur\nd'électricité peu développé, il se recharge en\naspirant l'électricité des maisons avec sa queue.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-074",
+      "localId": 74,
+      "name": "Marshadow",
+      "pokedexId": 802,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 80,
+      "weakness": "psychic",
+      "weaknessFr": "Psy",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Vendetta",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 40,
+          "damageSuffix": "+",
+          "text": "Si au moins l'un de vos Pokémon a été mis K.O. par les dégâts d'une attaque pendant le dernier tour de votre adversaire, cette attaque inflige 60 dégâts supplémentaires."
+        }
+      ],
+      "rarity": "star-1",
+      "rarityFr": "Une Étoile",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/074/high.webp",
+      "illustrator": "OKACHEKE",
+      "description": "Il se fond dans l'ombre de son adversaire pour imiter sa\nforce et ses attaques. La copie surpasse alors l'original.",
+      "boosters": [],
+      "isEx": false,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-075",
+      "localId": 75,
+      "name": "Celebi-ex",
+      "pokedexId": 251,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Éclosion Éclatante",
+          "cost": [
+            "grass",
+            "colorless"
+          ],
+          "damage": 50,
+          "damageSuffix": "x",
+          "text": "Lancez une pièce pour chaque Énergie attachée à ce Pokémon. Cette attaque inflige 50 dégâts pour chaque côté face."
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/075/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-076",
+      "localId": 76,
+      "name": "Léviator-ex",
+      "pokedexId": 130,
+      "type": "water",
+      "typeFr": "Eau",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 180,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 3,
+      "attacks": [
+        {
+          "name": "Tourbillon Tempétueux",
+          "cost": [
+            "water",
+            "water",
+            "water",
+            "colorless"
+          ],
+          "damage": 140,
+          "text": "Défaussez une Énergie au hasard parmi celles attachées à tous les Pokémon en jeu (les vôtres et ceux de votre adversaire)."
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/076/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": "Magicarpe"
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-077",
+      "localId": 77,
+      "name": "Mew-ex",
+      "pokedexId": 151,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Piqûre Psy",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": null
+        },
+        {
+          "name": "Piratage de Génome",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "text": "Choisissez l'une des attaques du Pokémon Actif de votre adversaire et utilisez-la en tant que cette attaque."
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/077/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-078",
+      "localId": 78,
+      "name": "Ptéra-ex",
+      "pokedexId": 142,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 140,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Écras'Terre",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 80,
+          "text": null
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/078/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-079",
+      "localId": 79,
+      "name": "Roucarnage-ex",
+      "pokedexId": 18,
+      "type": "colorless",
+      "typeFr": "Incolore",
+      "stage": "stage2",
+      "stageFr": "Niveau 2",
+      "hp": 170,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Cyclone Ravageur",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "damage": 80,
+          "damageSuffix": "+",
+          "text": "Cette attaque inflige 20 dégâts supplémentaires pour chaque Pokémon de Banc de votre adversaire."
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/079/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": "Roucoups"
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-080",
+      "localId": 80,
+      "name": "Jeune Explorateur",
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/080/high.webp",
+      "illustrator": "Yuu Nishida",
+      "effect": "Ajoutez votre Mew-ex sur le Poste Actif à votre main.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-081",
+      "localId": 81,
+      "name": "Blue",
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/081/high.webp",
+      "illustrator": "Ryuta Fuse",
+      "effect": "Pendant le prochain tour de votre adversaire, tous vos Pokémon subissent − 10 dégâts provenant des attaques des Pokémon de votre adversaire.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "trainer",
+      "id": "A1a-082",
+      "localId": 82,
+      "name": "Leaf",
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/082/high.webp",
+      "illustrator": "En Morikura",
+      "effect": "Pendant ce tour, le Coût de Retraite de votre Pokémon Actif est diminué de 2 Énergies.",
+      "trainerType": "supporter",
+      "trainerTypeFr": "Supporter",
+      "boosters": [
+        "mewtwo",
+        "charizard",
+        "pikachu"
+      ],
+      "starter": true
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-083",
+      "localId": 83,
+      "name": "Mew-ex",
+      "pokedexId": 151,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Piqûre Psy",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": null
+        },
+        {
+          "name": "Piratage de Génome",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "text": "Choisissez l'une des attaques du Pokémon Actif de votre adversaire et utilisez-la en tant que cette attaque."
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/083/high.webp",
+      "illustrator": "HYOGONOSUKE",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-084",
+      "localId": 84,
+      "name": "Ptéra-ex",
+      "pokedexId": 142,
+      "type": "fighting",
+      "typeFr": "Combat",
+      "stage": "stage1",
+      "stageFr": "Niveau 1",
+      "hp": 140,
+      "weakness": "lightning",
+      "weaknessFr": "Électrique",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Écras'Terre",
+          "cost": [
+            "fighting",
+            "colorless"
+          ],
+          "damage": 80,
+          "text": null
+        }
+      ],
+      "rarity": "star-2",
+      "rarityFr": "Deux Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/084/high.webp",
+      "illustrator": "danciao",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-085",
+      "localId": 85,
+      "name": "Celebi-ex",
+      "pokedexId": 251,
+      "type": "grass",
+      "typeFr": "Plante",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "fire",
+      "weaknessFr": "Feu",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Éclosion Éclatante",
+          "cost": [
+            "grass",
+            "colorless"
+          ],
+          "damage": 50,
+          "damageSuffix": "x",
+          "text": "Lancez une pièce pour chaque Énergie attachée à ce Pokémon. Cette attaque inflige 50 dégâts pour chaque côté face."
+        }
+      ],
+      "rarity": "star-3",
+      "rarityFr": "Trois Étoiles",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/085/high.webp",
+      "illustrator": "kantaro",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    },
+    {
+      "kind": "pokemon",
+      "id": "A1a-086",
+      "localId": 86,
+      "name": "Mew-ex",
+      "pokedexId": 151,
+      "type": "psychic",
+      "typeFr": "Psy",
+      "stage": "basic",
+      "stageFr": "De base",
+      "hp": 130,
+      "weakness": "darkness",
+      "weaknessFr": "Obscurité",
+      "weaknessValue": "+20",
+      "retreatCost": 1,
+      "attacks": [
+        {
+          "name": "Piqûre Psy",
+          "cost": [
+            "psychic"
+          ],
+          "damage": 20,
+          "text": null
+        },
+        {
+          "name": "Piratage de Génome",
+          "cost": [
+            "colorless",
+            "colorless",
+            "colorless"
+          ],
+          "text": "Choisissez l'une des attaques du Pokémon Actif de votre adversaire et utilisez-la en tant que cette attaque."
+        }
+      ],
+      "rarity": "crown",
+      "rarityFr": "Couronne",
+      "image": "https://assets.tcgdex.net/fr/tcgp/A1a/086/high.webp",
+      "illustrator": "PLANETA CG Works",
+      "description": null,
+      "boosters": [],
+      "isEx": true,
+      "evolveFromName": null
+    }
+  ]
+}

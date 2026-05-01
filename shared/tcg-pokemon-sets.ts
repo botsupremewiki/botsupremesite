@@ -18,6 +18,8 @@ import {
   POKEMON_BASE_SET,
   POKEMON_BASE_SET_BY_ID,
 } from "./tcg-pokemon-base";
+import { POKEMON_A1A_SET } from "./tcg-pokemon-a1a";
+import { POKEMON_A2_SET } from "./tcg-pokemon-a2";
 
 export type PokemonSetMeta = {
   /** Identifiant tcgdex (A1, A1a, A2, A2a, A3...). */
@@ -40,22 +42,20 @@ export const POKEMON_SETS: PokemonSetMeta[] = [
     releasedAt: "2024-10-30",
     active: true,
   },
-  // À ajouter quand importés :
-  //
-  // {
-  //   id: "A1a",
-  //   name: "Île Mythique",
-  //   cards: POKEMON_A1A_SET,
-  //   releasedAt: "2024-12-17",
-  //   active: true,
-  // },
-  // {
-  //   id: "A2",
-  //   name: "Espace-Temps Triomphal",
-  //   cards: POKEMON_A2_SET,
-  //   releasedAt: "2025-01-30",
-  //   active: true,
-  // },
+  {
+    id: "A1a",
+    name: "L'Île Fabuleuse",
+    cards: POKEMON_A1A_SET,
+    releasedAt: "2024-12-17",
+    active: true,
+  },
+  {
+    id: "A2",
+    name: "Choc Spatio-Temporel",
+    cards: POKEMON_A2_SET,
+    releasedAt: "2025-01-30",
+    active: true,
+  },
 ];
 
 /** Toutes les cartes Pokémon (tous sets actifs) — utile pour la collection
