@@ -98,6 +98,11 @@ export function LorBattleClient({
   );
   // Phase 5.8 : modal confirmation concede (vs native confirm).
   const [concedeModalOpen, setConcedeModalOpen] = useState(false);
+  // Phase 5.12 : pulse hand badge quand handCount augmente (draw card).
+  const [handPulse, setHandPulse] = useState<{ self: number; opponent: number }>({
+    self: 0,
+    opponent: 0,
+  });
   // Phase 3.7 + 3.39 + 3.70 + 3.71 : sort en attente de cible (null = pas
   // de targeting en cours). targetCount: 1, 2 ou 3 (3 = Crépuscule).
   // firstTargetUid + secondTargetUid stockent les cibles pickées en
@@ -278,6 +283,23 @@ export function LorBattleClient({
           return next;
         });
       }, 1200);
+    }
+    // Phase 5.12 : hand grow → pulse handCount badge (draw card visual).
+    const selfHandDiff = (state.self?.handCount ?? 0) - (prev.self?.handCount ?? 0);
+    const oppHandDiff =
+      (state.opponent?.handCount ?? 0) - (prev.opponent?.handCount ?? 0);
+    if (selfHandDiff > 0 || oppHandDiff > 0) {
+      const ts = Date.now();
+      setHandPulse({
+        self: selfHandDiff > 0 ? ts : handPulse.self,
+        opponent: oppHandDiff > 0 ? ts : handPulse.opponent,
+      });
+      setTimeout(() => {
+        setHandPulse((curr) => ({
+          self: curr.self === ts ? 0 : curr.self,
+          opponent: curr.opponent === ts ? 0 : curr.opponent,
+        }));
+      }, 800);
     }
     // Phase 5.4 : nexus health diff → popup -N (dégâts) ou +N (heal).
     const nexusDiffSelf = prev.self && state.self
@@ -504,6 +526,7 @@ export function LorBattleClient({
             damagePopups={damagePopups}
             nexusDamagePopups={nexusDamagePopups}
             recentlySummoned={recentlySummoned}
+            handPulse={handPulse}
           />
         )}
 
@@ -871,6 +894,7 @@ function RoundView({
   damagePopups,
   nexusDamagePopups,
   recentlySummoned,
+  handPulse,
 }: {
   state: RuneterraBattleState;
   onPlayHand: (handIndex: number) => void;
@@ -907,6 +931,8 @@ function RoundView({
   };
   // Phase 5.6 : summon animation entrée banc (slide-in 600ms).
   recentlySummoned?: Set<string>;
+  // Phase 5.12 : pulse handCount sur draw card (timestamp).
+  handPulse?: { self: number; opponent: number };
 }) {
   // Hooks AVANT tout return conditionnel pour respecter les rules of hooks.
   const [combatMode, setCombatMode] = useState<"none" | "attacker-pick">(
@@ -1036,6 +1062,7 @@ function RoundView({
         isActive={state.activeSeat !== state.selfSeat}
         hasAttackToken={state.opponent.attackToken}
         nexusPopup={nexusDamagePopups?.opponent}
+        handPulse={handPulse?.opponent}
         nexusTargetable={
           pendingSpell?.side === "any-or-nexus" ||
           (pendingSpell?.side === "ally-and-any-or-nexus" &&
@@ -1270,6 +1297,7 @@ function RoundView({
         isActive={state.activeSeat === state.selfSeat}
         hasAttackToken={state.self.attackToken}
         nexusPopup={nexusDamagePopups?.self}
+        handPulse={handPulse?.self}
         nexusTargetable={
           pendingSpell?.side === "any-or-nexus" ||
           (pendingSpell?.side === "ally-and-any-or-nexus" &&
@@ -1348,6 +1376,7 @@ function PlayerStrip({
   isActive,
   hasAttackToken,
   nexusPopup,
+  handPulse,
 }: {
   player: RuneterraPlayerPublicState | RuneterraSelfState;
   isOpponent: boolean;
@@ -1361,6 +1390,9 @@ function PlayerStrip({
   hasAttackToken?: boolean;
   // Phase 5.4 : popup -N rouge (dégâts) ou +N vert (heal) au-dessus du nexus.
   nexusPopup?: { amount: number; ts: number; isHeal: boolean };
+  // Phase 5.12 : timestamp du dernier draw — déclenche un animate-pulse
+  // sur le badge handCount (~800ms).
+  handPulse?: number;
 }) {
   void onZoom;
   const nexusClass = nexusTargetable
@@ -1401,7 +1433,17 @@ function PlayerStrip({
           </span>
         )}
         <span className="text-[11px] text-zinc-500">
-          🎴 {player.handCount} · 📦 {player.deckSize}
+          <span
+            key={handPulse ?? 0}
+            className={
+              handPulse
+                ? "rounded bg-emerald-500/30 px-1 text-emerald-200 animate-pulse"
+                : ""
+            }
+          >
+            🎴 {player.handCount}
+          </span>
+          {" · "}📦 {player.deckSize}
         </span>
       </div>
       <div className="flex items-center gap-3 text-xs tabular-nums">
