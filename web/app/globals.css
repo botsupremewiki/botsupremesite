@@ -45,6 +45,98 @@ html[data-theme="light"] body {
   color: var(--fg);
 }
 
+/* ─── Light mode global overrides ───────────────────────────────────
+   Plutôt que de toucher tous les fichiers existants pour remplacer
+   bg-zinc-950 → bg-[var(--bg)], on override les classes Tailwind
+   les plus utilisées via data-theme="light". Approche pragmatique
+   qui inverse la palette sans refactor massif. */
+
+/* Backgrounds : zinc-950/900/800 → blanc cassé / gris clairs */
+html[data-theme="light"] .bg-zinc-950 {
+  background-color: #fafafa !important;
+}
+html[data-theme="light"] .bg-zinc-900 {
+  background-color: #f4f4f5 !important;
+}
+html[data-theme="light"] .bg-zinc-800 {
+  background-color: #e4e4e7 !important;
+}
+
+/* Black overlays : on les transforme en overlays clairs ou en dim
+   modal-style selon l'opacité. */
+html[data-theme="light"] .bg-black\/40 {
+  background-color: rgb(255 255 255 / 0.7) !important;
+}
+html[data-theme="light"] .bg-black\/30 {
+  background-color: rgb(255 255 255 / 0.6) !important;
+}
+html[data-theme="light"] .bg-black\/60,
+html[data-theme="light"] .bg-black\/70,
+html[data-theme="light"] .bg-black\/75,
+html[data-theme="light"] .bg-black\/80,
+html[data-theme="light"] .bg-black\/85 {
+  background-color: rgb(0 0 0 / 0.4) !important;
+}
+
+/* White overlays légers en mode dark = noir léger en mode light */
+html[data-theme="light"] .bg-white\/\[0\.02\],
+html[data-theme="light"] .bg-white\/\[0\.03\],
+html[data-theme="light"] .bg-white\/5 {
+  background-color: rgb(0 0 0 / 0.03) !important;
+}
+html[data-theme="light"] .bg-white\/\[0\.07\],
+html[data-theme="light"] .bg-white\/10 {
+  background-color: rgb(0 0 0 / 0.05) !important;
+}
+
+/* Texte : zinc clair → zinc foncé */
+html[data-theme="light"] .text-zinc-100 {
+  color: #27272a !important;
+}
+html[data-theme="light"] .text-zinc-200 {
+  color: #3f3f46 !important;
+}
+html[data-theme="light"] .text-zinc-300 {
+  color: #52525b !important;
+}
+html[data-theme="light"] .text-zinc-400 {
+  color: #71717a !important;
+}
+html[data-theme="light"] .text-zinc-500 {
+  color: #a1a1aa !important;
+}
+html[data-theme="light"] .text-zinc-600 {
+  color: #d4d4d8 !important;
+}
+
+/* Borders : white/X → équivalents black/X */
+html[data-theme="light"] .border-white\/5 {
+  border-color: rgb(0 0 0 / 0.05) !important;
+}
+html[data-theme="light"] .border-white\/10 {
+  border-color: rgb(0 0 0 / 0.10) !important;
+}
+html[data-theme="light"] .border-white\/15 {
+  border-color: rgb(0 0 0 / 0.15) !important;
+}
+html[data-theme="light"] .border-white\/20 {
+  border-color: rgb(0 0 0 / 0.20) !important;
+}
+html[data-theme="light"] .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(0 0 0 / 0.05) !important;
+}
+
+/* Pixi canvas reste sombre (c'est l'arrière-plan du jeu Plaza). */
+html[data-theme="light"] .pixi-host {
+  background: #18181b;
+}
+
+/* Skip link garde un contraste élevé en mode light. */
+html[data-theme="light"] .skip-link {
+  background: rgb(217 119 6);
+  color: white;
+}
+
 /* ─── A11Y : focus visible standard ──────────────────────────────────
    Anneau ambre cohérent sur tous les interactifs au focus clavier.
    Désactivé pour les clics souris (focus-visible only). */
