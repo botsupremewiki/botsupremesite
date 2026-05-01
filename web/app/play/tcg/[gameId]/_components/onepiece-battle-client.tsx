@@ -8,6 +8,11 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  DefeatScreen,
+  LeaderShowdown,
+  VictoryScreen,
+} from "./onepiece-battle-cinematic";
 import { BattleEffects } from "./onepiece-battle-effects";
 import { useOnePieceSfx } from "./use-onepiece-sfx";
 import type {
@@ -43,6 +48,11 @@ export function OnePieceBattleClient({
   const sfx = useOnePieceSfx();
   // Trackers pour détecter les transitions et jouer les bons sons.
   const prevStateRef = useRef<OnePieceBattleState | null>(null);
+  // Cinematic states.
+  const [showLeaderShowdown, setShowLeaderShowdown] = useState(false);
+  const [showVictoryScreen, setShowVictoryScreen] = useState(false);
+  const [showDefeatScreen, setShowDefeatScreen] = useState(false);
+  const [endReason, setEndReason] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatDraft, setChatDraft] = useState("");
   // Attaque en 2 étapes : clique "Attaquer" sur un de mes attackers → store
@@ -136,10 +146,26 @@ export function OnePieceBattleClient({
           ) {
             sfx.play("ko");
           }
-          // Détecter game over.
+          // Détecter game over → cinematic victory/defeat.
           if (prev?.phase !== "ended" && next.phase === "ended") {
-            if (next.winner === next.selfSeat) sfx.play("win");
-            else sfx.play("lose");
+            if (next.winner === next.selfSeat) {
+              sfx.play("win");
+              setShowVictoryScreen(true);
+            } else {
+              sfx.play("lose");
+              setShowDefeatScreen(true);
+            }
+            // Récupère la raison du dernier log "Victoire ..." pour
+            // afficher dans le cinematic.
+            const reasonLine = next.log
+              .slice()
+              .reverse()
+              .find((l) => l.includes("Victoire"));
+            setEndReason(reasonLine ?? null);
+          }
+          // Détecter premier passage à playing → leader showdown.
+          if (prev?.phase !== "playing" && next.phase === "playing") {
+            setShowLeaderShowdown(true);
           }
           // Détecter changement de tour actif.
           if (
@@ -190,6 +216,26 @@ export function OnePieceBattleClient({
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Effets visuels overlay plein écran */}
       <BattleEffects state={state} />
+      {/* Cinematic : Leader showdown au début */}
+      <LeaderShowdown
+        selfLeaderId={state?.self?.leader?.cardId ?? null}
+        oppLeaderId={state?.opponent?.leader?.cardId ?? null}
+        selfName={state?.self?.username ?? "Toi"}
+        oppName={state?.opponent?.username ?? "Adversaire"}
+        show={showLeaderShowdown}
+        onDone={() => setShowLeaderShowdown(false)}
+      />
+      {/* Cinematic : Victoire / Défaite plein écran */}
+      <VictoryScreen
+        show={showVictoryScreen}
+        reason={endReason ?? undefined}
+        onClose={() => setShowVictoryScreen(false)}
+      />
+      <DefeatScreen
+        show={showDefeatScreen}
+        reason={endReason ?? undefined}
+        onClose={() => setShowDefeatScreen(false)}
+      />
       <header className="flex shrink-0 items-center justify-between border-b border-white/5 px-2 py-2 text-sm sm:px-4 sm:py-3">
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
