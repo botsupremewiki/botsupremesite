@@ -3,6 +3,7 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
 import { DailyRewardCard } from "@/components/daily-reward-card";
+import { DailyChainCard } from "@/components/daily-chain-card";
 import {
   ACHIEVEMENTS,
   ACHIEVEMENTS_BY_CATEGORY,
@@ -69,6 +70,9 @@ export default async function ObjectifsPage() {
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
           {/* ───── Daily reward — top ───── */}
           <DailyRewardCard />
+
+          {/* ───── Daily chain milestones (J7/J14/J30) ───── */}
+          <DailyChainCard />
 
           {/* ───── Achievements summary ───── */}
           <section className="rounded-xl border border-white/10 bg-black/40 p-5">
