@@ -11,6 +11,7 @@ import {
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
 import { PinnableAchievementsGrid } from "./pinnable-achievements";
+import { Sparkline, DonutChart } from "@/components/charts";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export default async function StatsPage({
   let deckWinrates: DeckWinrate[] = [];
   let unlockedAchievements: UnlockedAchievement[] = [];
   let pinnedAchievements: string[] = [];
+  let eloHistory: { ended_at: string; elo: number }[] = [];
   let aggregates: {
     totalMatches: number;
     wins: number;
@@ -61,7 +63,7 @@ export default async function StatsPage({
   if (profile) {
     const supabase = await createClient();
     if (supabase) {
-      const [statsRes, decksRes, achRes, profRes, aggRes] =
+      const [statsRes, decksRes, achRes, profRes, aggRes, eloRes] =
         await Promise.all([
           supabase.rpc("get_tcg_player_stats", {
             p_user_id: profile.id,
@@ -84,10 +86,16 @@ export default async function StatsPage({
             p_user_id: profile.id,
             p_game_id: gameId,
           }),
+          supabase.rpc("get_my_elo_history", {
+            p_game_id: gameId,
+            p_limit: 50,
+          }),
         ]);
       stats = (statsRes.data as Stats) ?? null;
       deckWinrates = (decksRes.data as DeckWinrate[]) ?? [];
       unlockedAchievements = (achRes.data as UnlockedAchievement[]) ?? [];
+      eloHistory =
+        (eloRes.data as { ended_at: string; elo: number }[]) ?? [];
       const prof = profRes.data as
         | { pinned_achievements: string[] | null }
         | null;
@@ -214,6 +222,80 @@ export default async function StatsPage({
               />
             </div>
           )}
+
+          {/* ─── Charts : ELO timeline + Winrate donut ─── */}
+          {profile && stats ? (
+            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-black/40 p-4">
+                <h2 className="text-sm font-bold text-zinc-100">
+                  📈 Évolution ELO classé
+                </h2>
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  50 derniers matchs classés. Ligne ambre = ton ELO après
+                  chaque match.
+                </p>
+                <div className="mt-3">
+                  <Sparkline
+                    data={eloHistory.map((h, i) => ({ x: i, y: h.elo }))}
+                    height={80}
+                    showDots={eloHistory.length <= 20}
+                    ariaLabel={`Courbe ELO sur les ${eloHistory.length} derniers matchs`}
+                  />
+                </div>
+                {eloHistory.length >= 2 ? (
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
+                    <span>{eloHistory[0].elo}</span>
+                    <span>
+                      {eloHistory[eloHistory.length - 1].elo}{" "}
+                      <span className="text-zinc-600">(actuel)</span>
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-black/40 p-4">
+                <h2 className="self-start text-sm font-bold text-zinc-100">
+                  🎯 Répartition matchs
+                </h2>
+                <DonutChart
+                  segments={[
+                    {
+                      label: "Victoires",
+                      value: stats.wins,
+                      color: "rgb(52 211 153)",
+                    },
+                    {
+                      label: "Défaites",
+                      value: stats.losses,
+                      color: "rgb(244 63 94)",
+                    },
+                  ]}
+                  size={140}
+                  centerLabel={
+                    winrate !== null ? `${winrate}%` : "—"
+                  }
+                  centerSubLabel="Winrate"
+                  ariaLabel={`Répartition victoires/défaites : ${stats.wins} W, ${stats.losses} L`}
+                />
+                <div className="mt-2 flex gap-3 text-[10px]">
+                  <span className="flex items-center gap-1">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: "rgb(52 211 153)" }}
+                    />
+                    {stats.wins} W
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: "rgb(244 63 94)" }}
+                    />
+                    {stats.losses} L
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* ─── Stats par deck ─── */}
           {profile && deckWinrates.length > 0 && (
