@@ -489,11 +489,52 @@ export function LorBattleClient({
   );
 }
 
+// Phase 4.6 : dictionnaire des mots-clés LoR (keywordRef → description FR).
+// Affiché dans la HoverPreview pour que les nouveaux joueurs comprennent
+// les keywords sans devoir lire les règles.
+const KEYWORD_LEGEND: Record<string, string> = {
+  Elusive: "Élusif — bloqué uniquement par d'autres unités élusives.",
+  Burst: "Instantané — résolu immédiatement, l'adversaire ne peut pas réagir.",
+  Fast: "Rapide — l'adversaire peut réagir avec un sort Rapide ou Instantané.",
+  Slow: "Lent — peut être contré par un sort Rapide. Pas jouable en combat.",
+  Focus: "Focalisé — comme Instantané mais hors d'une fenêtre de réaction.",
+  QuickStrike: "Frappe rapide — frappe en premier en combat.",
+  DoubleStrike: "Double frappe — frappe deux fois en combat.",
+  Overwhelm: "Surpuissance — les dégâts excédentaires touchent le Nexus ennemi.",
+  SpellOverwhelm:
+    "Sur-puissance de sort — les dégâts excédentaires d'un sort touchent le Nexus.",
+  Fearsome:
+    "Redoutable — ne peut être bloqué que par des ennemis avec ≥ 3 puissance.",
+  Lifesteal: "Vampirisme — les dégâts infligés régénèrent ton Nexus.",
+  Tough: "Robuste — réduit de 1 tous les dégâts reçus.",
+  Regeneration: "Régénération — soigné totalement à la fin du round.",
+  Barrier:
+    "Barrière — annule les prochains dégâts subis ce round, puis disparaît.",
+  Challenger: "Provocateur — choisit qui doit le bloquer côté ennemi.",
+  Vulnerable:
+    "Vulnérable — n'importe quel attaquant peut forcer cet ennemi à bloquer.",
+  CantBlock: "Ne peut pas bloquer — incapable de défendre.",
+  LastBreath: "Dernier souffle — déclenche un effet quand l'unité meurt.",
+  Skill: "Compétence — comme un sort, peut être contré par sort Rapide.",
+  ElementalSkill: "Compétence Élémentaire — sous-type de Skill.",
+  Imbue:
+    "Imprégnation — gagne un effet à chaque sort que tu lances.",
+  Support: "Soutien — quand cette unité attaque, son allié à droite gagne un bonus.",
+  Ephemeral: "Éphémère — disparaît après son combat ou la fin du round.",
+  Fleeting: "Fugace — défaussé en fin de round si encore en main.",
+  Stun: "Étourdir — l'unité est mise au repos et ne peut pas attaquer/bloquer.",
+  Recall: "Rappeler — l'unité retourne en main de son contrôleur.",
+};
+
 // Phase 4.3 : preview large de la carte hovered (bas-droite, fixed, pas
 // d'interaction). Affiche full-art si dispo + texte description.
 function HoverPreview({ cardCode }: { cardCode: string }) {
   const card = RUNETERRA_BASE_SET_BY_CODE.get(cardCode);
   if (!card) return null;
+  // Phase 4.6 : extraire les keywords avec définition pour afficher la légende.
+  const keywordsWithDef = (card.keywordRefs ?? [])
+    .map((ref) => ({ ref, def: KEYWORD_LEGEND[ref] }))
+    .filter((k): k is { ref: string; def: string } => !!k.def);
   return (
     <div
       className="pointer-events-none fixed bottom-4 right-4 z-30 w-64 overflow-hidden rounded-xl border-2 border-white/20 bg-zinc-950/95 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-right-4"
@@ -523,8 +564,22 @@ function HoverPreview({ cardCode }: { cardCode: string }) {
           {card.supertype === "Champion" && " · ★ Champion"}
         </div>
         {card.descriptionRaw && (
-          <div className="mt-1 max-h-32 overflow-y-auto text-[11px] leading-tight text-zinc-300">
+          <div className="mt-1 max-h-24 overflow-y-auto text-[11px] leading-tight text-zinc-300">
             {card.descriptionRaw}
+          </div>
+        )}
+        {keywordsWithDef.length > 0 && (
+          <div className="mt-2 space-y-0.5 border-t border-white/10 pt-1.5">
+            {keywordsWithDef.map(({ ref, def }) => (
+              <div key={ref} className="text-[10px] leading-tight">
+                <span className="font-semibold text-amber-300">
+                  {(card.keywords ?? []).find(
+                    (_, i) => card.keywordRefs?.[i] === ref,
+                  ) ?? ref}
+                </span>{" "}
+                <span className="text-zinc-500">— {def}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
