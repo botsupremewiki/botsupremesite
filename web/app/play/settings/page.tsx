@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { UserPill } from "@/components/user-pill";
 import { SettingsClient } from "./settings-client";
+import { getT } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ type Preferences = {
 export default async function SettingsPage() {
   const profile = await getProfile();
   if (!profile) redirect("/");
+  const t = await getT();
   let prefs: Preferences = {};
   const supabase = await createClient();
   if (supabase) {
@@ -37,10 +39,10 @@ export default async function SettingsPage() {
             href="/play"
             className="text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
           >
-            ← Plaza
+            ← {t("nav.plaza")}
           </Link>
           <div className="h-4 w-px bg-white/10" />
-          <span className="font-semibold">⚙️ Paramètres</span>
+          <span className="font-semibold">{t("settings.title")}</span>
         </div>
         <UserPill profile={profile} variant="play" />
       </header>
@@ -49,11 +51,10 @@ export default async function SettingsPage() {
         className="flex flex-1 flex-col items-center overflow-y-auto p-6"
       >
         <div className="w-full max-w-2xl">
-          <h1 className="text-2xl font-bold text-zinc-100">⚙️ Paramètres</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Tes préférences sont enregistrées et synchronisées sur tous tes
-            appareils.
-          </p>
+          <h1 className="text-2xl font-bold text-zinc-100">
+            {t("settings.title")}
+          </h1>
+          <p className="mt-1 text-sm text-zinc-400">{t("settings.subtitle")}</p>
           <SettingsClient initialPreferences={prefs} />
         </div>
       </main>

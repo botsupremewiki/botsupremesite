@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useTheme, ThemeToggle } from "@/components/theme-provider";
 import { useToast } from "@/components/toast";
+import { useLocale } from "@/lib/i18n-client";
 
 type Preferences = {
   notifications_enabled?: boolean;
@@ -22,6 +23,7 @@ export function SettingsClient({
   const [prefs, setPrefs] = useState<Preferences>(initialPreferences);
   const toast = useToast();
   const { resolved } = useTheme();
+  const { t } = useLocale();
 
   async function patch(p: Partial<Preferences>) {
     const next = { ...prefs, ...p };
@@ -31,56 +33,55 @@ export function SettingsClient({
     const { error } = await supabase.rpc("set_my_preferences", { p_patch: p });
     if (error) {
       toast.error(error.message);
-      // Rollback optimiste.
       setPrefs(prefs);
     } else {
-      toast.success("Préférence sauvegardée");
+      toast.success(t("settings.saved"));
     }
   }
 
   return (
     <div className="mt-6 flex flex-col gap-6">
       {/* ── Apparence ──────────────────────────────────────────── */}
-      <Section title="🎨 Apparence">
+      <Section title={t("settings.appearance")}>
         <Row
-          label="Thème"
-          description={`Actuellement : ${resolved}.`}
+          label={t("settings.theme")}
+          description={`${t("settings.themeCurrent")} : ${resolved}.`}
         >
           <ThemeToggle />
         </Row>
         <Toggle
-          label="Mode compact"
-          description="Réduire les paddings et marges (densité d'info plus haute)."
+          label={t("settings.compactMode")}
+          description={t("settings.compactModeDesc")}
           value={prefs.compact_mode ?? false}
           onChange={(v) => patch({ compact_mode: v })}
         />
       </Section>
 
       {/* ── Notifications ──────────────────────────────────────── */}
-      <Section title="🔔 Notifications">
+      <Section title={t("settings.notifications")}>
         <Toggle
-          label="Activer les notifications"
-          description="Master switch — désactive tout d'un coup."
+          label={t("settings.notifEnable")}
+          description={t("settings.notifEnableDesc")}
           value={prefs.notifications_enabled ?? true}
           onChange={(v) => patch({ notifications_enabled: v })}
         />
         <Toggle
-          label="Échanges (trades)"
-          description="Quand un joueur te propose un échange ou répond au tien."
+          label={t("settings.notifTrades")}
+          description={t("settings.notifTradesDesc")}
           value={prefs.notifications_trades ?? true}
           onChange={(v) => patch({ notifications_trades: v })}
           disabled={!(prefs.notifications_enabled ?? true)}
         />
         <Toggle
-          label="Tournois"
-          description="Démarrage d'un tournoi auquel tu es inscrit."
+          label={t("settings.notifTournaments")}
+          description={t("settings.notifTournamentsDesc")}
           value={prefs.notifications_tournaments ?? true}
           onChange={(v) => patch({ notifications_tournaments: v })}
           disabled={!(prefs.notifications_enabled ?? true)}
         />
         <Toggle
-          label="Saisons ranked"
-          description="Clôture d'une saison avec snapshot ELO + récompenses."
+          label={t("settings.notifSeasons")}
+          description={t("settings.notifSeasonsDesc")}
           value={prefs.notifications_seasons ?? true}
           onChange={(v) => patch({ notifications_seasons: v })}
           disabled={!(prefs.notifications_enabled ?? true)}
@@ -88,25 +89,19 @@ export function SettingsClient({
       </Section>
 
       {/* ── Sons ───────────────────────────────────────────────── */}
-      <Section title="🔊 Sons">
+      <Section title={t("settings.sounds")}>
         <Toggle
-          label="Effets sonores"
-          description="Sons pendant les matchs (cartes posées, KO, victoire)."
+          label={t("settings.sfx")}
+          description={t("settings.sfxDesc")}
           value={prefs.sounds_enabled ?? true}
           onChange={(v) => patch({ sounds_enabled: v })}
         />
       </Section>
 
       {/* ── A11y info ──────────────────────────────────────────── */}
-      <Section title="♿ Accessibilité">
+      <Section title={t("settings.a11y")}>
         <div className="rounded-md border border-cyan-300/30 bg-cyan-300/[0.03] p-3 text-xs text-cyan-100">
-          Le site respecte automatiquement la préférence{" "}
-          <code className="rounded bg-black/30 px-1">
-            prefers-reduced-motion
-          </code>{" "}
-          de ton OS — les animations longues sont désactivées si tu as coché
-          &quot;réduire les animations&quot;. Configurable dans les
-          paramètres système (macOS, Windows, iOS, Android).
+          {t("settings.a11yMotion")}
         </div>
       </Section>
     </div>
