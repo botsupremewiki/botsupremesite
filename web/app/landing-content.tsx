@@ -2,43 +2,36 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-
-const GAMES = [
-  {
-    name: "Casino",
-    desc: "Blackjack, roulette, poker, slots, mines, Hi-Lo.",
-    glow: "bg-rose-500",
-  },
-  {
-    name: "RPG",
-    desc: "Exploration, combats, donjons.",
-    glow: "bg-amber-500",
-  },
-  {
-    name: "Pokémon TCG",
-    desc: "Duels de cartes multijoueur.",
-    glow: "bg-emerald-500",
-  },
-  {
-    name: "Jeux de cartes",
-    desc: "Classiques et variantes.",
-    glow: "bg-sky-500",
-  },
-  {
-    name: "Médiéval",
-    desc: "Construis ton royaume.",
-    glow: "bg-indigo-500",
-  },
-  {
-    name: "Tycoon",
-    desc: "Gère tes commerces.",
-    glow: "bg-fuchsia-500",
-  },
-];
+import { useLocale } from "@/lib/i18n-client";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export function LandingContent() {
+  const { locale } = useLocale();
+  const isEN = locale === "en";
+
+  const GAMES = isEN
+    ? [
+        { name: "Casino", desc: "Blackjack, roulette, poker, slots, mines, Hi-Lo.", glow: "bg-rose-500" },
+        { name: "RPG", desc: "Exploration, fights, dungeons.", glow: "bg-amber-500" },
+        { name: "Pokémon TCG", desc: "Multiplayer card battles.", glow: "bg-emerald-500" },
+        { name: "Card games", desc: "Classics and variants.", glow: "bg-sky-500" },
+        { name: "Medieval", desc: "Build your kingdom.", glow: "bg-indigo-500" },
+        { name: "Tycoon", desc: "Manage your businesses.", glow: "bg-fuchsia-500" },
+      ]
+    : [
+        { name: "Casino", desc: "Blackjack, roulette, poker, slots, mines, Hi-Lo.", glow: "bg-rose-500" },
+        { name: "RPG", desc: "Exploration, combats, donjons.", glow: "bg-amber-500" },
+        { name: "Pokémon TCG", desc: "Duels de cartes multijoueur.", glow: "bg-emerald-500" },
+        { name: "Jeux de cartes", desc: "Classiques et variantes.", glow: "bg-sky-500" },
+        { name: "Médiéval", desc: "Construis ton royaume.", glow: "bg-indigo-500" },
+        { name: "Tycoon", desc: "Gère tes commerces.", glow: "bg-fuchsia-500" },
+      ];
+
   return (
     <>
+      <div className="absolute right-4 top-4 z-10">
+        <LanguageSwitcher />
+      </div>
       <section className="relative flex flex-1 flex-col items-center justify-center px-6 pb-24 pt-12 text-center">
         <motion.p
           initial={{ opacity: 0, y: 12 }}
@@ -46,7 +39,7 @@ export function LandingContent() {
           transition={{ duration: 0.5 }}
           className="mb-5 text-xs font-semibold uppercase tracking-[0.25em] text-indigo-300/80"
         >
-          Univers 2D multijoueur
+          {isEN ? "2D multiplayer universe" : "Univers 2D multijoueur"}
         </motion.p>
 
         <motion.h1
@@ -55,9 +48,19 @@ export function LandingContent() {
           transition={{ duration: 0.7, delay: 0.05 }}
           className="max-w-4xl bg-gradient-to-br from-white via-zinc-100 to-indigo-300 bg-clip-text text-5xl font-bold tracking-tight text-transparent sm:text-7xl md:text-8xl"
         >
-          Tous tes jeux,
-          <br />
-          un seul monde.
+          {isEN ? (
+            <>
+              All your games,
+              <br />
+              one world.
+            </>
+          ) : (
+            <>
+              Tous tes jeux,
+              <br />
+              un seul monde.
+            </>
+          )}
         </motion.h1>
 
         <motion.p
@@ -66,8 +69,9 @@ export function LandingContent() {
           transition={{ duration: 0.7, delay: 0.15 }}
           className="mx-auto mt-6 max-w-xl text-base text-zinc-400 sm:text-lg"
         >
-          Entre dans la plaza, croise les autres joueurs, traverse un portail
-          et lance une partie. Casino, RPG, cartes — tout est connecté.
+          {isEN
+            ? "Enter the plaza, meet other players, walk through a portal and start a game. Casino, RPG, cards — everything is connected."
+            : "Entre dans la plaza, croise les autres joueurs, traverse un portail et lance une partie. Casino, RPG, cartes — tout est connecté."}
         </motion.p>
 
         <motion.div
@@ -80,7 +84,7 @@ export function LandingContent() {
             href="/play"
             className="group relative inline-flex items-center gap-2 rounded-full bg-indigo-500 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-400 hover:shadow-xl hover:shadow-indigo-500/50"
           >
-            Entrer dans le monde
+            {isEN ? "Enter the world" : "Entrer dans le monde"}
             <span className="transition-transform group-hover:translate-x-1">
               →
             </span>
@@ -89,7 +93,7 @@ export function LandingContent() {
             href="#games"
             className="inline-flex items-center rounded-full border border-white/10 px-7 py-3.5 text-sm font-semibold text-zinc-200 transition-colors hover:bg-white/5"
           >
-            Voir les jeux
+            {isEN ? "See games" : "Voir les jeux"}
           </a>
         </motion.div>
       </section>
@@ -101,10 +105,12 @@ export function LandingContent() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Ce qui t&apos;attend
+              {isEN ? "What awaits you" : "Ce qui t'attend"}
             </h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Les mondes connectés à la plaza. D&apos;autres arrivent.
+              {isEN
+                ? "The worlds connected to the plaza. More coming."
+                : "Les mondes connectés à la plaza. D'autres arrivent."}
             </p>
           </div>
         </div>

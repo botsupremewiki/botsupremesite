@@ -1,0 +1,49 @@
+{
+  "site": {
+    "name": "Site Ultime",
+    "tagline": "2D multiplayer universe — casino, RPG, card games and more."
+  },
+  "common": {
+    "login": "Sign in",
+    "logout": "Sign out",
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "claim": "Claim",
+    "share": "Share",
+    "search": "Search",
+    "filter": "Filter",
+    "reset": "Reset"
+  },
+  "nav": {
+    "plaza": "Plaza",
+    "casino": "Casino",
+    "rpg": "RPG",
+    "tcg": "Cards",
+    "tycoon": "Tycoon",
+    "profile": "Profile",
+    "friends": "Friends",
+    "objectives": "Goals"
+  },
+  "tcg": {
+    "collection": "My collection",
+    "decks": "My decks",
+    "boosters": "Boosters",
+    "battle": "Battle",
+    "history": "History",
+    "stats": "Stats",
+    "seasons": "Seasons",
+    "tournaments": "Tournaments",
+    "quests": "Quests",
+    "meta": "Meta",
+    "replays": "Replays",
+    "trade": "Trade",
+    "battlePass": "Battle Pass",
+    "wonderPick": "Wonder Pick"
+  }
+}

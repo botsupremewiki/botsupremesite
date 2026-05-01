@@ -1,0 +1,49 @@
+{
+  "site": {
+    "name": "Site Ultime",
+    "tagline": "Univers 2D multijoueur — casino, RPG, jeux de cartes et plus."
+  },
+  "common": {
+    "login": "Se connecter",
+    "logout": "Se déconnecter",
+    "loading": "Chargement…",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "close": "Fermer",
+    "claim": "Réclamer",
+    "share": "Partager",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "reset": "Réinitialiser"
+  },
+  "nav": {
+    "plaza": "Plaza",
+    "casino": "Casino",
+    "rpg": "RPG",
+    "tcg": "Cartes",
+    "tycoon": "Tycoon",
+    "profile": "Profil",
+    "friends": "Amis",
+    "objectives": "Objectifs"
+  },
+  "tcg": {
+    "collection": "Ma collection",
+    "decks": "Mes decks",
+    "boosters": "Boosters",
+    "battle": "Combat",
+    "history": "Historique",
+    "stats": "Stats",
+    "seasons": "Saisons",
+    "tournaments": "Tournois",
+    "quests": "Quêtes",
+    "meta": "Méta",
+    "replays": "Replays",
+    "trade": "Échange",
+    "battlePass": "Battle Pass",
+    "wonderPick": "Pioche Mystère"
+  }
+}
