@@ -1599,6 +1599,38 @@ export function playSpell(
       spellChoice ?? 0,
     );
     newPlayers = intermediateState.players;
+    // Phase 5.2 : Karma niveau 2 (01IO041T1) — quand le caster lance
+    // un sort, copiez-le sur les mêmes cibles. On applique l'effet une
+    // 2e fois (cibles identiques). 1 application supplémentaire par
+    // Karma L2 sur le banc.
+    const karmaL2Count = newPlayers[seatIdx].bench.filter(
+      (u) => u.cardCode === "01IO041T1",
+    ).length;
+    if (karmaL2Count > 0) {
+      for (let i = 0; i < karmaL2Count; i++) {
+        intermediateState = applySpellEffect(
+          intermediateState,
+          seatIdx,
+          effect,
+          targetUid ?? null,
+          targetUid2 ?? null,
+          targetUid3 ?? null,
+          spellChoice ?? 0,
+        );
+      }
+      const karmaPlayer = intermediateState.players[seatIdx];
+      newPlayers = [
+        intermediateState.players[0],
+        intermediateState.players[1],
+      ] as [InternalPlayer, InternalPlayer];
+      intermediateState = {
+        ...intermediateState,
+        log: [
+          ...intermediateState.log,
+          `${karmaPlayer.username} : Karma copie ${card.name} (${karmaL2Count}× supplémentaire${karmaL2Count > 1 ? "s" : ""}).`,
+        ],
+      };
+    }
   }
 
   // Phase 3.22 : déclenche Imbue sur tous les alliés du caster qui en ont.
