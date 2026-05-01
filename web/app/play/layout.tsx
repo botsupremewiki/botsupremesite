@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
-import { isAuthConfigured } from "@/lib/supabase/server";
+import { createClient, isAuthConfigured } from "@/lib/supabase/server";
 import { ToastProvider } from "@/components/toast";
 import { CommandPalette } from "@/components/command-palette";
+import { OnboardingTour } from "@/components/onboarding-tour";
 
 // Toute la zone /play (plaza, casino, RPG, TCG, Imperium, Skyline, …) est
 // désormais réservée aux utilisateurs connectés via Discord. Plus de mode
@@ -18,16 +19,29 @@ export default async function PlayLayout({
 }: {
   children: React.ReactNode;
 }) {
+  let needsOnboarding = false;
   if (isAuthConfigured()) {
     const profile = await getProfile();
     if (!profile) {
       redirect("/join");
+    }
+    // Check si l'user a déjà fait l'onboarding global du site.
+    const supabase = await createClient();
+    if (supabase) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("onboarded_at")
+        .eq("id", profile.id)
+        .maybeSingle();
+      const row = data as { onboarded_at: string | null } | null;
+      needsOnboarding = !row?.onboarded_at;
     }
   }
   return (
     <ToastProvider>
       {children}
       <CommandPalette />
+      <OnboardingTour active={needsOnboarding} />
     </ToastProvider>
   );
 }
