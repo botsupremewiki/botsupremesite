@@ -23,6 +23,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle, XCircle, Info, AlertTriangle } from "lucide-react";
 import { announce } from "@/lib/a11y";
+import { useSounds } from "@/lib/sounds";
 
 type ToastKind = "success" | "error" | "info" | "warning";
 
@@ -79,18 +80,26 @@ const COLORS: Record<
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const sounds = useSounds();
 
-  const push = useCallback((kind: ToastKind, message: string) => {
-    const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, kind, message }]);
-    announce(
-      message,
-      kind === "error" || kind === "warning" ? "assertive" : "polite",
-    );
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  }, []);
+  const push = useCallback(
+    (kind: ToastKind, message: string) => {
+      const id = crypto.randomUUID();
+      setToasts((prev) => [...prev, { id, kind, message }]);
+      announce(
+        message,
+        kind === "error" || kind === "warning" ? "assertive" : "polite",
+      );
+      // Joue un son discret selon le kind (no-op si l'user a coupé les sons).
+      if (kind === "success") sounds.success();
+      else if (kind === "error") sounds.error();
+      else if (kind === "warning" || kind === "info") sounds.notify();
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000);
+    },
+    [sounds],
+  );
 
   const value: ToastContextValue = {
     push,

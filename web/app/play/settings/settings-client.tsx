@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useTheme, ThemeToggle } from "@/components/theme-provider";
 import { useToast } from "@/components/toast";
 import { useLocale } from "@/lib/i18n-client";
+import { setSoundsEnabled } from "@/lib/sounds";
 
 type Preferences = {
   notifications_enabled?: boolean;
@@ -25,9 +26,18 @@ export function SettingsClient({
   const { resolved } = useTheme();
   const { t } = useLocale();
 
+  // Sync localStorage cache pour useSounds() (utilisé hors React tree).
+  useEffect(() => {
+    setSoundsEnabled(prefs.sounds_enabled ?? true);
+  }, [prefs.sounds_enabled]);
+
   async function patch(p: Partial<Preferences>) {
     const next = { ...prefs, ...p };
     setPrefs(next);
+    // Sync localStorage immédiat pour les sons (avant l'appel SQL).
+    if (typeof p.sounds_enabled === "boolean") {
+      setSoundsEnabled(p.sounds_enabled);
+    }
     const supabase = createClient();
     if (!supabase) return;
     const { error } = await supabase.rpc("set_my_preferences", { p_patch: p });
