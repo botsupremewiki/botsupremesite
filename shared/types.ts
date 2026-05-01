@@ -1358,6 +1358,13 @@ export type RuneterraBattleState = {
   opponent: RuneterraPlayerPublicState | null;
   selfSeat: RuneterraSeatId | null;
   activeSeat: RuneterraSeatId | null; // qui a la priorité
+  // Phase 7.0 : reactive spell stack visible. Affiche les sorts Fast/Slow
+  // en attente de résolution (LIFO). UI affiche un panneau central avec
+  // le sort en cours + adversaire peut répondre. Pop quand un joueur passe.
+  spellStack?: {
+    casterSeat: RuneterraSeatId;
+    cardCode: string;
+  }[];
   attackTokenSeat: RuneterraSeatId | null; // qui peut déclarer l'attaque ce round
   // Attaque en cours (null si pas d'attaque). attackerSeat = qui attaque,
   // lanes = liste ordonnée des paires attaquant→bloqueur (le bloqueur est

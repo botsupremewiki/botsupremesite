@@ -1113,6 +1113,17 @@ function RoundView({
         />
       )}
 
+      {/* Phase 7.0 : reactive spell stack — affiche les sorts en attente
+          de résolution (LIFO). Chaque joueur peut répondre avec un Fast/
+          Burst, ou passer pour résoudre le top du stack. */}
+      {state.spellStack && state.spellStack.length > 0 && (
+        <SpellStackView
+          stack={state.spellStack}
+          selfSeat={state.selfSeat}
+          activeSeat={state.activeSeat}
+        />
+      )}
+
       {/* Centre : info round + actions */}
       <div className="flex shrink-0 items-center justify-between rounded-lg border border-white/10 bg-black/40 px-4 py-2 text-sm">
         <div className="flex items-center gap-3">
@@ -1519,6 +1530,82 @@ const REGION_LABELS: Record<string, string> = {
   PiltoverZaun: "Piltover & Zaun",
   ShadowIsles: "Îles obscures",
 };
+
+// Phase 7.0 : visualise la spell stack au centre de l'écran. Chaque sort
+// est représenté avec une carte miniature + nom du caster. LIFO : le top
+// du stack (dernier pushé) est en haut. Texte « Tu peux répondre / Adversaire
+// doit répondre » selon activeSeat.
+function SpellStackView({
+  stack,
+  selfSeat,
+  activeSeat,
+}: {
+  stack: { casterSeat: "p1" | "p2"; cardCode: string }[];
+  selfSeat: "p1" | "p2" | null;
+  activeSeat: "p1" | "p2" | null;
+}) {
+  const myTurn = activeSeat === selfSeat;
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border-2 border-violet-400/50 bg-gradient-to-r from-violet-900/30 to-violet-900/10 p-3 shadow-[inset_0_0_24px_rgba(139,92,246,0.25)] animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="flex items-center gap-2">
+        <span className="text-2xl animate-pulse">✨</span>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-violet-300">
+            Pile de sorts ({stack.length})
+          </div>
+          <div className="text-xs text-violet-100">
+            {myTurn
+              ? "À toi de répondre — passe pour résoudre le sort, ou réponds avec Rapide/Instantané."
+              : "L'adversaire peut répondre…"}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 overflow-x-auto">
+        {[...stack].reverse().map((s, i) => {
+          const card = RUNETERRA_BASE_SET_BY_CODE.get(s.cardCode);
+          const isYours = s.casterSeat === selfSeat;
+          return (
+            <div
+              key={i}
+              className={`flex shrink-0 flex-col items-center gap-1 rounded-md border px-2 py-1 text-[10px] ${
+                isYours
+                  ? "border-sky-400/50 bg-sky-500/10 text-sky-100"
+                  : "border-rose-400/50 bg-rose-500/10 text-rose-100"
+              } ${i === 0 ? "ring-2 ring-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.5)]" : ""}`}
+              title={
+                i === 0
+                  ? "Top du stack — résout en premier au prochain pass"
+                  : "Sera résolu après le top"
+              }
+            >
+              <div className="h-16 w-12 overflow-hidden rounded">
+                {card?.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={card.image}
+                    alt={card.name}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-[8px] text-zinc-500">
+                    {s.cardCode}
+                  </div>
+                )}
+              </div>
+              <span className="max-w-[80px] truncate font-semibold">
+                {card?.name ?? s.cardCode}
+              </span>
+              <span className="text-[8px] text-zinc-400">
+                {isYours ? "🧙 toi" : "👹 adv"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // Phase 5.13 : visuel mana sous forme de pastilles circulaires.
 // `mana` = cercles bleus pleins (mana dispo) ; `manaMax - mana` =

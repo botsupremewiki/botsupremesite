@@ -68,8 +68,27 @@ export type InternalState = {
     attackerSeatIdx: 0 | 1;
     lanes: AttackLane[];
   } | null;
+  // Phase 7.0 : reactive spell stack. Quand un sort Fast/Slow est lancé,
+  // il est PUSHÉ sur la pile (sans résoudre son effet) et la priorité
+  // passe à l'adversaire. L'adversaire peut répondre avec un sort
+  // Fast/Burst (qui va aussi sur la pile) OU passer (= top of stack
+  // résout, LIFO). Burst/Focus bypass entièrement la pile (résolu
+  // immédiatement, le caster garde la priorité).
+  spellStack: PendingStackSpell[];
   winnerSeatIdx: 0 | 1 | null;
   log: string[];
+};
+
+// Phase 7.0 : entrée de la pile de sorts en attente de résolution.
+export type PendingStackSpell = {
+  casterSeat: 0 | 1;
+  cardCode: string;
+  // Effect peut être null pour les sorts sans effet enregistré (rare).
+  effect: SpellEffect | null;
+  targetUid: string | null;
+  targetUid2: string | null;
+  targetUid3: string | null;
+  spellChoice: 0 | 1;
 };
 
 /** Discriminé : réducteurs d'action retournent ok=false + raison si l'action
@@ -334,6 +353,7 @@ export function createInitialState(
     round: 0,
     consecutivePasses: 0,
     attackInProgress: null,
+    spellStack: [],
     winnerSeatIdx: null,
     log: [`Partie démarrée. ${startingAttacker === 0 ? p1.username : p2.username} attaque en premier.`],
   };
@@ -1572,6 +1592,12 @@ export function projectStateForSeat(
             attackerSeat: seatToId(state.attackInProgress.attackerSeatIdx),
             lanes: state.attackInProgress.lanes,
           },
+    // Phase 7.0 : projeter la spellStack au client (juste casterSeat +
+    // cardCode, on peut ré-récupérer le card depuis le baseSet).
+    spellStack: state.spellStack.map((s) => ({
+      casterSeat: seatToId(s.casterSeat),
+      cardCode: s.cardCode,
+    })),
     round: state.round,
     winner:
       state.winnerSeatIdx === null ? null : seatToId(state.winnerSeatIdx),
@@ -1659,6 +1685,13 @@ export function playUnit(
   }
   if (state.activeSeatIdx !== seatIdx) {
     return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+  // Phase 7.0 : pas de play unit pendant un stack non-résolu (slow speed).
+  if (state.spellStack.length > 0) {
+    return {
+      ok: false,
+      error: "Résous le stack de sorts avant de jouer une unité.",
+    };
   }
   const player = state.players[seatIdx];
   if (handIndex < 0 || handIndex >= player.hand.length) {
@@ -1819,10 +1852,10 @@ export function playSpell(
     };
   }
 
-  // Phase 5.0 : validation spell speed.
-  //   - Slow : ne peut PAS être joué en combat (attaque en cours).
-  //   - Burst/Focus : caster GARDE la priorité après cast (combos).
-  //   - Fast : caster passe la priorité (réaction adverse possible).
+  // Phase 5.0 + 7.0 : validation spell speed.
+  //   - Slow : interdit en combat ET pendant un reactive stack.
+  //   - Fast : pushé sur la pile, l'adversaire peut répondre (Fast/Burst).
+  //   - Burst/Focus : résolu IMMÉDIATEMENT, bypass stack, caster keeps priority.
   // Le spell speed est sur card.spellSpeed ("Burst" | "Fast" | "Slow" | "Focus").
   const spellSpeed = card.spellSpeed;
   if (spellSpeed === "Slow" && state.attackInProgress !== null) {
@@ -1831,9 +1864,16 @@ export function playSpell(
       error: `${card.name} (Lent) ne peut pas être joué pendant un combat.`,
     };
   }
-  // Burst/Focus = pas de fenêtre de réaction adverse → caster keeps priority.
-  const keepsPriorityAfterCast =
-    spellSpeed === "Burst" || spellSpeed === "Focus";
+  if (spellSpeed === "Slow" && state.spellStack.length > 0) {
+    return {
+      ok: false,
+      error: `${card.name} (Lent) ne peut pas être joué en réponse à un sort.`,
+    };
+  }
+  // Burst/Focus = bypass stack, résolu immédiatement, garde la priorité.
+  const isBurstSpeed = spellSpeed === "Burst" || spellSpeed === "Focus";
+  // Fast/Slow = pushé sur la pile, priorité passe à l'adversaire.
+  const goesOnStack = spellSpeed === "Fast" || spellSpeed === "Slow";
 
   // Phase 3.7 + 3.37 + 3.70 : valide le ciblage (1, 2 ou 3 cibles selon
   // l'effet).
@@ -1893,74 +1933,89 @@ export function playSpell(
     },
   };
 
-  let newPlayers: [InternalPlayer, InternalPlayer] = [...state.players] as [
-    InternalPlayer,
-    InternalPlayer,
-  ];
+  const newPlayers: [InternalPlayer, InternalPlayer] = [
+    ...state.players,
+  ] as [InternalPlayer, InternalPlayer];
   newPlayers[seatIdx] = updatedPlayer;
 
-  // Applique l'effet enregistré.
-  let intermediateState: InternalState = {
+  // Phase 7.0 : pour les sorts Fast/Slow, on PUSHE sur la spellStack et
+  // on passe la priorité. L'effet sera appliqué quand le sort résout
+  // (passPriority pop le top du stack). Les triggers ON-CAST (Imbue,
+  // Heimer, Lux, Ezreal) firent NOW. Les triggers ON-RESOLVE (Karma,
+  // Jinx) sont déférés.
+
+  let postSpellState: InternalState = {
     ...state,
     players: newPlayers,
-  };
-  if (effect) {
-    intermediateState = applySpellEffect(
-      intermediateState,
-      seatIdx,
-      effect,
-      targetUid ?? null,
-      targetUid2 ?? null,
-      targetUid3 ?? null,
-      spellChoice ?? 0,
-    );
-    newPlayers = intermediateState.players;
-    // Phase 5.2 : Karma niveau 2 (01IO041T1) — quand le caster lance
-    // un sort, copiez-le sur les mêmes cibles. On applique l'effet une
-    // 2e fois (cibles identiques). 1 application supplémentaire par
-    // Karma L2 sur le banc.
-    const karmaL2Count = newPlayers[seatIdx].bench.filter(
-      (u) => u.cardCode === "01IO041T1",
-    ).length;
-    if (karmaL2Count > 0) {
-      for (let i = 0; i < karmaL2Count; i++) {
-        intermediateState = applySpellEffect(
-          intermediateState,
-          seatIdx,
-          effect,
-          targetUid ?? null,
-          targetUid2 ?? null,
-          targetUid3 ?? null,
-          spellChoice ?? 0,
-        );
-      }
-      const karmaPlayer = intermediateState.players[seatIdx];
-      newPlayers = [
-        intermediateState.players[0],
-        intermediateState.players[1],
-      ] as [InternalPlayer, InternalPlayer];
-      intermediateState = {
-        ...intermediateState,
-        log: [
-          ...intermediateState.log,
-          `${karmaPlayer.username} : Karma copie ${card.name} (${karmaL2Count}× supplémentaire${karmaL2Count > 1 ? "s" : ""}).`,
-        ],
-      };
-    }
-  }
-
-  // Phase 3.22 : déclenche Imbue sur tous les alliés du caster qui en ont.
-  // Phase 5.0 : Burst/Focus → caster GARDE la priorité (active reste seatIdx).
-  // Fast/Slow → priorité passe à l'adversaire (réaction possible).
-  let postSpellState: InternalState = {
-    ...intermediateState,
-    activeSeatIdx: keepsPriorityAfterCast ? seatIdx : otherSeat(seatIdx),
     consecutivePasses: 0,
     log: [
-      ...intermediateState.log,
+      ...state.log,
       `${player.username} lance ${card.name} (coût ${card.cost}, ${spellSpeed ?? "?"}).`,
     ],
   };
+
+  if (goesOnStack) {
+    // Push sur la pile, pass priority. L'effet ne résout pas encore.
+    postSpellState = {
+      ...postSpellState,
+      spellStack: [
+        ...postSpellState.spellStack,
+        {
+          casterSeat: seatIdx,
+          cardCode: handCard.cardCode,
+          effect: effect ?? null,
+          targetUid: targetUid ?? null,
+          targetUid2: targetUid2 ?? null,
+          targetUid3: targetUid3 ?? null,
+          spellChoice: ((spellChoice ?? 0) === 1 ? 1 : 0) as 0 | 1,
+        },
+      ],
+      activeSeatIdx: otherSeat(seatIdx),
+    };
+  } else if (isBurstSpeed) {
+    // Burst/Focus : résout immédiatement, garde la priorité.
+    if (effect) {
+      postSpellState = applySpellEffect(
+        postSpellState,
+        seatIdx,
+        effect,
+        targetUid ?? null,
+        targetUid2 ?? null,
+        targetUid3 ?? null,
+        spellChoice ?? 0,
+      );
+      postSpellState = applyOnResolveSpellTriggers(
+        postSpellState,
+        seatIdx,
+        card.name,
+        effect,
+        targetUid ?? null,
+        targetUid2 ?? null,
+        targetUid3 ?? null,
+        ((spellChoice ?? 0) === 1 ? 1 : 0) as 0 | 1,
+      );
+    }
+    // Burst → priorité reste au caster.
+    postSpellState = { ...postSpellState, activeSeatIdx: seatIdx };
+  } else {
+    // Pas de spellSpeed reconnue — fallback : résout immédiatement
+    // comme un Burst implicite pour ne pas bloquer la partie.
+    if (effect) {
+      postSpellState = applySpellEffect(
+        postSpellState,
+        seatIdx,
+        effect,
+        targetUid ?? null,
+        targetUid2 ?? null,
+        targetUid3 ?? null,
+        spellChoice ?? 0,
+      );
+    }
+    postSpellState = { ...postSpellState, activeSeatIdx: otherSeat(seatIdx) };
+  }
+
+  // Phase 3.22 : déclenche Imbue sur tous les alliés du caster (ON-CAST,
+  // toujours, même si le sort va sur la pile).
   postSpellState = triggerImbue(postSpellState, seatIdx);
   // Phase 3.76 : Heimerdinger trigger (cast turret of same cost in hand).
   postSpellState = triggerHeimerdingerOnSpellCast(
@@ -1970,26 +2025,69 @@ export function playSpell(
   );
   // Phase 4.0b : Lux L2 — chaque fois que spellManaSpent crosse un
   // multiple de 6 dans le round, créer 1 Éclat final (01DE042T3) en main.
-  // Trigger continu vs uniquement à level-up (qui était l'ancien
-  // comportement bug).
   postSpellState = triggerLuxLevel2OnSpellCast(
     postSpellState,
     seatIdx,
     player.championCounters.spellManaSpent,
     player.championCounters.spellManaSpent + effectiveSpellCost,
   );
-  // Phase 4.0b : Jinx L2 — si la main devient vide pour la 1re fois de
-  // ce round, créer 1 Super roquette de la mort ! (01PZ040T2) en main.
-  postSpellState = triggerJinxLevel2OnHandEmpty(postSpellState, seatIdx);
-  // Phase 5.9 : Ezreal L2 — si le sort vient de cibler un ennemi, deal
-  // 2 dmg au nexus ennemi (par Ezreal L2 sur le banc).
+  // Phase 5.9 : Ezreal L2 — ON-CAST si cible ennemie.
   if (targetIsEnemy && (targetSide === "enemy" || targetSide === "any")) {
     postSpellState = triggerEzrealLevel2OnEnemyTarget(postSpellState, seatIdx);
   }
+
   return {
     ok: true,
     state: checkLevelUps(postSpellState),
   };
+}
+
+/** Phase 7.0 : triggers qui doivent fire APRÈS qu'un sort résout son
+ *  effet. Inclut Karma L2 double-cast et Jinx L2 main-vide. À appeler
+ *  pour Burst (immédiat) ET dans passPriority lors du pop de stack. */
+function applyOnResolveSpellTriggers(
+  state: InternalState,
+  casterSeat: 0 | 1,
+  spellName: string,
+  effect: SpellEffect | null,
+  targetUid: string | null,
+  targetUid2: string | null,
+  targetUid3: string | null,
+  spellChoice: 0 | 1,
+): InternalState {
+  let newState = state;
+  // Phase 5.2 : Karma L2 (01IO041T1) double-cast — applique l'effet une
+  // 2e fois (par Karma L2). Karma agit sur la résolution (pas sur le cast).
+  if (effect) {
+    const karmaL2Count = newState.players[casterSeat].bench.filter(
+      (u) => u.cardCode === "01IO041T1",
+    ).length;
+    if (karmaL2Count > 0) {
+      for (let i = 0; i < karmaL2Count; i++) {
+        newState = applySpellEffect(
+          newState,
+          casterSeat,
+          effect,
+          targetUid,
+          targetUid2,
+          targetUid3,
+          spellChoice,
+        );
+      }
+      const karmaPlayer = newState.players[casterSeat];
+      newState = {
+        ...newState,
+        log: [
+          ...newState.log,
+          `${karmaPlayer.username} : Karma copie ${spellName} (${karmaL2Count}× supplémentaire${karmaL2Count > 1 ? "s" : ""}).`,
+        ],
+      };
+    }
+  }
+  // Phase 4.0b : Jinx L2 main vide — check après résolution (le sort
+  // peut avoir vidé la main).
+  newState = triggerJinxLevel2OnHandEmpty(newState, casterSeat);
+  return newState;
 }
 
 /** Phase 5.9 : Ezreal niveau 2 (01PZ036T1) — quand vous ciblez un ennemi,
@@ -5657,6 +5755,56 @@ export function passPriority(
     return { ok: false, error: "Ce n'est pas ton tour." };
   }
 
+  // Phase 7.0 : si la spellStack est non-vide, un pass = laisser le top
+  // du stack résoudre (LIFO). On ne compte PAS comme un pass normal
+  // (consecutivePasses ne s'incrémente pas — la fenêtre de résolution
+  // n'est pas une fenêtre de fin de round).
+  if (state.spellStack.length > 0) {
+    const top = state.spellStack[state.spellStack.length - 1];
+    const newStack = state.spellStack.slice(0, -1);
+    let resolvedState: InternalState = {
+      ...state,
+      spellStack: newStack,
+      log: [
+        ...state.log,
+        `${state.players[seatIdx].username} passe → ${getCard(top.cardCode)?.name ?? top.cardCode} résout.`,
+      ],
+    };
+    if (top.effect) {
+      resolvedState = applySpellEffect(
+        resolvedState,
+        top.casterSeat,
+        top.effect,
+        top.targetUid,
+        top.targetUid2,
+        top.targetUid3,
+        top.spellChoice,
+      );
+      // Triggers ON-RESOLVE après que le sort applique son effet.
+      resolvedState = applyOnResolveSpellTriggers(
+        resolvedState,
+        top.casterSeat,
+        getCard(top.cardCode)?.name ?? top.cardCode,
+        top.effect,
+        top.targetUid,
+        top.targetUid2,
+        top.targetUid3,
+        top.spellChoice,
+      );
+    }
+    // Phase 7.0 : après résolution, priorité va à l'OPPOSÉ du caster du
+    // sort qui vient de résoudre (rule LoR : l'autre joueur peut prendre
+    // la prochaine action).
+    return {
+      ok: true,
+      state: checkLevelUps({
+        ...resolvedState,
+        activeSeatIdx: otherSeat(top.casterSeat),
+        consecutivePasses: 0,
+      }),
+    };
+  }
+
   const newPasses = state.consecutivePasses + 1;
   const player = state.players[seatIdx];
   const log = [...state.log, `${player.username} passe.`];
@@ -5713,6 +5861,13 @@ export function declareAttack(
   }
   if (state.attackInProgress !== null) {
     return { ok: false, error: "Une attaque est déjà en cours." };
+  }
+  // Phase 7.0 : pas de déclaration d'attaque pendant un stack non-résolu.
+  if (state.spellStack.length > 0) {
+    return {
+      ok: false,
+      error: "Résous le stack de sorts avant de déclarer une attaque.",
+    };
   }
   const player = state.players[seatIdx];
   if (!player.attackToken) {
