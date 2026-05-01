@@ -601,8 +601,12 @@ export function endRound(state: InternalState): InternalState {
     }
   }
   const updatedPlayers: [InternalPlayer, InternalPlayer] = [
-    applyRegeneration(expireRoundBuffs(bankSpellMana(stateForEor.players[0]))),
-    applyRegeneration(expireRoundBuffs(bankSpellMana(stateForEor.players[1]))),
+    applyFleetingDiscard(
+      applyRegeneration(expireRoundBuffs(bankSpellMana(stateForEor.players[0]))),
+    ),
+    applyFleetingDiscard(
+      applyRegeneration(expireRoundBuffs(bankSpellMana(stateForEor.players[1]))),
+    ),
   ];
 
   // Vérifier game over.
@@ -642,6 +646,29 @@ function bankSpellMana(player: InternalPlayer): InternalPlayer {
     mana: 0, // sera réassignée dans startRound
     spellMana: banked,
   };
+}
+
+/** Phase 4.8 : Fleeting (mot-clé Fugace) — les cartes Fleeting encore en
+ *  main à la fin du round sont défaussées (oblitérées, pas dans le deck).
+ *  Couvre les tokens Heimer turrets, Lux Final Spark, Katarina Dague
+ *  fugace, Ezreal Tir mystique, etc. Vérifie keywordRefs sur la card
+ *  imprimée (les buffs cardBuffs ne définissent pas Fleeting). */
+function applyFleetingDiscard(player: InternalPlayer): InternalPlayer {
+  if (player.hand.length === 0) return player;
+  const newHand: typeof player.hand = [];
+  const discardedNames: string[] = [];
+  const newCardBuffs = { ...player.cardBuffs };
+  for (const handCard of player.hand) {
+    const card = getCard(handCard.cardCode);
+    if (card?.keywordRefs?.includes("Fleeting")) {
+      discardedNames.push(card.name);
+      delete newCardBuffs[handCard.uid];
+      continue;
+    }
+    newHand.push(handCard);
+  }
+  if (discardedNames.length === 0) return player;
+  return { ...player, hand: newHand, cardBuffs: newCardBuffs };
 }
 
 /** Régénération (mot-clé Regeneration) : à la fin de chaque round, les
@@ -5440,6 +5467,13 @@ export function assignBlockers(
       return {
         ok: false,
         error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} est étourdie — ne peut pas bloquer ce round.`,
+      };
+    }
+    // Phase 4.8 : mot-clé CantBlock — l'unité ne peut pas être bloqueur.
+    if (hasKeyword(unit, "CantBlock")) {
+      return {
+        ok: false,
+        error: `${getCard(unit.cardCode)?.name ?? unit.cardCode} ne peut pas bloquer.`,
       };
     }
     // Validation Elusive / Fearsome : l'attaquant impose des contraintes

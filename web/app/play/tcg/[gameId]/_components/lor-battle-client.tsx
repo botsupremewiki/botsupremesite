@@ -1414,10 +1414,12 @@ function AttackLanesView({
           ? defenderBench.find((u) => u.uid === blockerUid)
           : null;
 
-        // Liste des bloqueurs valides (filtre Elusive + Fearsome).
+        // Liste des bloqueurs valides (filtre Elusive + Fearsome + CantBlock).
         const validBlockers = mustAssignBlockers
           ? defenderBench.filter((u) => {
               if (!attackerUnit) return true;
+              // Phase 4.8 : CantBlock interdit le défenseur d'être bloqueur.
+              if (u.keywords.includes("CantBlock")) return false;
               if (
                 attackerUnit.keywords.includes("Elusive") &&
                 !u.keywords.includes("Elusive")
