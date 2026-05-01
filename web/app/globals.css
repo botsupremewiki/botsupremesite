@@ -5,6 +5,29 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ─── Theme tokens (data-theme="light" | "dark") ───────────────────
+   Variables CSS utilisables via les classes Tailwind arbitrary :
+     bg-[var(--bg)], text-[var(--fg)], border-[var(--border)]
+   Les pages existantes en bg-zinc-950 hardcodé ne basculent pas, mais
+   les nouveaux composants peuvent utiliser ces tokens pour suivre le
+   thème actif. */
+html[data-theme="dark"] {
+  --bg: #09090b;
+  --bg-soft: rgb(255 255 255 / 0.03);
+  --fg: #f4f4f5;
+  --fg-muted: #a1a1aa;
+  --border: rgb(255 255 255 / 0.10);
+  --accent: #fbbf24;
+}
+html[data-theme="light"] {
+  --bg: #fafafa;
+  --bg-soft: rgb(0 0 0 / 0.03);
+  --fg: #18181b;
+  --fg-muted: #52525b;
+  --border: rgb(0 0 0 / 0.12);
+  --accent: #d97706;
+}
+
 html,
 body {
   height: 100%;
@@ -14,6 +37,12 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* En mode light, le body bg switch via les variables. */
+html[data-theme="light"] body {
+  background: var(--bg);
+  color: var(--fg);
 }
 
 /* ─── A11Y : focus visible standard ──────────────────────────────────
