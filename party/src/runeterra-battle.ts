@@ -45,6 +45,9 @@ type ConnInfo = {
   deckId: string | null;
   username: string;
   seatIdx: 0 | 1 | null;
+  // Phase 10.2 : spectateur en read-only. Pas de seat, pas d'actions
+  // envoyées. Reçoit les state broadcasts depuis la perspective du siège 0.
+  isSpectator?: boolean;
 };
 
 export default class LorBattleServer implements Party.Server {
@@ -94,6 +97,35 @@ export default class LorBattleServer implements Party.Server {
       conn.close();
       return;
     }
+
+    // Phase 10.2 : mode spectateur. Si ?spectate=1, on accepte la connexion
+    // sans deckId, sans seat. La connexion reçoit les broadcasts en
+    // read-only (perspective du siège 0).
+    const spectateParam = url.searchParams.get("spectate");
+    if (spectateParam === "1") {
+      this.connInfo.set(conn.id, {
+        authId,
+        deckId: null,
+        username,
+        seatIdx: null,
+        isSpectator: true,
+      });
+      this.send(conn, {
+        type: "lor-battle-welcome",
+        selfId: conn.id,
+        selfSeat: null,
+      });
+      // Si la partie est déjà en cours, envoie l'état actuel (perspective
+      // du siège 0).
+      if (this.state !== null) {
+        this.send(conn, {
+          type: "lor-battle-state",
+          state: projectStateForSeat(this.state, 0),
+        });
+      }
+      return;
+    }
+
     if (!deckId) {
       this.send(conn, {
         type: "lor-battle-error",
@@ -371,10 +403,18 @@ export default class LorBattleServer implements Party.Server {
   private broadcastState() {
     if (this.state === null) return;
     for (const [connId, info] of this.connInfo) {
-      if (info.seatIdx === null) continue;
       const conn = this.findConn(connId);
       if (!conn) continue;
-      this.sendState(conn, info.seatIdx);
+      if (info.seatIdx !== null) {
+        // Joueur assis — sa propre perspective.
+        this.sendState(conn, info.seatIdx);
+      } else if (info.isSpectator) {
+        // Phase 10.2 : spectateur — perspective du siège 0 par défaut.
+        this.send(conn, {
+          type: "lor-battle-state",
+          state: projectStateForSeat(this.state, 0),
+        });
+      }
     }
     // Phase 3.8f : enregistre le résultat de partie quand state.phase
     // devient "ended". Skip en mode bot (pas de joueur réel à classer).

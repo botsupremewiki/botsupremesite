@@ -47,10 +47,14 @@ export function LorBattleClient({
   profile,
   roomId,
   deckId,
+  spectatorMode,
 }: {
   profile: Profile | null;
   roomId: string;
   deckId: string;
+  // Phase 10.2 : mode spectateur (read-only, pas de actions). URL
+  // /play/tcg/lol/spectate/{roomId}.
+  spectatorMode?: boolean;
 }) {
   const game = TCG_GAMES.lol;
   const socketRef = useRef<WebSocket | null>(null);
@@ -157,11 +161,16 @@ export function LorBattleClient({
     hasChoice: boolean;
   } | null>(null);
 
-  const send = useCallback((msg: RuneterraBattleClientMessage) => {
-    const ws = socketRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify(msg));
-  }, []);
+  const send = useCallback(
+    (msg: RuneterraBattleClientMessage) => {
+      // Phase 10.2 : spectateur ne peut PAS envoyer d'actions.
+      if (spectatorMode) return;
+      const ws = socketRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify(msg));
+    },
+    [spectatorMode],
+  );
 
   useEffect(() => {
     if (!profile) return;
@@ -176,8 +185,13 @@ export function LorBattleClient({
         : "wss";
     const params = new URLSearchParams();
     params.set("authId", profile.id);
-    params.set("deckId", deckId);
     params.set("name", profile.username);
+    if (spectatorMode) {
+      // Phase 10.2 : spectateur — pas de deckId, ?spectate=1.
+      params.set("spectate", "1");
+    } else {
+      params.set("deckId", deckId);
+    }
     const url = `${scheme}://${partyHost}/parties/battlelor/${roomId}?${params.toString()}`;
     const ws = new WebSocket(url);
     socketRef.current = ws;
@@ -218,7 +232,7 @@ export function LorBattleClient({
       ws.close();
       if (socketRef.current === ws) socketRef.current = null;
     };
-  }, [profile, roomId, deckId]);
+  }, [profile, roomId, deckId, spectatorMode]);
 
   // Phase 3.85 : auto-dismiss du toast quête après 8s. Si une nouvelle
   // victoire arrive avant l'expiration, on reset le timer.
@@ -603,9 +617,30 @@ export function LorBattleClient({
           </Link>
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
-          <span className="text-xs text-zinc-500">⚔️ Combat — salle {roomId.slice(0, 8)}</span>
+          <span className="text-xs text-zinc-500">
+            {spectatorMode ? "👀 Spectateur" : "⚔️ Combat"} — salle {roomId.slice(0, 8)}
+          </span>
+          {spectatorMode && (
+            <span className="rounded-md border border-violet-400/40 bg-violet-500/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-violet-200">
+              read-only
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
+          {/* Phase 10.2 : copier lien spectateur (visible uniquement
+              hors spectator mode, pour les joueurs assis). */}
+          {!spectatorMode && (
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/play/tcg/lol/spectate/${roomId}`;
+                navigator.clipboard?.writeText(url).catch(() => {});
+              }}
+              className="rounded-md border border-violet-400/40 bg-violet-500/10 px-2 py-1 text-xs text-violet-200 hover:bg-violet-500/20"
+              title="Copier le lien spectateur (à partager sur Discord)"
+            >
+              👀 Lien spectate
+            </button>
+          )}
           {/* Phase 9.1 : toggle mute SFX (persisté en localStorage). */}
           <SfxMuteToggle />
           <UserPill profile={profile} variant="play" />

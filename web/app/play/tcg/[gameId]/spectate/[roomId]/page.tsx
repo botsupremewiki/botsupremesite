@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { BattleClient } from "../../battle/[roomId]/battle-client";
+import { LorBattleClient } from "../../_components/lor-battle-client";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,17 @@ export default async function SpectatePage({
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-sm text-zinc-400">
         Connecte-toi avec Discord pour observer un match.
       </div>
+    );
+  }
+  // Phase 10.2 : LoR utilise son propre client (LorBattleClient).
+  if (gameId === "lol") {
+    return (
+      <LorBattleClient
+        profile={profile}
+        roomId={roomId}
+        deckId=""
+        spectatorMode
+      />
     );
   }
   return (
