@@ -30,6 +30,7 @@ import { useRegisterProximityChat } from "@/app/play/proximity-chat-context";
 import { useSounds } from "@/lib/sounds";
 import { useToast } from "@/components/toast";
 import { CardFace, CardZoomModal } from "../../_components/card-visuals";
+import { CardBack, CoinFace } from "../../_components/cosmetic-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -3286,7 +3287,9 @@ function CoinFlipOverlay({
         )}
       </div>
 
-      {/* Pièce en 3D — perspective + rotateY animé */}
+      {/* Pièce en 3D — perspective + rotateY animé. Les 2 faces sont
+          rendues via CoinFace (Poké Ball SVG procédurale + reflets) au
+          lieu des anciens disques unis avec emoji. */}
       <div style={{ perspective: "800px" }}>
         <motion.div
           initial={{ rotateY: 0 }}
@@ -3295,27 +3298,21 @@ function CoinFlipOverlay({
           style={{
             transformStyle: "preserve-3d",
             position: "relative",
-            width: 120,
-            height: 120,
+            width: 128,
+            height: 128,
           }}
         >
-          {/* Face « FACE » (heads) — visible à rotateY 0/720.
-              Style dépend du coin équipé (Pokéball/Super Ball/etc). */}
+          {/* Face heads — visible à rotateY 0/720 */}
           <div
             style={{
               position: "absolute",
               inset: 0,
               backfaceVisibility: "hidden",
             }}
-            className={`flex items-center justify-center rounded-full bg-gradient-to-br ${coinStyle.headsBg} text-3xl font-black ${coinStyle.headsText} shadow-2xl ring-4 ${coinStyle.headsRing}`}
           >
-            {coinStyle.headsEmoji ? (
-              <span className="text-4xl">{coinStyle.headsEmoji}</span>
-            ) : (
-              "FACE"
-            )}
+            <CoinFace coinId={coinId ?? "default"} side="heads" size="lg" />
           </div>
-          {/* Face « PILE » (tails) — visible à rotateY 180/540 */}
+          {/* Face tails — visible à rotateY 180/540 */}
           <div
             style={{
               position: "absolute",
@@ -3323,9 +3320,8 @@ function CoinFlipOverlay({
               backfaceVisibility: "hidden",
               transform: "rotateY(180deg)",
             }}
-            className={`flex items-center justify-center rounded-full bg-gradient-to-br ${coinStyle.tailsBg} text-3xl font-black ${coinStyle.tailsText} shadow-2xl ring-4 ${coinStyle.tailsRing}`}
           >
-            PILE
+            <CoinFace coinId={coinId ?? "default"} side="tails" size="lg" />
           </div>
         </motion.div>
       </div>

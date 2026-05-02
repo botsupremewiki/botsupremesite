@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { ONEPIECE_BASE_SET_BY_ID } from "@shared/tcg-onepiece-base";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { CosmeticItem } from "@shared/tcg-onepiece-cosmetics";
+import {
+  CardBack,
+  CoinFace,
+  PlaymatPreview,
+} from "../_components/cosmetic-visuals";
 
 // On étend le type avec "coin" pour Pokemon (pile/face). La DB accepte
 // n'importe quel string de type, donc pas de migration nécessaire.
@@ -201,7 +206,9 @@ export function CosmeticsShopClient({
                     : "border-white/10 bg-black/30"
               }`}
             >
-              {/* Aperçu */}
+              {/* Aperçu — utilise les composants procéduraux SVG du
+                  fichier cosmetic-visuals.tsx pour avoir une preview
+                  fidèle au rendu en combat (pas juste un emoji). */}
               <div className="flex h-32 items-center justify-center overflow-hidden rounded-md bg-zinc-950/60">
                 {item.type === "avatar" && cardImg ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -211,26 +218,25 @@ export function CosmeticsShopClient({
                     className="h-full object-contain"
                   />
                 ) : item.type === "sleeve" ? (
-                  <div
-                    className={`h-24 w-16 rounded-md border-2 border-white/20 bg-gradient-to-br ${
-                      item.sleeveColor ?? "from-rose-900 to-rose-950"
-                    } shadow-inner`}
-                  >
-                    <div className="flex h-full items-center justify-center text-2xl">
-                      {item.emoji}
-                    </div>
-                  </div>
+                  <CardBack sleeveId={item.id} size="md" />
                 ) : item.type === "coin" ? (
-                  // Coin : pièce circulaire avec emoji centré + dégradé.
-                  <div className="relative h-24 w-24 rounded-full border-4 border-amber-300/80 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 shadow-[inset_0_4px_8px_rgba(0,0,0,0.3)]">
-                    <div className="flex h-full w-full items-center justify-center text-3xl">
-                      {item.emoji}
+                  // Affiche les 2 faces de la pièce côte à côte pour que
+                  // le user voie le design heads ET tails avant achat.
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-center gap-1">
+                      <CoinFace coinId={(item as { coinId?: string }).coinId ?? "default"} side="heads" size="md" />
+                      <span className="text-[9px] uppercase tracking-widest text-zinc-500">Face</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <CoinFace coinId={(item as { coinId?: string }).coinId ?? "default"} side="tails" size="md" />
+                      <span className="text-[9px] uppercase tracking-widest text-zinc-500">Pile</span>
                     </div>
                   </div>
                 ) : item.type === "playmat" ? (
-                  <div className="flex h-full w-full items-center justify-center text-5xl">
-                    {item.emoji}
-                  </div>
+                  <PlaymatPreview
+                    playmatId={item.playmatId ?? "default"}
+                    className="h-full w-full"
+                  />
                 ) : (
                   <div className="text-5xl">{item.emoji}</div>
                 )}

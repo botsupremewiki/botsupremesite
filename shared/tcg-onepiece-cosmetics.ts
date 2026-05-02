@@ -27,6 +27,9 @@ export type CosmeticItem = {
   sleeveColor?: string;
   // Pour les playmats : id de fond appliqué au combat.
   playmatId?: string;
+  // Pour les coins (Pokemon uniquement) : id de pièce affichée au coin
+  // flip (cf. COIN_DESIGNS dans cosmetic-visuals.tsx).
+  coinId?: string;
 };
 
 export const ONEPIECE_COSMETICS: CosmeticItem[] = [
