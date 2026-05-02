@@ -18,6 +18,7 @@ import { POKEMON_BASE_SET, POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-ba
 import { formatPackRate, pokemonPackRate } from "@shared/tcg-pack-odds";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
+import { useSounds } from "@/lib/sounds";
 import {
   CardFace,
   CardZoomModal,
@@ -40,6 +41,11 @@ export function BoostersClient({
   const cardById = POKEMON_BASE_SET_BY_ID;
 
   const socketRef = useRef<WebSocket | null>(null);
+  const sounds = useSounds();
+  const soundsRef = useRef(sounds);
+  useEffect(() => {
+    soundsRef.current = sounds;
+  }, [sounds]);
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [gold, setGold] = useState<number>(profile?.gold ?? 0);
   const [freePacks, setFreePacks] = useState<number>(0);
@@ -90,6 +96,24 @@ export function BoostersClient({
         case "tcg-pack-opened":
           setRevealing(msg.pack);
           setFreePacks(msg.freePacks);
+          // Son de pack ouvert : success court, puis si une carte rare
+          // (★ ou 👑) est dedans, un coup de victoire à la fin de la
+          // reveal pour célébrer (joué avec un délai).
+          soundsRef.current.success();
+          {
+            const ids = msg.pack.cards;
+            const hasRare = ids.some((id) => {
+              const c = POKEMON_BASE_SET_BY_ID.get(id);
+              if (!c) return false;
+              const tier = RARITY_TIER[c.rarity] ?? 0;
+              return tier >= 5; // star-1 ou plus
+            });
+            if (hasRare) {
+              window.setTimeout(() => {
+                soundsRef.current.victory();
+              }, 1800);
+            }
+          }
           break;
         case "gold-update":
           setGold(msg.gold);

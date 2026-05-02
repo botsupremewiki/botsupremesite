@@ -25,6 +25,7 @@ import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { useRegisterProximityChat } from "@/app/play/proximity-chat-context";
+import { useSounds } from "@/lib/sounds";
 import { CardFace, CardZoomModal } from "../../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
@@ -107,10 +108,24 @@ export function BattleClient({
   const game = TCG_GAMES[gameId];
   const cardById = POKEMON_BASE_SET_BY_ID;
   const wsRef = useRef<WebSocket | null>(null);
+  const sounds = useSounds();
+  // Ref miroir pour utiliser sounds dans les closures stables (handler
+  // WebSocket) sans forcer le rerender sur chaque render parent.
+  const soundsRef = useRef(sounds);
+  useEffect(() => {
+    soundsRef.current = sounds;
+  }, [sounds]);
 
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [state, setState] = useState<BattleState | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Refs pour détecter les TRANSITIONS d'état (winner null → set,
+  // koCount qui augmente, etc.) et déclencher des sons une seule fois.
+  const prevWinnerRef = useRef<BattleSeatId | null>(null);
+  const prevKoCountsRef = useRef<{ self: number; opp: number }>({
+    self: 0,
+    opp: 0,
+  });
   const [questToast, setQuestToast] = useState<{
     botWins: number;
     granted: boolean;
@@ -163,27 +178,45 @@ export function BattleClient({
    *  changement de tour quand l'`activeSeat` change. Centralisé ici
    *  parce que l'application est différée tant qu'une animation
    *  pile/face est en cours. */
-  const applyStateNow = useCallback((newState: BattleState) => {
-    setState((prev) => {
-      const prevActive = prev?.activeSeat;
-      const nextActive = newState.activeSeat;
-      const phaseStartedNow =
-        prev?.phase !== "playing" && newState.phase === "playing";
-      if (
-        newState.phase === "playing" &&
-        ((prevActive && nextActive && prevActive !== nextActive) ||
-          phaseStartedNow)
-      ) {
-        const isMine = nextActive === newState.selfSeat;
-        setTurnBanner({
-          text: isMine ? "À toi !" : "Tour adverse",
-          accent: isMine ? "self" : "opp",
-          key: Date.now(),
-        });
-      }
-      return newState;
-    });
-  }, []);
+  const applyStateNow = useCallback(
+    (newState: BattleState) => {
+      setState((prev) => {
+        const prevActive = prev?.activeSeat;
+        const nextActive = newState.activeSeat;
+        const phaseStartedNow =
+          prev?.phase !== "playing" && newState.phase === "playing";
+        if (
+          newState.phase === "playing" &&
+          ((prevActive && nextActive && prevActive !== nextActive) ||
+            phaseStartedNow)
+        ) {
+          const isMine = nextActive === newState.selfSeat;
+          setTurnBanner({
+            text: isMine ? "À toi !" : "Tour adverse",
+            accent: isMine ? "self" : "opp",
+            key: Date.now(),
+          });
+        }
+        // Sons : KO (compteur de KO augmente) + victoire (winner détecté).
+        const prevSelfKo = prev?.self?.koCount ?? 0;
+        const prevOppKo = prev?.opponent?.koCount ?? 0;
+        const nextSelfKo = newState.self?.koCount ?? 0;
+        const nextOppKo = newState.opponent?.koCount ?? 0;
+        if (nextSelfKo > prevSelfKo || nextOppKo > prevOppKo) {
+          sounds.koHit();
+        }
+        if (newState.winner && !prev?.winner) {
+          if (newState.winner === newState.selfSeat) {
+            sounds.victory();
+          } else {
+            sounds.error();
+          }
+        }
+        return newState;
+      });
+    },
+    [sounds],
+  );
 
   /** Consomme le 1er coin flip de la queue (appelé quand son anim finit).
    *  Si la queue se vide ET qu'un state est en attente, on l'applique
@@ -305,6 +338,9 @@ export function BattleClient({
           };
           coinQueueRef.current = [...coinQueueRef.current, ev];
           setCoinQueue(coinQueueRef.current);
+          // Son d'arrivée du coin (notify, court). Joué quand le client
+          // reçoit l'event ; l'animation visuelle suit dans 0-2s.
+          soundsRef.current.notify();
           // Met à jour le récap de la série en cours. Si le label
           // change, on démarre une nouvelle série. Sinon on append.
           // Inclut aussi les séries "open-ended" (Ondine, Léviator
