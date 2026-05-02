@@ -53,6 +53,105 @@ const STEPS_POKEMON: Step[] = [
   },
 ];
 
+/** Étapes du tutoriel One Piece TCG. Clone fidèle des règles Bandai :
+ *  Leader + 50 cartes + 10 DON, Vie 4-5 selon Leader, phases Refresh/
+ *  Pioche/DON/Main/Fin, Power vs Power, Triggers de Vie. */
+const STEPS_ONEPIECE: Step[] = [
+  {
+    title: "Bienvenue dans One Piece TCG",
+    body: "Clone fidèle du jeu officiel Bandai. Tu pars à l'abordage avec ton Leader, ses Persos et ses DON!! pour réduire à zéro la Vie de l'adversaire (4 ou 5 cartes selon le Leader). Stratégie pure, pas de hasard.",
+    visual: <OnePieceMockup phase="intro" />,
+  },
+  {
+    title: "Le deck — 1 Leader + 50 cartes + 10 DON",
+    body: "Tu choisis 1 Leader (qui détermine ta Vie initiale, ta puissance et tes couleurs autorisées), puis 50 cartes (Persos, Évents, Lieux) max 4 copies par cardNumber. Ton deck DON séparé contient toujours 10 cartes DON!!.",
+    visual: <OnePieceMockup phase="deck" />,
+  },
+  {
+    title: "Les DON!! — moteur du jeu",
+    body: "Chaque tour, tu ajoutes 2 DON (1 au tout 1er tour) à ta zone DON active. Tu peux les dépenser pour jouer des cartes (coût) OU les attacher à un Leader/Persos pour +1000 puissance chacun. À la fin du tour, les DON attachées reviennent en zone DON épuisée.",
+    visual: <OnePieceMockup phase="don" />,
+  },
+  {
+    title: "Phases d'un tour",
+    body: "1) Refresh : tu redresses Leader, Persos, Lieu et DON. 2) Pioche : 1 carte (sauf 1er tour). 3) DON : ajoute 2 DON. 4) Phase principale : joue cartes, attache DON, attaque. 5) Fin : DON attachées retournent en pool épuisée.",
+    visual: <OnePieceMockup phase="phases" />,
+  },
+  {
+    title: "Attaquer — Power vs Power",
+    body: "Choisis un attaquant redressé (Leader ou Persos). Cible : Leader adverse OU Persos épuisé adverse. Si Power attaquant ≥ Power cible, ça touche. Sur Leader hit : l'adversaire prend 1 carte Vie en main (2 si [Double Attaque]). Sur Persos hit : KO. Le 1er joueur ne peut PAS attaquer au tour 1.",
+    visual: <OnePieceMockup phase="attack" />,
+  },
+  {
+    title: "Se défendre — Bloqueur, Counter, Trigger",
+    body: "Quand on t'attaque tu peux : 1) [Bloqueur] : un Persos rested redirige l'attaque sur lui. 2) Counter : depuis la main, joue un Persos avec valeur counter (1000/2000) ou un Évent [Contre]. 3) Trigger : si une Vie révélée a un [Déclenchement], tu peux l'activer avant qu'elle aille en main.",
+    visual: <OnePieceMockup phase="defense" />,
+  },
+  {
+    title: "Conditions de victoire",
+    body: "Tu gagnes si tu réduis la Vie de l'adversaire à 0 en attaquant son Leader (4-5 dégâts selon Leader). Tu gagnes aussi par deck-out (l'adversaire ne peut plus piocher). Inversement, garde l'œil sur ton propre deck.",
+    visual: <OnePieceMockup phase="victory" />,
+  },
+  {
+    title: "À l'abordage, pirate !",
+    body: "Tu connais les règles essentielles. Le mieux est d'apprendre en jouant : commence contre le Bot Suprême (deck miroir équilibré) puis vise le PvP classé. Bon match, capitaine ! 🏴‍☠️",
+    visual: <OnePieceMockup phase="ready" />,
+  },
+];
+
+/** Étapes du tutoriel LoR (League of Runeterra clone). Mécaniques clés :
+ *  mana max +1/round, spell mana banked, attack token alterné,
+ *  champions level-up, 3 vitesses de sort. */
+const STEPS_LOR: Step[] = [
+  {
+    title: "Bienvenue dans LoL TCG (Runeterra)",
+    body: "Clone fidèle de Legends of Runeterra (sunset 2024 par Riot). Réduis le Nexus adverse de 20 à 0 via tes attaques et sorts. 6 régions, ~40 mots-clés, gameplay très tactique.",
+    visual: <LorMockup phase="intro" />,
+  },
+  {
+    title: "Le deck — 40 cartes + 1-2 régions",
+    body: "Exactement 40 cartes (Unités + Sorts), max 3 copies par cardCode, max 6 champions, 1-2 régions parmi : Demacia, Freljord, Ionia, Noxus, Piltover & Zaun, Îles obscures.",
+    visual: <LorMockup phase="deck" />,
+  },
+  {
+    title: "Mana et spell mana",
+    body: "Chaque round ton mana max +1 (cap 10). Mana non utilisé en fin de round → spell mana (cap 3) que tu peux dépenser uniquement pour des sorts les rounds suivants. Gestion clé !",
+    visual: <LorMockup phase="mana" />,
+  },
+  {
+    title: "Le jeton d'attaque",
+    body: "Un seul joueur peut attaquer par round — le porteur du jeton. Le jeton alterne à chaque round. Tu peux choisir de ne pas attaquer et garder du mana pour des sorts.",
+    visual: <LorMockup phase="token" />,
+  },
+  {
+    title: "Combat — déclaration et bloqueurs",
+    body: "Tu choisis 1 à 6 unités prêtes pour attaquer (ordre dans des lanes). L'adversaire assigne 1 bloqueur par lane (ou laisse passer = dégâts au Nexus). Mots-clés contraints : Insaisissable, Redoutable, Challenger…",
+    visual: <LorMockup phase="combat" />,
+  },
+  {
+    title: "Vitesses de sort — Burst / Fast / Slow",
+    body: "Burst (instantané, ne donne pas la priorité), Fast (rapide, l'adversaire peut réagir avec ses Fast/Burst), Slow (lent, ne peut pas être lancé en combat). Choisis bien quand tu veux jouer.",
+    visual: <LorMockup phase="speed" />,
+  },
+  {
+    title: "Champions et level-up",
+    body: "Les Champions ont une condition de level-up unique. Une fois remplie, ils passent niveau 2 avec stats et abilities boostés. Garen frappe 2× = level 2 ; Lux dépense 6+ mana en sorts ; Yasuo voit 4 unités stun/recall…",
+    visual: <LorMockup phase="champion" />,
+  },
+  {
+    title: "Au combat, invocateur !",
+    body: "Tu connais l'essentiel. Pour tester : Bot Suprême puis ranked. Bon match ! ⚔️",
+    visual: <LorMockup phase="ready" />,
+  },
+];
+
+/** Sélecteur de steps selon le jeu. Default Pokemon. */
+function getStepsForGame(gameId: string): Step[] {
+  if (gameId === "onepiece") return STEPS_ONEPIECE;
+  if (gameId === "lol") return STEPS_LOR;
+  return STEPS_POKEMON;
+}
+
 export function TutorialClient({
   gameId,
   isLoggedIn,
@@ -77,8 +176,9 @@ export function TutorialClient({
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Pour l'instant on n'a que pokemon — on duplique pour les autres jeux.
-  const steps = STEPS_POKEMON;
+  // Sélection des étapes selon le jeu (Pokemon / OnePiece / LoR).
+  // Chaque jeu a son propre catalogue de steps (règles spécifiques).
+  const steps = getStepsForGame(gameId);
   const isLast = step >= steps.length - 1;
 
   // "Terminer 🎉" sur la dernière étape : on affiche juste l'écran de fin
@@ -384,6 +484,253 @@ function BoardMockup({ phase }: { phase: string }) {
           <div className="text-sm font-bold text-emerald-200">
             Prêt à jouer !
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Visuel emoji-based pour le tutoriel One Piece TCG (8 phases). */
+function OnePieceMockup({ phase }: { phase: string }) {
+  return (
+    <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-rose-900/40 to-amber-900/30 p-4">
+      {phase === "intro" ? (
+        <>
+          <div className="text-5xl">🏴‍☠️</div>
+          <div className="text-sm text-zinc-300">Toi vs Adversaire</div>
+        </>
+      ) : phase === "deck" ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex h-16 w-12 items-center justify-center rounded border-2 border-amber-300/80 bg-amber-300/15">
+            <span className="text-xl">⭐</span>
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-amber-200">
+            Leader
+          </div>
+          <div className="grid grid-cols-10 gap-1">
+            {Array.from({ length: 50 }, (_, i) => (
+              <div
+                key={i}
+                className="h-3 w-2 rounded-sm border border-rose-300/30 bg-rose-300/10"
+              />
+            ))}
+          </div>
+          <div className="text-[10px] text-zinc-400">50 cartes deck</div>
+          <div className="flex gap-0.5">
+            {Array.from({ length: 10 }, (_, i) => (
+              <div
+                key={i}
+                className="h-3 w-3 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 ring-1 ring-amber-200"
+              />
+            ))}
+          </div>
+          <div className="text-[10px] text-amber-200">10 DON!!</div>
+        </div>
+      ) : phase === "don" ? (
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            {Array.from({ length: 6 }, (_, i) => (
+              <span
+                key={i}
+                className="inline-block h-5 w-5 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 ring-1 ring-amber-200 shadow"
+              />
+            ))}
+          </div>
+          <div className="text-2xl">→</div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-16 w-12 items-center justify-center rounded border-2 border-rose-400/60 bg-rose-300/10">
+              <span className="text-xl">⚔️</span>
+            </div>
+            <span className="text-xs text-amber-200">+3000 power</span>
+          </div>
+        </div>
+      ) : phase === "phases" ? (
+        <div className="flex flex-col items-start gap-1.5 text-xs">
+          <div>
+            <span className="font-bold text-amber-200">1.</span> Refresh ↻
+          </div>
+          <div>
+            <span className="font-bold text-amber-200">2.</span> Pioche 🎴
+          </div>
+          <div>
+            <span className="font-bold text-amber-200">3.</span> +2 DON 🟡🟡
+          </div>
+          <div>
+            <span className="font-bold text-amber-200">4.</span> Phase
+            principale ⚔️
+          </div>
+          <div>
+            <span className="font-bold text-amber-200">5.</span> Fin ⏸
+          </div>
+        </div>
+      ) : phase === "attack" ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-16 w-12 flex-col items-center justify-center rounded border-2 border-rose-400/60 bg-rose-300/10">
+              <span className="text-xl">🦸</span>
+              <span className="text-[8px] text-rose-200">5000</span>
+            </div>
+            <div className="text-3xl">💥</div>
+            <div className="flex h-16 w-12 flex-col items-center justify-center rounded border border-amber-300/40 bg-amber-300/10">
+              <span className="text-xl">⭐</span>
+              <span className="text-[8px] text-amber-200">4000</span>
+            </div>
+          </div>
+          <div className="text-xs text-rose-300">5000 ≥ 4000 → touche !</div>
+        </div>
+      ) : phase === "defense" ? (
+        <div className="flex flex-col items-center gap-2 text-xs">
+          <div className="flex gap-2">
+            <div className="rounded border border-sky-400/50 bg-sky-500/10 px-2 py-1 text-sky-200">
+              🛡️ Bloqueur
+            </div>
+            <div className="rounded border border-emerald-400/50 bg-emerald-500/10 px-2 py-1 text-emerald-200">
+              ⚡ Counter
+            </div>
+            <div className="rounded border border-violet-400/50 bg-violet-500/10 px-2 py-1 text-violet-200">
+              💫 Trigger
+            </div>
+          </div>
+          <div className="text-zinc-400">3 façons de défendre</div>
+        </div>
+      ) : phase === "victory" ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="text-5xl">🏆</div>
+          <div className="flex gap-1">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div
+                key={i}
+                className="h-6 w-4 rounded-sm border border-rose-500/60 bg-rose-900/40"
+              />
+            ))}
+          </div>
+          <div className="text-xs text-rose-300">5 Vies → 0 = défaite</div>
+        </div>
+      ) : (
+        <>
+          <div className="text-5xl">⚓</div>
+          <div className="text-sm font-bold text-amber-200">À l&apos;abordage !</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Visuel emoji-based pour le tutoriel LoL TCG (Runeterra clone, 8 phases). */
+function LorMockup({ phase }: { phase: string }) {
+  return (
+    <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-violet-900/40 to-indigo-900/40 p-4">
+      {phase === "intro" ? (
+        <>
+          <div className="text-5xl">⚔️</div>
+          <div className="text-sm text-zinc-300">Nexus 20 → 0</div>
+        </>
+      ) : phase === "deck" ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="grid grid-cols-8 gap-1">
+            {Array.from({ length: 40 }, (_, i) => (
+              <div
+                key={i}
+                className="h-4 w-3 rounded-sm border border-violet-300/30 bg-violet-300/10"
+              />
+            ))}
+          </div>
+          <div className="text-[10px] text-zinc-400">40 cartes · 1-2 régions</div>
+          <div className="flex gap-1 text-base">
+            <span title="Demacia">⚔️</span>
+            <span title="Noxus">🔥</span>
+            <span title="Ionia">🌸</span>
+            <span title="Freljord">❄️</span>
+          </div>
+        </div>
+      ) : phase === "mana" ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-1">
+            {Array.from({ length: 7 }, (_, i) => (
+              <span
+                key={i}
+                className="h-3 w-3 rounded-full bg-sky-400 ring-1 ring-sky-200/60"
+              />
+            ))}
+            <span className="ml-1 text-xs font-bold text-sky-200">7/10</span>
+          </div>
+          <div className="text-[10px] text-zinc-400">Mana max +1/round</div>
+          <div className="flex items-center gap-1">
+            <span className="text-violet-300">✨</span>
+            {Array.from({ length: 3 }, (_, i) => (
+              <span
+                key={i}
+                className="h-3 w-3 rounded-full bg-violet-400 ring-1 ring-violet-200/60"
+              />
+            ))}
+            <span className="ml-1 text-xs font-bold text-violet-200">3</span>
+          </div>
+          <div className="text-[10px] text-zinc-400">Spell mana banked (cap 3)</div>
+        </div>
+      ) : phase === "token" ? (
+        <div className="flex flex-col items-center gap-3">
+          <div className="rounded-full bg-orange-500/30 px-3 py-1 text-sm font-bold text-orange-200 ring-1 ring-orange-400/60">
+            ⚔️ Jeton d&apos;attaque
+          </div>
+          <div className="text-2xl">⇄</div>
+          <div className="text-xs text-zinc-300">Alterne chaque round</div>
+        </div>
+      ) : phase === "combat" ? (
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex h-12 w-9 items-center justify-center rounded border border-rose-400/60 bg-rose-500/10"
+              >
+                <span className="text-base">⚔️</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-2xl">⇅</div>
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex h-12 w-9 items-center justify-center rounded border border-sky-400/60 bg-sky-500/10"
+              >
+                <span className="text-base">🛡️</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-zinc-400">Lanes 1-6 · bloqueurs assignés</div>
+        </div>
+      ) : phase === "speed" ? (
+        <div className="flex flex-col items-center gap-2 text-xs">
+          <div className="flex gap-2">
+            <div className="rounded border border-amber-400 bg-amber-400/20 px-2 py-1 text-amber-200">
+              ⚡ Burst
+            </div>
+            <div className="rounded border border-sky-400 bg-sky-400/20 px-2 py-1 text-sky-200">
+              💨 Fast
+            </div>
+            <div className="rounded border border-rose-400 bg-rose-400/20 px-2 py-1 text-rose-200">
+              🐢 Slow
+            </div>
+          </div>
+          <div className="text-zinc-400">3 vitesses de sort</div>
+        </div>
+      ) : phase === "champion" ? (
+        <div className="flex items-center gap-2">
+          <div className="flex h-16 w-12 flex-col items-center justify-center rounded border-2 border-amber-300/40 bg-amber-300/10">
+            <span className="text-xl">🦸</span>
+            <span className="text-[8px] text-amber-200">Lv1</span>
+          </div>
+          <div className="text-2xl">→</div>
+          <div className="flex h-16 w-12 flex-col items-center justify-center rounded-lg border-2 border-amber-300/80 bg-amber-300/25 shadow-[0_0_12px_rgba(252,211,77,0.5)]">
+            <span className="text-xl">🦸‍♂️</span>
+            <span className="text-[8px] font-bold text-amber-100">Lv2 ★</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="text-5xl">⚔️</div>
+          <div className="text-sm font-bold text-violet-200">Au combat !</div>
         </>
       )}
     </div>
