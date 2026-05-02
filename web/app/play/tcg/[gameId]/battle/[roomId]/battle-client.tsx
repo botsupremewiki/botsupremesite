@@ -1081,51 +1081,40 @@ function BattleBoard({
                     discardCount={state.self.discardCount}
                     handCount={state.self.handCount}
                   />
-                  {state.phase === "playing" && (
-                    <SelfControls
-                      state={state}
-                      isMyTurn={isMyTurn}
-                      cardById={cardById}
-                      onConfirmSetup={onConfirmSetup}
-                      onEndTurn={onEndTurn}
-                      onAttack={onAttack}
-                      onSelectCopyAttack={(idx) => {
-                        cancelPending();
-                        setPendingCopyFor(idx);
-                      }}
-                      oppPromoting={oppPromoting}
-                      /* Énergie pending : intégrée dans SelfControls entre
-                         les attaques et le bouton Fin du tour. Le drag (via
-                         EnergyAttach) marche depuis n'importe où grâce aux
-                         pointer events + document.elementFromPoint. */
-                      pendingEnergy={
-                        !state.self.energyAttachedThisTurn &&
-                        isMyTurn &&
-                        !oppPromoting
-                          ? state.self.pendingEnergy
-                          : null
-                      }
-                      onAttachEnergy={onAttachEnergy}
-                      onActivateAttachMode={() => setAttachEnergyMode(true)}
-                    />
-                  )}
+                  {/* Phase 11.2 : SelfControls TOUJOURS rendu dans la
+                      colonne droite (avant : setup → en bas centré,
+                      playing → ici). Le bouton « Confirmer mon équipe »
+                      apparaît donc à droite du board en setup, comme
+                      pour les attaques en playing. */}
+                  <SelfControls
+                    state={state}
+                    isMyTurn={isMyTurn}
+                    cardById={cardById}
+                    onConfirmSetup={onConfirmSetup}
+                    onEndTurn={onEndTurn}
+                    onAttack={onAttack}
+                    onSelectCopyAttack={(idx) => {
+                      cancelPending();
+                      setPendingCopyFor(idx);
+                    }}
+                    oppPromoting={oppPromoting}
+                    /* Énergie pending : intégrée dans SelfControls entre
+                       les attaques et le bouton Fin du tour. Le drag (via
+                       EnergyAttach) marche depuis n'importe où grâce aux
+                       pointer events + document.elementFromPoint. */
+                    pendingEnergy={
+                      state.phase === "playing" &&
+                      !state.self.energyAttachedThisTurn &&
+                      isMyTurn &&
+                      !oppPromoting
+                        ? state.self.pendingEnergy
+                        : null
+                    }
+                    onAttachEnergy={onAttachEnergy}
+                    onActivateAttachMode={() => setAttachEnergyMode(true)}
+                  />
                 </div>
               </div>
-              {state.phase === "setup" && (
-                <SelfControls
-                  state={state}
-                  isMyTurn={isMyTurn}
-                  cardById={cardById}
-                  onConfirmSetup={onConfirmSetup}
-                  onEndTurn={onEndTurn}
-                  onAttack={onAttack}
-                  onSelectCopyAttack={(idx) => {
-                    cancelPending();
-                    setPendingCopyFor(idx);
-                  }}
-                  oppPromoting={oppPromoting}
-                />
-              )}
               {(attachEnergyMode ||
                 pendingEvolveIdx !== null ||
                 pendingTrainerIdx !== null ||
@@ -1152,22 +1141,32 @@ function BattleBoard({
           {/* Séparateur vertical */}
           <div className="w-px shrink-0 self-stretch bg-white/10" />
 
-          {/* ── Colonne adversaire (droite) — Phase 11.1 : layout
-              symétrique du joueur. PlayerInfo + BackRow à GAUCHE du
-              board adverse (au niveau de la hauteur du cadre), board à
-              droite, main cachée en dessous. ── */}
+          {/* ── Colonne adversaire (droite) — Phase 11.1 + 11.2 : layout
+              symétrique du joueur. PlayerInfo + BackRow + HandHidden à
+              GAUCHE du board adverse (au niveau de la hauteur du cadre),
+              board à droite. ── */}
           {state.opponent && (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
               <div className="flex items-start gap-4">
-                {/* Phase 11.1 : PlayerInfo + BackRow déplacés à gauche
-                    du board adverse (mirroir symétrique du joueur). */}
-                <div className="flex flex-col gap-2">
+                {/* Phase 11.1 + 11.2 : PlayerInfo + BackRow + HandHidden
+                    tous regroupés à gauche du board adverse (mirroir
+                    symétrique du joueur). HandHidden était auparavant
+                    rendu en dessous du board, maintenant sous le BackRow. */}
+                <div className="flex flex-col items-stretch gap-2">
                   <PlayerInfo player={state.opponent} isOpponent />
                   <BackRow
                     koCount={state.opponent.koCount}
                     deckSize={state.opponent.deckSize}
                     discardCount={state.opponent.discardCount}
                     handCount={state.opponent.handCount}
+                  />
+                  <HandHidden
+                    count={state.opponent.handCount}
+                    sleeveGradient={
+                      cosmetics
+                        ? resolveSleeveGradient(cosmetics.sleeve)
+                        : undefined
+                    }
                   />
                 </div>
                 <BoardArea
@@ -1185,14 +1184,6 @@ function BattleBoard({
                   }
                 />
               </div>
-              <HandHidden
-                count={state.opponent.handCount}
-                sleeveGradient={
-                  cosmetics
-                    ? resolveSleeveGradient(cosmetics.sleeve)
-                    : undefined
-                }
-              />
             </div>
           )}
         </div>
