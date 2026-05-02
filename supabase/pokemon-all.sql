@@ -66,16 +66,42 @@ create table if not exists public.tcg_decks (
 alter table public.tcg_decks
   add column if not exists energy_types text[] not null default '{}';
 
+-- Colonne leader (One Piece : carte hors deck, requise pour ce game_id).
+-- Pour Pokémon/LoR : null. CRITIQUE : sans cette colonne fetchTcgDecks
+-- côté PartyKit échoue (SELECT référence leader_id) → 0 decks affichés.
+alter table public.tcg_decks
+  add column if not exists leader_id text;
+
+-- Colonnes régions (Legends of Runeterra : 1-2 régions par deck).
+-- Idem critique : fetchTcgDecks la SELECT.
+alter table public.tcg_decks
+  add column if not exists regions text[] not null default '{}';
+
+-- Partage de decks (deck public + code court à 6 chars).
+-- Idem critique : fetchTcgDecks SELECT is_public et share_code.
+alter table public.tcg_decks
+  add column if not exists is_public boolean not null default false;
+alter table public.tcg_decks
+  add column if not exists share_code text;
+
+create unique index if not exists tcg_decks_share_code_unique
+  on public.tcg_decks (share_code) where share_code is not null;
+create index if not exists tcg_decks_public_idx
+  on public.tcg_decks (game_id, is_public, updated_at desc)
+  where is_public = true;
+
 create index if not exists tcg_decks_user_game_idx
   on public.tcg_decks (user_id, game_id);
 
 alter table public.tcg_decks enable row level security;
 
+-- Lecture : ses propres decks OU les decks publics.
 drop policy if exists "tcg_decks_read_own" on public.tcg_decks;
-create policy "tcg_decks_read_own"
+drop policy if exists "tcg_decks_read_public_or_own" on public.tcg_decks;
+create policy "tcg_decks_read_public_or_own"
   on public.tcg_decks
   for select
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id or is_public = true);
 
 
 -- ─── 4. Table : tcg_tutorial_completion (FIX du bug tuto qui revient) ──────
