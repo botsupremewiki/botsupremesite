@@ -1249,12 +1249,24 @@ function RoundView({
               <button
                 onClick={onPass}
                 disabled={!myTurn || isMyAttack === true}
-                className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className={`rounded-md border px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
+                  state.spellStack && state.spellStack.length > 0
+                    ? "border-violet-400/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25"
+                    : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                }`}
+                title={
+                  state.spellStack && state.spellStack.length > 0
+                    ? "Passer = laisser le top du stack résoudre. L'adversaire pourra ensuite répondre ou passer aussi."
+                    : "Passer = ne rien faire ce tour. Si l'adversaire passe aussi, le round se termine."
+                }
               >
-                Passer
+                {state.spellStack && state.spellStack.length > 0
+                  ? `✓ Résoudre (${state.spellStack.length})`
+                  : "Passer"}
               </button>
               <button
                 onClick={onConcede}
+                title="Concéder : tu perds immédiatement la partie"
                 className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-500/20"
               >
                 Concéder
