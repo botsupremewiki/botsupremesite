@@ -120,11 +120,9 @@ export function TutorialClient({
   }
 
   if (completed) {
-    // Preview des récompenses (les valeurs sont fixes côté RPC v2 :
-    // +50 OS pour tous les jeux, +10 boosters pour pokemon/onepiece/lol).
-    // Si tu changes tcg-tutorial-rewards-v2.sql, mets aussi à jour ces
-    // chiffres pour rester cohérent.
-    const previewGold = 50;
+    // Preview de la récompense (10 boosters gratuits, valeur fixe côté
+    // RPC v3). Si tu changes tcg-tutorial-rewards-v2.sql, mets aussi à
+    // jour ce chiffre pour rester cohérent.
     const previewPacks = 10;
     return (
       <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-400/10 to-emerald-400/5 p-8 text-center">
@@ -140,9 +138,6 @@ export function TutorialClient({
           pour démarrer ta collection !
         </p>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-          <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-200">
-            🎁 +{previewGold} OS
-          </div>
           <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
             🎴 +{previewPacks} boosters gratuits
           </div>

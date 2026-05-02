@@ -330,9 +330,9 @@ end;
 $$;
 
 
--- ─── 10. RPC : complete_tcg_tutorial (v2 — Pokemon + OnePiece + LoL) ──────
--- Insère dans tcg_tutorial_completion (idempotent), crédite +50 OS la 1ère
--- fois, +10 boosters pour les 3 jeux supportés.
+-- ─── 10. RPC : complete_tcg_tutorial (v3 — boosters uniquement) ───────────
+-- Insère dans tcg_tutorial_completion (idempotent), crédite +10 boosters
+-- la 1ère fois pour les 3 jeux supportés. Aucune récompense OS.
 
 create or replace function public.complete_tcg_tutorial(p_game_id text)
 returns jsonb
@@ -355,12 +355,8 @@ begin
   -- Si l'INSERT a réellement créé une ligne (= 1ère fois), récompense.
   get diagnostics v_first = row_count;
   if v_first then
-    -- 50 OS pour tous les jeux.
-    update public.profiles
-    set gold = coalesce(gold, 0) + 50,
-        updated_at = now()
-    where id = v_user_id;
-    -- 10 boosters gratuits pour les TCG supportés.
+    -- 10 boosters gratuits pour les TCG supportés (pokemon, onepiece, lol).
+    -- Plus de bonus OS — la récompense est uniquement les boosters.
     if p_game_id in ('pokemon', 'onepiece', 'lol') then
       v_packs := 10;
       select coalesce(tcg_free_packs, '{}'::jsonb)
@@ -380,9 +376,10 @@ begin
       where id = v_user_id;
     end if;
   end if;
+  -- reward_gold reste à 0 (compat client v1/v2, plus utilisé).
   return jsonb_build_object(
     'first_time', v_first,
-    'reward_gold', case when v_first then 50 else 0 end,
+    'reward_gold', 0,
     'reward_packs', v_packs
   );
 end;
