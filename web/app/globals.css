@@ -465,3 +465,35 @@ html[data-theme="light"] .skip-link {
   mix-blend-mode: screen;
   border-radius: 0.65rem;
 }
+
+
+/* Phase 10.1 LoR : combat resolution shake + flash. */
+@keyframes lor-clash {
+  0% {
+    transform: translateX(0) scale(1);
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+  20% {
+    transform: translateX(-6px) scale(1.04);
+    box-shadow: 0 0 24px rgba(251, 191, 36, 0.7);
+  }
+  40% {
+    transform: translateX(6px) scale(1.04);
+    box-shadow: 0 0 32px rgba(244, 63, 94, 0.8);
+  }
+  60% {
+    transform: translateX(-4px) scale(1.02);
+    box-shadow: 0 0 24px rgba(244, 63, 94, 0.6);
+  }
+  80% {
+    transform: translateX(4px) scale(1.02);
+    box-shadow: 0 0 16px rgba(251, 191, 36, 0.4);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+.animate-clash {
+  animation: lor-clash 500ms ease-in-out;
+}

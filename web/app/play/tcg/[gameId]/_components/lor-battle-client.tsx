@@ -104,6 +104,15 @@ export function LorBattleClient({
   const [recentlyHitBySpell, setRecentlyHitBySpell] = useState<Set<string>>(
     new Set(),
   );
+  // Phase 10.1 : Set d'uids qui viennent de participer à un combat résolu
+  // (attaquants + bloqueurs). Détecté quand attackInProgress flip object →
+  // null. Trigger une animation shake + flash 500ms.
+  const [recentlyClashed, setRecentlyClashed] = useState<Set<string>>(
+    new Set(),
+  );
+  // Phase 10.1 : flag pour afficher un overlay « ⚔️ COMBAT ! » bref au
+  // moment de la résolution.
+  const [combatFlash, setCombatFlash] = useState<{ ts: number } | null>(null);
   // Phase 5.8 : modal confirmation concede (vs native confirm).
   const [concedeModalOpen, setConcedeModalOpen] = useState(false);
   // Phase 9.4 : Vladimir L1 (01NX006) Skill modal state. null = pas de
@@ -305,6 +314,33 @@ export function LorBattleClient({
     // Phase 9.1 : attack started (attackInProgress flip null → object)
     if (!prev.attackInProgress && state.attackInProgress) {
       sfxAttack = true;
+    }
+    // Phase 10.1 : attack resolved (attackInProgress flip object → null)
+    // → trigger animation clash sur les attaquants/bloqueurs concernés.
+    if (prev.attackInProgress && !state.attackInProgress) {
+      const clashedUids = new Set<string>();
+      for (const lane of prev.attackInProgress.lanes) {
+        clashedUids.add(lane.attackerUid);
+        if (lane.blockerUid) clashedUids.add(lane.blockerUid);
+      }
+      setRecentlyClashed((prevSet) => {
+        const next = new Set(prevSet);
+        clashedUids.forEach((uid) => next.add(uid));
+        return next;
+      });
+      setTimeout(() => {
+        setRecentlyClashed((prevSet) => {
+          const next = new Set(prevSet);
+          clashedUids.forEach((uid) => next.delete(uid));
+          return next;
+        });
+      }, 500);
+      // Flash overlay « ⚔️ COMBAT ! » centre 700ms.
+      const flashTs = Date.now();
+      setCombatFlash({ ts: flashTs });
+      setTimeout(() => {
+        setCombatFlash((curr) => (curr?.ts === flashTs ? null : curr));
+      }, 700);
     }
     // Stack change (push or pop)
     const prevStackLen = prev.spellStack?.length ?? 0;
@@ -642,6 +678,7 @@ export function LorBattleClient({
             nexusDamagePopups={nexusDamagePopups}
             recentlySummoned={recentlySummoned}
             recentlyHitBySpell={recentlyHitBySpell}
+            recentlyClashed={recentlyClashed}
             onActivateSkill={(uid) =>
               setPendingSkill({ casterUid: uid, allyUids: new Set(), enemyUid: null })
             }
@@ -785,6 +822,20 @@ export function LorBattleClient({
                   ✓ Concéder
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Phase 10.1 : flash centre « ⚔️ COMBAT ! » au moment de la
+            résolution du combat (700ms). Pointer-events-none. */}
+        {combatFlash && (
+          <div
+            key={combatFlash.ts}
+            className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center"
+            aria-hidden
+          >
+            <div className="animate-in zoom-in-50 fade-in duration-300 text-7xl font-black text-rose-300 drop-shadow-[0_4px_16px_rgba(244,63,94,0.9)]">
+              ⚔️
             </div>
           </div>
         )}
@@ -1055,6 +1106,7 @@ function RoundView({
   recentlySummoned,
   recentlyHitBySpell,
   onActivateSkill,
+  recentlyClashed,
   handPulse,
 }: {
   state: RuneterraBattleState;
@@ -1096,6 +1148,8 @@ function RoundView({
   recentlyHitBySpell?: Set<string>;
   // Phase 9.4 : callback pour activer compétence Vladimir L1.
   onActivateSkill?: (uid: string) => void;
+  // Phase 10.1 : uids qui viennent de clasher en combat (flash + shake).
+  recentlyClashed?: Set<string>;
   // Phase 5.12 : pulse handCount sur draw card (timestamp).
   handPulse?: { self: number; opponent: number };
 }) {
@@ -1243,6 +1297,7 @@ function RoundView({
         damagePopups={damagePopups}
         recentlySummoned={recentlySummoned}
         recentlyHitBySpell={recentlyHitBySpell}
+        recentlyClashed={recentlyClashed}
         highlighted={
           pendingSpell &&
           (pendingSpell.side === "enemy" ||
@@ -1471,6 +1526,7 @@ function RoundView({
         damagePopups={damagePopups}
         recentlySummoned={recentlySummoned}
         recentlyHitBySpell={recentlyHitBySpell}
+        recentlyClashed={recentlyClashed}
         onActivateSkill={
           // Phase 9.4 : ⚡ Skill seulement si c'est mon tour, pas en
           // combat, pas de stack en cours.
@@ -2089,6 +2145,7 @@ function BenchRow({
   recentlySummoned,
   recentlyHitBySpell,
   onActivateSkill,
+  recentlyClashed,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
@@ -2110,6 +2167,8 @@ function BenchRow({
   // Phase 9.4 : si défini, callback quand le ⚡ Skill est cliqué sur une
   // unité avec compétence active (Vladimir 01NX006 uniquement).
   onActivateSkill?: (uid: string) => void;
+  // Phase 10.1 : Set d'uids qui viennent de clasher en combat (flash + shake).
+  recentlyClashed?: Set<string>;
 }) {
   if (units.length === 0) {
     return (
@@ -2149,6 +2208,7 @@ function BenchRow({
               damagePopup={damagePopups?.[u.uid]}
               justSummoned={recentlySummoned?.has(u.uid)}
               hitBySpell={recentlyHitBySpell?.has(u.uid)}
+              justClashed={recentlyClashed?.has(u.uid)}
               onActivateSkill={
                 // Phase 9.4 : ⚡ Skill visible UNIQUEMENT pour Vladimir L1
                 // (01NX006) et uniquement si onActivateSkill est passé
@@ -2375,6 +2435,7 @@ function UnitCard({
   justSummoned,
   hitBySpell,
   onActivateSkill,
+  justClashed,
 }: {
   unit: RuneterraBattleUnit;
   onClick: () => void;
@@ -2395,6 +2456,9 @@ function UnitCard({
   // Phase 9.4 : si défini, l'unité a une compétence active. Le bouton
   // ⚡ apparaît bottom-left et appelle onActivateSkill(unit.uid).
   onActivateSkill?: (uid: string) => void;
+  // Phase 10.1 : flash + shake quand cette unité vient de clasher en
+  // combat (attaquant ou bloqueur).
+  justClashed?: boolean;
 }) {
   const card = RUNETERRA_BASE_SET_BY_CODE.get(unit.cardCode);
   const aliveHealth = unit.health - unit.damage;
@@ -2415,7 +2479,7 @@ function UnitCard({
         justSummoned
           ? "animate-in zoom-in-50 fade-in slide-in-from-bottom-4 duration-500"
           : ""
-      }`}
+      } ${justClashed ? "animate-clash" : ""}`}
       title={card?.name ?? unit.cardCode}
     >
       <div className="aspect-[2/3]">
