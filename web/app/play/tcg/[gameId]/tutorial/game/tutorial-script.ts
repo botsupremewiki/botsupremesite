@@ -146,7 +146,57 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
 
   // ─── ACTE 2 : Premier combat (steps 9-15) ────────────────────────
-  // (à implémenter dans commit suivant)
+  {
+    id: "bot-turn-1",
+    title: "Tour du Bot",
+    body: "Le Bot Suprême joue son 1er tour : il pose Roucool en Actif, Smogo au Banc, attache son énergie ⭐. Comme toi, il NE PEUT PAS attaquer au tour 1. Clique pour le voir jouer.",
+    target: null,
+    nextLabel: "▶️ Voir le bot jouer",
+  },
+  {
+    id: "draw-turn-2",
+    title: "Pioche du tour 2",
+    body: "À partir du tour 2, tu pioches automatiquement 1 carte au début de ton tour. C'est gratuit, contrairement à beaucoup d'autres TCG. Continue !",
+    target: '[data-tutorial-target="self-deck"]',
+    nextLabel: "Suivant →",
+  },
+  {
+    id: "attach-energy-2",
+    title: "Attache ta 2e énergie",
+    body: "Une nouvelle énergie ⚡ t'est offerte. Attache-la à Pikachu : il a déjà 1⚡ du tour précédent, il en aura 2 au total — assez pour son attaque qui en coûte 1 (le surplus sera utile plus tard pour évoluer en Raichu).",
+    target: '[data-tutorial-target="energy-pending"]',
+    requiresAction: true,
+    nextLabel: null,
+  },
+  {
+    id: "attack-rules",
+    title: "Comprendre une attaque",
+    body: "Pikachu a l'attaque « Ronge » : coûte 1⚡, inflige 20 dégâts. Roucool a une faiblesse ⚡ → tu lui infliges +20 dégâts (40 au lieu de 20). C'est crucial : exploite TOUJOURS les faiblesses.",
+    target: '[data-tutorial-target="attacks-panel"]',
+    nextLabel: "Compris",
+  },
+  {
+    id: "launch-attack",
+    title: "À l'attaque !",
+    body: "Clique sur le bouton « Ronge » pour lancer l'attaque. Roucool va prendre 40 dégâts (20 base + 20 faiblesse).",
+    target: '[data-tutorial-target="attack-btn-0"]',
+    requiresAction: true,
+    nextLabel: null,
+  },
+  {
+    id: "bot-attack",
+    title: "Le bot riposte",
+    body: "Le bot fait Tornade avec Roucool : 10 dmg sur Pikachu (pas de faiblesse ⭐). Roucool ne sera pas KO ce tour, mais on a bien entamé sa barre de PV. Clique pour voir l'attaque.",
+    target: null,
+    nextLabel: "▶️ Voir Roucool attaquer",
+  },
+  {
+    id: "end-acte-2",
+    title: "Tu maîtrises les bases du combat !",
+    body: "Tu sais : poser un actif/banc, attacher de l'énergie, lire une attaque, exploiter une faiblesse, finir ton tour. Dans l'Acte 3 on va faire évoluer Pikachu en Raichu pour KO Roucool, et utiliser des Trainer cards.",
+    target: null,
+    nextLabel: "Acte 3 →",
+  },
 
   // ─── ACTE 3 : Évolution + Trainers (steps 16-22) ─────────────────
   // (à implémenter dans commit suivant)

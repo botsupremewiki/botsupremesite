@@ -16,12 +16,17 @@
  * complete_tcg_tutorial soit appelée et débloque les +50 OS + 10 packs.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
-import type { PokemonCardData, PokemonEnergyType } from "@shared/types";
+import type {
+  PokemonAttack,
+  PokemonCard,
+  PokemonCardData,
+  PokemonEnergyType,
+} from "@shared/types";
 import { createClient } from "@/lib/supabase/client";
 import { CoachOverlay } from "@/components/coach-overlay";
 import {
@@ -30,6 +35,45 @@ import {
   TUTORIAL_STEPS,
   type TutorialStep,
 } from "./tutorial-script";
+
+/** Récupère la définition Pokémon (seulement si c'est un Pokémon, pas un
+ *  Trainer). Retourne null sinon. Helper utilisé partout pour avoir
+ *  accès aux HP, attaques, faiblesse… */
+function getPokemonCard(cardId: string): PokemonCard | null {
+  const meta = POKEMON_BASE_SET_BY_ID.get(cardId);
+  if (!meta || meta.kind !== "pokemon") return null;
+  return meta;
+}
+
+/** Vérifie si un set d'énergies couvre un coût d'attaque. Le ⭐
+ *  (colorless) accepte n'importe quel type. Simplifié vs vrai engine. */
+function canPayCost(
+  attached: PokemonEnergyType[],
+  cost: PokemonEnergyType[],
+): boolean {
+  const pool = [...attached];
+  // 1ère passe : matcher les exigences typées (non colorless).
+  for (const c of cost) {
+    if (c === "colorless") continue;
+    const idx = pool.indexOf(c);
+    if (idx === -1) return false;
+    pool.splice(idx, 1);
+  }
+  // 2e passe : compter les colorless restants (n'importe quoi).
+  const colorless = cost.filter((c) => c === "colorless").length;
+  return pool.length >= colorless;
+}
+
+/** Calcule les dégâts effectifs en tenant compte de la faiblesse (+20). */
+function computeDamage(
+  attack: PokemonAttack,
+  attackerType: PokemonEnergyType,
+  defenderWeakness: PokemonEnergyType | null | undefined,
+): number {
+  const base = attack.damage ?? 0;
+  if (defenderWeakness && defenderWeakness === attackerType) return base + 20;
+  return base;
+}
 
 /** State minimal d'un Pokémon en jeu (Active ou Bench). */
 type InPlay = {
@@ -304,35 +348,187 @@ export function TutorialGameClient({
         },
       };
     });
-    if (currentStep?.id === "attach-first-energy") advance();
+    if (
+      currentStep?.id === "attach-first-energy" ||
+      currentStep?.id === "attach-energy-2"
+    ) {
+      advance();
+    }
   }
 
   /** Termine le tour du joueur. */
   function endTurn() {
+    setState((s) => ({
+      ...s,
+      activeSide: "bot",
+      // Reset les flags de tour côté joueur (préparation pour le retour).
+      self: { ...s.self, energyAttachedThisTurn: false, pendingEnergy: null },
+    }));
     if (currentStep?.id === "end-turn-1") advance();
-    // (Le tour bot sera géré dans Acte 2 — pour l'instant on s'arrête ici.)
+    if (currentStep?.id === "end-turn-2") advance();
   }
 
-  // Détecte les conditions de validation auto pour les steps qui s'avancent
-  // sur une condition state (et pas un bouton "Suivant").
-  // On utilise un useEffect-equivalent inline via useMemo pour ne pas
-  // re-executer à chaque render. Ici on s'appuie sur les avances explicites
-  // dans setActive/addToBench/etc.
+  /** Lance une attaque du Pokémon Actif sur l'Actif adverse. Règle
+   *  Pokémon TCG Pocket : attaquer met fin au tour. On flippe donc
+   *  activeSide à "bot" après l'attaque. Pour le tutoriel : pas de cible
+   *  alternative, pas d'effet text — juste les dégâts + faiblesse.
+   *  KO géré dans un sous-step (Acte 3). */
+  function attack(attackIdx: number) {
+    setState((s) => {
+      if (s.activeSide !== "self" || !s.self.active || !s.bot.active) return s;
+      const attacker = getPokemonCard(s.self.active.cardId);
+      const defender = getPokemonCard(s.bot.active.cardId);
+      if (!attacker || !defender) return s;
+      const a = attacker.attacks[attackIdx];
+      if (!a) return s;
+      if (!canPayCost(s.self.active.attachedEnergies, a.cost)) return s;
+      const dmg = computeDamage(a, attacker.type, defender.weakness);
+      return {
+        ...s,
+        // Attaquer met fin au tour automatiquement (règle Pocket).
+        activeSide: "bot",
+        self: { ...s.self, energyAttachedThisTurn: false, pendingEnergy: null },
+        bot: {
+          ...s.bot,
+          active: {
+            ...s.bot.active,
+            damage: s.bot.active.damage + dmg,
+          },
+        },
+      };
+    });
+    if (currentStep?.id === "launch-attack") advance();
+  }
+
+  /** Animation du tour 1 du bot : il a déjà posé ses Pokémon dans
+   *  confirmSetup ; il reste juste à attacher 1⭐ sur Roucool. Anti-rush :
+   *  pas d'attaque tour 1.  À la fin, repasse au tour joueur 2 +
+   *  pioche + énergie pendante. */
+  const runBotTurn1AndAdvance = useCallback(() => {
+    // Tour bot phase 1 : attache énergie ⭐ sur Roucool (~600ms après).
+    setTimeout(() => {
+      setState((s) => {
+        if (!s.bot.active) return s;
+        return {
+          ...s,
+          bot: {
+            ...s.bot,
+            active: {
+              ...s.bot.active,
+              attachedEnergies: [...s.bot.active.attachedEnergies, "colorless"],
+            },
+            energyAttachedThisTurn: true,
+          },
+        };
+      });
+    }, 600);
+    // Phase 2 : retour au tour joueur 2, pioche + énergie pendante.
+    setTimeout(() => {
+      setState((s) => ({
+        ...s,
+        turn: 2,
+        activeSide: "self",
+        self: {
+          ...s.self,
+          // Pioche 1 carte (top of deck = index 0).
+          hand: s.self.deck.length > 0 ? [...s.self.hand, s.self.deck[0]] : s.self.hand,
+          deck: s.self.deck.slice(1),
+          pendingEnergy: "lightning",
+          energyAttachedThisTurn: false,
+        },
+        bot: { ...s.bot, energyAttachedThisTurn: false },
+      }));
+      advance();
+    }, 1500);
+  }, [advance]);
+
+  /** Animation du tour 2 du bot : Roucool attaque Pikachu avec Tornade
+   *  (1⭐ → 10 dmg). Pas de faiblesse ⭐ donc juste 10. Avance ensuite. */
+  const runBotAttackAndAdvance = useCallback(() => {
+    setTimeout(() => {
+      setState((s) => {
+        if (!s.bot.active || !s.self.active) return s;
+        const attacker = getPokemonCard(s.bot.active.cardId);
+        const defender = getPokemonCard(s.self.active.cardId);
+        if (!attacker || !defender) return s;
+        const a = attacker.attacks[0];
+        if (!a) return s;
+        const dmg = computeDamage(a, attacker.type, defender.weakness);
+        return {
+          ...s,
+          self: {
+            ...s.self,
+            active: { ...s.self.active, damage: s.self.active.damage + dmg },
+          },
+        };
+      });
+    }, 600);
+    // Phase 2 : retour au tour joueur (tour 3 — sera géré dans Acte 3).
+    setTimeout(() => {
+      setState((s) => ({
+        ...s,
+        turn: 3,
+        activeSide: "self",
+        self: {
+          ...s.self,
+          hand: s.self.deck.length > 0 ? [...s.self.hand, s.self.deck[0]] : s.self.hand,
+          deck: s.self.deck.slice(1),
+          pendingEnergy: "lightning",
+          energyAttachedThisTurn: false,
+        },
+        bot: { ...s.bot, energyAttachedThisTurn: false },
+      }));
+      advance();
+    }, 1500);
+  }, [advance]);
+
+  /** Wrapper du bouton "Suivant" qui dispatch les side-effects selon
+   *  la step active. Permet d'avoir un seul callback pour CoachOverlay. */
+  const handleNext = useCallback(() => {
+    if (!currentStep) return;
+    switch (currentStep.id) {
+      case "bot-turn-1":
+        runBotTurn1AndAdvance();
+        break;
+      case "bot-attack":
+        runBotAttackAndAdvance();
+        break;
+      default:
+        advance();
+    }
+  }, [currentStep, advance, runBotTurn1AndAdvance, runBotAttackAndAdvance]);
+
+  // Auto-advance pour les steps purement informatifs avec délai (ex.
+  // "draw-turn-2" — on laisse le user 1.5s pour observer la pioche puis
+  // on avance). Pour les autres steps, l'avancement est déclenché soit
+  // par les actions (setActive, attack, etc.) soit par le bouton "Suivant"
+  // via handleNext.
+  const lastAutoStepRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentStep) return;
+    if (lastAutoStepRef.current === currentStep.id) return;
+    if (currentStep.id === "draw-turn-2") {
+      lastAutoStepRef.current = currentStep.id;
+      const t = setTimeout(() => advance(), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [currentStep, advance]);
 
   if (!currentStep) {
-    // Fin du tutoriel (pour ce commit : Acte 1 uniquement). À chaque commit
-    // suivant on enrichira les steps ; ce screen reste l'écran final qui
-    // crédite les 10 boosters via complete_tcg_tutorial (idempotent).
+    // Fin du tutoriel. À chaque commit on enrichira les steps ; ce screen
+    // reste l'écran final qui crédite les 10 boosters via la RPC
+    // complete_tcg_tutorial (idempotente côté serveur).
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-zinc-950 p-8 text-center text-zinc-100">
         <div className="text-6xl">🎉</div>
         <h2 className="text-2xl font-bold text-amber-200">
-          Acte 1 terminé !
+          Bravo, tu maîtrises les bases !
         </h2>
         <p className="max-w-md text-sm text-zinc-300">
-          Tu as appris les bases : main de départ, Actif, Banc, énergie auto.
-          Les actes suivants (combat, évolution, Trainer, status, EX) seront
-          ajoutés progressivement.
+          Tu as appris : main de départ, Actif, Banc, énergie auto, attaques,
+          faiblesses et combat tour par tour. Les mécaniques avancées
+          (évolution, Trainer, status, EX, pile/face) seront ajoutées
+          progressivement.
         </p>
         {!reviewMode && !alreadyCompleted && (
           <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
@@ -405,10 +601,12 @@ export function TutorialGameClient({
       {/* Self side (bas) */}
       <SelfBoard
         state={state}
+        currentStepId={currentStep.id}
         onSetActive={setActive}
         onAddBench={addToBench}
         onConfirm={confirmSetup}
         onAttachEnergy={attachEnergy}
+        onAttack={attack}
         onEndTurn={endTurn}
       />
 
@@ -420,7 +618,7 @@ export function TutorialGameClient({
         currentStep={stepIdx + 1}
         totalSteps={totalSteps}
         nextLabel={currentStep.nextLabel ?? "Suivant →"}
-        onNext={advance}
+        onNext={handleNext}
         onSkip={skip}
         bubblePosition={currentStep.bubblePosition ?? "auto"}
       />
@@ -435,7 +633,8 @@ function BotBoard({ state }: { state: GameState }) {
       <div className="mb-1 flex items-center gap-3 text-xs">
         <span className="font-bold text-rose-300">🤖 Bot Suprême</span>
         <span className="text-zinc-400">
-          KO : {state.bot.koCount} / 3 · Main : {state.bot.hand.length}
+          KO : {state.bot.koCount} / 3 · Main : {state.bot.hand.length} · Deck :{" "}
+          {state.bot.deck.length}
         </span>
       </div>
       <div className="flex items-start gap-3">
@@ -445,7 +644,7 @@ function BotBoard({ state }: { state: GameState }) {
             Actif
           </div>
           {state.bot.active ? (
-            <CardMini cardId={state.bot.active.cardId} />
+            <CardWithStats inPlay={state.bot.active} />
           ) : (
             <EmptySlot label="" small={false} />
           )}
@@ -459,7 +658,7 @@ function BotBoard({ state }: { state: GameState }) {
             {Array.from({ length: 3 }, (_, i) => {
               const c = state.bot.bench[i];
               return c ? (
-                <CardMini key={c.uid} cardId={c.cardId} small />
+                <CardWithStats key={c.uid} inPlay={c} small />
               ) : (
                 <EmptySlot key={i} label="" small />
               );
@@ -474,19 +673,37 @@ function BotBoard({ state }: { state: GameState }) {
 /** Affichage du board joueur (Active + Bench + main + actions). */
 function SelfBoard({
   state,
+  currentStepId,
   onSetActive,
   onAddBench,
   onConfirm,
   onAttachEnergy,
+  onAttack,
   onEndTurn,
 }: {
   state: GameState;
+  currentStepId: string;
   onSetActive: (handIdx: number) => void;
   onAddBench: (handIdx: number) => void;
   onConfirm: () => void;
   onAttachEnergy: (targetUid: string) => void;
+  onAttack: (attackIdx: number) => void;
   onEndTurn: () => void;
 }) {
+  // Carte Pokémon Actif (pour afficher ses attaques dans le panneau).
+  const activeCard = state.self.active
+    ? getPokemonCard(state.self.active.cardId)
+    : null;
+  // Le panneau d'attaques apparaît dès qu'on est dans la phase de jeu
+  // ET que la step le justifie (à partir de "attack-rules"). On garde
+  // ainsi un onboarding propre : pas d'attaques visibles au tour 1
+  // (l'user ne peut pas attaquer de toute façon).
+  const showAttacksPanel =
+    state.phase === "playing" &&
+    state.activeSide === "self" &&
+    state.turn >= 2 &&
+    activeCard != null;
+
   return (
     <div className="flex flex-1 flex-col gap-3">
       {/* Board (Actif + Bench + énergie pending + actions) */}
@@ -504,14 +721,7 @@ function SelfBoard({
                 onClick={() => state.self.pendingEnergy && onAttachEnergy(state.self.active!.uid)}
                 className="cursor-pointer"
               >
-                <CardMini cardId={state.self.active.cardId} />
-                {state.self.active.attachedEnergies.length > 0 && (
-                  <div className="mt-1 flex justify-center gap-0.5">
-                    {state.self.active.attachedEnergies.map((e, i) => (
-                      <EnergyChip key={i} type={e} />
-                    ))}
-                  </div>
-                )}
+                <CardWithStats inPlay={state.self.active} />
               </button>
             ) : (
               <EmptySlot label="Actif" small={false} />
@@ -532,14 +742,7 @@ function SelfBoard({
                   onClick={() => state.self.pendingEnergy && onAttachEnergy(c.uid)}
                   className="cursor-pointer"
                 >
-                  <CardMini cardId={c.cardId} small />
-                  {c.attachedEnergies.length > 0 && (
-                    <div className="mt-1 flex justify-center gap-0.5">
-                      {c.attachedEnergies.map((e, j) => (
-                        <EnergyChip key={j} type={e} small />
-                      ))}
-                    </div>
-                  )}
+                  <CardWithStats inPlay={c} small />
                 </button>
               ) : (
                 <EmptySlot key={i} label="Banc" small />
@@ -559,6 +762,55 @@ function SelfBoard({
             </div>
             <EnergyChip type={state.self.pendingEnergy} large />
             <div className="text-[10px] text-zinc-400">Clic sur un Pokémon</div>
+          </div>
+        )}
+
+        {/* Panneau d'attaques (à partir du tour 2). Affiche les attaques
+            de l'Actif avec coût + dégâts. Bouton désactivé si l'énergie
+            ne suffit pas ou si on est dans une step où l'attaque n'est
+            pas attendue (anti-clic accidentel pendant l'apprentissage). */}
+        {showAttacksPanel && activeCard && state.self.active && (
+          <div
+            data-tutorial-target="attacks-panel"
+            className="flex min-w-[180px] flex-col gap-1.5 rounded-lg border-2 border-rose-400/30 bg-rose-950/20 p-2"
+          >
+            <div className="text-[10px] uppercase tracking-widest text-rose-300/80">
+              Attaques
+            </div>
+            {activeCard.attacks.map((a, i) => {
+              const canPay = canPayCost(state.self.active!.attachedEnergies, a.cost);
+              // On débloque le bouton uniquement à partir de "launch-attack".
+              // Les steps précédentes empêchent les clics accidentels.
+              const allowed = currentStepId === "launch-attack";
+              const disabled = !canPay || !allowed;
+              return (
+                <button
+                  key={i}
+                  data-tutorial-target={`attack-btn-${i}`}
+                  disabled={disabled}
+                  onClick={() => onAttack(i)}
+                  className={`flex items-center justify-between gap-2 rounded-md border-2 px-2 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                    disabled
+                      ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
+                      : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
+                  }`}
+                  title={a.text ?? a.name}
+                >
+                  <div className="flex items-center gap-0.5">
+                    {a.cost.map((c, j) => (
+                      <EnergyChip key={j} type={c} small />
+                    ))}
+                  </div>
+                  <span className="flex-1 truncate font-bold">{a.name}</span>
+                  {a.damage !== undefined && (
+                    <span className="text-base font-black tabular-nums text-amber-300">
+                      {a.damage}
+                      {a.damageSuffix ?? ""}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -587,11 +839,23 @@ function SelfBoard({
         )}
       </div>
 
-      {/* Main */}
+      {/* Main + indicateur de deck (pour les step "draw-turn-2"). */}
       <div
         data-tutorial-target="hand"
-        className="flex gap-2 rounded-xl border-2 border-amber-400/30 bg-amber-950/10 p-3"
+        className="flex items-center gap-2 rounded-xl border-2 border-amber-400/30 bg-amber-950/10 p-3"
       >
+        <div className="flex flex-col items-center gap-0.5 self-center">
+          <div
+            data-tutorial-target="self-deck"
+            className="flex h-12 w-9 items-center justify-center rounded border-2 border-indigo-400/40 bg-gradient-to-br from-indigo-900 to-indigo-700 text-[10px] font-bold text-indigo-100 shadow"
+            title="Pioche"
+          >
+            🂠 {state.self.deck.length}
+          </div>
+          <span className="text-[8px] uppercase tracking-widest text-indigo-300/70">
+            Deck
+          </span>
+        </div>
         <div className="text-[10px] uppercase tracking-widest text-amber-300/80 self-center">
           Main ({state.self.hand.length})
         </div>
@@ -640,7 +904,8 @@ function SelfBoard({
   );
 }
 
-/** Mini carte affichée sur le board. */
+/** Mini carte affichée sur le board. Variante "stats" qui ajoute la
+ *  HP bar et les énergies attachées en dessous. */
 function CardMini({ cardId, small }: { cardId: string; small?: boolean }) {
   const meta = POKEMON_BASE_SET_BY_ID.get(cardId);
   if (!meta) return null;
@@ -656,6 +921,65 @@ function CardMini({ cardId, small }: { cardId: string; small?: boolean }) {
         alt={meta.name}
         className="h-full w-full object-contain"
       />
+    </div>
+  );
+}
+
+/** Carte avec stats : HP bar + énergies attachées. Utilisée sur le board. */
+function CardWithStats({
+  inPlay,
+  small,
+}: {
+  inPlay: InPlay;
+  small?: boolean;
+}) {
+  const meta = getPokemonCard(inPlay.cardId);
+  if (!meta) return null;
+  const hp = meta.hp;
+  const remaining = Math.max(0, hp - inPlay.damage);
+  const pct = Math.max(0, Math.min(100, (remaining / hp) * 100));
+  const koed = remaining === 0;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative">
+        <CardMini cardId={inPlay.cardId} small={small} />
+        {/* HP bar overlay en bas de la carte. */}
+        <div className="absolute inset-x-1 bottom-1 flex flex-col gap-0.5 rounded bg-black/70 px-1 py-0.5 text-[9px] font-bold text-zinc-100 shadow">
+          <div className="flex items-center justify-between">
+            <span>PV</span>
+            <span className={koed ? "text-rose-400" : "text-emerald-300"}>
+              {remaining}/{hp}
+            </span>
+          </div>
+          <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-700">
+            <motion.div
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.4 }}
+              className={`h-full ${
+                pct > 50
+                  ? "bg-emerald-400"
+                  : pct > 20
+                    ? "bg-amber-400"
+                    : "bg-rose-500"
+              }`}
+            />
+          </div>
+        </div>
+        {/* Flash KO si pkmn out (Acte 3+). */}
+        {koed && (
+          <div className="absolute inset-0 flex items-center justify-center rounded bg-black/60 text-2xl">
+            💀
+          </div>
+        )}
+      </div>
+      {/* Énergies attachées sous la carte. */}
+      {inPlay.attachedEnergies.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-0.5">
+          {inPlay.attachedEnergies.map((e, i) => (
+            <EnergyChip key={i} type={e} small={small} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
