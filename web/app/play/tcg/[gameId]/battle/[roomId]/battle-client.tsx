@@ -1013,15 +1013,9 @@ function BattleBoard({
               className="flex min-w-0 flex-1 flex-col items-center gap-2"
               data-self-side
             >
-              <PlayerInfo player={state.self} isOpponent={false} />
-              <BackRow
-                koCount={state.self.koCount}
-                deckSize={state.self.deckSize}
-                discardCount={state.self.discardCount}
-                handCount={state.self.handCount}
-              />
-              {/* Layout principal : Pokémons + énergie à GAUCHE,
-                  attaques + Fin du tour à DROITE. */}
+              {/* Phase 11.1 : layout horizontal Pokémons à gauche,
+                  PlayerInfo + BackRow + Attaques à droite (au niveau
+                  de la hauteur du cadre du board). */}
               <div className="flex items-start gap-4">
                 <div className="flex flex-col items-center gap-3">
                   <BoardArea
@@ -1076,34 +1070,46 @@ function BattleBoard({
                     DROITE du board. En phase setup : on rend SelfControls
                     plus bas (centré sous le board) pour le bouton
                     « Confirmer ». */}
-                {state.phase === "playing" && (
-                  <SelfControls
-                    state={state}
-                    isMyTurn={isMyTurn}
-                    cardById={cardById}
-                    onConfirmSetup={onConfirmSetup}
-                    onEndTurn={onEndTurn}
-                    onAttack={onAttack}
-                    onSelectCopyAttack={(idx) => {
-                      cancelPending();
-                      setPendingCopyFor(idx);
-                    }}
-                    oppPromoting={oppPromoting}
-                    /* Énergie pending : intégrée dans SelfControls entre
-                       les attaques et le bouton Fin du tour. Le drag (via
-                       EnergyAttach) marche depuis n'importe où grâce aux
-                       pointer events + document.elementFromPoint. */
-                    pendingEnergy={
-                      !state.self.energyAttachedThisTurn &&
-                      isMyTurn &&
-                      !oppPromoting
-                        ? state.self.pendingEnergy
-                        : null
-                    }
-                    onAttachEnergy={onAttachEnergy}
-                    onActivateAttachMode={() => setAttachEnergyMode(true)}
+                {/* Phase 11.1 : PlayerInfo + BackRow déplacés ici (à
+                    droite du board, au-dessus des attaques, au niveau
+                    de la hauteur du cadre). */}
+                <div className="flex flex-col gap-2">
+                  <PlayerInfo player={state.self} isOpponent={false} />
+                  <BackRow
+                    koCount={state.self.koCount}
+                    deckSize={state.self.deckSize}
+                    discardCount={state.self.discardCount}
+                    handCount={state.self.handCount}
                   />
-                )}
+                  {state.phase === "playing" && (
+                    <SelfControls
+                      state={state}
+                      isMyTurn={isMyTurn}
+                      cardById={cardById}
+                      onConfirmSetup={onConfirmSetup}
+                      onEndTurn={onEndTurn}
+                      onAttack={onAttack}
+                      onSelectCopyAttack={(idx) => {
+                        cancelPending();
+                        setPendingCopyFor(idx);
+                      }}
+                      oppPromoting={oppPromoting}
+                      /* Énergie pending : intégrée dans SelfControls entre
+                         les attaques et le bouton Fin du tour. Le drag (via
+                         EnergyAttach) marche depuis n'importe où grâce aux
+                         pointer events + document.elementFromPoint. */
+                      pendingEnergy={
+                        !state.self.energyAttachedThisTurn &&
+                        isMyTurn &&
+                        !oppPromoting
+                          ? state.self.pendingEnergy
+                          : null
+                      }
+                      onAttachEnergy={onAttachEnergy}
+                      onActivateAttachMode={() => setAttachEnergyMode(true)}
+                    />
+                  )}
+                </div>
               </div>
               {state.phase === "setup" && (
                 <SelfControls
@@ -1146,30 +1152,39 @@ function BattleBoard({
           {/* Séparateur vertical */}
           <div className="w-px shrink-0 self-stretch bg-white/10" />
 
-          {/* ── Colonne adversaire (droite) — vertical : info → KO → board → main cachée ── */}
+          {/* ── Colonne adversaire (droite) — Phase 11.1 : layout
+              symétrique du joueur. PlayerInfo + BackRow à GAUCHE du
+              board adverse (au niveau de la hauteur du cadre), board à
+              droite, main cachée en dessous. ── */}
           {state.opponent && (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
-              <PlayerInfo player={state.opponent} isOpponent />
-              <BackRow
-                koCount={state.opponent.koCount}
-                deckSize={state.opponent.deckSize}
-                discardCount={state.opponent.discardCount}
-                handCount={state.opponent.handCount}
-              />
-              <BoardArea
-                active={state.opponent.active}
-                bench={state.opponent.bench}
-                cardById={cardById}
-                isOpponent
-                onZoomCard={setZoomedCard}
-                onHoverCard={setHoveredCard}
-                /* Quand on est en mode talent qui cible l'adversaire (ex
-                   Sheauriken, Piège Parfumé), on rend le board adverse
-                   cliquable pour sélectionner la cible. */
-                attachMode={
-                  pendingAbilityUid !== null ? attachModeHandler : null
-                }
-              />
+              <div className="flex items-start gap-4">
+                {/* Phase 11.1 : PlayerInfo + BackRow déplacés à gauche
+                    du board adverse (mirroir symétrique du joueur). */}
+                <div className="flex flex-col gap-2">
+                  <PlayerInfo player={state.opponent} isOpponent />
+                  <BackRow
+                    koCount={state.opponent.koCount}
+                    deckSize={state.opponent.deckSize}
+                    discardCount={state.opponent.discardCount}
+                    handCount={state.opponent.handCount}
+                  />
+                </div>
+                <BoardArea
+                  active={state.opponent.active}
+                  bench={state.opponent.bench}
+                  cardById={cardById}
+                  isOpponent
+                  onZoomCard={setZoomedCard}
+                  onHoverCard={setHoveredCard}
+                  /* Quand on est en mode talent qui cible l'adversaire (ex
+                     Sheauriken, Piège Parfumé), on rend le board adverse
+                     cliquable pour sélectionner la cible. */
+                  attachMode={
+                    pendingAbilityUid !== null ? attachModeHandler : null
+                  }
+                />
+              </div>
               <HandHidden
                 count={state.opponent.handCount}
                 sleeveGradient={
@@ -1273,11 +1288,13 @@ function RecapSidebar({
 }) {
   if (hoveredCard) {
     return (
-      <aside className="flex w-[284px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3">
+      <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3 xl:w-80 2xl:w-96">
         <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
           Aperçu
         </div>
-        <div className="aspect-[5/7] w-full max-w-[260px]">
+        {/* Carte qui remplit toute la largeur de la sidebar (pas de
+            max-width) — proportions 5:7 préservées. */}
+        <div className="aspect-[5/7] w-full">
           <CardFace card={hoveredCard} large />
         </div>
         <div className="mt-2 text-sm font-bold text-zinc-100">
@@ -1375,7 +1392,7 @@ function RecapSidebar({
     );
   }
   return (
-    <aside className="flex w-[284px] shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
+    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40 xl:w-80 2xl:w-96">
       <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
         📜 Journal du combat
       </div>
@@ -2296,7 +2313,7 @@ function SelfControls({
     (active?.playedThisTurn ?? false);
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col items-stretch gap-2 xl:w-[320px] 2xl:w-[360px]">
+    <div className="flex w-[220px] shrink-0 flex-col items-stretch gap-2 xl:w-[240px] 2xl:w-[260px]">
       {/* Liste des attaques (à droite du board joueur) */}
       <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-zinc-500">
         <Swords size={12} aria-hidden="true" />
@@ -2323,40 +2340,37 @@ function SelfControls({
               if (isCopy) onSelectCopyAttack(i);
               else onAttack(i);
             }}
-            className={`flex flex-col items-stretch rounded-md border-2 px-2.5 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`flex items-center justify-between gap-2 rounded-md border-2 px-2 py-1.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
               disabled
                 ? "border-rose-400/20 bg-rose-500/5 text-rose-300/60"
                 : "border-rose-400/60 bg-rose-500/15 text-rose-50 shadow-md hover:scale-[1.02] hover:bg-rose-500/25"
             }`}
-            title={a.text ?? ""}
+            // Description complète gardée en title pour hover (au cas
+            // où le joueur veut connaître l'effet — pas dans le bouton).
+            title={a.text ?? a.name}
           >
-            <div className="flex items-center justify-between gap-2">
-              {/* Coût en pastilles colorées par type */}
-              <div className="flex items-center gap-1">
-                {a.cost.map((c, j) => {
-                  const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
-                  const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
-                  return (
-                    <span
-                      key={j}
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold shadow ${bg} ${fg}`}
-                    >
-                      {energyEmoji(c)}
-                    </span>
-                  );
-                })}
-              </div>
-              <span className="flex-1 text-sm font-bold">{a.name}</span>
-              {a.damage !== undefined && (
-                <span className="text-lg font-black tabular-nums text-amber-300">
-                  {a.damage}
-                  {a.damageSuffix ?? ""}
-                </span>
-              )}
+            {/* Coût en pastilles colorées par type */}
+            <div className="flex items-center gap-0.5">
+              {a.cost.map((c, j) => {
+                const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
+                const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
+                return (
+                  <span
+                    key={j}
+                    className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
+                  >
+                    {energyEmoji(c)}
+                  </span>
+                );
+              })}
             </div>
-            {a.text && (
-              <span className="mt-1 text-xs italic leading-snug text-rose-200/80">
-                {a.text}
+            <span className="flex-1 truncate text-sm font-bold">
+              {a.name}
+            </span>
+            {a.damage !== undefined && (
+              <span className="text-base font-black tabular-nums text-amber-300">
+                {a.damage}
+                {a.damageSuffix ?? ""}
               </span>
             )}
           </button>
