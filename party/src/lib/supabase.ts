@@ -134,6 +134,72 @@ export async function fetchTcgCollection(
   }
 }
 
+/** TCG Pity : fetch le compteur actuel (packs ouverts depuis dernier ★+).
+ *  Si le compteur est ≥ 10, le serveur DOIT forcer une carte ★+ au
+ *  prochain pack. Retourne 0 si DB non-disponible (= comportement normal,
+ *  pas de pity). */
+export async function getTcgPityCounter(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+): Promise<number> {
+  const env = getSupabaseEnv(room);
+  if (!env) return 0;
+  try {
+    // Pas de auth.uid() côté server (service_role) — on appelle via une
+    // RPC qui filtre par l'auth context. On utilise donc une lecture
+    // directe sur profiles pour bypasser auth.uid() check.
+    const resp = await fetch(
+      `${env.url}/rest/v1/profiles?id=eq.${authId}&select=tcg_pity_state`,
+      {
+        headers: {
+          apikey: env.key,
+          Authorization: `Bearer ${env.key}`,
+        },
+      },
+    );
+    if (!resp.ok) return 0;
+    const rows = (await resp.json()) as { tcg_pity_state?: Record<string, number> }[];
+    if (rows.length === 0) return 0;
+    const state = rows[0].tcg_pity_state ?? {};
+    return state[gameId] ?? 0;
+  } catch (err) {
+    console.warn("[tcg] getTcgPityCounter threw:", err);
+    return 0;
+  }
+}
+
+/** TCG Pity : update le compteur après ouverture d'un pack.
+ *  hadRare = true si le pack contenait au moins une carte ★+ → reset.
+ *  Sinon → increment. Best effort. */
+export async function updateTcgPityCounter(
+  room: Party.Room,
+  authId: string,
+  gameId: string,
+  hadRare: boolean,
+): Promise<void> {
+  const env = getSupabaseEnv(room);
+  if (!env) return;
+  try {
+    await fetch(`${env.url}/rest/v1/rpc/tcg_update_pity_counter`, {
+      method: "POST",
+      headers: {
+        apikey: env.key,
+        Authorization: `Bearer ${env.key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        p_user_id: authId,
+        p_game_id: gameId,
+        p_had_rare: hadRare,
+      }),
+    });
+  } catch (err) {
+    console.warn("[tcg] updateTcgPityCounter threw:", err);
+  }
+}
+
 /** Atomically consume one free TCG pack for the user.
  *  Returns true when a free pack was decremented, false when there's none. */
 export async function consumeTcgFreePack(

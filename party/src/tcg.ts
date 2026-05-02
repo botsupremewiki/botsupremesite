@@ -38,8 +38,10 @@ import {
   fetchProfile,
   fetchTcgCollection,
   fetchTcgDecks,
+  getTcgPityCounter,
   patchProfileGold,
   saveTcgDeck,
+  updateTcgPityCounter,
 } from "./lib/supabase";
 
 const UUID_RE =
@@ -1112,6 +1114,18 @@ export default class TcgServer implements Party.Server {
       this.sendTo(conn, { type: "gold-update", gold: info.gold });
     }
 
+    // Pity : pour Pokemon, fetch le compteur. Si >= 10, on garantit
+    // une carte ★+ au pack (override le slot 5 si nécessaire).
+    let pityActive = false;
+    if (this.gameId === "pokemon" && info.authId) {
+      const pityCounter = await getTcgPityCounter(
+        this.room,
+        info.authId,
+        this.gameId,
+      );
+      pityActive = pityCounter >= 10;
+    }
+
     // Distribution des slots en 5 tiers (core/mid/upper/high/rare) — voir
     // PACK_LAYOUT et getSlotKind() ci-dessus pour la répartition exacte par jeu.
     // Le pack escalade en intérêt : core (commune pure) → mid → upper → high → rare.
@@ -1125,6 +1139,46 @@ export default class TcgServer implements Party.Server {
       } else if (this.gameId === "lol") {
         cardIds.push(this.drawRuneterraCard(lorThemed!, slotKind).cardCode);
       }
+    }
+
+    // Pity Pokemon : si actif et qu'aucune ★+ n'a été tirée naturellement,
+    // remplace la dernière carte par une random ★+ du pool. Reset implicite
+    // du compteur (via updateTcgPityCounter ci-dessous avec hadRare=true).
+    if (this.gameId === "pokemon" && pityActive) {
+      const hasRareNaturally = cardIds.some((id) => {
+        const meta = POKEMON_BASE_SET_BY_ID.get(id);
+        if (!meta) return false;
+        const tier = POKEMON_RARITY_TIER[meta.rarity] ?? 0;
+        return tier >= 5; // star-1 ou plus rare
+      });
+      if (!hasRareNaturally) {
+        // Pioche random parmi les ★+ du pool thématique.
+        const starPlus = (pokemonThemed ?? []).filter((c) => {
+          const tier = POKEMON_RARITY_TIER[c.rarity] ?? 0;
+          return tier >= 5;
+        });
+        if (starPlus.length > 0) {
+          const forced = starPlus[Math.floor(Math.random() * starPlus.length)];
+          cardIds[cardIds.length - 1] = forced.id;
+        }
+      }
+    }
+
+    // Update pity counter pour Pokemon : hadRare = true si le pack final
+    // contient au moins une ★+ (cas pity ou tirage naturel).
+    if (this.gameId === "pokemon" && info.authId) {
+      const hadRareFinal = cardIds.some((id) => {
+        const meta = POKEMON_BASE_SET_BY_ID.get(id);
+        if (!meta) return false;
+        const tier = POKEMON_RARITY_TIER[meta.rarity] ?? 0;
+        return tier >= 5;
+      });
+      void updateTcgPityCounter(
+        this.room,
+        info.authId,
+        this.gameId,
+        hadRareFinal,
+      ).catch(() => {});
     }
     // Stub typé pour le reste du flow : on travaille uniquement avec les ids.
     const cards = cardIds.map((id) => ({ id }));

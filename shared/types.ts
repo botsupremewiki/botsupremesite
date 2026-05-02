@@ -3067,6 +3067,36 @@ export type TcgServerMessage =
   | { type: "gold-update"; gold: number }
   | { type: "tcg-error"; message: string };
 
+// ─── Trade realtime room (party/src/trade.ts) ────────────────────────────
+// Échange direct 1-vs-1 : chacun pose 1 carte, les 2 valident → swap.
+// Si un retire/change sa carte → reset les 2 validations.
+
+export type TradeSlotState = {
+  authId: string;
+  username: string;
+  /** cardId posé par ce slot, ou null tant que rien n'est posé. */
+  cardId: string | null;
+  /** true ssi ce slot a cliqué "Valider" ET a une carte posée. */
+  validated: boolean;
+};
+
+export type TradeClientMessage =
+  | { type: "trade-put-card"; cardId: string }
+  | { type: "trade-remove-card" }
+  | { type: "trade-validate" }
+  | { type: "trade-unvalidate" };
+
+export type TradeServerMessage =
+  | { type: "trade-state"; slots: TradeSlotState[] }
+  | {
+      type: "trade-completed";
+      cardAToB: string;
+      cardBToA: string;
+      userA: string;
+      userB: string;
+    }
+  | { type: "trade-error"; message: string };
+
 // ─── Pokémon Battle (Phase 2 : matchmaking + setup) ────────────────────────
 
 export type BattleSeatId = "p1" | "p2";
