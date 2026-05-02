@@ -22,6 +22,7 @@ import type {
 } from "@shared/types";
 import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
+import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { useRegisterProximityChat } from "@/app/play/proximity-chat-context";
@@ -134,6 +135,16 @@ export function BattleClient({
     botWins: number;
     granted: boolean;
   } | null>(null);
+  /** Toast pour les victoires d'arène (Champion d'arène Pokemon) :
+   *  badge unlocked + booster gratuit. Distinct de questToast (qui est
+   *  le 3-wins/jour générique). */
+  const [arenaToast, setArenaToast] = useState<{
+    badgeUnlocked: boolean;
+    packGranted: boolean;
+  } | null>(null);
+  /** Garde-fou pour ne pas appeler record_arena_win plusieurs fois si
+   *  le state est rejoué (reconnexion etc). */
+  const arenaWinRecordedRef = useRef(false);
   // Chat propre à la table de combat — éphémère (la room PartyKit
   // hiberne quand vide). Exposé en "proximity" via le sidebar global.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -212,6 +223,38 @@ export function BattleClient({
         if (newState.winner && !prev?.winner) {
           if (newState.winner === newState.selfSeat) {
             sounds.victory();
+            // Mode arène (room id "bot-arena-{type}-...") : appel
+            // record_arena_win pour crédit badge + booster.
+            // Le check arenaWinRecordedRef évite les doubles appels en
+            // cas de reconnexion qui rejoue le state final.
+            if (
+              roomId.startsWith("bot-arena-") &&
+              !arenaWinRecordedRef.current
+            ) {
+              arenaWinRecordedRef.current = true;
+              const arenaIdMatch = window.location.search.match(
+                /[?&]arena=([^&]+)/,
+              );
+              const arenaId = arenaIdMatch ? arenaIdMatch[1] : null;
+              if (arenaId) {
+                (async () => {
+                  const sb = createClient();
+                  if (!sb) return;
+                  const { data } = await sb.rpc("record_arena_win", {
+                    p_arena_id: arenaId,
+                  });
+                  const r = data as
+                    | { badge_unlocked: boolean; pack_granted: boolean }
+                    | null;
+                  if (r && r.pack_granted) {
+                    setArenaToast({
+                      badgeUnlocked: r.badge_unlocked,
+                      packGranted: r.pack_granted,
+                    });
+                  }
+                })();
+              }
+            }
           } else {
             sounds.error();
           }
@@ -219,7 +262,7 @@ export function BattleClient({
         return newState;
       });
     },
-    [sounds],
+    [sounds, roomId],
   );
 
   /** Consomme le 1er coin flip de la queue (appelé quand son anim finit).
@@ -679,6 +722,37 @@ export function BattleClient({
               >
                 ✕
               </button>
+            </div>
+          )}
+
+          {arenaToast && (
+            <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 transform rounded-xl border-2 border-amber-300/70 bg-gradient-to-br from-amber-500/30 to-orange-500/20 px-5 py-4 text-sm text-amber-50 shadow-[0_8px_32px_rgba(251,191,36,0.4)] backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🏟️</span>
+                <div>
+                  <div className="text-base font-extrabold">
+                    Champion d&apos;arène vaincu !
+                  </div>
+                  <div className="mt-1 text-xs">
+                    {arenaToast.badgeUnlocked && (
+                      <span className="mr-2 rounded-full bg-amber-400/40 px-2 py-0.5 font-bold">
+                        🏅 Nouveau badge !
+                      </span>
+                    )}
+                    {arenaToast.packGranted && (
+                      <span className="rounded-full bg-emerald-400/30 px-2 py-0.5 font-bold">
+                        🎴 +1 booster gratuit
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setArenaToast(null)}
+                  className="text-amber-200 hover:text-amber-50"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
 

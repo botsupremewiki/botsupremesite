@@ -36,7 +36,23 @@ import {
   shuffle,
 } from "./lib/battle-engine";
 import { parseAttackEffects, type AttackEffect } from "./lib/attack-effects";
-import { pickRandomBotDeck } from "./lib/bot-decks";
+import { pickArenaBotDeck, pickRandomBotDeck } from "./lib/bot-decks";
+
+/** Types Pokémon valides — pour parser le segment d'arène dans l'id de room. */
+const VALID_POKEMON_TYPES: ReadonlySet<PokemonEnergyType> = new Set<
+  PokemonEnergyType
+>([
+  "fire",
+  "water",
+  "grass",
+  "lightning",
+  "psychic",
+  "fighting",
+  "darkness",
+  "metal",
+  "dragon",
+  "colorless",
+]);
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -287,12 +303,31 @@ export default class BattleServer implements Party.Server {
 
   // ─────────────── bot ───────────────
 
+  /** Détecte le type d'arène depuis l'id de room. Pattern attendu :
+   *   • "bot-arena-{type}-{authId}-{rand}" → type ∈ VALID_POKEMON_TYPES
+   *   • Tout autre pattern "bot-..." → null (mode bot classique random)
+   */
+  private getArenaType(): PokemonEnergyType | null {
+    const id = this.room.id;
+    if (!id.startsWith("bot-arena-")) return null;
+    // Format : bot-arena-{type}-...
+    const segments = id.split("-");
+    // ["bot", "arena", type, ...]
+    const typeStr = segments[2];
+    if (typeStr && VALID_POKEMON_TYPES.has(typeStr as PokemonEnergyType)) {
+      return typeStr as PokemonEnergyType;
+    }
+    return null;
+  }
+
   /** Remplit p2 avec le Bot Suprême équipé d'un deck choisi au hasard
-   *  parmi `BOT_DECKS` (5 archétypes différents : Feu, Eau, Élec, Plante,
-   *  Combat). Permet des matchups variés au lieu d'un mirror du deck
-   *  joueur. */
+   *  parmi `BOT_DECKS` (12+ archétypes). Si la room est en mode arène
+   *  (id "bot-arena-{type}-..."), pioche un deck mono-type matchant —
+   *  le joueur affronte alors le Champion d'arène du jour. */
   private fillBotSeat() {
-    const botDeck = pickRandomBotDeck();
+    const arenaType = this.getArenaType();
+    let botDeck = arenaType ? pickArenaBotDeck(arenaType) : null;
+    if (!botDeck) botDeck = pickRandomBotDeck();
     const deck = expandDeck(botDeck.cards);
     shuffle(deck);
     const { hand, mulligans } = dealOpeningHand(deck, OPENING_HAND_SIZE);

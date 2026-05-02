@@ -251,9 +251,45 @@ export const BOT_DECKS: BotDeck[] = [
       { cardId: "P-A-002", count: 2 }, // Vitesse +
     ],
   },
+
+  // ─── Deck 13 : Grotadmorv Toxik (Ténèbres / Obscurité) ────────────────
+  // Arène Ténèbres : poison + control via Grotadmorv et Smogogo.
+  {
+    name: "Grotadmorv Toxik",
+    description:
+      "Toxik + Smogogo (Fuite de Gaz) + Arbok lock retraite. Mono-darkness pour l'Arène Ténèbres.",
+    energyTypes: ["darkness"],
+    cards: [
+      { cardId: "A1-164", count: 2 }, // Abo
+      { cardId: "A1-165", count: 2 }, // Arbok
+      { cardId: "A1-174", count: 2 }, // Tadmorv
+      { cardId: "A1-175", count: 2 }, // Grotadmorv (Choc Venin +50 si empoisonné)
+      { cardId: "A1-176", count: 2 }, // Smogo
+      { cardId: "A1-177", count: 2 }, // Smogogo (talent Fuite de Gaz)
+      { cardId: "A1-172", count: 2 }, // Nosferapti
+      { cardId: "A1-173", count: 2 }, // Nosferalto
+      { cardId: "P-A-007", count: 2 }, // Recherches Professorales
+      { cardId: "P-A-001", count: 2 }, // Potion
+    ],
+  },
 ];
 
 /** Tire un deck au hasard parmi ceux préenregistrés. */
 export function pickRandomBotDeck(): BotDeck {
   return BOT_DECKS[Math.floor(Math.random() * BOT_DECKS.length)];
+}
+
+/** Tire un deck bot mono-type pour le mode "Champion d'arène".
+ *  Filtre les decks dont le seul type d'énergie est `arenaType`.
+ *  Si plusieurs decks matchent, en pioche un au hasard.
+ *  Retourne null si aucun deck mono-type pour ce type — fallback sur
+ *  pickRandomBotDeck() côté caller. */
+export function pickArenaBotDeck(
+  arenaType: PokemonEnergyType,
+): BotDeck | null {
+  const matching = BOT_DECKS.filter(
+    (d) => d.energyTypes.length === 1 && d.energyTypes[0] === arenaType,
+  );
+  if (matching.length === 0) return null;
+  return matching[Math.floor(Math.random() * matching.length)];
 }

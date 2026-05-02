@@ -2,14 +2,45 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { TcgDeck, TcgGameId, TcgServerMessage } from "@shared/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  PokemonCardData,
+  PokemonEnergyType,
+  TcgDeck,
+  TcgGameId,
+  TcgServerMessage,
+} from "@shared/types";
 import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
+import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
+import {
+  POKEMON_TYPE_EMOJI,
+  POKEMON_TYPE_LABEL_FR,
+  getTodayArena,
+  type PokemonArena,
+} from "@shared/tcg-pokemon-arenas";
+import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { CombatNav } from "../../_components/combat-nav";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
+
+/** Détermine si un deck contient au moins une carte Pokémon du type donné.
+ *  Sert à valider que le deck du joueur ne contient pas le type INTERDIT
+ *  par l'arène en cours. */
+function deckContainsType(
+  deck: TcgDeck,
+  type: PokemonEnergyType,
+): boolean {
+  for (const entry of deck.cards) {
+    const card = POKEMON_BASE_SET_BY_ID.get(entry.cardId) as
+      | PokemonCardData
+      | undefined;
+    if (!card) continue;
+    if (card.kind === "pokemon" && card.type === type) return true;
+  }
+  return false;
+}
 
 export function BotLobbyClient({
   profile,
@@ -26,6 +57,33 @@ export function BotLobbyClient({
   const [decks, setDecks] = useState<TcgDeck[]>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  // Mode arène : pour Pokemon uniquement, on affiche l'arène du jour avec
+  // status (badge déjà gagné ? déjà battu aujourd'hui ?).
+  const arena = useMemo<PokemonArena | null>(
+    () => (gameId === "pokemon" ? getTodayArena() : null),
+    [gameId],
+  );
+  const [arenaStatus, setArenaStatus] = useState<{
+    badge_owned: boolean;
+    won_today: boolean;
+  } | null>(null);
+
+  // Fetch du statut d'arène (badge déjà gagné ? combat déjà gagné aujourd'hui ?)
+  const fetchArenaStatus = useCallback(async () => {
+    if (!arena || !profile) return;
+    const sb = createClient();
+    if (!sb) return;
+    const { data } = await sb.rpc("arena_today_status", {
+      p_arena_id: arena.id,
+    });
+    if (data && typeof data === "object") {
+      setArenaStatus(data as { badge_owned: boolean; won_today: boolean });
+    }
+  }, [arena, profile]);
+
+  useEffect(() => {
+    fetchArenaStatus();
+  }, [fetchArenaStatus]);
 
   // Load decks via the TCG party.
   useEffect(() => {
@@ -102,6 +160,27 @@ export function BotLobbyClient({
     );
   }
 
+  /** Démarre un match Champion d'arène. Le room id contient le type de
+   *  l'arène (pour que PartyKit pioche un deck mono-type matchant). */
+  function startArenaMatch() {
+    if (!profile || !selectedDeckId || starting || !arena) return;
+    // Validation client : le deck ne doit pas contenir le type interdit.
+    const selected = decks.find((d) => d.id === selectedDeckId);
+    if (selected && deckContainsType(selected, arena.forbiddenType)) {
+      alert(
+        `Ce deck contient des Pokémon ${POKEMON_TYPE_LABEL_FR[arena.forbiddenType]} — interdit dans l'Arène ${arena.name.replace("Arène ", "")} !`,
+      );
+      return;
+    }
+    setStarting(true);
+    const rand = Math.random().toString(36).slice(2, 8);
+    // Pattern : bot-arena-{type}-{authId}-{rand} (cf. battle.ts getArenaType).
+    const roomId = `bot-arena-${arena.botType}-${profile.id.slice(0, 8)}-${rand}`;
+    router.push(
+      `/play/tcg/${gameId}/battle/${roomId}?deck=${selectedDeckId}&arena=${arena.id}`,
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
@@ -127,6 +206,111 @@ export function BotLobbyClient({
         className={`flex flex-1 flex-col items-center gap-4 overflow-y-auto p-6 ${game.gradient}`}
       >
         <CombatNav gameId={gameId} current="bot" />
+
+        {/* Section Champion d'arène (Pokemon uniquement). 7 arènes en
+            rotation hebdomadaire — l'arène du jour est déterminée par
+            le jour de la semaine (cf. tcg-pokemon-arenas.ts). */}
+        {arena && profile && (() => {
+          const selected = decks.find((d) => d.id === selectedDeckId);
+          const deckHasForbidden =
+            selected != null &&
+            deckContainsType(selected, arena.forbiddenType);
+          const rewarded = arenaStatus?.won_today ?? false;
+          const hasBadge = arenaStatus?.badge_owned ?? false;
+          return (
+            <div
+              className={`w-full max-w-xl rounded-2xl border-2 bg-gradient-to-br ${arena.bg} p-6 backdrop-blur-sm border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)]`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-5xl">{arena.icon}</span>
+                <div className="flex-1">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-400">
+                    🏟️ Champion d&apos;arène — du jour
+                  </div>
+                  <h2 className={`text-2xl font-bold ${arena.accent}`}>
+                    {arena.name}
+                  </h2>
+                  <p className="mt-0.5 text-xs text-zinc-300">
+                    {arena.description}
+                  </p>
+                </div>
+                {hasBadge && (
+                  <span
+                    className="rounded-full bg-amber-400/20 px-2 py-1 text-xs font-bold text-amber-200 ring-1 ring-amber-400/40"
+                    title="Tu possèdes déjà ce badge"
+                  >
+                    🏅 Badge
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border border-white/10 bg-black/30 p-2">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    Bot joue
+                  </div>
+                  <div className="mt-0.5 font-bold text-zinc-100">
+                    {POKEMON_TYPE_EMOJI[arena.botType]}{" "}
+                    {POKEMON_TYPE_LABEL_FR[arena.botType]} mono-type
+                  </div>
+                </div>
+                <div className="rounded-md border border-rose-400/30 bg-rose-500/10 p-2">
+                  <div className="text-[10px] uppercase tracking-widest text-rose-300">
+                    Ton deck NE doit PAS contenir
+                  </div>
+                  <div className="mt-0.5 font-bold text-rose-100">
+                    {POKEMON_TYPE_EMOJI[arena.forbiddenType]}{" "}
+                    {POKEMON_TYPE_LABEL_FR[arena.forbiddenType]}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-md border border-amber-400/30 bg-amber-500/5 p-2 text-xs text-amber-200">
+                🎁 Récompense : <strong>1 badge</strong>
+                {!hasBadge ? " (nouveau !)" : " (déjà acquis)"} +{" "}
+                <strong>1 booster gratuit</strong>
+                {rewarded && " — déjà gagné aujourd'hui, prochain reset à minuit"}
+              </div>
+
+              {deckHasForbidden && (
+                <div className="mt-3 rounded-md border border-rose-500/40 bg-rose-500/10 p-2 text-xs text-rose-300">
+                  ⛔ Ton deck sélectionné contient des Pokémon{" "}
+                  {POKEMON_TYPE_LABEL_FR[arena.forbiddenType]} — choisis un
+                  autre deck pour défier l&apos;arène.
+                </div>
+              )}
+
+              <button
+                onClick={startArenaMatch}
+                disabled={
+                  !selectedDeckId ||
+                  validDecks.length === 0 ||
+                  tcgStatus !== "connected" ||
+                  starting ||
+                  deckHasForbidden ||
+                  rewarded
+                }
+                title={
+                  rewarded
+                    ? "Déjà gagné aujourd'hui — reset à minuit"
+                    : deckHasForbidden
+                      ? `Deck contient ${POKEMON_TYPE_LABEL_FR[arena.forbiddenType]}`
+                      : undefined
+                }
+                className={`mt-3 w-full rounded-lg px-4 py-3 text-base font-extrabold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                  rewarded
+                    ? "bg-zinc-700 text-zinc-400"
+                    : `bg-gradient-to-br from-amber-400 to-amber-600 text-amber-950 shadow-[0_4px_18px_rgba(251,191,36,0.4)] hover:scale-[1.02] hover:from-amber-300 hover:to-amber-500`
+                }`}
+              >
+                {rewarded
+                  ? "✓ Arène vaincue aujourd'hui"
+                  : `${arena.icon} Défier le ${arena.name.replace("Arène ", "Champion ")}`}
+              </button>
+            </div>
+          );
+        })()}
+
         <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-sm">
           <h1 className="text-2xl font-bold text-zinc-100">
             🤖 Bot Suprême
