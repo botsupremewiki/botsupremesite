@@ -1,13 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { PokemonCardData } from "@shared/types";
+import type { PokemonCardData, TcgRarity } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
 import type { TradeRow } from "./page";
 
 type TradeCard = { cardId: string; count: number };
+
+/** Raretés autorisées pour les échanges (aligné Pokemon TCG Pocket) :
+ *  • ◆ → ◆◆◆◆ : toutes raretés losanges (commune → rare ex)
+ *  • ★ : Full Art simple
+ *
+ *  PAS autorisées : ★★, ★★★, 👑 (full art alt, immersive, couronne).
+ *  Ces raretés sont trop précieuses pour permettre le trade libre. */
+const TRADABLE_RARITIES: ReadonlySet<TcgRarity> = new Set<TcgRarity>([
+  "diamond-1",
+  "diamond-2",
+  "diamond-3",
+  "diamond-4",
+  "star-1",
+]);
+
+/** Indique si une carte peut être échangée selon sa rareté. */
+function isCardTradable(card: PokemonCardData | undefined): boolean {
+  if (!card) return false;
+  return TRADABLE_RARITIES.has(card.rarity);
+}
 
 export function TradesClient({
   gameId,
@@ -27,6 +47,21 @@ export function TradesClient({
   const [showForm, setShowForm] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Combien de trades je peux encore initier dans les 24 prochaines
+   *  heures (cap = 3/jour). null = pas encore chargé. */
+  const [remainingToday, setRemainingToday] = useState<number | null>(null);
+
+  // Charge le compteur de trades restants à l'init et à chaque refresh.
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) return;
+    (async () => {
+      const { data } = await supabase.rpc("tcg_trades_remaining_today", {
+        p_game_id: gameId,
+      });
+      if (typeof data === "number") setRemainingToday(data);
+    })();
+  }, [gameId, trades]);
 
   // Refresh : recharge la page pour récupérer les trades à jour.
   const refresh = () => router.refresh();
@@ -161,12 +196,37 @@ export function TradesClient({
       {/* ─── Nouvelle proposition ─── */}
       <section>
         {!showForm ? (
-          <button
-            onClick={() => setShowForm(true)}
-            className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400"
-          >
-            + Nouvelle proposition
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowForm(true)}
+              disabled={remainingToday === 0}
+              title={
+                remainingToday === 0
+                  ? "Limite de 3 trades par 24h atteinte. Reviens demain ou annule un trade en attente."
+                  : undefined
+              }
+              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+            >
+              + Nouvelle proposition
+            </button>
+            {remainingToday !== null && (
+              <span
+                className={`text-xs ${
+                  remainingToday === 0
+                    ? "text-rose-300"
+                    : remainingToday === 1
+                      ? "text-amber-300"
+                      : "text-zinc-400"
+                }`}
+              >
+                <span className="font-bold tabular-nums">
+                  {remainingToday}
+                </span>{" "}
+                / 3 trade{remainingToday > 1 ? "s" : ""} restant
+                {remainingToday > 1 ? "s" : ""} aujourd&apos;hui
+              </span>
+            )}
+          </div>
         ) : (
           <NewTradeForm
             gameId={gameId}
@@ -330,6 +390,9 @@ function NewTradeForm({
   // Cartes offertes : seulement celles que je possède en doublon (au moins
   // 2) — on garde toujours au moins 1 exemplaire dans la collection. Sinon
   // l'échange viderait la carte (frustrant si rare).
+  // Restriction Pocket : seules les raretés ◆ → ★ peuvent être échangées
+  // (cf. TRADABLE_RARITIES en haut du fichier). Les ★★, ★★★, 👑 sont
+  // exclues parce que trop précieuses.
   const ownedDoubles = useMemo(
     () =>
       collection
@@ -338,7 +401,8 @@ function NewTradeForm({
           card: POKEMON_BASE_SET_BY_ID.get(c.card_id),
           owned: c.count,
         }))
-        .filter((x): x is { card: PokemonCardData; owned: number } => !!x.card),
+        .filter((x): x is { card: PokemonCardData; owned: number } => !!x.card)
+        .filter(({ card }) => isCardTradable(card)),
     [collection],
   );
 
@@ -351,7 +415,9 @@ function NewTradeForm({
 
   const filteredReq = useMemo(() => {
     const q = searchReq.trim().toLowerCase();
-    return pool.filter((c) => !q || c.name.toLowerCase().includes(q));
+    return pool
+      .filter((c) => isCardTradable(c))
+      .filter((c) => !q || c.name.toLowerCase().includes(q));
   }, [pool, searchReq]);
 
   const offeredEntries = Array.from(offered.entries()).filter(
@@ -442,6 +508,12 @@ function NewTradeForm({
         >
           Annuler
         </button>
+      </div>
+      {/* Note sur les restrictions de rareté (alignée Pokemon TCG Pocket) */}
+      <div className="mt-2 rounded-md border border-sky-400/30 bg-sky-400/5 p-2 text-[11px] text-sky-200">
+        ℹ️ Seules les cartes <strong>◆ Communes</strong> à <strong>★ Full
+        Art</strong> peuvent être échangées. Les ★★, ★★★ et 👑 sont
+        exclues. Limite de <strong>3 trades par jour</strong>.
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
