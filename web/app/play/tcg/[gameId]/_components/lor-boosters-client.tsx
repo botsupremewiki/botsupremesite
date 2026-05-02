@@ -357,7 +357,7 @@ function BoosterDetailModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl"
+        className="flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl 2xl:max-w-7xl"
       >
         <header className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3">
           <div className="flex items-center gap-3">
@@ -401,7 +401,7 @@ function BoosterDetailModal({
                     </span>
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
                   {list.map((card) => (
                     <button
                       key={card.cardCode}
@@ -528,7 +528,7 @@ function RevealCard({
     >
       <motion.div
         animate={{ rotateY: flipped ? 180 : 0 }}
-        transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
         className="relative h-full w-full"
         style={{ transformStyle: "preserve-3d" }}
       >

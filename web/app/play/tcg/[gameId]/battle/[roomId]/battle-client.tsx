@@ -1143,7 +1143,7 @@ function RecapSidebar({
 }) {
   if (hoveredCard) {
     return (
-      <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3">
+      <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3 xl:w-80 2xl:w-96">
         <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
           Aperçu
         </div>
@@ -1245,7 +1245,7 @@ function RecapSidebar({
     );
   }
   return (
-    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
+    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40 xl:w-80 2xl:w-96">
       <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
         📜 Journal du combat
       </div>
@@ -1343,29 +1343,36 @@ function BackRow({
   handCount?: number;
 }) {
   return (
-    <div className="flex items-center gap-3 text-[10px] text-zinc-400">
-      {/* KO progress en cases */}
-      <div className="flex items-center gap-1.5">
-        <span className="uppercase tracking-widest text-zinc-500">
-          KO {koCount}/{BATTLE_CONFIG.koWinTarget}
+    <div className="flex items-center gap-3 text-xs text-zinc-300">
+      {/* KO progress en cases — agrandi pour lisibilité 1920×1080 */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] uppercase tracking-widest text-zinc-400">
+          KO <span className="font-bold tabular-nums text-amber-200">{koCount}</span>
+          <span className="text-zinc-500">/{BATTLE_CONFIG.koWinTarget}</span>
         </span>
-        <div className="flex gap-0.5">
+        <div className="flex gap-1">
           {Array.from({ length: BATTLE_CONFIG.koWinTarget }, (_, i) => (
             <div
               key={i}
-              className={`h-4 w-4 rounded-sm border ${
+              className={`h-5 w-5 rounded border-2 transition-colors ${
                 i < koCount
-                  ? "border-amber-300/60 bg-amber-700/40"
-                  : "border-white/5 bg-white/[0.02]"
+                  ? "border-amber-300/80 bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_8px_rgba(251,191,36,0.5)]"
+                  : "border-white/10 bg-white/[0.02]"
               }`}
             />
           ))}
         </div>
       </div>
-      <span className="h-3 w-px bg-white/10" />
-      <span title="Cartes restantes dans le deck">📚 {deckSize}</span>
-      <span title="Carte(s) en main">✋ {handCount ?? 0}</span>
-      <span title="Défausse">🗑 {discardCount}</span>
+      <span className="h-4 w-px bg-white/10" />
+      <span className="tabular-nums" title="Cartes restantes dans le deck">
+        📚 <span className="font-bold text-zinc-100">{deckSize}</span>
+      </span>
+      <span className="tabular-nums" title="Carte(s) en main">
+        ✋ <span className="font-bold text-zinc-100">{handCount ?? 0}</span>
+      </span>
+      <span className="tabular-nums" title="Défausse">
+        🗑 <span className="font-bold text-zinc-100">{discardCount}</span>
+      </span>
     </div>
   );
 }
@@ -1374,19 +1381,19 @@ function BackRow({
  *  cartes empilées horizontalement (effet "fan" léger). */
 function HandHidden({ count }: { count: number }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[9px] uppercase tracking-widest text-zinc-500">
-        Main ({count})
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] uppercase tracking-widest text-zinc-400">
+        Main <span className="font-bold text-zinc-100 tabular-nums">{count}</span>
       </span>
       <div className="flex">
         {Array.from({ length: Math.min(count, 7) }, (_, i) => (
           <div
             key={i}
-            className="-ml-3 h-9 w-6 rounded border border-indigo-300/40 bg-gradient-to-br from-indigo-600 to-indigo-900 first:ml-0"
+            className="-ml-3 h-14 w-10 rounded border border-indigo-300/40 bg-gradient-to-br from-indigo-600 to-indigo-900 shadow first:ml-0 xl:h-16 xl:w-12"
           />
         ))}
         {count > 7 && (
-          <span className="ml-1 text-[10px] text-zinc-400">+{count - 7}</span>
+          <span className="ml-1 text-xs font-bold text-zinc-300">+{count - 7}</span>
         )}
       </div>
     </div>
@@ -1751,8 +1758,11 @@ function BoardCard({
   //   • HP courant en bas (gros, rouge si dégâts)
   //   • Énergies attachées sous la carte (pastilles colorées par type)
   //   • Statuses en haut à droite (badges emoji)
-  const w = large ? 160 : 100;
-  const h = large ? 224 : 140;
+  // Tailles responsive : Active (large) plus grosse que Bench. Sur 1920×1080
+  // on profite vraiment de l'espace dispo (avant : tailles fixes 160/100).
+  const sizeClass = large
+    ? "w-44 h-60 lg:w-48 lg:h-64 xl:w-52 xl:h-72 2xl:w-56 2xl:h-[20rem]"
+    : "w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48";
   const remainingHp = Math.max(0, data.hp - card.damage);
   const damaged = card.damage > 0;
   const hpPct = Math.max(0, Math.min(1, remainingHp / data.hp));
@@ -1768,8 +1778,8 @@ function BoardCard({
             : undefined
         }
         transition={{ duration: 0.45, ease: "easeOut" }}
-        className="relative"
-        style={{ width: w, height: h, perspective: "800px" }}
+        className={`relative ${sizeClass}`}
+        style={{ perspective: "800px" }}
         data-battle-card-uid={card.uid}
       >
         <div
@@ -1830,22 +1840,21 @@ function BoardCard({
           )}
 
           {/* Barre HP en bas (jauge verte → rouge selon ratio) */}
-          <div className="absolute inset-x-0 bottom-0 flex flex-col bg-gradient-to-t from-black/90 via-black/50 to-transparent px-1.5 py-1">
-            <div className="flex items-center justify-between text-xs tabular-nums">
+          <div className="absolute inset-x-0 bottom-0 flex flex-col bg-gradient-to-t from-black/90 via-black/60 to-transparent px-1.5 py-1.5">
+            <div className="flex items-baseline justify-end gap-1 tabular-nums">
+              {/* HP descend smooth via composant dédié, gros texte lisible */}
               <span
-                className={`font-bold ${
+                className={`text-base font-extrabold ${
                   damaged ? "text-rose-300" : "text-emerald-200"
-                }`}
+                } ${large ? "lg:text-lg xl:text-xl" : "lg:text-base"}`}
               >
-                {/* HP descend smooth via composant dédié */}
                 <SmoothNumber value={remainingHp} />
-                <span className="text-zinc-400">/{data.hp}</span>
               </span>
-              <span className="text-[10px] uppercase tracking-widest text-zinc-400">
-                PV
+              <span className={`font-semibold text-zinc-400 ${large ? "text-sm" : "text-[11px]"}`}>
+                /{data.hp}
               </span>
             </div>
-            <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-black/50">
+            <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-black/50">
               <motion.div
                 animate={{ width: `${hpPct * 100}%` }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
@@ -1860,13 +1869,49 @@ function BoardCard({
             </div>
           </div>
 
-          {/* Statuses en haut à droite */}
+          {/* Statuses en haut à droite + watermark plein carte */}
           {card.statuses.length > 0 && (
-            <div className="absolute right-1 top-1 flex gap-0.5 rounded bg-black/80 px-1 py-0.5 text-sm">
-              {card.statuses.map((s, i) => (
-                <span key={i}>{statusEmoji(s)}</span>
-              ))}
-            </div>
+            <>
+              <div className="absolute right-1 top-1 flex gap-0.5 rounded bg-black/85 px-1.5 py-0.5 text-base shadow ring-1 ring-white/20">
+                {card.statuses.map((s, i) => (
+                  <span key={i} title={statusLabel(s)}>
+                    {statusEmoji(s)}
+                  </span>
+                ))}
+              </div>
+              {/* Watermark central : on voit instantanément l'état même de
+                  loin / sur petite carte. Couleur tranchée par status. */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span
+                  className={`rounded px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-widest shadow-lg ring-1 ${
+                    card.statuses.includes("poisoned")
+                      ? "bg-violet-500/85 text-violet-50 ring-violet-300"
+                      : card.statuses.includes("burned")
+                        ? "bg-rose-500/85 text-rose-50 ring-rose-300"
+                        : card.statuses.includes("paralyzed")
+                          ? "bg-amber-500/85 text-amber-950 ring-amber-300"
+                          : card.statuses.includes("asleep")
+                            ? "bg-sky-500/85 text-sky-50 ring-sky-300"
+                            : "bg-fuchsia-500/85 text-fuchsia-50 ring-fuchsia-300"
+                  }`}
+                >
+                  {statusLabel(card.statuses[0])}
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* Bordure dorée + label "ex" si Pokemon EX (KO = +2 récompenses) */}
+          {data.isEx && (
+            <>
+              <div
+                className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-amber-300/80 shadow-[inset_0_0_18px_rgba(251,191,36,0.4)]"
+                aria-hidden
+              />
+              <span className="absolute left-1 top-1 rounded bg-gradient-to-br from-amber-300 to-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-widest text-amber-950 shadow ring-1 ring-amber-200">
+                EX
+              </span>
+            </>
           )}
 
           {/* Floating damage number (au-dessus de la carte) */}
@@ -1903,9 +1948,10 @@ function BoardCard({
         </div>
       </motion.div>
 
-      {/* Pastilles d'énergies attachées (sous la carte). */}
+      {/* Pastilles d'énergies attachées (sous la carte). Plus grandes
+          sur l'Active (large) qu'en Bench. */}
       {card.attachedEnergies.length > 0 && (
-        <div className="flex flex-wrap items-center justify-center gap-0.5 px-0.5">
+        <div className="flex flex-wrap items-center justify-center gap-1 px-0.5">
           {card.attachedEnergies.map((e, i) => {
             const t = e as PokemonEnergyType;
             const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
@@ -1917,7 +1963,9 @@ function BoardCard({
                 initial={isNew ? { scale: 0, rotate: -180 } : false}
                 animate={isNew ? { scale: [0, 1.3, 1], rotate: 0 } : undefined}
                 transition={{ duration: 0.5, ease: "backOut" }}
-                className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold shadow ring-1 ring-black/30 ${bg} ${fg}`}
+                className={`flex items-center justify-center rounded-full font-bold shadow ring-1 ring-black/30 ${
+                  large ? "h-6 w-6 text-sm" : "h-5 w-5 text-xs"
+                } ${bg} ${fg}`}
                 title={e}
               >
                 {energyEmoji(t)}
@@ -1947,7 +1995,7 @@ function AbilityButton({
   small?: boolean;
 }) {
   const isDisabled = disabled || used;
-  const size = small ? "h-7 w-7 text-xs" : "h-8 w-8 text-sm";
+  const size = small ? "h-8 w-8 text-sm" : "h-10 w-10 text-base lg:h-11 lg:w-11";
   return (
     <button
       onClick={(e) => {
@@ -2006,6 +2054,24 @@ function statusEmoji(s: string): string {
       return "⚡";
     case "poisoned":
       return "☠️";
+    default:
+      return "";
+  }
+}
+
+/** Label court FR pour watermark plein-carte. */
+function statusLabel(s: string | undefined): string {
+  switch (s) {
+    case "asleep":
+      return "Endormi";
+    case "burned":
+      return "Brûlé";
+    case "confused":
+      return "Confus";
+    case "paralyzed":
+      return "Paralysé";
+    case "poisoned":
+      return "Empoisonné";
     default:
       return "";
   }
@@ -2084,7 +2150,7 @@ function SelfControls({
     (active?.playedThisTurn ?? false);
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col items-stretch gap-2">
+    <div className="flex w-[280px] shrink-0 flex-col items-stretch gap-2 xl:w-[320px] 2xl:w-[360px]">
       {/* Liste des attaques (à droite du board joueur) */}
       <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-zinc-500">
         <Swords size={12} aria-hidden="true" />
@@ -2120,30 +2186,30 @@ function SelfControls({
           >
             <div className="flex items-center justify-between gap-2">
               {/* Coût en pastilles colorées par type */}
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
                 {a.cost.map((c, j) => {
                   const bg = ENERGY_BADGE_BG[c] ?? "bg-zinc-400";
                   const fg = ENERGY_BADGE_TEXT[c] ?? "text-zinc-900";
                   return (
                     <span
                       key={j}
-                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold shadow ${bg} ${fg}`}
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold shadow ${bg} ${fg}`}
                     >
                       {energyEmoji(c)}
                     </span>
                   );
                 })}
               </div>
-              <span className="flex-1 font-bold">{a.name}</span>
+              <span className="flex-1 text-sm font-bold">{a.name}</span>
               {a.damage !== undefined && (
-                <span className="text-base font-black tabular-nums text-amber-300">
+                <span className="text-lg font-black tabular-nums text-amber-300">
                   {a.damage}
                   {a.damageSuffix ?? ""}
                 </span>
               )}
             </div>
             {a.text && (
-              <span className="mt-1 text-[10px] italic leading-tight text-rose-200/70">
+              <span className="mt-1 text-xs italic leading-snug text-rose-200/80">
                 {a.text}
               </span>
             )}
@@ -2170,7 +2236,8 @@ function SelfControls({
         </div>
       )}
 
-      {/* Bouton "Fin du tour" en bas */}
+      {/* Bouton "Fin du tour" — gros, isolé, gradient pour bien sauter
+          aux yeux puisque c'est l'action de bouclage du tour. */}
       <button
         onClick={onEndTurn}
         disabled={!isMyTurn || !!self?.mustPromoteActive || oppPromoting}
@@ -2179,9 +2246,9 @@ function SelfControls({
             ? "Attends que l'adversaire choisisse son nouveau Actif"
             : undefined
         }
-        className="mt-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 shadow-lg hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-3 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 px-5 py-3 text-base font-extrabold text-amber-950 shadow-[0_4px_18px_rgba(251,191,36,0.4)] transition-all hover:from-amber-300 hover:to-amber-500 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
       >
-        ⏭ Fin du tour
+        🏁 Fin du tour
       </button>
     </div>
   );
@@ -2880,14 +2947,13 @@ function HandCard({
       }}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
-      className={`relative shrink-0 overflow-hidden rounded-lg border transition-colors ${
+      className={`relative w-28 h-40 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-32 lg:h-44 xl:w-36 xl:h-52 2xl:w-40 2xl:h-56 ${
         playable
           ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
           : blocked
             ? "cursor-not-allowed border-white/5 opacity-50 grayscale"
             : "cursor-default border-white/10 opacity-90 hover:ring-2 hover:ring-white/30"
       }`}
-      style={{ width: 130, height: 182 }}
       title={tooltip}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2899,12 +2965,12 @@ function HandCard({
         draggable={false}
       />
       {playable && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-900/90 via-emerald-900/60 to-transparent p-1 text-center text-[10px] font-bold text-emerald-100">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-900/90 via-emerald-900/60 to-transparent p-1 text-center text-xs font-bold text-emerald-100">
           {action.label}
         </div>
       )}
       {blocked && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-900/95 via-zinc-900/70 to-transparent p-1 text-center text-[9px] leading-tight text-zinc-300">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-900/95 via-zinc-900/70 to-transparent p-1 text-center text-[10px] leading-tight text-zinc-300">
           {action.reason}
         </div>
       )}
@@ -2948,11 +3014,12 @@ function CoinFlipOverlay({
   series: { label: string; entries: CoinSeriesEntry[] };
   onComplete: () => void;
 }) {
-  // Phase 0 → 0.9s : la pièce tourne. Le `result` détermine où elle s'arrête
+  // Phase 0 → 0.6s : la pièce tourne. Le `result` détermine où elle s'arrête
   // (heads = 720° = face visible, tails = 540° = pile visible).
   const targetRotation = event.result === "heads" ? 720 : 540;
-  // Total ~1.8s : 0.9s spin + 0.9s annonce.
-  const TOTAL_MS = 1800;
+  // Total ~1.2s : 0.6s spin + 0.6s annonce. Réduit depuis 1.8s pour les
+  // séries de pile/face (Pikachu Rafale d'Éclairs = 4 flips successifs).
+  const TOTAL_MS = 1200;
 
   useEffect(() => {
     const t = window.setTimeout(onComplete, TOTAL_MS);

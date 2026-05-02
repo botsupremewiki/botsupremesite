@@ -947,7 +947,7 @@ function HoverPreview({ cardCode }: { cardCode: string }) {
     .filter((k): k is { ref: string; def: string } => !!k.def);
   return (
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-30 w-64 overflow-hidden rounded-xl border-2 border-white/20 bg-zinc-950/95 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-right-4"
+      className="pointer-events-none fixed bottom-4 right-4 z-30 w-72 overflow-hidden rounded-xl border-2 border-white/20 bg-zinc-950/95 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-right-4 xl:w-80 2xl:w-96"
       aria-hidden
     >
       <div className="aspect-[2/3] w-full">
@@ -1308,7 +1308,7 @@ function RoundView({
   const defenderBench = isMyAttack ? state.opponent.bench : state.self.bench;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-2 overflow-hidden">
+    <div className="mx-auto flex h-full w-full max-w-[1700px] flex-col gap-2 overflow-hidden">
       {/* Adversaire */}
       <PlayerStrip
         player={state.opponent}
@@ -1380,23 +1380,35 @@ function RoundView({
         />
       )}
 
-      {/* Centre : info round + actions */}
-      <div className="flex shrink-0 items-center justify-between rounded-lg border border-white/10 bg-black/40 px-4 py-2 text-sm">
+      {/* Centre : info round + actions. Bandeau tour bien tranché : vert
+          pulsant si mon tour, rose si adversaire — plus de tonalité grise
+          peu visible. */}
+      <div
+        className={`flex shrink-0 items-center justify-between rounded-lg border px-4 py-2 text-sm transition-all ${
+          myTurn
+            ? "border-emerald-400/60 bg-emerald-400/10 shadow-[0_0_18px_rgba(52,211,153,0.25)]"
+            : "border-rose-500/40 bg-rose-950/40"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <span className="text-xs uppercase tracking-widest text-zinc-400">
             Round {state.round}
           </span>
           {state.attackTokenSeat === state.selfSeat ? (
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] text-amber-200">
-              ⚔️ Jeton d'attaque (toi)
+            <span className="rounded-full bg-amber-500/20 px-2 py-1 text-xs font-bold text-amber-200 ring-1 ring-amber-400/40">
+              ⚔️ Jeton (toi)
             </span>
           ) : (
-            <span className="rounded-full bg-zinc-700/40 px-2 py-0.5 text-[11px] text-zinc-300">
+            <span className="rounded-full bg-zinc-700/40 px-2 py-1 text-xs text-zinc-300">
               ⚔️ Jeton adverse
             </span>
           )}
-          <span className={myTurn ? "text-emerald-300" : "text-zinc-500"}>
-            {myTurn ? "▶ Ton tour" : "⏸ Tour adverse"}
+          <span
+            className={`text-base font-bold ${
+              myTurn ? "text-emerald-200" : "text-rose-200"
+            }`}
+          >
+            {myTurn ? "🟢 À toi de jouer" : "🔴 Tour adverse"}
           </span>
           {isMyAttack && (
             <span className="text-rose-300">
@@ -1461,7 +1473,7 @@ function RoundView({
           {pendingSpell ? (
             <button
               onClick={onCancelSpell}
-              className="rounded-md border border-violet-400/40 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/20"
+              className="rounded-md border border-violet-400/40 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-200 hover:bg-violet-500/20"
             >
               Annuler le sort
             </button>
@@ -1470,7 +1482,7 @@ function RoundView({
               <button
                 onClick={handleConfirmAttack}
                 disabled={pickedAttackers.size === 0}
-                className="rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-rose-950 hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md bg-rose-500 px-4 py-2 text-sm font-extrabold text-rose-950 hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ⚔️ Confirmer ({pickedAttackers.size})
               </button>
@@ -1479,7 +1491,7 @@ function RoundView({
                   setCombatMode("none");
                   setPickedAttackers(new Set());
                 }}
-                className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 hover:bg-white/10"
+                className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 hover:bg-white/10"
               >
                 Annuler
               </button>
@@ -1487,7 +1499,7 @@ function RoundView({
           ) : mustAssignBlockers ? (
             <button
               onClick={handleConfirmBlocks}
-              className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-bold text-orange-950 hover:bg-orange-400"
+              className="rounded-md bg-orange-500 px-4 py-2 text-sm font-extrabold text-orange-950 shadow-lg hover:bg-orange-400"
             >
               🛡 Confirmer bloqueurs ({blockerByLane.size}/
               {attackInProgress!.lanes.length})
@@ -1497,7 +1509,7 @@ function RoundView({
               {canDeclareAttack && (
                 <button
                   onClick={() => setCombatMode("attacker-pick")}
-                  className="rounded-md bg-rose-500 px-3 py-1.5 text-xs font-bold text-rose-950 hover:bg-rose-400"
+                  className="rounded-md bg-gradient-to-br from-rose-500 to-rose-600 px-4 py-2 text-sm font-extrabold text-rose-950 shadow-md hover:from-rose-400 hover:to-rose-500"
                 >
                   ⚔️ Attaquer
                 </button>
@@ -1505,10 +1517,10 @@ function RoundView({
               <button
                 onClick={onPass}
                 disabled={!myTurn || isMyAttack === true}
-                className={`rounded-md border px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`rounded-md border px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 ${
                   state.spellStack && state.spellStack.length > 0
-                    ? "border-violet-400/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25"
-                    : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                    ? "border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30"
+                    : "border-emerald-400/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25"
                 }`}
                 title={
                   state.spellStack && state.spellStack.length > 0
@@ -1518,12 +1530,12 @@ function RoundView({
               >
                 {state.spellStack && state.spellStack.length > 0
                   ? `✓ Résoudre (${state.spellStack.length})`
-                  : "Passer"}
+                  : "🏁 Passer"}
               </button>
               <button
                 onClick={onConcede}
                 title="Concéder : tu perds immédiatement la partie"
-                className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-500/20"
+                className="rounded-md border border-rose-500/30 bg-rose-500/5 px-2.5 py-1.5 text-xs text-rose-300/70 hover:bg-rose-500/15 hover:text-rose-200"
               >
                 Concéder
               </button>
@@ -1693,9 +1705,17 @@ function PlayerStrip({
   handPulse?: number;
 }) {
   void onZoom;
+  // Nexus PV : élément le plus important du jeu (PV = défaite à 0).
+  // Affichage gros, lisible (pas text-xs) avec heart icon dédié.
   const nexusClass = nexusTargetable
-    ? "cursor-pointer rounded-md bg-violet-500/20 px-2 py-0.5 text-violet-200 ring-1 ring-violet-300 hover:bg-violet-500/40"
-    : "text-emerald-300";
+    ? "cursor-pointer rounded-md bg-violet-500/20 px-3 py-1 ring-1 ring-violet-300 hover:bg-violet-500/40 text-2xl xl:text-3xl font-extrabold tabular-nums text-violet-100"
+    : `text-2xl xl:text-3xl font-extrabold tabular-nums ${
+        (player.nexusHealth ?? 20) <= 5
+          ? "text-rose-400"
+          : (player.nexusHealth ?? 20) <= 10
+            ? "text-amber-300"
+            : "text-emerald-300"
+      }`;
   // Phase 4.9 : border + glow différents selon le tour actif.
   const activeClass = isActive
     ? isOpponent
@@ -1704,20 +1724,20 @@ function PlayerStrip({
     : "border-white/10 bg-black/40";
   return (
     <div
-      className={`flex shrink-0 items-center justify-between rounded-lg border px-3 py-1.5 text-sm transition-all ${activeClass}`}
+      className={`flex shrink-0 items-center justify-between rounded-lg border px-3 py-2 text-sm transition-all ${activeClass}`}
     >
       <div className="flex items-center gap-3">
         {/* Phase 4.9 : indicateur de tour visible à gauche */}
         {isActive && (
           <span
-            className="text-base animate-pulse"
+            className="text-lg animate-pulse"
             title={isOpponent ? "Tour adverse" : "Ton tour"}
           >
             ▶
           </span>
         )}
         <span
-          className={`font-semibold ${isOpponent ? "text-rose-300" : "text-sky-300"}`}
+          className={`text-base font-bold ${isOpponent ? "text-rose-300" : "text-sky-300"}`}
         >
           {player.username}
         </span>
@@ -1727,7 +1747,7 @@ function PlayerStrip({
             {player.deckRegions.map((r) => (
               <span
                 key={r}
-                className="text-base"
+                className="text-lg"
                 title={REGION_LABELS[r] ?? r}
               >
                 {REGION_GLYPHS[r] ?? "❓"}
@@ -1738,27 +1758,29 @@ function PlayerStrip({
         {/* Phase 4.9 : badge jeton d'attaque (⚔️ si en main ce round) */}
         {hasAttackToken && (
           <span
-            className="rounded bg-orange-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-orange-200 ring-1 ring-orange-400/40"
+            className="rounded bg-orange-500/30 px-2 py-1 text-xs font-extrabold uppercase tracking-widest text-orange-100 ring-1 ring-orange-400/60 shadow-[0_0_12px_rgba(251,146,60,0.6)] animate-pulse"
             title="Jeton d'attaque ce round"
           >
             ⚔️ Attaque
           </span>
         )}
-        <span className="text-[11px] text-zinc-500">
+        <span className="flex items-center gap-2 text-xs text-zinc-300">
           <span
             key={handPulse ?? 0}
-            className={
+            className={`tabular-nums ${
               handPulse
                 ? "rounded bg-emerald-500/30 px-1 text-emerald-200 animate-pulse"
                 : ""
-            }
+            }`}
           >
-            🎴 {player.handCount}
+            🎴 <span className="font-bold text-zinc-100">{player.handCount}</span>
           </span>
-          {" · "}📦 {player.deckSize}
+          <span className="tabular-nums">
+            📦 <span className="font-bold text-zinc-100">{player.deckSize}</span>
+          </span>
         </span>
       </div>
-      <div className="flex items-center gap-3 text-xs tabular-nums">
+      <div className="flex items-center gap-3 tabular-nums">
         {/* Phase 5.13 : mana orbs visuels — chaque mana = un cercle.
             Bleu plein = disponible, gris vide = utilisé. Cap à 10 (manaMax max). */}
         <ManaDisplay
@@ -1771,8 +1793,9 @@ function PlayerStrip({
           disabled={!nexusTargetable}
           onClick={() => onNexusClick?.()}
           className={`${nexusClass} relative`}
+          aria-label={`Nexus : ${player.nexusHealth} PV`}
         >
-          ❤️ {player.nexusHealth}
+          <span className="text-base">❤️</span> {player.nexusHealth}
           {/* Phase 5.4 : popup -N rouge ou +N vert au-dessus du nexus. */}
           {nexusPopup && (
             <span
@@ -2133,34 +2156,44 @@ function ManaDisplay({
   manaMax: number;
   spellMana: number;
 }) {
-  // Affichage compact pour ≤6, plus condensé au-delà.
+  // Pastilles plus grandes (h-3) + chiffre lisible "3/7" pour éviter de
+  // compter les orbes au-delà de 6.
   const orbs = Array.from({ length: manaMax }).map((_, i) => i < mana);
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="flex items-center gap-0.5" title={`${mana}/${manaMax} mana`}>
+    <div className="flex items-center gap-2">
+      <span
+        className="flex items-center gap-1"
+        title={`${mana}/${manaMax} mana`}
+      >
         {orbs.map((filled, i) => (
           <span
             key={i}
-            className={`h-2 w-2 rounded-full ring-1 ${
+            className={`h-3 w-3 rounded-full ring-1 lg:h-3.5 lg:w-3.5 ${
               filled
-                ? "bg-sky-400 ring-sky-200/60 shadow-[0_0_4px_rgba(56,189,248,0.6)]"
+                ? "bg-sky-400 ring-sky-200/60 shadow-[0_0_6px_rgba(56,189,248,0.7)]"
                 : "bg-zinc-700 ring-zinc-600"
             }`}
           />
         ))}
+        <span className="ml-1 text-sm font-bold tabular-nums text-sky-200">
+          {mana}/{manaMax}
+        </span>
       </span>
       {spellMana > 0 && (
         <span
-          className="flex items-center gap-0.5"
+          className="flex items-center gap-1"
           title={`${spellMana} spell mana banked`}
         >
-          <span className="text-[10px] text-violet-300">✨</span>
+          <span className="text-sm text-violet-300">✨</span>
           {Array.from({ length: spellMana }).map((_, i) => (
             <span
               key={i}
-              className="h-2 w-2 rounded-full bg-violet-400 ring-1 ring-violet-200/60 shadow-[0_0_4px_rgba(167,139,250,0.6)]"
+              className="h-3 w-3 rounded-full bg-violet-400 ring-1 ring-violet-200/60 shadow-[0_0_6px_rgba(167,139,250,0.7)] lg:h-3.5 lg:w-3.5"
             />
           ))}
+          <span className="ml-0.5 text-sm font-bold tabular-nums text-violet-200">
+            {spellMana}
+          </span>
         </span>
       )}
     </div>
@@ -2207,7 +2240,7 @@ function BenchRow({
 }) {
   if (units.length === 0) {
     return (
-      <div className="flex h-32 shrink-0 items-center justify-center rounded-md border border-dashed border-white/10 text-xs text-zinc-600">
+      <div className="flex h-36 shrink-0 items-center justify-center rounded-md border border-dashed border-white/10 text-xs text-zinc-600 lg:h-44 xl:h-52">
         Banc vide
       </div>
     );
@@ -2504,7 +2537,7 @@ function UnitCard({
       onMouseEnter={() => onHoverCode?.(unit.cardCode)}
       onMouseLeave={() => onHoverCode?.(null)}
       disabled={dimmed}
-      className={`relative flex w-24 flex-col items-stretch overflow-hidden rounded border bg-black/40 transition-transform ${
+      className={`relative flex w-20 shrink-0 flex-col items-stretch overflow-hidden rounded border bg-black/40 transition-transform sm:w-24 lg:w-28 xl:w-32 ${
         highlighted
           ? "border-rose-400 ring-2 ring-rose-400/60 shadow-[0_0_20px_rgba(244,114,128,0.5)] -translate-y-1"
           : card
@@ -2531,9 +2564,9 @@ function UnitCard({
           </div>
         )}
       </div>
-      <div className="flex justify-between bg-black/60 px-1 py-0.5 text-[10px] tabular-nums">
-        <span className="text-amber-300">{unit.power}</span>
-        <span className={aliveHealth <= 0 ? "text-rose-400" : "text-emerald-300"}>
+      <div className="flex justify-between bg-black/85 px-1.5 py-0.5 text-sm font-bold tabular-nums shadow">
+        <span className="text-amber-200">{unit.power}</span>
+        <span className={aliveHealth <= 0 ? "text-rose-400" : "text-emerald-200"}>
           {aliveHealth}
         </span>
       </div>
@@ -2541,8 +2574,8 @@ function UnitCard({
         <>
           {/* Phase 4.3 : aura dorée pulsante autour des champions level 2. */}
           <div className="pointer-events-none absolute inset-0 animate-pulse rounded ring-2 ring-amber-300/60 shadow-[0_0_18px_rgba(252,211,77,0.55)]" />
-          <div className="absolute right-0.5 top-0.5 rounded bg-amber-400 px-1 text-[8px] font-bold text-amber-950 shadow">
-            ★ 2
+          <div className="absolute right-0.5 top-0.5 rounded bg-gradient-to-br from-amber-300 to-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-950 shadow ring-1 ring-amber-200">
+            ★ Lv2
           </div>
         </>
       )}
@@ -2650,7 +2683,7 @@ function HandRow({
               onMouseEnter={() => onHoverCode?.(cardCode)}
               onMouseLeave={() => onHoverCode?.(null)}
               disabled={!myTurn}
-              className={`relative w-28 shrink-0 overflow-hidden rounded border-2 transition-transform ${
+              className={`relative w-24 shrink-0 overflow-hidden rounded border-2 transition-transform sm:w-28 lg:w-32 xl:w-36 ${
                 playable
                   ? "border-emerald-400/60 cursor-pointer hover:scale-[1.08] hover:-translate-y-3"
                   : "border-white/10 opacity-70 cursor-not-allowed"
@@ -2671,19 +2704,19 @@ function HandRow({
                   </div>
                 )}
               </div>
-              <div className={`absolute left-1 top-1 rounded-full px-1.5 text-[10px] font-bold text-white ${costColor}`}>
+              <div className={`absolute left-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-extrabold tabular-nums text-white ring-1 ring-white/30 ${costColor}`}>
                 {effectiveCost}
               </div>
               {/* Phase 3.67 : badge stats si Unit + buff */}
               {card?.type === "Unit" && hasBuff && (
-                <div className="absolute right-1 top-1 rounded bg-fuchsia-500/90 px-1 text-[9px] font-bold text-white">
+                <div className="absolute right-1 top-1 rounded bg-fuchsia-500/90 px-1.5 py-0.5 text-xs font-bold text-white">
                   {effectiveAttack}/{effectiveHealth}
                 </div>
               )}
               {/* Phase 5.0 : badge spell speed sur sorts (Burst/Fast/Slow). */}
               {card?.type === "Spell" && card.spellSpeed && (
                 <div
-                  className={`absolute right-1 top-1 rounded px-1 text-[8px] font-bold ${
+                  className={`absolute right-1 top-1 flex flex-col items-center rounded px-1 py-0.5 text-[10px] font-extrabold leading-tight ${
                     card.spellSpeed === "Burst"
                       ? "bg-amber-400 text-amber-950"
                       : card.spellSpeed === "Fast"
@@ -2694,13 +2727,24 @@ function HandRow({
                   }`}
                   title={card.spellSpeed}
                 >
-                  {card.spellSpeed === "Burst"
-                    ? "⚡"
-                    : card.spellSpeed === "Fast"
-                      ? "💨"
-                      : card.spellSpeed === "Slow"
-                        ? "🐢"
-                        : "🎯"}
+                  <span>
+                    {card.spellSpeed === "Burst"
+                      ? "⚡"
+                      : card.spellSpeed === "Fast"
+                        ? "💨"
+                        : card.spellSpeed === "Slow"
+                          ? "🐢"
+                          : "🎯"}
+                  </span>
+                  <span className="mt-0.5">
+                    {card.spellSpeed === "Burst"
+                      ? "BST"
+                      : card.spellSpeed === "Fast"
+                        ? "FST"
+                        : card.spellSpeed === "Slow"
+                          ? "SLW"
+                          : "FOC"}
+                  </span>
                 </div>
               )}
               {/* Phase 5.0 : badge Fleeting si défaussé EOR. */}

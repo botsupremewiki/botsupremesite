@@ -441,7 +441,7 @@ function DecksList({
           Aucun deck sauvegardé. Clique « Nouveau deck » pour commencer.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {decks.map((d) => {
             const total = d.cards.reduce((s, c) => s + c.count, 0);
             const regs = (d.regions ?? []).filter((r): r is RuneterraRegion =>
@@ -817,7 +817,7 @@ function DeckEditor({
                     : "Aucune carte ne matche ta recherche."}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
                   {filtered.map((card) => {
                     const owned = collection.get(card.cardCode) ?? 0;
                     const inDeck = draftEntries.get(card.cardCode) ?? 0;

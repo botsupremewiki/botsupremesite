@@ -744,7 +744,7 @@ function CollectionPicker({
             Aucune carte ne correspond à ces filtres.
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
             {sorted.map((card) => {
               const owned = collection.get(card.id) ?? 0;
               const inDeck = draftEntries.get(card.id) ?? 0;
