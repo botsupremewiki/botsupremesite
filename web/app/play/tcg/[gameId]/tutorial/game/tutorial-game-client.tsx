@@ -287,15 +287,8 @@ export function TutorialGameClient({
         },
       };
     });
-    // Avance step "set-bench" si on a posé au moins 1 carte
-    setTimeout(() => {
-      setState((s) => {
-        if (currentStep?.id === "set-bench" && s.self.bench.length >= 2) {
-          advance();
-        }
-        return s;
-      });
-    }, 0);
+    // L'avancée de la step "set-bench" est gérée par useEffect plus bas
+    // (déclenchement quand bench.length atteint 2).
   }
 
   /** Confirme l'équipe et démarre le match. */
@@ -719,6 +712,16 @@ export function TutorialGameClient({
     }
   }, [currentStep, advance]);
 
+  // Auto-advance de la step "set-bench" : se déclenche dès que le
+  // joueur a posé 2 Pokémon de Base au banc (Carapuce + Salamèche dans
+  // le scénario). Approche propre via useEffect au lieu du setTimeout
+  // hack précédent.
+  useEffect(() => {
+    if (currentStep?.id === "set-bench" && state.self.bench.length >= 2) {
+      advance();
+    }
+  }, [state.self.bench.length, currentStep?.id, advance]);
+
   if (!currentStep) {
     // Fin du tutoriel. À chaque commit on enrichira les steps ; ce screen
     // reste l'écran final qui crédite les 10 boosters via la RPC
@@ -914,6 +917,13 @@ function SelfBoard({
 
   return (
     <div className="flex flex-1 flex-col gap-3">
+      <div className="flex items-center gap-3 text-xs">
+        <span className="font-bold text-emerald-300">🧑 Toi</span>
+        <span className="text-zinc-400">
+          KO : {state.self.koCount} / 3 · Main : {state.self.hand.length} ·
+          Tour : {state.turn} · {state.activeSide === "self" ? "À toi" : "Bot joue…"}
+        </span>
+      </div>
       {/* Board (Actif + Bench + énergie pending + actions) */}
       <div
         className="flex items-start gap-3 rounded-xl border-2 border-emerald-400/30 bg-emerald-950/20 p-3"
@@ -1159,7 +1169,9 @@ function CardMini({ cardId, small }: { cardId: string; small?: boolean }) {
   );
 }
 
-/** Carte avec stats : HP bar + énergies attachées. Utilisée sur le board. */
+/** Carte avec stats : HP bar + énergies attachées. Utilisée sur le board.
+ *  Affiche aussi un flash "+N" éphémère quand les dégâts augmentent
+ *  (feedback visuel pour les attaques + poison). */
 function CardWithStats({
   inPlay,
   small,
@@ -1168,6 +1180,25 @@ function CardWithStats({
   small?: boolean;
 }) {
   const meta = getPokemonCard(inPlay.cardId);
+  // Track le précédent damage pour calculer le delta. La popup +N
+  // flotte 1.2s puis disparaît via AnimatePresence (clé = damage val).
+  const prevDamageRef = useRef(inPlay.damage);
+  const [flashDelta, setFlashDelta] = useState<{ delta: number; key: number } | null>(
+    null,
+  );
+  useEffect(() => {
+    const prev = prevDamageRef.current;
+    // ⚠ Important : on update prev AVANT le return de la branche if,
+    // sinon le prev reste figé à 0 et tous les flash suivants seraient
+    // calculés depuis zéro (delta cumulatif au lieu d'incrémental).
+    prevDamageRef.current = inPlay.damage;
+    if (inPlay.damage > prev) {
+      const delta = inPlay.damage - prev;
+      setFlashDelta({ delta, key: Date.now() });
+      const t = setTimeout(() => setFlashDelta(null), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [inPlay.damage]);
   if (!meta) return null;
   const hp = meta.hp;
   const remaining = Math.max(0, hp - inPlay.damage);
@@ -1219,6 +1250,21 @@ function CardWithStats({
             ))}
           </div>
         )}
+        {/* Flash damage : +N qui flotte vers le haut puis disparaît. */}
+        <AnimatePresence>
+          {flashDelta && (
+            <motion.div
+              key={flashDelta.key}
+              initial={{ opacity: 0, y: 10, scale: 0.8 }}
+              animate={{ opacity: 1, y: -20, scale: 1.2 }}
+              exit={{ opacity: 0, y: -40, scale: 1 }}
+              transition={{ duration: 1.2 }}
+              className="pointer-events-none absolute inset-x-0 top-1/3 flex items-center justify-center text-2xl font-black text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.9)]"
+            >
+              -{flashDelta.delta}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       {/* Énergies attachées sous la carte. */}
       {inPlay.attachedEnergies.length > 0 && (

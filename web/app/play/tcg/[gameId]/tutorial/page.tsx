@@ -13,11 +13,18 @@ export default async function TutorialPage({
   searchParams,
 }: {
   params: Promise<{ gameId: string }>;
-  searchParams: Promise<{ review?: string }>;
+  searchParams: Promise<{ review?: string; legacy?: string }>;
 }) {
   const { gameId } = await params;
   const sp = await searchParams;
   if (!(gameId in TCG_GAMES)) notFound();
+  // Pokemon a maintenant un tutoriel pratique interactif (couvre 30
+  // étapes, toutes les mécaniques). Sauf demande explicite via ?legacy=1
+  // (slideshow legacy en backup), on redirige vers /tutorial/game.
+  if (gameId === "pokemon" && sp.legacy !== "1") {
+    const reviewParam = sp.review === "1" ? "?review=1" : "";
+    redirect(`/play/tcg/${gameId}/tutorial/game${reviewParam}`);
+  }
   const game = TCG_GAMES[gameId as TcgGameId];
   const profile = await getProfile();
   // Mode "review" : tutoriel revisitable depuis le hub. Pas de
