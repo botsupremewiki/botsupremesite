@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
@@ -27,6 +27,14 @@ export default async function TutorialPage({
       });
       alreadyCompleted = Boolean(data);
     }
+  }
+
+  // Si le tuto a déjà été complété, on n'affiche JAMAIS plus l'écran de
+  // tutoriel (cf. demande user : "le tutoriel ne devrait plus jamais
+  // s'afficher pour le joueur"). On redirige direct vers les boosters,
+  // qui est la prochaine étape logique du flow d'onboarding.
+  if (alreadyCompleted) {
+    redirect(`/play/tcg/${gameId}/boosters`);
   }
 
   return (

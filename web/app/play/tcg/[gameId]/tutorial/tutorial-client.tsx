@@ -118,7 +118,6 @@ export function TutorialClient({
   }
 
   if (completed) {
-    const gotPacks = reward && reward.packs > 0;
     return (
       <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-400/10 to-emerald-400/5 p-8 text-center">
         <div className="text-6xl">🎓</div>
@@ -126,58 +125,26 @@ export function TutorialClient({
           Tutoriel terminé !
         </h2>
         <p className="mt-2 text-sm text-zinc-300">
-          Tu connais maintenant les règles essentielles.
-          {gotPacks && (
-            <>
-              {" "}
-              Voici tes <strong className="text-amber-200">10 boosters
-              gratuits</strong> pour bien démarrer ta collection !
-            </>
-          )}
+          Tu as reçu{" "}
+          <strong className="text-amber-200">10 boosters gratuits</strong>{" "}
+          pour démarrer ta collection !
         </p>
-        {reward ? (
+        {reward && (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
             <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-200">
               🎁 +{reward.gold} OS
             </div>
-            {gotPacks && (
-              <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
-                🎴 +{reward.packs} boosters gratuits
-              </div>
-            )}
+            <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
+              🎴 +{reward.packs} boosters gratuits
+            </div>
           </div>
-        ) : alreadyCompleted ? (
-          <div className="mt-4 text-xs text-zinc-500">
-            Tu avais déjà complété ce tutoriel — pas de récompense bonus
-            cette fois.
-          </div>
-        ) : null}
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {gotPacks && (
-            <Link
-              href={`/play/tcg/${gameId}/boosters`}
-              className="rounded-md border-2 border-emerald-300/70 bg-gradient-to-br from-emerald-500 to-emerald-700 px-5 py-3 text-base font-extrabold text-emerald-50 shadow-[0_4px_18px_rgba(52,211,153,0.35)] transition-all hover:scale-[1.02] hover:from-emerald-400 hover:to-emerald-600"
-            >
-              🎴 Accéder aux boosters
-            </Link>
-          )}
+        )}
+        <div className="mt-6 flex justify-center">
           <Link
-            href={`/play/tcg/${gameId}?skipTutorial=1`}
-            className="rounded-md border border-white/20 bg-white/[0.03] px-4 py-3 text-sm text-zinc-200 transition-colors hover:bg-white/[0.07]"
+            href={`/play/tcg/${gameId}/boosters`}
+            className="rounded-md border-2 border-emerald-300/70 bg-gradient-to-br from-emerald-500 to-emerald-700 px-6 py-3 text-base font-extrabold text-emerald-50 shadow-[0_4px_18px_rgba(52,211,153,0.35)] transition-all hover:scale-[1.02] hover:from-emerald-400 hover:to-emerald-600"
           >
-            🏠 Continuer vers le hub
-          </Link>
-          <Link
-            href={`/play/tcg/${gameId}/battle/bot`}
-            className="rounded-md border border-amber-400/60 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100 transition-colors hover:bg-amber-400/20"
-          >
-            🤖 Match contre le Bot
-          </Link>
-          <Link
-            href={`/play/tcg/${gameId}/decks`}
-            className="rounded-md border border-white/20 bg-white/[0.03] px-4 py-3 text-sm text-zinc-200 transition-colors hover:bg-white/[0.07]"
-          >
-            🃏 Mes decks
+            🎴 Accéder aux boosters
           </Link>
         </div>
       </div>
