@@ -7,7 +7,8 @@ export type AchievementCategory =
   | "casino"
   | "eternum"
   | "imperium"
-  | "skyline";
+  | "skyline"
+  | "lol";
 
 export type Achievement = {
   id: string;
@@ -272,6 +273,128 @@ export const ACHIEVEMENTS: Achievement[] = [
     required: 50,
     osReward: 2_000,
   },
+
+  // ─── LoR ────────────────────────────────────────────────────────────
+  // Achievements spécifiques Legends of Runeterra. Trackés depuis le
+  // engine au moment des actions (runeterra-battle.ts side-effects via
+  // un message client `lor-achievement` ou directement Supabase).
+  {
+    id: "lol.first-bot-win",
+    category: "lol",
+    name: "Apprenti invocateur",
+    description: "Bat le bot LoR pour la première fois.",
+    glyph: "🤖",
+    required: 1,
+    osReward: 200,
+  },
+  {
+    id: "lol.first-pvp-win",
+    category: "lol",
+    name: "Champion débutant",
+    description: "Gagne ton 1er match LoR PvP non-classé.",
+    glyph: "🆚",
+    required: 1,
+    osReward: 500,
+  },
+  {
+    id: "lol.first-ranked-win",
+    category: "lol",
+    name: "Aspirant",
+    description: "Gagne ton 1er match LoR classé.",
+    glyph: "🏆",
+    required: 1,
+    osReward: 1_000,
+  },
+  {
+    id: "lol.elo-1200",
+    category: "lol",
+    name: "Compétiteur",
+    description: "Atteindre 1200 ELO LoR (départ 1000).",
+    glyph: "📈",
+    required: 1200,
+    osReward: 2_000,
+  },
+  {
+    id: "lol.elo-1500",
+    category: "lol",
+    name: "Maître Tacticien",
+    description: "Atteindre 1500 ELO LoR.",
+    glyph: "🧠",
+    required: 1500,
+    osReward: 5_000,
+  },
+  {
+    id: "lol.collection-50",
+    category: "lol",
+    name: "Collectionneur",
+    description: "Posséder 50 cartes LoR uniques.",
+    glyph: "📚",
+    required: 50,
+    osReward: 1_000,
+  },
+  {
+    id: "lol.collection-150",
+    category: "lol",
+    name: "Archiviste",
+    description: "Posséder 150 cartes LoR uniques.",
+    glyph: "📖",
+    required: 150,
+    osReward: 5_000,
+  },
+  {
+    id: "lol.collection-300",
+    category: "lol",
+    name: "Maître Collectionneur",
+    description: "Posséder 300+ cartes LoR uniques (set 1 quasi-complet).",
+    glyph: "🎴",
+    required: 300,
+    osReward: 20_000,
+  },
+  {
+    id: "lol.champion-levelups",
+    category: "lol",
+    name: "Évolution",
+    description: "Faire passer 10 champions au niveau 2 (cumulé).",
+    glyph: "⭐",
+    required: 10,
+    osReward: 2_000,
+  },
+  {
+    id: "lol.win-fiora",
+    category: "lol",
+    name: "Riposte de Fiora",
+    description: "Gagne une partie via la win condition de Fiora L2.",
+    glyph: "⚔️",
+    required: 1,
+    osReward: 3_000,
+  },
+  {
+    id: "lol.win-mono-region",
+    category: "lol",
+    name: "Pure Allégeance",
+    description: "Gagne une partie avec un deck mono-région LoR.",
+    glyph: "🛡️",
+    required: 1,
+    osReward: 2_000,
+  },
+  {
+    id: "lol.spells-cast-100",
+    category: "lol",
+    name: "Maître des arcanes",
+    description: "Lance 100 sorts au total dans tes parties LoR.",
+    glyph: "✨",
+    required: 100,
+    osReward: 1_500,
+  },
+  {
+    id: "lol.bot-wins-25",
+    category: "lol",
+    name: "Adversaire de la machine",
+    description: "Bat le bot LoR 25 fois (cumulé).",
+    glyph: "🦾",
+    required: 25,
+    osReward: 2_500,
+  },
 ];
 
 export const ACHIEVEMENTS_BY_ID: Map<string, Achievement> = new Map(
@@ -287,6 +410,7 @@ export const ACHIEVEMENTS_BY_CATEGORY: Record<
   eternum: ACHIEVEMENTS.filter((a) => a.category === "eternum"),
   imperium: ACHIEVEMENTS.filter((a) => a.category === "imperium"),
   skyline: ACHIEVEMENTS.filter((a) => a.category === "skyline"),
+  lol: ACHIEVEMENTS.filter((a) => a.category === "lol"),
 };
 
 export const CATEGORY_LABEL: Record<AchievementCategory, string> = {
@@ -295,4 +419,5 @@ export const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   eternum: "⚔️ Eternum",
   imperium: "🏰 Imperium",
   skyline: "🏙️ Skyline",
+  lol: "🎴 LoR",
 };
