@@ -33,6 +33,7 @@ import {
   fetchTcgDecks,
   recordBattleResult,
   recordBotWin,
+  saveTcgReplay,
 } from "./lib/supabase";
 
 const UUID_RE =
@@ -67,6 +68,8 @@ export default class LorBattleServer implements Party.Server {
   private resultRecorded = false;
   // Phase 3.85 : anti-double recordBotWin (mode bot uniquement).
   private questRecorded = false;
+  // Phase 8.0 : timestamp de début de partie (pour duration replay).
+  private battleStartTs: number | null = null;
 
   constructor(readonly room: Party.Room) {
     this.rankedMode = room.id.startsWith("ranked-");
@@ -256,6 +259,8 @@ export default class LorBattleServer implements Party.Server {
     this.deckNames = [p0Deck.name ?? null, p1Deck.name ?? null];
     this.seatAuthIds = [p0.authId, p1.authId];
     this.seatUsernames = [p0.username, p1.username];
+    // Phase 8.0 : timestamp pour duration replay.
+    this.battleStartTs = Date.now();
     this.broadcastState();
   }
 
@@ -384,6 +389,23 @@ export default class LorBattleServer implements Party.Server {
     const loserAuth = this.seatAuthIds[loserIdx];
     if (!winnerAuth || !loserAuth) return;
     this.resultRecorded = true;
+    // Phase 8.0 : save replay (log + duration) en parallèle de
+    // recordBattleResult. Le replay est consultable via /play/tcg/lol/replays.
+    const durationSeconds = this.battleStartTs
+      ? Math.floor((Date.now() - this.battleStartTs) / 1000)
+      : 0;
+    void saveTcgReplay(this.room, {
+      gameId: "lol",
+      winnerId: winnerAuth,
+      loserId: loserAuth,
+      winnerUsername: this.seatUsernames[winnerIdx],
+      loserUsername: this.seatUsernames[loserIdx],
+      winnerDeckName: this.deckNames[winnerIdx],
+      loserDeckName: this.deckNames[loserIdx],
+      ranked: this.rankedMode,
+      durationSeconds,
+      log: this.state.log,
+    }).catch(() => {});
     void recordBattleResult(this.room, {
       gameId: "lol",
       winnerId: winnerAuth,
