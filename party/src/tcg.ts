@@ -133,21 +133,50 @@ const STARTER_CARD_IDS: string[] = (() => {
 })();
 const STARTER_COPIES = 2;
 
-type SlotKind = "regular-low" | "regular-high" | "rare";
+type SlotKind =
+  | "regular-core"
+  | "regular-mid"
+  | "regular-upper"
+  | "regular-high"
+  | "rare";
 
-// Pack rarity slots : 5 cartes/pack, 3 niveaux de distribution.
-// Inspiré de Pokémon TCG Pocket mais plus généreux (les ★/👑 restent rares
-// mais plus accessibles, et les 2 derniers slots tirent du ◆◆◆ minimum).
+// Pack rarity slots : 10 cartes/pack, 5 niveaux de distribution.
+// Inspiré de Pokémon TCG papier (escalation des slots) :
 //
-//   • REGULAR_LOW  → slots 1, 2, 3 (90/9/1)
-//   • REGULAR_HIGH → slot 4         (76% ◆◆◆ + 20% ◆◆◆◆ + chance d'étoiles)
-//   • RARE_SLOT    → slot 5         (70% ◆◆◆ + 23.5% ◆◆◆◆ + plus d'étoiles
-//                                    + plus de couronnes)
-const REGULAR_LOW_WEIGHTS: Record<TcgRarity, number> = {
-  "diamond-1": 90,
-  "diamond-2": 9,
-  "diamond-3": 1,
+//   • REGULAR_CORE  → slots 1-4 : ◆ pur (commune garantie, drama d'ouverture)
+//   • REGULAR_MID   → slots 5-7 : ◆ dominant + chance ◆◆ + petite chance ◆◆◆
+//   • REGULAR_UPPER → slot 8    : ◆◆ dominant + chance ◆◆◆ + petite chance ◆◆◆◆
+//   • REGULAR_HIGH  → slot 9    : ◆◆ + ◆◆◆ + chance d'étoiles
+//   • RARE_SLOT     → slot 10   : ◆◆◆ garanti + ◆◆◆◆ + plus d'étoiles + couronne
+const REGULAR_CORE_WEIGHTS: Record<TcgRarity, number> = {
+  "diamond-1": 100,
+  "diamond-2": 0,
+  "diamond-3": 0,
   "diamond-4": 0,
+  "star-1": 0,
+  "star-2": 0,
+  "star-3": 0,
+  crown: 0,
+  promo: 0,
+};
+
+const REGULAR_MID_WEIGHTS: Record<TcgRarity, number> = {
+  "diamond-1": 70,
+  "diamond-2": 28,
+  "diamond-3": 2,
+  "diamond-4": 0,
+  "star-1": 0,
+  "star-2": 0,
+  "star-3": 0,
+  crown: 0,
+  promo: 0,
+};
+
+const REGULAR_UPPER_WEIGHTS: Record<TcgRarity, number> = {
+  "diamond-1": 0,
+  "diamond-2": 80,
+  "diamond-3": 18,
+  "diamond-4": 2,
   "star-1": 0,
   "star-2": 0,
   "star-3": 0,
@@ -180,18 +209,46 @@ const RARE_SLOT_WEIGHTS: Record<TcgRarity, number> = {
 };
 
 // ─── Weights One Piece TCG ─────────────────────────────────────────────────
-// Distribution par slot (6 cartes/pack — packSize=6). Raretés Bandai :
+// Distribution par slot (10 cartes/pack — packSize=10). Raretés Bandai :
 //   c=Common, uc=Uncommon, r=Rare, sr=Super Rare, sec=Secret Rare,
 //   l=Leader, sp=Special/Alt-Art, tr=Treasure Rare, p=Promo, don=DON!!.
 //
-//   • OP_REGULAR_LOW   → slots 1-3 : commune dominante, peu d'UC
-//   • OP_REGULAR_HIGH  → slots 4-5 : UC + R + chance de SR/SEC
-//   • OP_RARE_SLOT     → slot 6   : R + SR + petite chance de SEC/SP/L/TR
-const OP_REGULAR_LOW_WEIGHTS: Record<OnePieceRarity, number> = {
-  c: 80,
-  uc: 18,
+//   • OP_REGULAR_CORE  → slots 1-4 : C pur
+//   • OP_REGULAR_MID   → slots 5-7 : C dominant + chance UC + petit % R
+//   • OP_REGULAR_UPPER → slot 8   : UC dominant + chance R + petit % SR
+//   • OP_REGULAR_HIGH  → slot 9   : UC + R + chance SR/SEC/L/SP
+//   • OP_RARE_SLOT     → slot 10  : R + SR + chance SEC/SP/L/TR
+const OP_REGULAR_CORE_WEIGHTS: Record<OnePieceRarity, number> = {
+  c: 100,
+  uc: 0,
+  r: 0,
+  sr: 0,
+  sec: 0,
+  l: 0,
+  p: 0,
+  tr: 0,
+  sp: 0,
+  don: 0,
+};
+
+const OP_REGULAR_MID_WEIGHTS: Record<OnePieceRarity, number> = {
+  c: 65,
+  uc: 33,
   r: 2,
   sr: 0,
+  sec: 0,
+  l: 0,
+  p: 0,
+  tr: 0,
+  sp: 0,
+  don: 0,
+};
+
+const OP_REGULAR_UPPER_WEIGHTS: Record<OnePieceRarity, number> = {
+  c: 0,
+  uc: 75,
+  r: 23,
+  sr: 2,
   sec: 0,
   l: 0,
   p: 0,
@@ -233,15 +290,37 @@ const OP_RARE_SLOT_WEIGHTS: Record<OnePieceRarity, number> = {
 // grand). Raretés Riot : Common, Rare, Epic, Champion. None est exclu
 // (tokens non-collectibles). Variantes Holographic/Prismatic ultra-rares.
 //
-//   • LOR_REGULAR_LOW   → slots 1-13 : Common dominant
+//   • LOR_REGULAR_CORE  → slots 1-7  : Common pur
+//   • LOR_REGULAR_MID   → slots 8-11 : Common dominant + chance Rare + petit % Epic
+//   • LOR_REGULAR_UPPER → slots 12-13: Rare dominant + chance Common + chance Epic
 //   • LOR_REGULAR_HIGH  → slot 14    : Rare dominant + ~8% Champion + 2% Holo
 //   • LOR_RARE_SLOT     → slot 15    : Rare+ garanti + ~18% Champion + 12% ultra-rare
 //
-// Taux global Champion par pack ≈ 26% (8% slot 14 + 18% slot 15, indépendants).
-const LOR_REGULAR_LOW_WEIGHTS: Record<RuneterraRarity, number> = {
-  Common: 90,
-  Rare: 9,
-  Epic: 1,
+// Taux global Champion par pack ≈ 25%.
+const LOR_REGULAR_CORE_WEIGHTS: Record<RuneterraRarity, number> = {
+  Common: 100,
+  Rare: 0,
+  Epic: 0,
+  Champion: 0,
+  Holographic: 0,
+  Prismatic: 0,
+  None: 0,
+};
+
+const LOR_REGULAR_MID_WEIGHTS: Record<RuneterraRarity, number> = {
+  Common: 70,
+  Rare: 28,
+  Epic: 2,
+  Champion: 0,
+  Holographic: 0,
+  Prismatic: 0,
+  None: 0,
+};
+
+const LOR_REGULAR_UPPER_WEIGHTS: Record<RuneterraRarity, number> = {
+  Common: 30,
+  Rare: 65,
+  Epic: 5,
   Champion: 0,
   Holographic: 0,
   Prismatic: 0,
@@ -267,6 +346,36 @@ const LOR_RARE_SLOT_WEIGHTS: Record<RuneterraRarity, number> = {
   Prismatic: 2,
   None: 0,
 };
+
+// ─── Layout des slots par jeu ──────────────────────────────────────────────
+// Combien de slots core/mid/upper avant les 2 slots fixes (high + rare).
+//   • core  : tier 1 (commune pure, "drama d'ouverture")
+//   • mid   : tier 2 (commune dominante + chance d'uncommon)
+//   • upper : tier 3 (uncommon dominant + chance de rare)
+// Les 2 derniers slots sont toujours regular-high puis rare.
+//
+// Total = core + mid + upper + 2 (high + rare) = packSize.
+const PACK_LAYOUT: Record<
+  TcgGameId,
+  { core: number; mid: number; upper: number }
+> = {
+  pokemon: { core: 4, mid: 3, upper: 1 }, // 4+3+1+1+1 = 10
+  onepiece: { core: 4, mid: 3, upper: 1 }, // 4+3+1+1+1 = 10
+  lol: { core: 7, mid: 4, upper: 2 }, // 7+4+2+1+1 = 15
+};
+
+function getSlotKind(
+  gameId: TcgGameId,
+  slotIndex: number,
+  packSize: number,
+): SlotKind {
+  if (slotIndex === packSize - 1) return "rare";
+  if (slotIndex === packSize - 2) return "regular-high";
+  const layout = PACK_LAYOUT[gameId];
+  if (slotIndex < layout.core) return "regular-core";
+  if (slotIndex < layout.core + layout.mid) return "regular-mid";
+  return "regular-upper";
+}
 
 export default class TcgServer implements Party.Server {
   private connInfo = new Map<string, ConnInfo>();
@@ -935,18 +1044,12 @@ export default class TcgServer implements Party.Server {
       this.sendTo(conn, { type: "gold-update", gold: info.gold });
     }
 
-    // Distribution des slots : les N-2 premiers slots tirent du REGULAR_LOW,
-    // l'avant-dernier du REGULAR_HIGH et le dernier du RARE_SLOT. Les
-    // raretés sont propres au jeu (Pokémon : ◆/◆◆/★/👑 ; One Piece :
-    // C/UC/R/SR/SEC/SP/L/TR).
+    // Distribution des slots en 5 tiers (core/mid/upper/high/rare) — voir
+    // PACK_LAYOUT et getSlotKind() ci-dessus pour la répartition exacte par jeu.
+    // Le pack escalade en intérêt : core (commune pure) → mid → upper → high → rare.
     const cardIds: string[] = [];
     for (let i = 0; i < game.packSize; i++) {
-      const slotKind: SlotKind =
-        i === game.packSize - 1
-          ? "rare"
-          : i === game.packSize - 2
-            ? "regular-high"
-            : "regular-low";
+      const slotKind: SlotKind = getSlotKind(this.gameId, i, game.packSize);
       if (this.gameId === "pokemon") {
         cardIds.push(this.drawCard(pokemonThemed!, slotKind).id);
       } else if (this.gameId === "onepiece") {
@@ -1020,7 +1123,11 @@ export default class TcgServer implements Party.Server {
         ? OP_RARE_SLOT_WEIGHTS
         : slotKind === "regular-high"
           ? OP_REGULAR_HIGH_WEIGHTS
-          : OP_REGULAR_LOW_WEIGHTS;
+          : slotKind === "regular-upper"
+            ? OP_REGULAR_UPPER_WEIGHTS
+            : slotKind === "regular-mid"
+              ? OP_REGULAR_MID_WEIGHTS
+              : OP_REGULAR_CORE_WEIGHTS;
     const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
     let chosen: OnePieceRarity = "c";
@@ -1070,7 +1177,11 @@ export default class TcgServer implements Party.Server {
         ? LOR_RARE_SLOT_WEIGHTS
         : slotKind === "regular-high"
           ? LOR_REGULAR_HIGH_WEIGHTS
-          : LOR_REGULAR_LOW_WEIGHTS;
+          : slotKind === "regular-upper"
+            ? LOR_REGULAR_UPPER_WEIGHTS
+            : slotKind === "regular-mid"
+              ? LOR_REGULAR_MID_WEIGHTS
+              : LOR_REGULAR_CORE_WEIGHTS;
     const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
     let chosen: RuneterraRarity = "Common";
@@ -1115,7 +1226,11 @@ export default class TcgServer implements Party.Server {
         ? RARE_SLOT_WEIGHTS
         : slotKind === "regular-high"
           ? REGULAR_HIGH_WEIGHTS
-          : REGULAR_LOW_WEIGHTS;
+          : slotKind === "regular-upper"
+            ? REGULAR_UPPER_WEIGHTS
+            : slotKind === "regular-mid"
+              ? REGULAR_MID_WEIGHTS
+              : REGULAR_CORE_WEIGHTS;
     const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
     let chosen: TcgRarity = "diamond-1";
