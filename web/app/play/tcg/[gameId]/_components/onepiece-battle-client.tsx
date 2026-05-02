@@ -263,7 +263,7 @@ export function OnePieceBattleClient({
       </header>
 
       <main
-        className={`relative flex flex-1 flex-col gap-3 overflow-y-auto p-2 sm:gap-4 sm:p-4 ${game.gradient}`}
+        className={`relative flex flex-1 flex-col gap-2 overflow-y-auto p-2 sm:gap-3 sm:p-3 ${game.gradient}`}
       >
         {/* Playmat illustré OnePiece : grain + vagues Hokusai + halo
             radial top/bottom + boussole décorative + Joly Roger en
@@ -313,33 +313,26 @@ export function OnePieceBattleClient({
         >
           🏴‍☠️
         </div>
-        <div className="relative z-10 flex flex-1 flex-col gap-3 sm:gap-4">
+        <div className="relative z-10 flex flex-1 flex-col gap-2 sm:gap-3">
         {!profile ? (
           <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
             Connecte-toi pour rejoindre la partie.
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Pills info compactes — sans bouton fin de tour (qu'on isole
+                en sticky bottom-right pour l'affordance). */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
               <Pill label="Room" value={roomId} />
-              <Pill label="Connexion" value={status} />
+              <Pill label="Conn" value={status} />
               <Pill label="Siège" value={selfSeat ?? "—"} />
               <Pill label="Phase" value={state?.phase ?? "—"} />
               <Pill label="Tour" value={String(state?.turnNumber ?? 0)} />
-              {state?.phase === "playing" &&
-                state.activeSeat === state.selfSeat && (
-                  <button
-                    onClick={() => send({ type: "op-end-turn" })}
-                    className="ml-auto rounded-md bg-emerald-500 px-4 py-1.5 text-sm font-bold text-emerald-950 shadow hover:bg-emerald-400"
-                  >
-                    🏁 Fin de tour
-                  </button>
-                )}
               <a
                 href="/play/tcg/onepiece/regles"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-amber-200 hover:bg-amber-400/20"
+                className="ml-auto rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-amber-200 hover:bg-amber-400/20"
                 title="Ouvre les règles dans un nouvel onglet"
               >
                 📖 Règles
@@ -354,12 +347,7 @@ export function OnePieceBattleClient({
               </button>
               <button
                 onClick={concede}
-                className={
-                  state?.phase === "playing" &&
-                  state.activeSeat === state.selfSeat
-                    ? "rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-rose-200 hover:bg-rose-500/20"
-                    : "ml-auto rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-rose-200 hover:bg-rose-500/20"
-                }
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
               >
                 Abandonner
               </button>
@@ -419,29 +407,43 @@ export function OnePieceBattleClient({
               </div>
             )}
 
-            {state?.phase === "playing" && (
-              <div className="rounded-md border border-emerald-400/30 bg-emerald-400/5 p-3 text-xs text-emerald-200">
-                ⚔️ Tour {state.turnNumber} ·{" "}
-                {state.activeSeat === state.selfSeat
-                  ? "à toi de jouer"
-                  : "tour adverse"}{" "}
-                · phase {state.turnPhase}
-                {state.deadlineMs != null && (
-                  <DeadlineCountdown deadlineMs={state.deadlineMs} />
-                )}
-                {attackerSelected && (
-                  <span className="ml-2 text-amber-300">
-                    🎯 Choisis une cible (Leader adverse ou Personnage épuisé) —{" "}
-                    <button
-                      onClick={() => setAttackerSelected(null)}
-                      className="underline"
-                    >
-                      annuler
-                    </button>
+            {state?.phase === "playing" && (() => {
+              const myTurn = state.activeSeat === state.selfSeat;
+              return (
+                <motion.div
+                  animate={
+                    myTurn
+                      ? { boxShadow: ["0 0 0 rgba(52,211,153,0)", "0 0 18px rgba(52,211,153,0.4)", "0 0 0 rgba(52,211,153,0)"] }
+                      : {}
+                  }
+                  transition={{ duration: 2, repeat: myTurn ? Infinity : 0 }}
+                  className={`flex flex-wrap items-center gap-3 rounded-md border p-2.5 text-sm ${
+                    myTurn
+                      ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-100"
+                      : "border-rose-500/40 bg-rose-950/40 text-rose-200"
+                  }`}
+                >
+                  <span className="font-bold">
+                    {myTurn ? "🟢 À toi de jouer" : "🔴 Tour adverse"}
                   </span>
-                )}
-              </div>
-            )}
+                  <span className="text-xs text-zinc-300/80">
+                    Tour {state.turnNumber} · {state.turnPhase}
+                  </span>
+                  <DeadlineCountdown deadlineMs={state.deadlineMs ?? null} />
+                  {attackerSelected && (
+                    <span className="ml-auto rounded bg-amber-500/20 px-2 py-1 text-xs font-semibold text-amber-200">
+                      🎯 Choisis une cible{" "}
+                      <button
+                        onClick={() => setAttackerSelected(null)}
+                        className="underline hover:text-amber-100"
+                      >
+                        annuler
+                      </button>
+                    </span>
+                  )}
+                </motion.div>
+              );
+            })()}
 
             {/* Pending attack panel : visible aux deux joueurs, actions
                 pour le défenseur uniquement. */}
@@ -569,7 +571,7 @@ export function OnePieceBattleClient({
               })()}
 
             {state && state.self && (
-              <div className="sticky bottom-0 -mx-2 mt-2 rounded-md border border-amber-400/30 bg-zinc-950/95 p-3 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] backdrop-blur sm:-mx-4">
+              <div className="sticky bottom-0 -mx-2 mt-2 rounded-md border border-amber-400/30 bg-zinc-950/95 p-2 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] backdrop-blur sm:-mx-4 sm:p-3">
                 <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-widest text-zinc-400">
                   <span className="font-bold text-amber-200">
                     🃏 Ma main ({state.self.handCount} cartes)
@@ -582,7 +584,9 @@ export function OnePieceBattleClient({
                       </span>
                     )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {/* Single-row horizontal scroll : permet de garder une seule
+                    rangée même avec 7+ cartes en main, sans écraser le board. */}
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                   <AnimatePresence mode="popLayout">
                   {state.self.hand.map((cardId, i) => {
                     const meta = ONEPIECE_BASE_SET_BY_ID.get(cardId);
@@ -622,7 +626,7 @@ export function OnePieceBattleClient({
                         exit={{ opacity: 0, y: -20, scale: 0.6 }}
                         transition={{ duration: 0.2 }}
                         key={`${cardId}-${i}`}
-                        className="flex w-16 flex-col gap-1 sm:w-20 md:w-24"
+                        className="flex w-24 shrink-0 flex-col gap-1 sm:w-28 lg:w-32 xl:w-36"
                       >
                         {meta ? (
                           <CardPreview
@@ -637,11 +641,11 @@ export function OnePieceBattleClient({
                             <img
                               src={meta.image}
                               alt={meta.name}
-                              className="h-32 w-full rounded object-contain"
+                              className="h-36 w-full rounded object-contain sm:h-40 lg:h-44 xl:h-48"
                             />
                           </CardPreview>
                         ) : (
-                          <div className="rounded border border-white/10 bg-zinc-950 h-32" />
+                          <div className="h-36 w-full rounded border border-white/10 bg-zinc-950 sm:h-40 lg:h-44 xl:h-48" />
                         )}
                         {meta?.kind === "character" && (
                           <button
@@ -652,7 +656,7 @@ export function OnePieceBattleClient({
                               })
                             }
                             disabled={!canPlayCharacter}
-                            className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             title={
                               canPlayCharacter
                                 ? `Jouer (coût ${meta.cost})`
@@ -671,7 +675,7 @@ export function OnePieceBattleClient({
                               })
                             }
                             disabled={!canPlayEvent}
-                            className="rounded border border-cyan-500/40 bg-cyan-500/10 px-1 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-1 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             title={
                               canPlayEvent
                                 ? `Jouer Évent (coût ${meta.cost})`
@@ -683,7 +687,7 @@ export function OnePieceBattleClient({
                         )}
                         {meta?.kind === "event" && isCounterEvent && (
                           <span
-                            className="rounded border border-amber-500/30 bg-amber-500/5 px-1 py-0.5 text-center text-[9px] text-amber-300/80"
+                            className="rounded border border-amber-500/30 bg-amber-500/5 px-1.5 py-1 text-center text-xs text-amber-300/80"
                             title="Évent [Contre] — jouable seulement en défense"
                           >
                             ⚔️ Counter
@@ -698,7 +702,7 @@ export function OnePieceBattleClient({
                               })
                             }
                             disabled={!canPlayStage}
-                            className="rounded border border-purple-500/40 bg-purple-500/10 px-1 py-0.5 text-[10px] text-purple-200 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded border border-purple-500/40 bg-purple-500/10 px-1.5 py-1 text-xs font-semibold text-purple-200 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             title={
                               canPlayStage
                                 ? `Poser Lieu (coût ${meta.cost})`
@@ -709,7 +713,7 @@ export function OnePieceBattleClient({
                           </button>
                         )}
                         {meta?.kind === "leader" && (
-                          <span className="text-center text-[9px] text-rose-300">
+                          <span className="text-center text-xs text-rose-300">
                             Leader
                           </span>
                         )}
@@ -721,24 +725,35 @@ export function OnePieceBattleClient({
               </div>
             )}
 
-            {/* Journal du combat (chat retiré : utiliser le chat global
-                du site en sidebar). */}
-            <div className="rounded-md border border-white/10 bg-black/30 p-3">
-              <div className="mb-2 text-[11px] uppercase tracking-widest text-zinc-400">
-                Journal du combat
-              </div>
-              <ul className="max-h-48 space-y-0.5 overflow-y-auto text-xs text-zinc-300">
-                {(state?.log ?? []).slice(-30).map((line, i) => (
-                  <li key={i} className="leading-relaxed">
-                    · {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {/* Journal du combat — bouton collapse pour libérer de la
+                place sur le board quand le joueur a déjà compris l'action.
+                Auto-scroll vers le dernier log. */}
+            <BattleLog log={state?.log ?? []} />
 
           </>
         )}
         </div>
+
+        {/* Bouton "Fin de tour" isolé en flottant bottom-right.
+            Visible uniquement quand c'est mon tour en phase main, sans
+            attaque/trigger en cours. C'est l'action centrale du joueur ;
+            isoler ce bouton évite qu'il se perde dans la barre de pills. */}
+        {state?.phase === "playing" &&
+          state.activeSeat === state.selfSeat &&
+          state.turnPhase === "main" &&
+          !state.pendingAttack &&
+          !state.pendingTrigger &&
+          !state.pendingChoice && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={() => send({ type: "op-end-turn" })}
+              className="fixed bottom-44 right-4 z-30 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 px-5 py-3 text-base font-extrabold text-emerald-950 shadow-[0_8px_32px_rgba(16,185,129,0.5)] hover:from-emerald-400 hover:to-emerald-500 sm:bottom-48 lg:bottom-52"
+              aria-label="Terminer mon tour"
+            >
+              🏁 Fin de tour
+            </motion.button>
+          )}
       </main>
     </div>
   );
@@ -749,6 +764,45 @@ function Pill({ label, value }: { label: string; value: string }) {
     <span className="rounded border border-white/10 bg-black/40 px-2 py-1 text-zinc-300">
       <span className="text-zinc-500">{label}:</span> {value}
     </span>
+  );
+}
+
+/** Journal du combat — collapsible avec auto-scroll vers le dernier log
+ *  et bouton pour libérer de la place sur le board quand pas utilisé. */
+function BattleLog({ log }: { log: string[] }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const listRef = useRef<HTMLUListElement | null>(null);
+  // Auto-scroll vers le bas à chaque nouveau log.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [log.length]);
+  return (
+    <div className="rounded-md border border-white/10 bg-black/30">
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex w-full items-center justify-between px-3 py-2 text-[11px] uppercase tracking-widest text-zinc-400 hover:bg-white/5"
+        aria-expanded={!collapsed}
+        aria-label={
+          collapsed ? "Déplier le journal" : "Replier le journal"
+        }
+      >
+        <span>📜 Journal du combat ({log.length})</span>
+        <span className="text-zinc-500">{collapsed ? "▶" : "▼"}</span>
+      </button>
+      {!collapsed && (
+        <ul
+          ref={listRef}
+          className="max-h-40 space-y-0.5 overflow-y-auto px-3 pb-2 text-xs text-zinc-300"
+        >
+          {log.slice(-30).map((line, i) => (
+            <li key={i} className="leading-relaxed">
+              · {line}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -782,7 +836,7 @@ function PlayerPanel({
   const targetMode = !!attackerSelected && !!onPickTarget;
   return (
     <div
-      className={`flex flex-col gap-2 rounded-md border bg-black/30 p-3 ${
+      className={`flex flex-col gap-2 rounded-md border bg-black/30 p-2 sm:p-3 ${
         isActive ? "border-emerald-400/40" : "border-white/10"
       }`}
     >
@@ -804,6 +858,13 @@ function PlayerPanel({
             {data.leader && (() => {
               const leaderMeta = ONEPIECE_BASE_SET_BY_ID.get(data.leader.cardId);
               if (!leaderMeta) return null;
+              const leaderRested = data.leader.rested;
+              const leaderCanBeAttacker =
+                isSelf && canAttack && !leaderRested;
+              const leaderPower =
+                leaderMeta.kind === "leader"
+                  ? leaderMeta.power + data.leader.attachedDon * 1000
+                  : 0;
               return (
                 <div className="flex flex-col items-center gap-1">
                   <CardPreview
@@ -811,142 +872,186 @@ function PlayerPanel({
                     imageUrl={leaderMeta.image}
                     name={leaderMeta.name}
                     effect={leaderMeta.effect}
-                    className={`relative w-24 rounded-md border-2 transition-transform sm:w-28 md:w-32 ${
-                      data.leader.rested
-                        ? "border-zinc-500/60 grayscale"
+                    className={`relative w-28 rounded-md border-2 transition-all sm:w-32 lg:w-36 xl:w-40 ${
+                      leaderRested
+                        ? "border-zinc-500/60"
                         : "border-rose-400/80 shadow-[0_0_24px_rgba(251,113,133,0.3)]"
                     } ${
                       targetMode
                         ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
-                        : "cursor-default"
-                    } ${attackerSelected === "leader" && isSelf ? "ring-2 ring-emerald-400" : ""}`}
+                        : leaderCanBeAttacker
+                          ? "cursor-pointer ring-2 ring-rose-400/0 hover:ring-rose-400/80 hover:scale-105"
+                          : "cursor-default"
+                    } ${attackerSelected === "leader" && isSelf ? "scale-105 ring-2 ring-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.6)]" : ""}`}
                   >
                     <button
                       onClick={() => {
-                        if (targetMode && onPickTarget) onPickTarget("leader");
+                        if (targetMode && onPickTarget) {
+                          onPickTarget("leader");
+                        } else if (leaderCanBeAttacker && onPickAttacker) {
+                          onPickAttacker("leader");
+                        }
                       }}
-                      disabled={!targetMode}
+                      disabled={!targetMode && !leaderCanBeAttacker}
                       className="block w-full"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={leaderMeta.image}
                         alt={leaderMeta.name}
-                        className={`h-36 w-full rounded object-contain sm:h-40 md:h-44 ${
-                          data.leader.rested ? "rotate-90" : ""
+                        className={`h-40 w-full rounded object-contain transition-transform sm:h-48 lg:h-52 xl:h-56 ${
+                          leaderRested ? "rotate-90 grayscale" : ""
                         }`}
                       />
                       {/* Badge "LEADER" parchemin doré */}
-                      <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 rounded-full border-2 border-amber-300/90 bg-gradient-to-br from-amber-400 to-amber-600 px-2 py-0.5 text-[8px] font-extrabold tracking-widest text-amber-950 shadow-md">
+                      <div className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 rounded-full border-2 border-amber-300/90 bg-gradient-to-br from-amber-400 to-amber-600 px-2 py-0.5 text-[10px] font-extrabold tracking-widest text-amber-950 shadow-md">
                         ⭐ LEADER
                       </div>
+                      {/* Power affiché en bas-gauche, gros et lisible */}
+                      <span className="absolute bottom-0 left-0 rounded-tr bg-black/85 px-1.5 py-0.5 text-base font-bold text-amber-200 tabular-nums shadow">
+                        {leaderPower.toLocaleString("fr-FR")}
+                      </span>
                       {data.leader.attachedDon > 0 && (
                         <motion.span
                           key={data.leader.attachedDon}
                           initial={{ scale: 1.5 }}
                           animate={{ scale: 1 }}
                           transition={{ duration: 0.3 }}
-                          className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-200 bg-gradient-to-br from-amber-300 to-amber-600 text-[10px] font-extrabold text-amber-950 shadow-lg"
+                          className="absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-amber-200 bg-gradient-to-br from-amber-300 to-amber-600 text-xs font-extrabold text-amber-950 shadow-lg"
                         >
                           +{data.leader.attachedDon}
                         </motion.span>
                       )}
+                      {/* Watermark "ÉPUISÉ" si rested */}
+                      {leaderRested && (
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-zinc-100">
+                          <span className="rounded bg-zinc-900/85 px-2 py-1">
+                            Épuisé
+                          </span>
+                        </span>
+                      )}
                     </button>
                   </CardPreview>
-                  {isSelf && canAttack && data.leader && !data.leader.rested && (
-                    <button
-                      onClick={() => onPickAttacker?.("leader")}
-                      className="rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[9px] text-rose-200 hover:bg-rose-500/20"
-                    >
-                      ⚔️ Attaquer
-                    </button>
-                  )}
                 </div>
               );
             })()}
-            <div className="flex flex-1 flex-col gap-2 text-[11px] text-zinc-300">
-              {/* Vies : pile de cartes face-cachée */}
-              <div className="flex items-center gap-1">
-                <span className="text-[9px] uppercase tracking-widest text-zinc-500">
+            <div className="flex flex-1 flex-col gap-3 text-xs text-zinc-300">
+              {/* Vies : compteur gros + cœur, plus lisible que pile écrasée */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500">
                   Vie
                 </span>
-                <div className="flex h-7 items-center">
-                  {Array.from({ length: data.life }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="-ml-2 h-7 w-5 rounded-sm border border-rose-500/60 bg-gradient-to-br from-rose-900 via-rose-700 to-rose-900 shadow-[inset_0_0_8px_rgba(0,0,0,0.5)] first:ml-0"
-                      style={{ transform: `rotate(${(i - 1) * 1.5}deg)` }}
-                      title={`Vie ${i + 1}`}
-                    />
-                  ))}
-                  {data.life === 0 && (
-                    <span className="text-rose-400 text-base">💀</span>
+                <div className="flex items-center gap-1">
+                  {data.life === 0 ? (
+                    <span className="text-2xl">💀</span>
+                  ) : (
+                    <span className="text-2xl">❤️</span>
                   )}
+                  <span className="text-2xl font-extrabold text-rose-300 tabular-nums">
+                    {data.life}
+                  </span>
                 </div>
-                <span className="text-rose-300 font-bold">{data.life}</span>
+                {/* Mini-pile décorative à droite (option visuelle) */}
+                {data.life > 0 && (
+                  <div className="flex h-8 items-center" aria-hidden="true">
+                    {Array.from({ length: Math.min(data.life, 6) }).map(
+                      (_, i) => (
+                        <div
+                          key={i}
+                          className="-ml-2 h-8 w-6 rounded-sm border border-rose-500/60 bg-gradient-to-br from-rose-900 via-rose-700 to-rose-900 shadow-[inset_0_0_8px_rgba(0,0,0,0.5)] first:ml-0"
+                          style={{ transform: `rotate(${(i - 1) * 1.5}deg)` }}
+                        />
+                      ),
+                    )}
+                  </div>
+                )}
                 {data.faceUpLifeCardIds.length > 0 && (
-                  <span className="text-[9px] text-amber-300" title="Vies face-up">
+                  <span
+                    className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-300"
+                    title="Vies face-up (révélées)"
+                  >
                     👁 {data.faceUpLifeCardIds.length}
                   </span>
                 )}
               </div>
 
-              {/* DON : jetons dorés */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] uppercase tracking-widest text-zinc-500">
+              {/* DON : jetons dorés plus gros + compteur très lisible */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500">
                   DON
                 </span>
-                <div className="flex flex-wrap items-center gap-0.5">
+                <div className="flex flex-wrap items-center gap-1">
                   {Array.from({ length: data.donActive }).map((_, i) => (
                     <span
                       key={`act-${i}`}
-                      className="inline-block h-3 w-3 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 ring-1 ring-amber-200 shadow-sm"
+                      className="inline-block h-4 w-4 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 ring-1 ring-amber-200 shadow"
                       title="DON prête"
                     />
                   ))}
                   {Array.from({ length: data.donRested }).map((_, i) => (
                     <span
                       key={`rest-${i}`}
-                      className="inline-block h-3 w-3 rounded-full bg-gradient-to-br from-zinc-500 to-zinc-700 ring-1 ring-zinc-400 shadow-sm opacity-60"
+                      className="inline-block h-4 w-4 rounded-full bg-gradient-to-br from-zinc-500 to-zinc-700 ring-1 ring-zinc-400 shadow opacity-50"
                       title="DON épuisée"
                     />
                   ))}
                 </div>
-                <span className="ml-1 text-[10px] text-zinc-400">
-                  ({data.donActive}/{data.donActive + data.donRested + data.donDeckSize})
+                <span className="ml-1 text-sm font-bold text-amber-200 tabular-nums">
+                  {data.donActive}
+                </span>
+                <span className="text-[10px] text-zinc-500 tabular-nums">
+                  /{data.donActive + data.donRested + data.donDeckSize}
                 </span>
               </div>
 
-              {/* Deck / Défausse : piles 3D-ish */}
+              {/* Deck / Défausse / Main : piles plus grandes, compteurs lisibles */}
               <div className="flex items-center gap-3">
-                <div className="flex flex-col items-center gap-0.5" title={`${data.deckSize} cartes`}>
-                  <div className="relative h-9 w-7">
-                    <div className="absolute left-0.5 top-0.5 h-9 w-7 rounded-sm border border-indigo-500/40 bg-gradient-to-br from-indigo-900 to-indigo-950" />
-                    <div className="absolute left-0 top-0 h-9 w-7 rounded-sm border border-indigo-500/60 bg-gradient-to-br from-indigo-800 via-indigo-900 to-indigo-950 flex items-center justify-center text-[8px] font-bold text-indigo-200">
+                <div
+                  className="flex flex-col items-center gap-0.5"
+                  title={`Deck : ${data.deckSize} cartes`}
+                >
+                  <div className="relative h-14 w-10">
+                    <div className="absolute left-0.5 top-0.5 h-14 w-10 rounded border border-indigo-500/40 bg-gradient-to-br from-indigo-900 to-indigo-950" />
+                    <div className="absolute left-0 top-0 flex h-14 w-10 items-center justify-center rounded border border-indigo-500/60 bg-gradient-to-br from-indigo-800 via-indigo-900 to-indigo-950 text-sm font-bold text-indigo-200 tabular-nums">
                       {data.deckSize}
                     </div>
                   </div>
-                  <span className="text-[8px] text-zinc-500">Deck</span>
+                  <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    Deck
+                  </span>
                 </div>
-                <div className="flex flex-col items-center gap-0.5" title={`${data.discardSize} cartes`}>
-                  <div className="relative h-9 w-7">
+                <div
+                  className="flex flex-col items-center gap-0.5"
+                  title={`Défausse : ${data.discardSize} cartes`}
+                >
+                  <div className="relative h-14 w-10">
                     {data.discardSize > 0 && (
-                      <div className="absolute left-0.5 top-0.5 h-9 w-7 rounded-sm border border-zinc-600/40 bg-zinc-800" />
+                      <div className="absolute left-0.5 top-0.5 h-14 w-10 rounded border border-zinc-600/40 bg-zinc-800" />
                     )}
-                    <div className="absolute left-0 top-0 h-9 w-7 rounded-sm border border-zinc-600/60 bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center text-[8px] font-bold text-zinc-300">
+                    <div className="absolute left-0 top-0 flex h-14 w-10 items-center justify-center rounded border border-zinc-600/60 bg-gradient-to-br from-zinc-700 to-zinc-900 text-sm font-bold text-zinc-300 tabular-nums">
                       {data.discardSize}
                     </div>
                   </div>
-                  <span className="text-[8px] text-zinc-500">Défausse</span>
+                  <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    Défausse
+                  </span>
                 </div>
-                <div className="flex flex-col items-center gap-0.5" title={`${data.handCount} cartes`}>
-                  <div className="h-9 w-7 rounded-sm border border-emerald-600/60 bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[8px] font-bold text-emerald-200">
+                <div
+                  className="flex flex-col items-center gap-0.5"
+                  title={`Main : ${data.handCount} cartes`}
+                >
+                  <div className="flex h-14 w-10 items-center justify-center rounded border border-emerald-600/60 bg-gradient-to-br from-emerald-800 to-emerald-950 text-sm font-bold text-emerald-200 tabular-nums">
                     {data.handCount}
                   </div>
-                  <span className="text-[8px] text-zinc-500">Main</span>
+                  <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    Main
+                  </span>
                 </div>
-                <div className="ml-auto text-[10px] text-zinc-500">
-                  {data.characters.length} / 5 Persos
+                <div className="ml-auto text-xs text-zinc-400">
+                  <span className="font-bold tabular-nums text-zinc-200">
+                    {data.characters.length}
+                  </span>
+                  <span className="text-zinc-500"> / 5 Persos</span>
                 </div>
               </div>
 
@@ -956,7 +1061,7 @@ function PlayerPanel({
                     onClick={() =>
                       send({ type: "op-attach-don", targetUid: "leader" })
                     }
-                    className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/20"
+                    className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"
                   >
                     + DON au Leader
                   </button>
@@ -968,7 +1073,7 @@ function PlayerPanel({
                       onClick={() =>
                         send({ type: "op-activate-main", uid: "leader" })
                       }
-                      className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                      className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-1 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
                     >
                       ✨ Activer Leader
                     </button>
@@ -1020,8 +1125,8 @@ function PlayerPanel({
                         : { duration: 0.25 }
                     }
                     key={c.uid}
-                    className={`flex w-14 flex-col gap-1 sm:w-16 md:w-20 ${
-                      c.rested ? "opacity-60" : ""
+                    className={`flex w-20 shrink-0 flex-col gap-1 sm:w-24 lg:w-28 xl:w-32 ${
+                      c.rested ? "opacity-70 saturate-50" : ""
                     } ${
                       pendingAttackTargetUid === c.uid
                         ? "ring-2 ring-rose-500"
@@ -1036,33 +1141,44 @@ function PlayerPanel({
                         name={meta.name}
                         effect={meta.effect}
                         trigger={meta.trigger}
-                        className={`relative rounded border bg-zinc-950 transition-transform ${
+                        className={`relative rounded border bg-zinc-950 transition-all ${
                           c.playedThisTurn
                             ? "border-amber-400/40"
                             : "border-white/10"
                         } ${
                           targetable
                             ? "cursor-crosshair ring-2 ring-amber-400 hover:scale-105"
-                            : "cursor-default"
-                        } ${isSelected ? "ring-2 ring-emerald-400" : ""}`}
+                            : canBeAttacker
+                              ? "cursor-pointer ring-2 ring-rose-400/0 hover:ring-rose-400/80 hover:scale-105"
+                              : "cursor-default"
+                        } ${isSelected ? "scale-105 ring-2 ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)]" : ""}`}
                       >
                         <button
                           onClick={() => {
-                            if (targetable && onPickTarget) onPickTarget(c.uid);
+                            // Toute la carte est cliquable :
+                            // - cible si targetable
+                            // - attaquant si canBeAttacker (mode click-on-card)
+                            if (targetable && onPickTarget) {
+                              onPickTarget(c.uid);
+                            } else if (canBeAttacker && onPickAttacker) {
+                              onPickAttacker(c.uid);
+                            }
                           }}
-                          disabled={!targetable}
+                          disabled={!targetable && !canBeAttacker}
                           className="block w-full"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={meta.image}
                             alt={meta.name}
-                            className={`h-24 w-full rounded object-contain ${
-                              c.rested ? "rotate-90" : ""
+                            className={`h-28 w-full rounded object-contain transition-transform sm:h-32 lg:h-36 xl:h-40 ${
+                              c.rested ? "rotate-90 grayscale" : ""
                             }`}
                           />
-                          <span className="absolute bottom-0 left-0 rounded-tr bg-black/80 px-1 text-[9px] text-amber-200">
-                            {totalPower}
+                          {/* Power total avec breakdown DON. text-sm minimum
+                              pour être lisible. */}
+                          <span className="absolute bottom-0 left-0 rounded-tr bg-black/85 px-1.5 py-0.5 text-sm font-bold text-amber-200 tabular-nums shadow">
+                            {totalPower.toLocaleString("fr-FR")}
                           </span>
                           {c.attachedDon > 0 && (
                             <motion.span
@@ -1070,10 +1186,19 @@ function PlayerPanel({
                               initial={{ scale: 1.5, backgroundColor: "#fef3c7" }}
                               animate={{ scale: 1, backgroundColor: "#fbbf24" }}
                               transition={{ duration: 0.3 }}
-                              className="absolute right-0 top-0 rounded-bl px-1 text-[9px] font-bold text-amber-950"
+                              className="absolute right-0 top-0 rounded-bl bg-amber-400 px-1.5 py-0.5 text-xs font-extrabold text-amber-950 shadow"
                             >
                               +{c.attachedDon}
                             </motion.span>
+                          )}
+                          {/* Watermark "ÉPUISÉ" pour rested — plus clair que
+                              juste la rotation. */}
+                          {c.rested && (
+                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-zinc-200/90">
+                              <span className="rounded bg-zinc-900/80 px-1.5 py-0.5">
+                                Épuisé
+                              </span>
+                            </span>
                           )}
                         </button>
                       </CardPreview>
@@ -1083,17 +1208,9 @@ function PlayerPanel({
                         onClick={() =>
                           send({ type: "op-attach-don", targetUid: c.uid })
                         }
-                        className="rounded border border-amber-500/40 bg-amber-500/10 px-0.5 py-0.5 text-[9px] text-amber-200 hover:bg-amber-500/20"
+                        className="rounded border border-amber-500/40 bg-amber-500/10 px-1 py-0.5 text-xs text-amber-200 hover:bg-amber-500/20"
                       >
                         + DON
-                      </button>
-                    )}
-                    {canBeAttacker && (
-                      <button
-                        onClick={() => onPickAttacker?.(c.uid)}
-                        className="rounded border border-rose-500/40 bg-rose-500/10 px-0.5 py-0.5 text-[9px] text-rose-200 hover:bg-rose-500/20"
-                      >
-                        ⚔️ Attaquer
                       </button>
                     )}
                     {isSelf && canAttachDon &&
@@ -1102,7 +1219,7 @@ function PlayerPanel({
                           onClick={() =>
                             send({ type: "op-activate-main", uid: c.uid })
                           }
-                          className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-0.5 py-0.5 text-[9px] text-fuchsia-200 hover:bg-fuchsia-500/20"
+                          className="rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1 py-0.5 text-xs text-fuchsia-200 hover:bg-fuchsia-500/20"
                         >
                           ✨ Activer
                         </button>
@@ -1155,15 +1272,6 @@ function PlayerPanel({
           })()}
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <span className="text-zinc-500">{label}</span>
-      <span className="text-zinc-200 tabular-nums">{value}</span>
     </div>
   );
 }
@@ -1243,84 +1351,150 @@ function DefensePanel({
       return /\[Contre\]/i.test(eff);
     });
 
+  // Image de la carte attaquante pour mini-preview dans le panel.
+  const attackerMeta = attackerCard
+    ? ONEPIECE_BASE_SET_BY_ID.get(attackerCard)
+    : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95, y: -10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.18 }}
-      className={`rounded-md border p-3 text-xs ${
+      className={`rounded-md border p-3 ${
         isDefender
           ? "border-amber-400/60 bg-amber-400/10 text-amber-100 shadow-[0_0_25px_rgba(251,191,36,0.3)]"
           : "border-zinc-500/40 bg-black/40 text-zinc-300"
       }`}
     >
-      <div className="font-semibold">
+      <div className="text-sm font-bold">
         ⚔️ Attaque en cours{isDefender ? " — à toi de défendre" : ""}
-      </div>
-      <div className="mt-1">
-        Attaquant : <span className="font-bold">{attackerName}</span>{" "}
-        ({att.attackerPower}) → cible :{" "}
-        <span className="font-bold">
-          {targetIsLeader ? "Leader" : "Personnage"}
-        </span>{" "}
-        ({totalDefenderPower}
-        {att.defenderBoost > 0 ? ` = ${att.defenderBasePower}+${att.defenderBoost}` : ""}
-        )
         {att.doubleAttack && (
-          <span className="ml-2 text-rose-200">· Double Attaque</span>
+          <span className="ml-2 rounded bg-rose-500/30 px-2 py-0.5 text-xs text-rose-100">
+            ⚡ Double Attaque
+          </span>
         )}
       </div>
-      <div className="mt-1 text-[11px]">
-        Sans réaction : {wouldHit ? "❌ touche" : "✅ rate"}
+
+      {/* Affichage gros et clair : ATTAQUANT (power) → DÉFENSEUR (power)
+          + résultat (touche/rate) en couleur. */}
+      <div className="mt-3 flex items-center justify-center gap-3">
+        {attackerMeta && (
+          <div className="hidden sm:block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={attackerMeta.image}
+              alt={attackerMeta.name}
+              className="h-20 w-14 rounded border border-rose-400/50 object-contain"
+            />
+          </div>
+        )}
+        <div className="flex flex-1 items-center justify-center gap-3 sm:gap-5">
+          <div className="text-center">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-400">
+              Attaquant
+            </div>
+            <div className="truncate text-xs text-zinc-200">{attackerName}</div>
+            <div className="text-3xl font-extrabold tabular-nums text-rose-300">
+              {att.attackerPower.toLocaleString("fr-FR")}
+            </div>
+          </div>
+          <div
+            className={`text-3xl font-bold ${
+              wouldHit ? "text-rose-400" : "text-emerald-400"
+            }`}
+          >
+            {wouldHit ? "→" : "≠"}
+          </div>
+          <div className="text-center">
+            <div className="text-[10px] uppercase tracking-widest text-zinc-400">
+              {targetIsLeader ? "Leader" : "Personnage"}
+            </div>
+            <div className="truncate text-xs text-zinc-200">
+              {targetIsLeader ? "Leader adverse" : "—"}
+            </div>
+            <div className="text-3xl font-extrabold tabular-nums text-sky-300">
+              {totalDefenderPower.toLocaleString("fr-FR")}
+            </div>
+            {att.defenderBoost > 0 && (
+              <div className="text-[10px] text-emerald-300">
+                +{att.defenderBoost.toLocaleString("fr-FR")} (boost)
+              </div>
+            )}
+          </div>
+        </div>
+        <div
+          className={`shrink-0 rounded-md px-3 py-2 text-sm font-bold ${
+            wouldHit
+              ? "bg-rose-500/30 text-rose-100"
+              : "bg-emerald-500/30 text-emerald-100"
+          }`}
+        >
+          {wouldHit ? "❌ Touche" : "✅ Rate"}
+        </div>
       </div>
 
       {isDefender && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {blockers.map((b) => {
-            const meta = ONEPIECE_BASE_SET_BY_ID.get(b.cardId);
-            return (
-              <button
-                key={b.uid}
-                onClick={() =>
-                  send({ type: "op-block", blockerUid: b.uid })
-                }
-                className="rounded-md border border-sky-400/50 bg-sky-500/10 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-500/20"
-              >
-                🛡️ Bloquer avec {meta?.name ?? "?"}
-              </button>
-            );
-          })}
-          {counterCards.map((c) => {
-            const counterValue =
-              c.meta && "counter" in c.meta ? c.meta.counter : 0;
-            return (
-              <button
-                key={`counter-${c.i}`}
-                onClick={() =>
-                  send({ type: "op-counter", handIndex: c.i })
-                }
-                className="rounded-md border border-emerald-400/50 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/20"
-              >
-                ⚡ Counter {c.meta?.name} (+{counterValue})
-              </button>
-            );
-          })}
-          {counterEvents.map((c) => (
-            <button
-              key={`countevt-${c.i}`}
-              onClick={() =>
-                send({ type: "op-play-counter-event", handIndex: c.i })
-              }
-              className="rounded-md border border-violet-400/50 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100 hover:bg-violet-500/20"
-              title={c.meta?.effect ?? ""}
-            >
-              ⚔️ Évent [Contre] {c.meta?.name}
-            </button>
-          ))}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {blockers.length > 0 && (
+            <div className="flex w-full flex-wrap gap-2">
+              <span className="self-center text-[10px] uppercase tracking-widest text-sky-300">
+                Bloqueurs disponibles ({blockers.length}) :
+              </span>
+              {blockers.map((b) => {
+                const meta = ONEPIECE_BASE_SET_BY_ID.get(b.cardId);
+                return (
+                  <button
+                    key={b.uid}
+                    onClick={() =>
+                      send({ type: "op-block", blockerUid: b.uid })
+                    }
+                    className="rounded-md border border-sky-400/60 bg-sky-500/15 px-3 py-1.5 text-sm font-semibold text-sky-100 hover:bg-sky-500/25"
+                  >
+                    🛡️ Bloquer avec {meta?.name ?? "?"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {(counterCards.length > 0 || counterEvents.length > 0) && (
+            <div className="flex w-full flex-wrap gap-2">
+              <span className="self-center text-[10px] uppercase tracking-widest text-emerald-300">
+                Counter / Évent [Contre] ({counterCards.length + counterEvents.length}) :
+              </span>
+              {counterCards.map((c) => {
+                const counterValue =
+                  c.meta && "counter" in c.meta ? c.meta.counter ?? 0 : 0;
+                return (
+                  <button
+                    key={`counter-${c.i}`}
+                    onClick={() =>
+                      send({ type: "op-counter", handIndex: c.i })
+                    }
+                    className="rounded-md border border-emerald-400/60 bg-emerald-500/15 px-3 py-1.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/25"
+                  >
+                    ⚡ {c.meta?.name} (+{counterValue.toLocaleString("fr-FR")})
+                  </button>
+                );
+              })}
+              {counterEvents.map((c) => (
+                <button
+                  key={`countevt-${c.i}`}
+                  onClick={() =>
+                    send({ type: "op-play-counter-event", handIndex: c.i })
+                  }
+                  className="rounded-md border border-violet-400/60 bg-violet-500/15 px-3 py-1.5 text-sm font-semibold text-violet-100 hover:bg-violet-500/25"
+                  title={c.meta?.effect ?? ""}
+                >
+                  ⚔️ {c.meta?.name}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             onClick={() => send({ type: "op-pass-defense" })}
-            className="rounded-md border border-rose-400/50 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-100 hover:bg-rose-500/20"
+            className="ml-auto rounded-md border border-rose-400/60 bg-rose-500/15 px-3 py-1.5 text-sm font-semibold text-rose-100 hover:bg-rose-500/25"
           >
             ➡️ Laisser passer
           </button>
@@ -1330,7 +1504,8 @@ function DefensePanel({
   );
 }
 
-/** Panel de résolution d'un Trigger révélé par une Vie. */
+/** Panel de résolution d'un Trigger révélé par une Vie. Affiche la carte
+ *  source en grand pour que le joueur sache exactement de quoi il décide. */
 function TriggerPanel({
   trigger,
   send,
@@ -1340,30 +1515,56 @@ function TriggerPanel({
 }) {
   const meta = ONEPIECE_BASE_SET_BY_ID.get(trigger.cardId);
   return (
-    <div className="rounded-md border border-fuchsia-400/60 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-100">
-      <div className="font-semibold">
-        🎴 Trigger révélé : {meta?.name ?? "?"}
-      </div>
-      <div className="mt-1 italic">{trigger.trigger}</div>
-      <div className="mt-2 flex gap-2">
-        <button
-          onClick={() => send({ type: "op-trigger-resolve", activate: true })}
-          className="rounded-md border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-emerald-100 hover:bg-emerald-500/20"
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex items-start gap-3 rounded-md border border-fuchsia-400/60 bg-fuchsia-500/10 p-3 text-fuchsia-100 shadow-[0_0_25px_rgba(217,70,239,0.3)]"
+    >
+      {meta && (
+        <CardPreview
+          cardId={meta.id}
+          imageUrl={meta.image}
+          name={meta.name}
+          effect={meta.effect}
+          trigger={meta.trigger}
         >
-          ✨ Activer
-        </button>
-        <button
-          onClick={() => send({ type: "op-trigger-resolve", activate: false })}
-          className="rounded-md border border-zinc-400/50 bg-zinc-500/10 px-3 py-1 text-zinc-100 hover:bg-zinc-500/20"
-        >
-          ❌ Passer
-        </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={meta.image}
+            alt={meta.name}
+            className="h-32 w-24 shrink-0 rounded border-2 border-fuchsia-400/60 object-contain shadow-lg"
+          />
+        </CardPreview>
+      )}
+      <div className="flex-1">
+        <div className="text-sm font-bold">
+          🎴 Vie révélée — Trigger disponible
+        </div>
+        <div className="mt-1 text-base font-semibold text-fuchsia-50">
+          {meta?.name ?? "?"}
+        </div>
+        <div className="mt-1 rounded bg-black/30 px-2 py-1.5 text-xs italic text-fuchsia-100/90">
+          {trigger.trigger}
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => send({ type: "op-trigger-resolve", activate: true })}
+            className="rounded-md border border-emerald-400/60 bg-emerald-500/15 px-3 py-1.5 text-sm font-bold text-emerald-100 hover:bg-emerald-500/25"
+          >
+            ✨ Activer le Trigger
+          </button>
+          <button
+            onClick={() => send({ type: "op-trigger-resolve", activate: false })}
+            className="rounded-md border border-zinc-400/50 bg-zinc-500/10 px-3 py-1.5 text-sm font-semibold text-zinc-100 hover:bg-zinc-500/20"
+          >
+            ❌ Passer
+          </button>
+        </div>
+        <div className="mt-1 text-[10px] text-fuchsia-200/60">
+          La carte ira en main quoi qu&apos;il arrive.
+        </div>
       </div>
-      <div className="mt-1 text-[10px] text-fuchsia-200/70">
-        L&apos;effet n&apos;est pas exécuté par le moteur (descriptif). La carte
-        est ajoutée à ta main quoi qu&apos;il arrive.
-      </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -1430,10 +1631,45 @@ function PendingChoicePanel({
     });
   }
 
+  // Identifie la carte source si possible (meta cherché par cardNumber).
+  const sourceMeta = (() => {
+    if (!choice.sourceCardNumber) return null;
+    // ONEPIECE_BASE_SET_BY_ID est par cardId, mais on a un cardNumber.
+    // Cherche manuellement dans le set (rare, OK pour ce panel).
+    for (const c of ONEPIECE_BASE_SET_BY_ID.values()) {
+      if (c.cardNumber === choice.sourceCardNumber) return c;
+    }
+    return null;
+  })();
+
   return (
-    <div className="rounded-md border border-amber-400/60 bg-amber-400/10 p-3 text-xs text-amber-100">
-      <div className="font-semibold">🎯 Effet en cours — choix requis</div>
-      <div className="mt-1">{choice.prompt}</div>
+    <div className="flex items-start gap-3 rounded-md border border-amber-400/60 bg-amber-400/10 p-3 text-amber-100">
+      {sourceMeta && (
+        <CardPreview
+          cardId={sourceMeta.id}
+          imageUrl={sourceMeta.image}
+          name={sourceMeta.name}
+          effect={sourceMeta.effect}
+          trigger={sourceMeta.trigger}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={sourceMeta.image}
+            alt={sourceMeta.name}
+            className="h-28 w-20 shrink-0 rounded border-2 border-amber-400/60 object-contain shadow-lg"
+          />
+        </CardPreview>
+      )}
+      <div className="flex-1">
+      <div className="text-sm font-bold">
+        🎯 Effet en cours — choix requis
+      </div>
+      {sourceMeta && (
+        <div className="mt-0.5 text-xs text-amber-200/80">
+          Source : <span className="font-semibold">{sourceMeta.name}</span>
+        </div>
+      )}
+      <div className="mt-1 text-sm">{choice.prompt}</div>
 
       {/* KO Persos adverse */}
       {choice.kind === "ko-character" && opponent && (
@@ -1796,29 +2032,51 @@ function PendingChoicePanel({
           ❌ Passer
         </button>
       )}
+      </div>
     </div>
   );
 }
 
-function DeadlineCountdown({ deadlineMs }: { deadlineMs: number }) {
+function DeadlineCountdown({ deadlineMs }: { deadlineMs: number | null }) {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
+    if (deadlineMs == null) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
-  }, []);
+  }, [deadlineMs]);
+  // Si pas de deadline en cours : badge neutre "—" pour que le placement soit
+  // toujours visible (évite que l'utilisateur cherche le timer).
+  if (deadlineMs == null) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded bg-zinc-800/60 px-2 py-1 font-mono text-xs text-zinc-400"
+        title="Pas de chrono actif"
+      >
+        ⏱ —
+      </span>
+    );
+  }
   const remaining = Math.max(0, Math.floor((deadlineMs - now) / 1000));
   const urgent = remaining <= 10;
   return (
-    <span
-      className={`ml-2 inline-block rounded px-1.5 py-0.5 font-mono text-[10px] ${
+    <motion.span
+      animate={
         urgent
-          ? "bg-red-500/20 text-red-200"
-          : "bg-zinc-800/60 text-zinc-300"
+          ? { scale: [1, 1.08, 1] }
+          : {}
+      }
+      transition={{ duration: 0.5, repeat: urgent ? Infinity : 0 }}
+      className={`inline-flex items-center gap-1 rounded px-2 py-1 font-mono text-sm font-bold tabular-nums ${
+        urgent
+          ? "bg-red-500/30 text-red-100 ring-2 ring-red-500/60"
+          : remaining <= 30
+            ? "bg-amber-500/20 text-amber-200"
+            : "bg-zinc-800/60 text-zinc-200"
       }`}
       title="Compte à rebours anti-AFK"
     >
       ⏱ {remaining}s
-    </span>
+    </motion.span>
   );
 }
 
@@ -1839,8 +2097,8 @@ function ReorderTopDeckPicker({
   return (
     <div className="mt-2">
       <div className="mb-1 text-[11px] text-amber-200/80">
-        Réorganise dans l'ordre. Pour chaque carte : place au-dessus (top)
-        ou au-dessous (bottom) du deck.
+        Réorganise dans l&apos;ordre. Pour chaque carte : place au-dessus
+        (top) ou au-dessous (bottom) du deck.
       </div>
       <div className="flex flex-col gap-1">
         {order.map((cardId, i) => {

@@ -811,7 +811,7 @@ function DeckEditor({
                     : "Aucune carte ne matche ta recherche."}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
                   {filtered.map((card) => {
                     const owned = collection.get(card.id) ?? 0;
                     const inDeck = draftEntries.get(card.id) ?? 0;
@@ -946,7 +946,7 @@ function LeaderPicker({
           )}
           {/* Grille — content-start évite l'étirement vertical sur peu d'items.
               auto-rows-max garantit que les rangées ne s'étirent pas non plus. */}
-          <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-y-auto sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-y-auto sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {filtered.map((leader) => (
               <button
                 key={leader.id}
@@ -1041,6 +1041,8 @@ function PickerCard({
 }) {
   const remaining = owned - inDeck;
   const canAdd = remaining > 0 && inDeck < MAX_COPIES;
+  const cost = "cost" in card ? card.cost : null;
+  const power = "power" in card ? card.power : null;
   return (
     <CardPreview
       cardId={card.id}
@@ -1059,7 +1061,7 @@ function PickerCard({
           onZoom();
         }}
         disabled={!canAdd && remaining <= 0}
-        className="aspect-[5/7] overflow-hidden rounded"
+        className="relative aspect-[5/7] overflow-hidden rounded"
         aria-label={
           canAdd
             ? `Ajouter ${card.name} au deck (clic droit pour agrandir)`
@@ -1082,13 +1084,26 @@ function PickerCard({
           className="h-full w-full object-contain"
           loading="lazy"
         />
+        {/* Overlay coût (haut-gauche) — pour ne pas avoir à zoomer pour
+            connaître le coût d'une carte. */}
+        {cost !== null && (
+          <span className="absolute left-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-amber-300/60 bg-black/80 text-[11px] font-extrabold text-amber-200 tabular-nums">
+            {cost}
+          </span>
+        )}
+        {/* Overlay power (bas-droite) — Persos uniquement. */}
+        {power !== null && (
+          <span className="absolute bottom-7 right-1 rounded-tl bg-black/80 px-1 py-0.5 text-[10px] font-bold text-rose-200 tabular-nums">
+            {power.toLocaleString("fr-FR")}
+          </span>
+        )}
       </button>
       <div className="flex items-center justify-between rounded bg-black/60 px-1 py-0.5 text-[10px]">
         <span className="font-bold text-emerald-200">
           {inDeck} / {Math.min(owned, MAX_COPIES)}
         </span>
         <span className="text-zinc-400">
-          {"cost" in card ? `🟡${card.cost}` : ""}
+          {cost !== null ? `🟡${cost}` : ""}
         </span>
       </div>
     </CardPreview>

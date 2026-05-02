@@ -259,7 +259,7 @@ export function OnePieceCollectionGrid({
             Aucune carte ne correspond à ces filtres.
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 pr-1">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 pr-1">
             {sorted.map((c) => {
               const count = collection.get(c.id) ?? 0;
               return (
