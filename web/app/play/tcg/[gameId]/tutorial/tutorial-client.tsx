@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -284,8 +285,35 @@ export function TutorialClient({
   }
 
   const current = steps[step];
+  // Nouveau tutoriel pratique interactif (uniquement Pokemon pour
+  // l'instant). On affiche un CTA en haut pour l'essayer en alternative
+  // au slideshow. Les autres jeux n'ont pas (encore) de version interactive.
+  const hasInteractive = gameId === "pokemon";
   return (
     <div className="flex flex-col gap-6">
+      {hasInteractive && (
+        <Link
+          href={`/play/tcg/${gameId}/tutorial/game${reviewMode ? "?review=1" : ""}`}
+          className="group relative flex items-center gap-3 overflow-hidden rounded-xl border-2 border-amber-300/60 bg-gradient-to-r from-amber-400/15 via-amber-300/10 to-emerald-400/15 p-3 shadow-[0_0_20px_rgba(251,191,36,0.2)] transition-all hover:border-amber-200/80 hover:shadow-[0_0_30px_rgba(251,191,36,0.4)]"
+        >
+          <span className="text-2xl">🎮</span>
+          <div className="flex-1">
+            <div className="text-sm font-bold text-amber-100">
+              Mode pratique interactif{" "}
+              <span className="ml-1 rounded bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">
+                NOUVEAU
+              </span>
+            </div>
+            <div className="text-xs text-amber-100/70">
+              Joue une vraie partie pédagogique avec un coach qui te guide
+              étape par étape (recommandé).
+            </div>
+          </div>
+          <span className="text-amber-200 transition-transform group-hover:translate-x-1">
+            →
+          </span>
+        </Link>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">🎓 Tutoriel</h1>
