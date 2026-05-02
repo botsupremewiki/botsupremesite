@@ -104,6 +104,14 @@ export function LorBattleClient({
   );
   // Phase 5.8 : modal confirmation concede (vs native confirm).
   const [concedeModalOpen, setConcedeModalOpen] = useState(false);
+  // Phase 9.4 : Vladimir L1 (01NX006) Skill modal state. null = pas de
+  // skill en cours d'activation. Sinon : uid du caster + alliés
+  // sélectionnés (toggle) + ennemi cible (uid d'unité OU "nexus-enemy").
+  const [pendingSkill, setPendingSkill] = useState<{
+    casterUid: string;
+    allyUids: Set<string>;
+    enemyUid: string | null;
+  } | null>(null);
   // Phase 5.12 : pulse hand badge quand handCount augmente (draw card).
   const [handPulse, setHandPulse] = useState<{ self: number; opponent: number }>({
     self: 0,
@@ -599,6 +607,9 @@ export function LorBattleClient({
             nexusDamagePopups={nexusDamagePopups}
             recentlySummoned={recentlySummoned}
             recentlyHitBySpell={recentlyHitBySpell}
+            onActivateSkill={(uid) =>
+              setPendingSkill({ casterUid: uid, allyUids: new Set(), enemyUid: null })
+            }
             handPulse={handPulse}
           />
         )}
@@ -658,6 +669,46 @@ export function LorBattleClient({
             sur targeting). */}
         {hoveredCardCode && pendingSpell === null && (
           <HoverPreview cardCode={hoveredCardCode} />
+        )}
+
+        {/* Phase 9.4 : modal d'activation de Skill (Vladimir L1). */}
+        {pendingSkill && state?.self && state?.opponent && (
+          <SkillActivationModal
+            casterUid={pendingSkill.casterUid}
+            allyUids={pendingSkill.allyUids}
+            enemyUid={pendingSkill.enemyUid}
+            selfBench={state.self.bench}
+            opponentBench={state.opponent.bench}
+            onToggleAlly={(uid) => {
+              setPendingSkill((prev) => {
+                if (!prev) return prev;
+                const next = new Set(prev.allyUids);
+                if (next.has(uid)) next.delete(uid);
+                else next.add(uid);
+                return { ...prev, allyUids: next };
+              });
+            }}
+            onSelectEnemy={(uid) => {
+              setPendingSkill((prev) =>
+                prev ? { ...prev, enemyUid: uid } : prev,
+              );
+            }}
+            onConfirm={() => {
+              if (
+                !pendingSkill.enemyUid ||
+                pendingSkill.allyUids.size === 0
+              )
+                return;
+              send({
+                type: "lor-activate-skill",
+                unitUid: pendingSkill.casterUid,
+                allyTargetUids: Array.from(pendingSkill.allyUids),
+                enemyTargetUid: pendingSkill.enemyUid,
+              });
+              setPendingSkill(null);
+            }}
+            onCancel={() => setPendingSkill(null)}
+          />
         )}
 
         {/* Phase 5.8 : modal de confirmation concede stylé. */}
@@ -968,6 +1019,7 @@ function RoundView({
   nexusDamagePopups,
   recentlySummoned,
   recentlyHitBySpell,
+  onActivateSkill,
   handPulse,
 }: {
   state: RuneterraBattleState;
@@ -1007,6 +1059,8 @@ function RoundView({
   recentlySummoned?: Set<string>;
   // Phase 9.2 : flash violet quand sort résout sur unité (700ms).
   recentlyHitBySpell?: Set<string>;
+  // Phase 9.4 : callback pour activer compétence Vladimir L1.
+  onActivateSkill?: (uid: string) => void;
   // Phase 5.12 : pulse handCount sur draw card (timestamp).
   handPulse?: { self: number; opponent: number };
 }) {
@@ -1382,6 +1436,15 @@ function RoundView({
         damagePopups={damagePopups}
         recentlySummoned={recentlySummoned}
         recentlyHitBySpell={recentlyHitBySpell}
+        onActivateSkill={
+          // Phase 9.4 : ⚡ Skill seulement si c'est mon tour, pas en
+          // combat, pas de stack en cours.
+          myTurn &&
+          !attackInProgress &&
+          (state.spellStack?.length ?? 0) === 0
+            ? onActivateSkill
+            : undefined
+        }
         highlighted={
           combatMode === "attacker-pick"
             ? pickedAttackers
@@ -1621,6 +1684,171 @@ const REGION_LABELS: Record<string, string> = {
   ShadowIsles: "Îles obscures",
 };
 
+// Phase 9.4 : modal d'activation Skill (Vladimir L1 « Immédiat »).
+// Le joueur sélectionne 1+ alliés (toggle) puis 1 ennemi (radio).
+// L'effet : N alliés prennent 1 dmg chacun, l'ennemi prend N dmg.
+function SkillActivationModal({
+  casterUid,
+  allyUids,
+  enemyUid,
+  selfBench,
+  opponentBench,
+  onToggleAlly,
+  onSelectEnemy,
+  onConfirm,
+  onCancel,
+}: {
+  casterUid: string;
+  allyUids: Set<string>;
+  enemyUid: string | null;
+  selfBench: RuneterraBattleUnit[];
+  opponentBench: RuneterraBattleUnit[];
+  onToggleAlly: (uid: string) => void;
+  onSelectEnemy: (uid: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const caster = selfBench.find((u) => u.uid === casterUid);
+  const casterName = caster
+    ? RUNETERRA_BASE_SET_BY_CODE.get(caster.cardCode)?.name ?? "Vladimir"
+    : "Vladimir";
+  const damageTotal = allyUids.size;
+  const enemyName = (() => {
+    if (!enemyUid) return null;
+    if (enemyUid === "nexus-enemy") return "Nexus ennemi";
+    const u = opponentBench.find((x) => x.uid === enemyUid);
+    if (!u) return enemyUid;
+    return RUNETERRA_BASE_SET_BY_CODE.get(u.cardCode)?.name ?? u.cardCode;
+  })();
+  const valid = damageTotal > 0 && enemyUid !== null;
+  return (
+    <div
+      onClick={onCancel}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm animate-in fade-in"
+      role="dialog"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto rounded-2xl border-2 border-rose-500/40 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95"
+      >
+        <div className="text-center">
+          <div className="text-4xl">🩸</div>
+          <h2 className="mt-1 text-xl font-bold text-rose-200">
+            Compétence — {casterName}
+          </h2>
+          <p className="mt-1 text-xs text-zinc-400">
+            « Infligez 1 dmg à n'importe quel nombre d'alliés pour en
+            infliger autant à un ennemi. »
+          </p>
+        </div>
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-3">
+          <div className="text-[10px] uppercase tracking-widest text-rose-300">
+            Alliés à blesser ({allyUids.size} sélectionné
+            {allyUids.size > 1 ? "s" : ""})
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {selfBench
+              .filter((u) => u.uid !== casterUid && u.health - u.damage > 0)
+              .map((u) => {
+                const card = RUNETERRA_BASE_SET_BY_CODE.get(u.cardCode);
+                const selected = allyUids.has(u.uid);
+                const wouldDie = u.health - u.damage <= 1;
+                return (
+                  <button
+                    key={u.uid}
+                    onClick={() => onToggleAlly(u.uid)}
+                    className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${
+                      selected
+                        ? "border-rose-400 bg-rose-500/30 text-rose-100 ring-2 ring-rose-300"
+                        : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                    }`}
+                  >
+                    <span className="font-semibold">
+                      {card?.name ?? u.cardCode}
+                    </span>
+                    <span className="text-zinc-400">
+                      ({u.power}/{u.health - u.damage})
+                    </span>
+                    {wouldDie && selected && (
+                      <span className="rounded bg-rose-700 px-1 py-0.5 text-[8px] text-white">
+                        💀 mortel
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            {selfBench.filter((u) => u.uid !== casterUid).length === 0 && (
+              <span className="text-xs text-zinc-500">
+                Aucun autre allié sur le banc.
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3">
+          <div className="text-[10px] uppercase tracking-widest text-violet-300">
+            Cible ennemie ({damageTotal} dmg)
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {opponentBench.map((u) => {
+              const card = RUNETERRA_BASE_SET_BY_CODE.get(u.cardCode);
+              const selected = enemyUid === u.uid;
+              const wouldDie = u.health - u.damage <= damageTotal;
+              return (
+                <button
+                  key={u.uid}
+                  onClick={() => onSelectEnemy(u.uid)}
+                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${
+                    selected
+                      ? "border-violet-400 bg-violet-500/30 text-violet-100 ring-2 ring-violet-300"
+                      : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                  }`}
+                >
+                  <span className="font-semibold">
+                    {card?.name ?? u.cardCode}
+                  </span>
+                  <span className="text-zinc-400">
+                    ({u.power}/{u.health - u.damage})
+                  </span>
+                  {wouldDie && damageTotal > 0 && (
+                    <span className="rounded bg-emerald-700 px-1 py-0.5 text-[8px] text-white">
+                      💀 kill
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => onSelectEnemy("nexus-enemy")}
+              className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${
+                enemyUid === "nexus-enemy"
+                  ? "border-violet-400 bg-violet-500/30 text-violet-100 ring-2 ring-violet-300"
+                  : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+              }`}
+            >
+              ❤️ Nexus ennemi
+            </button>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-md border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-300 hover:bg-white/10"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!valid}
+            className="rounded-md bg-rose-500 px-4 py-2 text-sm font-bold text-rose-950 hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            🩸 Activer ({damageTotal} dmg{enemyName ? ` sur ${enemyName}` : ""})
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Phase 9.1 : toggle mute pour les SFX synthétisés. Persisté en
 // localStorage via lor-sfx.isMuted/setMuted.
 function SfxMuteToggle() {
@@ -1779,6 +2007,7 @@ function BenchRow({
   damagePopups,
   recentlySummoned,
   recentlyHitBySpell,
+  onActivateSkill,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
@@ -1797,6 +2026,9 @@ function BenchRow({
   recentlySummoned?: Set<string>;
   // Phase 9.2 : flash violet quand sort résout sur cette unité (700ms).
   recentlyHitBySpell?: Set<string>;
+  // Phase 9.4 : si défini, callback quand le ⚡ Skill est cliqué sur une
+  // unité avec compétence active (Vladimir 01NX006 uniquement).
+  onActivateSkill?: (uid: string) => void;
 }) {
   if (units.length === 0) {
     return (
@@ -1836,6 +2068,14 @@ function BenchRow({
               damagePopup={damagePopups?.[u.uid]}
               justSummoned={recentlySummoned?.has(u.uid)}
               hitBySpell={recentlyHitBySpell?.has(u.uid)}
+              onActivateSkill={
+                // Phase 9.4 : ⚡ Skill visible UNIQUEMENT pour Vladimir L1
+                // (01NX006) et uniquement si onActivateSkill est passé
+                // (= sur le banc allié uniquement, pas l'ennemi).
+                onActivateSkill && u.cardCode === "01NX006"
+                  ? onActivateSkill
+                  : undefined
+              }
             />
           </div>
         );
@@ -2053,6 +2293,7 @@ function UnitCard({
   damagePopup,
   justSummoned,
   hitBySpell,
+  onActivateSkill,
 }: {
   unit: RuneterraBattleUnit;
   onClick: () => void;
@@ -2070,6 +2311,9 @@ function UnitCard({
   justSummoned?: boolean;
   // Phase 9.2 : flash violet quand un sort résout sur cette cible (700ms).
   hitBySpell?: boolean;
+  // Phase 9.4 : si défini, l'unité a une compétence active. Le bouton
+  // ⚡ apparaît bottom-left et appelle onActivateSkill(unit.uid).
+  onActivateSkill?: (uid: string) => void;
 }) {
   const card = RUNETERRA_BASE_SET_BY_CODE.get(unit.cardCode);
   const aliveHealth = unit.health - unit.damage;
@@ -2152,6 +2396,19 @@ function UnitCard({
         >
           -{damagePopup.amount}
         </div>
+      )}
+      {/* Phase 9.4 : bouton ⚡ Skill (Vladimir L1 uniquement pour l'instant). */}
+      {onActivateSkill && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onActivateSkill(unit.uid);
+          }}
+          className="absolute bottom-0 left-0 right-0 rounded-b bg-rose-600/90 px-1 py-0.5 text-[9px] font-bold text-white hover:bg-rose-500 shadow"
+          title="Activer la compétence (Immédiat)"
+        >
+          ⚡ Skill
+        </button>
       )}
       {unit.playedThisRound && (
         <div className="absolute left-0.5 top-0.5 rounded bg-zinc-700/70 px-1 text-[8px] text-zinc-300">

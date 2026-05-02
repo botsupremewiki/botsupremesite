@@ -1422,7 +1422,17 @@ export type RuneterraBattleClientMessage =
     }
   | { type: "lor-assign-blockers"; blockerUids: (string | null)[] }
   | { type: "lor-pass" }
-  | { type: "lor-concede" };
+  | { type: "lor-concede" }
+  // Phase 9.4 : activation d'une compétence active (Skill) d'un champion.
+  // Pour Vladimir L1 (01NX006) : `unitUid` = Vladimir, `allyTargetUids` =
+  // alliés à blesser (1 dmg chacun), `enemyTargetUid` = ennemi qui prend
+  // le dmg total (peut être un uid d'unité OU « nexus-enemy »).
+  | {
+      type: "lor-activate-skill";
+      unitUid: string;
+      allyTargetUids: string[];
+      enemyTargetUid: string;
+    };
 
 export type RuneterraBattleServerMessage =
   | {

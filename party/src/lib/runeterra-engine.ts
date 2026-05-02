@@ -5749,6 +5749,176 @@ function applySpellEffect(
  *  passé d'affilée (consecutivePasses atteint 2), le round se termine et
  *  on transitionne au round suivant via `endRound`.
  */
+/** Phase 9.4 : activation de Skill (Vladimir L1 « Immédiat »).
+ *  Inflige 1 dmg à chaque allié dans allyTargetUids, puis allyTargetUids.length
+ *  dmg à l'ennemi (peut être un uid d'unité OU "nexus-enemy"). C'est un
+ *  Skill speed (similaire Burst — résolu immédiatement, pas sur stack).
+ *  Le caster garde la priorité après.
+ *
+ *  Validation :
+ *  - phase=round, c'est ton tour, pas de stack non-vide ni d'attaque
+ *  - unitUid existe sur ton banc, est un Vladimir L1 (01NX006)
+ *  - allyTargetUids non vide, tous sur ton banc
+ *  - enemyTargetUid valide (uid sur banc adverse OU "nexus-enemy")
+ */
+export function activateSkill(
+  state: InternalState,
+  seatIdx: 0 | 1,
+  unitUid: string,
+  allyTargetUids: string[],
+  enemyTargetUid: string,
+): EngineResult {
+  if (state.phase !== "round") {
+    return { ok: false, error: "La partie n'est pas en round." };
+  }
+  if (state.activeSeatIdx !== seatIdx) {
+    return { ok: false, error: "Ce n'est pas ton tour." };
+  }
+  if (state.spellStack.length > 0) {
+    return {
+      ok: false,
+      error: "Résous le stack avant d'activer une compétence.",
+    };
+  }
+  if (state.attackInProgress !== null) {
+    return {
+      ok: false,
+      error: "Pas de compétence pendant un combat.",
+    };
+  }
+  const player = state.players[seatIdx];
+  const oppSeat = otherSeat(seatIdx);
+  const opp = state.players[oppSeat];
+  const sourceUnit = player.bench.find((u) => u.uid === unitUid);
+  if (!sourceUnit) {
+    return { ok: false, error: "Unité introuvable sur ton banc." };
+  }
+  // Pour l'instant, seul Vladimir L1 (01NX006) a ce skill.
+  if (sourceUnit.cardCode !== "01NX006") {
+    return {
+      ok: false,
+      error: `${getCard(sourceUnit.cardCode)?.name ?? "Cette unité"} n'a pas de compétence active.`,
+    };
+  }
+  if (!allyTargetUids || allyTargetUids.length === 0) {
+    return { ok: false, error: "Sélectionne au moins 1 allié à blesser." };
+  }
+  // Vérif tous les alliés existent + dédup.
+  const allyUidSet = new Set<string>();
+  for (const uid of allyTargetUids) {
+    if (allyUidSet.has(uid)) {
+      return { ok: false, error: "Doublon dans les alliés sélectionnés." };
+    }
+    allyUidSet.add(uid);
+    if (!player.bench.some((u) => u.uid === uid)) {
+      return { ok: false, error: `Allié introuvable : ${uid}.` };
+    }
+  }
+  // Vérif enemy.
+  const isEnemyNexus = enemyTargetUid === "nexus-enemy";
+  if (!isEnemyNexus && !opp.bench.some((u) => u.uid === enemyTargetUid)) {
+    return { ok: false, error: `Ennemi introuvable : ${enemyTargetUid}.` };
+  }
+  const damageToEnemy = allyTargetUids.length;
+
+  // Applique 1 dmg à chaque allié.
+  let newState = state;
+  const newAlliesBench = player.bench.map((u) => {
+    if (!allyUidSet.has(u.uid)) return u;
+    const c = { ...u };
+    applyDamageToUnit(c, 1);
+    return c;
+  });
+  // Retire les morts du banc.
+  const survivors = newAlliesBench.filter((u) => u.damage < u.health);
+  const dead = newAlliesBench.filter((u) => u.damage >= u.health);
+  const newPlayersAfterAllies: [InternalPlayer, InternalPlayer] = [
+    state.players[0],
+    state.players[1],
+  ] as [InternalPlayer, InternalPlayer];
+  newPlayersAfterAllies[seatIdx] = {
+    ...player,
+    bench: survivors,
+    alliesDiedThisRound: player.alliesDiedThisRound + dead.length,
+    championCounters: {
+      ...player.championCounters,
+      alliesDied: player.championCounters.alliesDied + dead.length,
+      unitsDied: player.championCounters.unitsDied + dead.length,
+      // Phase 5.10 : alliesSurvivedDamage = alliés vivants après dmg
+      // (Vladimir level-up cond).
+      alliesSurvivedDamage:
+        player.championCounters.alliesSurvivedDamage +
+        allyTargetUids.length -
+        dead.length,
+    },
+  };
+  newState = { ...state, players: newPlayersAfterAllies };
+  // Trigger LastBreath sur les morts.
+  for (const deadUnit of dead) {
+    newState = triggerLastBreath(newState, deadUnit, seatIdx);
+  }
+  // Inflige damageToEnemy à l'ennemi.
+  if (isEnemyNexus) {
+    const newOpp = newState.players[oppSeat];
+    const newPlayersN: [InternalPlayer, InternalPlayer] = [
+      newState.players[0],
+      newState.players[1],
+    ] as [InternalPlayer, InternalPlayer];
+    newPlayersN[oppSeat] = {
+      ...newOpp,
+      nexusHealth: newOpp.nexusHealth - damageToEnemy,
+    };
+    newState = { ...newState, players: newPlayersN };
+  } else {
+    const newOpp = newState.players[oppSeat];
+    const enemyBench = newOpp.bench.map((u) => {
+      if (u.uid !== enemyTargetUid) return u;
+      const c = { ...u };
+      applyDamageToUnit(c, damageToEnemy);
+      return c;
+    });
+    const enemySurvivors = enemyBench.filter((u) => u.damage < u.health);
+    const enemyDead = enemyBench.filter((u) => u.damage >= u.health);
+    const newPlayersE: [InternalPlayer, InternalPlayer] = [
+      newState.players[0],
+      newState.players[1],
+    ] as [InternalPlayer, InternalPlayer];
+    newPlayersE[oppSeat] = {
+      ...newOpp,
+      bench: enemySurvivors,
+      championCounters: {
+        ...newOpp.championCounters,
+        unitsDied: newOpp.championCounters.unitsDied + enemyDead.length,
+      },
+    };
+    newState = { ...newState, players: newPlayersE };
+    // Trigger Last Breath sur les morts ennemis.
+    for (const deadUnit of enemyDead) {
+      newState = triggerLastBreath(newState, deadUnit, oppSeat);
+    }
+  }
+
+  // Log + check level-ups.
+  const enemyDesc = isEnemyNexus
+    ? "Nexus ennemi"
+    : (getCard(
+        opp.bench.find((u) => u.uid === enemyTargetUid)?.cardCode ?? "",
+      )?.name ?? "ennemi");
+  newState = {
+    ...newState,
+    log: [
+      ...newState.log,
+      `${player.username} : Vladimir saigne ${allyTargetUids.length} allié${allyTargetUids.length > 1 ? "s" : ""} → ${damageToEnemy} dmg sur ${enemyDesc}.`,
+    ],
+    consecutivePasses: 0,
+  };
+
+  return {
+    ok: true,
+    state: checkLevelUps(newState),
+  };
+}
+
 export function passPriority(
   state: InternalState,
   seatIdx: 0 | 1,

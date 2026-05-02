@@ -15,6 +15,7 @@ import type {
   RuneterraBattleServerMessage,
 } from "../../shared/types";
 import {
+  activateSkill,
   applyMulligan,
   assignBlockers,
   createInitialState,
@@ -318,6 +319,15 @@ export default class LorBattleServer implements Party.Server {
         break;
       case "lor-pass":
         result = passPriority(this.state, seat);
+        break;
+      case "lor-activate-skill":
+        result = activateSkill(
+          this.state,
+          seat,
+          data.unitUid,
+          data.allyTargetUids,
+          data.enemyTargetUid,
+        );
         break;
       case "lor-concede": {
         // Forfait : adversaire gagne immédiatement.
