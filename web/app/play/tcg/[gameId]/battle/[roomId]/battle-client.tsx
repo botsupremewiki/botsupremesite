@@ -1006,18 +1006,18 @@ function BattleBoard({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 gap-2 overflow-y-auto px-2 py-1">
+        <div className="flex min-h-0 flex-1 gap-2 overflow-y-auto p-2">
           {/* ── Colonne joueur (gauche) — vertical : info → KO → board → contrôles ── */}
           {state.self && (
             <div
-              className="flex min-w-0 flex-1 flex-col items-center gap-1"
+              className="flex min-w-0 flex-1 flex-col items-center gap-2"
               data-self-side
             >
               {/* Phase 11.1 : layout horizontal Pokémons à gauche,
                   PlayerInfo + BackRow + Attaques à droite (au niveau
                   de la hauteur du cadre du board). */}
               <div className="flex items-start gap-2">
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-3">
                   <BoardArea
                     active={state.self.active}
                     bench={state.self.bench}
@@ -1146,13 +1146,13 @@ function BattleBoard({
               GAUCHE du board adverse (au niveau de la hauteur du cadre),
               board à droite. ── */}
           {state.opponent && (
-            <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
               <div className="flex items-start gap-2">
                 {/* Phase 11.1 + 11.2 : PlayerInfo + BackRow + HandHidden
                     tous regroupés à gauche du board adverse (mirroir
                     symétrique du joueur). HandHidden était auparavant
                     rendu en dessous du board, maintenant sous le BackRow. */}
-                <div className="flex flex-col items-stretch gap-1.5">
+                <div className="flex flex-col items-stretch gap-2">
                   <PlayerInfo player={state.opponent} isOpponent />
                   <BackRow
                     koCount={state.opponent.koCount}
@@ -1536,7 +1536,7 @@ function HandHidden({
         {Array.from({ length: Math.min(count, 7) }, (_, i) => (
           <div
             key={i}
-            className={`-ml-3 h-10 w-7 rounded border border-white/20 bg-gradient-to-br ${gradient} shadow first:ml-0 xl:h-12 xl:w-9`}
+            className={`-ml-3 h-14 w-10 rounded border border-white/20 bg-gradient-to-br ${gradient} shadow first:ml-0 xl:h-16 xl:w-12`}
           />
         ))}
         {count > 7 && (
@@ -1626,7 +1626,7 @@ function BoardArea({
 
   return (
     <div
-      className={`flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-1.5 ${
+      className={`flex flex-col items-center gap-4 rounded-xl border-2 px-2 py-2 ${
         isOpponent
           ? "border-rose-400/30 bg-rose-950/20"
           : "border-emerald-400/30 bg-emerald-950/20"
