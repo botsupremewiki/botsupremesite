@@ -23,11 +23,16 @@ export default async function TcgGameHub({
   const profile = await getProfile();
   const game = TCG_GAMES[gameId as TcgGameId];
 
-  // Auto-redirect vers le tutoriel pour Pokemon : si l'user n'a jamais
-  // complété le tuto, on l'envoie automatiquement à sa première visite
-  // (sauf si ?skipTutorial=1 dans l'URL — utile pour navigation interne).
+  // Auto-redirect vers le tutoriel pour les 3 TCG (Pokemon, OnePiece, LoL) :
+  // si l'user n'a jamais complété le tuto pour ce jeu, on l'envoie
+  // automatiquement à sa première visite (sauf si ?skipTutorial=1 dans
+  // l'URL — utile pour navigation interne).
   // Le tuto crédite +50 OS + 10 boosters gratuits à la complétion.
-  if (gameId === "pokemon" && profile && sp.skipTutorial !== "1") {
+  if (
+    profile &&
+    sp.skipTutorial !== "1" &&
+    (gameId === "pokemon" || gameId === "onepiece" || gameId === "lol")
+  ) {
     const sb = await createClient();
     if (sb) {
       const { data: doneData } = await sb.rpc("has_completed_tcg_tutorial", {
@@ -303,7 +308,9 @@ export default async function TcgGameHub({
               icon="🎓"
               title="Tutoriel guidé"
               description={
-                gameId === "pokemon"
+                gameId === "pokemon" ||
+                gameId === "onepiece" ||
+                gameId === "lol"
                   ? "Apprends les bases en 8 étapes. +50 OS et +10 boosters la première fois."
                   : "Apprends les bases en 8 étapes. +50 OS la première fois."
               }
