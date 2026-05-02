@@ -1637,7 +1637,7 @@ function BoardArea({
           dimensionné sur la même sizeClass que la carte interne pour
           que le layout réserve la bonne place (avant : container fixe
           h-56 w-40 plus petit que la carte → carte overflow). */}
-      <div className="relative w-36 h-52 lg:w-40 lg:h-56 xl:w-44 xl:h-60 2xl:w-48 2xl:h-64">
+      <div className="relative w-40 h-56 lg:w-44 lg:h-60 xl:w-48 xl:h-64 2xl:w-52 2xl:h-72">
         <AnimatePresence mode="popLayout">
           {active
             ? (() => {
@@ -1712,7 +1712,7 @@ function BoardArea({
           return (
             <div
               key={`bench-slot-${i}`}
-              className="relative w-24 h-32 lg:w-28 lg:h-36 xl:w-32 xl:h-40"
+              className="relative w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48 2xl:w-40 2xl:h-56"
             >
               <AnimatePresence mode="popLayout">
                 {card
@@ -1911,13 +1911,13 @@ function BoardCard({
   //   • HP courant en bas (gros, rouge si dégâts)
   //   • Énergies attachées sous la carte (pastilles colorées par type)
   //   • Statuses en haut à droite (badges emoji)
-  // Tailles responsive : Active (large) plus grosse que Bench. Compactées
-  // (~15-20% en moins par rapport à la refonte UX 1920×1080 initiale)
-  // pour tenir verticalement sur 1080p sans scroll. Largeurs réduites en
-  // proportion pour garder le ratio 5:7 des cartes.
+  // Tailles responsive : Active (large) plus grosse que Bench. Compromis
+  // entre les tailles initiales (qui débordaient verticalement sur 1080p)
+  // et les tailles trop compactes (Phase 11) qui rendaient les cartes
+  // trop petites. Ratio 5:7 conservé pour cohérence visuelle.
   const sizeClass = large
-    ? "w-36 h-52 lg:w-40 lg:h-56 xl:w-44 xl:h-60 2xl:w-48 2xl:h-64"
-    : "w-24 h-32 lg:w-28 lg:h-36 xl:w-32 xl:h-40";
+    ? "w-40 h-56 lg:w-44 lg:h-60 xl:w-48 xl:h-64 2xl:w-52 2xl:h-72"
+    : "w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48 2xl:w-40 2xl:h-56";
   const remainingHp = Math.max(0, data.hp - card.damage);
   const damaged = card.damage > 0;
   const hpPct = Math.max(0, Math.min(1, remainingHp / data.hp));
@@ -3104,7 +3104,7 @@ function HandCard({
       }}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
-      className={`relative w-24 h-32 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-28 lg:h-36 xl:w-32 xl:h-44 2xl:w-36 2xl:h-48 ${
+      className={`relative w-28 h-40 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-32 lg:h-44 xl:w-36 xl:h-52 2xl:w-40 2xl:h-56 ${
         playable
           ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
           : blocked
