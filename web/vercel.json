@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/refresh-meta-stats",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-old-data",
+      "schedule": "30 3 * * *"
     }
   ]
 }

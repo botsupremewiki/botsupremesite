@@ -3151,6 +3151,26 @@ export default class BattleServer implements Party.Server {
             `🏅 ${username} débloque « ${ach.name} » ${ach.icon}`,
           );
           this.broadcastState();
+          // Toast privé au siège du joueur qui vient d'unlock.
+          const targetSeat: BattleSeatId | null =
+            this.seats.p1?.authId === userId
+              ? "p1"
+              : this.seats.p2?.authId === userId
+                ? "p2"
+                : null;
+          if (targetSeat) {
+            const conn = this.seats[targetSeat]?.conn;
+            if (conn) {
+              this.sendTo(conn, {
+                type: "battle-achievement-unlocked",
+                id: ach.id,
+                name: ach.name,
+                description: ach.description,
+                icon: ach.icon,
+                tier: ach.tier,
+              });
+            }
+          }
         }
       } catch {
         // best-effort, on ignore les erreurs réseau

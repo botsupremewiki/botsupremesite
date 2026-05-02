@@ -108,6 +108,86 @@ export const STARTER_DECKS: StarterDeckTemplate[] = [
       { cardId: "P-A-002", count: 2 },
     ],
   },
+  {
+    id: "psy-alakazam",
+    name: "🌀 L'Esprit Psy",
+    description:
+      "Mono-Psy avec Abra → Kadabra → Alakazam et la ligne Tarsal/Kirlia/Gardevoir. Contrôle et utilitaires.",
+    emoji: "🌀",
+    energyTypes: ["psychic"],
+    cards: [
+      { cardId: "A1-115", count: 2 }, // Abra
+      { cardId: "A1-116", count: 2 }, // Kadabra
+      { cardId: "A1-117", count: 2 }, // Alakazam
+      { cardId: "A1-130", count: 2 }, // Tarsal
+      { cardId: "A1-131", count: 2 }, // Kirlia
+      { cardId: "A1-132", count: 2 }, // Gardevoir
+      { cardId: "P-A-001", count: 2 },
+      { cardId: "P-A-007", count: 2 },
+      { cardId: "P-A-005", count: 2 },
+      { cardId: "P-A-002", count: 2 },
+    ],
+  },
+  {
+    id: "combat-machamp",
+    name: "👊 La Force du Combat",
+    description:
+      "Mono-Combat autour de Machoc → Machopeur → Mackogneur. Brutal au corps à corps avec Férosinge en finisher.",
+    emoji: "👊",
+    energyTypes: ["fighting"],
+    cards: [
+      { cardId: "A1-143", count: 2 }, // Machoc
+      { cardId: "A1-144", count: 2 }, // Machopeur
+      { cardId: "A1-145", count: 2 }, // Mackogneur
+      { cardId: "A1-141", count: 2 }, // Férosinge
+      { cardId: "A1-142", count: 2 }, // Colossinge
+      { cardId: "A1-156", count: 2 }, // Rhinocorne
+      { cardId: "P-A-001", count: 2 },
+      { cardId: "P-A-007", count: 2 },
+      { cardId: "P-A-005", count: 2 },
+      { cardId: "P-A-002", count: 2 },
+    ],
+  },
+  {
+    id: "obscurite-arbok",
+    name: "🌑 Les Ombres Sombres",
+    description:
+      "Mono-Obscurité avec Abo/Arbok, Nosferapti/Nosferalto et Smogo/Smogogo. Multi-lignes avec poison.",
+    emoji: "🌑",
+    energyTypes: ["darkness"],
+    cards: [
+      { cardId: "A1-164", count: 2 }, // Abo
+      { cardId: "A1-165", count: 2 }, // Arbok
+      { cardId: "A1-172", count: 2 }, // Nosferapti
+      { cardId: "A1-173", count: 2 }, // Nosferalto
+      { cardId: "A1-176", count: 2 }, // Smogo
+      { cardId: "A1-177", count: 2 }, // Smogogo
+      { cardId: "P-A-001", count: 2 },
+      { cardId: "P-A-007", count: 2 },
+      { cardId: "P-A-005", count: 2 },
+      { cardId: "P-A-002", count: 2 },
+    ],
+  },
+  {
+    id: "metal-melmetal",
+    name: "⚙️ Le Bouclier Métal",
+    description:
+      "Mono-Métal avec Meltan → Melmetal et Scalpion → Scalproie. Tank défensif aux gros HP.",
+    emoji: "⚙️",
+    energyTypes: ["metal"],
+    cards: [
+      { cardId: "A1-181", count: 2 }, // Meltan
+      { cardId: "A1-182", count: 2 }, // Melmetal
+      { cardId: "A1-179", count: 2 }, // Scalpion
+      { cardId: "A1-180", count: 2 }, // Scalproie
+      { cardId: "A1-178", count: 2 }, // Mysdibule
+      { cardId: "P-A-001", count: 2 }, // Potion (×2 = 4 PV soignés bien utile)
+      { cardId: "P-A-002", count: 2 }, // Vitesse +
+      { cardId: "P-A-005", count: 2 }, // Poké Ball
+      { cardId: "P-A-007", count: 2 }, // Recherches Pro
+      { cardId: "P-A-004", count: 2 }, // Pokédex
+    ],
+  },
 ];
 
 /** Retourne un starter par id (ou null). */

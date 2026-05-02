@@ -3289,6 +3289,17 @@ export type BattleServerMessage =
       type: "battle-emote";
       seat: BattleSeatId;
       emoteId: BattleEmoteId;
+    }
+  // Achievement nouvellement débloqué (ranked seulement, en fin de
+  // match). Émis uniquement au siège du joueur concerné — le client
+  // affiche un toast festif "Achievement unlocked !".
+  | {
+      type: "battle-achievement-unlocked";
+      id: string;
+      name: string;
+      description: string;
+      icon: string;
+      tier: "bronze" | "silver" | "gold";
     };
 
 // ─── Battle lobby (matchmaking) ────────────────────────────────────────────

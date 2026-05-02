@@ -26,6 +26,7 @@ import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
 import { useRegisterProximityChat } from "@/app/play/proximity-chat-context";
 import { useSounds } from "@/lib/sounds";
+import { useToast } from "@/components/toast";
 import { CardFace, CardZoomModal } from "../../_components/card-visuals";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
@@ -109,12 +110,15 @@ export function BattleClient({
   const cardById = POKEMON_BASE_SET_BY_ID;
   const wsRef = useRef<WebSocket | null>(null);
   const sounds = useSounds();
+  const toast = useToast();
   // Ref miroir pour utiliser sounds dans les closures stables (handler
   // WebSocket) sans forcer le rerender sur chaque render parent.
   const soundsRef = useRef(sounds);
+  const toastRef = useRef(toast);
   useEffect(() => {
     soundsRef.current = sounds;
-  }, [sounds]);
+    toastRef.current = toast;
+  }, [sounds, toast]);
 
   const [status, setStatus] = useState<ConnStatus>("connecting");
   const [state, setState] = useState<BattleState | null>(null);
@@ -397,6 +401,15 @@ export function BattleClient({
             if (isSelf) setEmoteSelf((cur) => (cur?.id === id ? null : cur));
             else setEmoteOpp((cur) => (cur?.id === id ? null : cur));
           }, 3000);
+          break;
+        }
+        case "battle-achievement-unlocked": {
+          // Toast festif + son victoire. Le user a unlock un achievement
+          // pendant le match (ex « 1ère victoire », « ELO 1500 »…).
+          toastRef.current.success(
+            `🏅 ${msg.icon} Achievement débloqué : ${msg.name}`,
+          );
+          soundsRef.current.victory();
           break;
         }
       }
