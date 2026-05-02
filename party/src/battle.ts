@@ -2692,7 +2692,14 @@ export default class BattleServer implements Party.Server {
             this.knockOut(seatId, oppId);
           } else {
             // KO sur le Banc adverse — incrémente koCount sans déclencher promote.
-            seat.koCount += 1;
+            // Pocket : un EX KO compte pour 2.
+            const isEx = tData.kind === "pokemon" && tData.isEx === true;
+            if (isEx) {
+              this.pushLog(
+                `💥 ${tData.name} ex KO sur le Banc — 2 points pour ${seat.username} !`,
+              );
+            }
+            seat.koCount += isEx ? 2 : 1;
             opp.bench = opp.bench.filter((c) => c.uid !== target.uid);
             opp.discard.push({
               uid: `disc-${this.uidCounter++}`,
@@ -2850,8 +2857,18 @@ export default class BattleServer implements Party.Server {
     const def = this.seats[defenderSeatId];
     const att = this.seats[attackerSeatId];
     if (!def || !att || !def.active) return;
+    // Récupère la data AVANT de défausser pour savoir si c'est un EX
+    // (= 2 KO au lieu de 1, règle officielle Pocket).
+    const koData = getCardForBattle(def.active.cardId);
+    const isEx = koData?.kind === "pokemon" && koData.isEx === true;
     // Le KO est annoncé inline dans le log d'attaque (« → K.O. ! »), donc
-    // pas de pushLog séparé ici.
+    // pas de pushLog séparé ici. On ajoute juste un log dédié EX qui
+    // explique le double point (sinon le joueur peut être surpris).
+    if (isEx) {
+      this.pushLog(
+        `💥 ${koData.name} ex KO — 2 points pour ${att.username} !`,
+      );
+    }
     // Discard l'Actif (ses énergies attachées partent avec en Pocket — pas
     // remises au deck/main, juste supprimées).
     def.discard.push({
@@ -2860,8 +2877,10 @@ export default class BattleServer implements Party.Server {
     });
     def.active = null;
 
-    // Pocket : l'attaquant gagne 1 KO. Premier à KO_WIN_TARGET gagne.
-    att.koCount += 1;
+    // Pocket : l'attaquant gagne 1 KO (ou 2 si EX). Premier à KO_WIN_TARGET
+    // gagne. Le score peut DÉPASSER la cible (4/3 si EX final) — on
+    // déclare quand même la victoire, le score affiché reste correct.
+    att.koCount += isEx ? 2 : 1;
 
     if (att.koCount >= KO_WIN_TARGET) {
       this.declareWinner(attackerSeatId, `${KO_WIN_TARGET} KO infligés.`);
