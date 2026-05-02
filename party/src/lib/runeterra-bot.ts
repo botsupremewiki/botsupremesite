@@ -67,6 +67,14 @@ export function botAct(
 
   const player = state.players[seatIdx];
 
+  // Phase 8.2 : si la spellStack est non-vide, le bot doit passer pour
+  // laisser le top du stack résoudre. Le bot ne réagit pas (simplification :
+  // un bot AI naïf qui ne contre-spell pas — joueurs humains ont l'avantage
+  // tactique, c'est intentionnel pour entraînement).
+  if (state.spellStack.length > 0) {
+    return passPriority(state, seatIdx);
+  }
+
   // Joue l'unité la moins chère qui rentre dans la mana
   const playableUnits: { handIndex: number; cost: number }[] = [];
   for (let i = 0; i < player.hand.length; i++) {
