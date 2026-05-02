@@ -1626,7 +1626,7 @@ function BoardArea({
 
   return (
     <div
-      className={`flex flex-col items-center gap-4 rounded-xl border-2 px-2 py-2 ${
+      className={`flex flex-col items-center gap-3 rounded-xl border-2 px-2 py-1.5 ${
         isOpponent
           ? "border-rose-400/30 bg-rose-950/20"
           : "border-emerald-400/30 bg-emerald-950/20"
@@ -2100,35 +2100,40 @@ function BoardCard({
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Pastilles d'énergies attachées — overlay À L'INTÉRIEUR de
+              la carte (au-dessus de la HP bar, alignées gauche). Avant :
+              les énergies étaient sous la carte, mais comme la carte est
+              dans un wrapper `absolute inset-0` avec hauteur fixe, elles
+              étaient invisibles (clip par le bord de la BoardArea).
+              Maintenant en overlay : pas de gain ni perte vertical, et
+              le joueur voit ses énergies. */}
+          {card.attachedEnergies.length > 0 && (
+            <div className="pointer-events-none absolute bottom-7 left-1 flex flex-wrap items-center gap-0.5">
+              {card.attachedEnergies.map((e, i) => {
+                const t = e as PokemonEnergyType;
+                const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
+                const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
+                const isNew = newEnergyIdx === i;
+                return (
+                  <motion.span
+                    key={i}
+                    initial={isNew ? { scale: 0, rotate: -180 } : false}
+                    animate={isNew ? { scale: [0, 1.3, 1], rotate: 0 } : undefined}
+                    transition={{ duration: 0.5, ease: "backOut" }}
+                    className={`flex items-center justify-center rounded-full font-bold shadow-md ring-2 ring-black/40 ${
+                      large ? "h-6 w-6 text-xs" : "h-5 w-5 text-[10px]"
+                    } ${bg} ${fg}`}
+                    title={e}
+                  >
+                    {energyEmoji(t)}
+                  </motion.span>
+                );
+              })}
+            </div>
+          )}
         </div>
       </motion.div>
-
-      {/* Pastilles d'énergies attachées (sous la carte). Plus grandes
-          sur l'Active (large) qu'en Bench. */}
-      {card.attachedEnergies.length > 0 && (
-        <div className="flex flex-wrap items-center justify-center gap-1 px-0.5">
-          {card.attachedEnergies.map((e, i) => {
-            const t = e as PokemonEnergyType;
-            const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
-            const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
-            const isNew = newEnergyIdx === i;
-            return (
-              <motion.span
-                key={i}
-                initial={isNew ? { scale: 0, rotate: -180 } : false}
-                animate={isNew ? { scale: [0, 1.3, 1], rotate: 0 } : undefined}
-                transition={{ duration: 0.5, ease: "backOut" }}
-                className={`flex items-center justify-center rounded-full font-bold shadow ring-1 ring-black/30 ${
-                  large ? "h-6 w-6 text-sm" : "h-5 w-5 text-xs"
-                } ${bg} ${fg}`}
-                title={e}
-              >
-                {energyEmoji(t)}
-              </motion.span>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
