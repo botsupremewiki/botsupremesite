@@ -70,6 +70,7 @@ export function TutorialClient({
   const [reward, setReward] = useState<{ gold: number; packs: number } | null>(
     null,
   );
+  const [error, setError] = useState<string | null>(null);
 
   // Pour l'instant on n'a que pokemon — on duplique pour les autres jeux.
   const steps = STEPS_POKEMON;
@@ -77,6 +78,10 @@ export function TutorialClient({
 
   async function complete() {
     setCompleting(true);
+    setError(null);
+    // Visiteur non connecté : on ne peut pas persister, on lui montre quand
+    // même l'écran de fin (la redirection hub→tutorial ne s'applique qu'aux
+    // users connectés de toute façon).
     if (!isLoggedIn) {
       setCompleted(true);
       setCompleting(false);
@@ -84,14 +89,24 @@ export function TutorialClient({
     }
     const supabase = createClient();
     if (!supabase) {
-      setCompleted(true);
+      setError("Connexion à la base impossible. Réessaie.");
       setCompleting(false);
       return;
     }
-    const { data } = await supabase.rpc("complete_tcg_tutorial", {
-      p_game_id: gameId,
-    });
+    const { data, error: rpcError } = await supabase.rpc(
+      "complete_tcg_tutorial",
+      { p_game_id: gameId },
+    );
     setCompleting(false);
+    // Si la RPC échoue, on N'AVANCE PAS vers l'écran de fin — sinon le
+    // joueur croit avoir terminé mais la complétion n'est pas enregistrée
+    // et le tutoriel revient à la visite suivante.
+    if (rpcError) {
+      setError(
+        rpcError.message ?? "Erreur lors de l'enregistrement. Réessaie.",
+      );
+      return;
+    }
     setCompleted(true);
     const r = data as
       | { first_time: boolean; reward_gold: number; reward_packs?: number }
@@ -172,20 +187,12 @@ export function TutorialClient({
   const current = steps[step];
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-100">🎓 Tutoriel</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Étape {step + 1} / {steps.length}
-          </p>
-        </div>
-        <Link
-          href={`/play/tcg/${gameId}?skipTutorial=1`}
-          className="text-xs text-zinc-400 transition-colors hover:text-zinc-100"
-          title="Quitter le tutoriel sans le compléter (pas de récompense)"
-        >
-          Passer →
-        </Link>
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100">🎓 Tutoriel</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Étape {step + 1} / {steps.length} — termine pour débloquer tes 10
+          boosters gratuits.
+        </p>
       </div>
 
       {/* Progress bar */}
@@ -209,6 +216,12 @@ export function TutorialClient({
           {current.visual}
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
+          ⚠️ {error}
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <button

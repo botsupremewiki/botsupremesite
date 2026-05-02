@@ -10,7 +10,9 @@
 // cosmetic_id "default" est gratuit et toujours équipable (cf. RPC
 // equip_tcg_cosmetic).
 
-export type CosmeticType = "avatar" | "sleeve" | "playmat";
+// Catalogue commun à tous les TCG. "coin" est utilisé seulement par
+// Pokemon (pile/face) mais on l'inclut ici pour ne pas dupliquer le type.
+export type CosmeticType = "avatar" | "sleeve" | "playmat" | "coin";
 
 export type CosmeticItem = {
   id: string;

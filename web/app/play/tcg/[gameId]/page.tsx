@@ -318,12 +318,16 @@ export default async function TcgGameHub({
               border="border-cyan-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.10),transparent_70%)]"
             />
-            {gameId === "onepiece" && (
+            {(gameId === "onepiece" || gameId === "pokemon") && (
               <MenuButton
                 href={`/play/tcg/${gameId}/cosmetics`}
                 icon="🛒"
                 title="Boutique cosmétique"
-                description="Avatars Leader, sleeves, playmats — pure cosmétique"
+                description={
+                  gameId === "onepiece"
+                    ? "Avatars Leader, sleeves, playmats — pure cosmétique"
+                    : "Avatars Pokémon, sleeves par type, playmats, pièces — pure cosmétique"
+                }
                 accent="text-fuchsia-200"
                 border="border-fuchsia-400/40"
                 gradient="bg-[radial-gradient(ellipse_at_center,rgba(232,121,249,0.10),transparent_70%)]"

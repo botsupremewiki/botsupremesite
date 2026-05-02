@@ -33,12 +33,23 @@ export default async function TutorialPage({
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
-          <Link
-            href={`/play/tcg/${gameId}?skipTutorial=1`}
-            className="text-zinc-400 transition-colors hover:text-zinc-100"
-          >
-            ← {game.name}
-          </Link>
+          {/* Le retour vers le hub n'est autorisé que si :
+              - le tuto a déjà été complété (l'user revient le revoir), ou
+              - l'user n'est pas connecté (pas de persistence possible).
+              Pour un user connecté qui n'a pas encore complété, on bloque
+              toute échappatoire pour forcer le clic sur "Terminer 🎉" qui
+              appelle le RPC complete_tcg_tutorial — sinon le tuto revient
+              à chaque visite. */}
+          {alreadyCompleted || !profile ? (
+            <Link
+              href={`/play/tcg/${gameId}?skipTutorial=1`}
+              className="text-zinc-400 transition-colors hover:text-zinc-100"
+            >
+              ← {game.name}
+            </Link>
+          ) : (
+            <span className="text-zinc-500">{game.name}</span>
+          )}
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
           <span className="text-xs text-zinc-500">🎓 Tutoriel</span>

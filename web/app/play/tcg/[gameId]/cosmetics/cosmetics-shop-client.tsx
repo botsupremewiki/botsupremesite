@@ -4,16 +4,31 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ONEPIECE_BASE_SET_BY_ID } from "@shared/tcg-onepiece-base";
-import type {
-  CosmeticItem,
-  CosmeticType,
-} from "@shared/tcg-onepiece-cosmetics";
+import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
+import type { CosmeticItem } from "@shared/tcg-onepiece-cosmetics";
 
-const TABS: { type: CosmeticType; label: string; emoji: string }[] = [
+// On étend le type avec "coin" pour Pokemon (pile/face). La DB accepte
+// n'importe quel string de type, donc pas de migration nécessaire.
+type AnyCosmeticType = "avatar" | "sleeve" | "playmat" | "coin";
+
+const TABS: { type: AnyCosmeticType; label: string; emoji: string }[] = [
   { type: "avatar", label: "Avatars", emoji: "👤" },
   { type: "sleeve", label: "Sleeves", emoji: "🃏" },
   { type: "playmat", label: "Playmats", emoji: "🗺️" },
+  { type: "coin", label: "Pièces", emoji: "🪙" },
 ];
+
+/** Cherche l'image associée à un cardId selon le jeu. Pour les avatars
+ *  (ex. cardId d'un Leader OnePiece ou d'un Pokémon iconique). */
+function getCardImage(gameId: string, cardId: string): string | null {
+  if (gameId === "onepiece") {
+    return ONEPIECE_BASE_SET_BY_ID.get(cardId)?.image ?? null;
+  }
+  if (gameId === "pokemon") {
+    return POKEMON_BASE_SET_BY_ID.get(cardId)?.image ?? null;
+  }
+  return null;
+}
 
 export function CosmeticsShopClient({
   gameId,
@@ -23,6 +38,7 @@ export function CosmeticsShopClient({
   activeAvatar,
   activeSleeve,
   activePlaymat,
+  activeCoin,
   catalog,
 }: {
   gameId: string;
@@ -32,21 +48,41 @@ export function CosmeticsShopClient({
   activeAvatar: string;
   activeSleeve: string;
   activePlaymat: string;
+  /** Coin actif — uniquement pour Pokemon. Optionnel (default si non fourni). */
+  activeCoin?: string;
+  /** Le catalogue est typé CosmeticItem mais peut contenir des items
+   *  Pokemon (type === "coin") qui ne matchent pas exactement le type
+   *  OnePiece — on cast au runtime. */
   catalog: CosmeticItem[];
 }) {
-  const [tab, setTab] = useState<CosmeticType>("avatar");
+  const [tab, setTab] = useState<AnyCosmeticType>("avatar");
   const [gold, setGold] = useState(initialGold);
   const [owned, setOwned] = useState<Set<string>>(new Set(ownedKeys));
   const [active, setActive] = useState({
     avatar: activeAvatar,
     sleeve: activeSleeve,
     playmat: activePlaymat,
+    coin: activeCoin ?? "default",
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  // Filtre les onglets selon le jeu : OnePiece n'a pas de coin, donc
+  // on cache l'onglet pour ce jeu.
+  const visibleTabs =
+    gameId === "pokemon" ? TABS : TABS.filter((t) => t.type !== "coin");
+
   const items = catalog.filter((c) => c.type === tab);
+  // Type-safe access to active value for the current tab.
+  const activeIdForTab =
+    tab === "avatar"
+      ? active.avatar
+      : tab === "sleeve"
+        ? active.sleeve
+        : tab === "playmat"
+          ? active.playmat
+          : active.coin;
 
   async function buy(item: CosmeticItem) {
     if (item.price > gold) {
@@ -110,14 +146,14 @@ export function CosmeticsShopClient({
       setError(`Équipement refusé : ${res.reason}`);
       return;
     }
-    setActive((prev) => ({ ...prev, [item.type]: item.id }));
+    setActive((prev) => ({ ...prev, [item.type as AnyCosmeticType]: item.id }));
     router.refresh();
   }
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap gap-2 border-b border-white/10 pb-2">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.type}
             onClick={() => setTab(t.type)}
@@ -145,12 +181,13 @@ export function CosmeticsShopClient({
         {items.map((item) => {
           const key = `${item.type}:${item.id}`;
           const isOwned = item.id === "default" || owned.has(key);
-          const isActive = active[item.type] === item.id;
+          const isActive = activeIdForTab === item.id;
           const isBusy = busy === `buy-${key}` || busy === `equip-${key}`;
 
-          // Pour avatars, on affiche l'image du Leader si défini.
-          const leaderMeta = item.leaderCardId
-            ? ONEPIECE_BASE_SET_BY_ID.get(item.leaderCardId)
+          // Pour avatars, on affiche l'image du Pokémon/Leader si défini.
+          // getCardImage gère pokemon ET onepiece selon gameId.
+          const cardImg = item.leaderCardId
+            ? getCardImage(gameId, item.leaderCardId)
             : null;
 
           return (
@@ -166,10 +203,10 @@ export function CosmeticsShopClient({
             >
               {/* Aperçu */}
               <div className="flex h-32 items-center justify-center overflow-hidden rounded-md bg-zinc-950/60">
-                {item.type === "avatar" && leaderMeta ? (
+                {item.type === "avatar" && cardImg ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={leaderMeta.image}
+                    src={cardImg}
                     alt={item.name}
                     className="h-full object-contain"
                   />
@@ -180,6 +217,13 @@ export function CosmeticsShopClient({
                     } shadow-inner`}
                   >
                     <div className="flex h-full items-center justify-center text-2xl">
+                      {item.emoji}
+                    </div>
+                  </div>
+                ) : item.type === "coin" ? (
+                  // Coin : pièce circulaire avec emoji centré + dégradé.
+                  <div className="relative h-24 w-24 rounded-full border-4 border-amber-300/80 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 shadow-[inset_0_4px_8px_rgba(0,0,0,0.3)]">
+                    <div className="flex h-full w-full items-center justify-center text-3xl">
                       {item.emoji}
                     </div>
                   </div>

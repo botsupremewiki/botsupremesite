@@ -4,10 +4,19 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
 import { ONEPIECE_COSMETICS } from "@shared/tcg-onepiece-cosmetics";
+import { POKEMON_COSMETICS } from "@shared/tcg-pokemon-cosmetics";
 import { UserPill } from "@/components/user-pill";
 import { CosmeticsShopClient } from "./cosmetics-shop-client";
 
 export const dynamic = "force-dynamic";
+
+/** Catalogue de cosmétiques par jeu. Supporté : OnePiece + Pokemon.
+ *  LoR (lol) n'a pas encore de cosmétiques. */
+function getCosmeticsCatalog(gameId: string) {
+  if (gameId === "onepiece") return ONEPIECE_COSMETICS;
+  if (gameId === "pokemon") return POKEMON_COSMETICS;
+  return null;
+}
 
 export default async function TcgCosmeticsPage({
   params,
@@ -18,8 +27,9 @@ export default async function TcgCosmeticsPage({
   if (!(gameId in TCG_GAMES)) notFound();
   const game = TCG_GAMES[gameId as TcgGameId];
   const profile = await getProfile();
+  const catalog = getCosmeticsCatalog(gameId);
 
-  if (gameId !== "onepiece") {
+  if (!catalog) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
@@ -42,7 +52,7 @@ export default async function TcgCosmeticsPage({
         </header>
         <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
           <p className="text-zinc-400">
-            Boutique cosmétiques disponible uniquement pour One Piece TCG.
+            Boutique cosmétiques bientôt disponible pour ce jeu.
           </p>
         </main>
       </div>
@@ -116,13 +126,19 @@ export default async function TcgCosmeticsPage({
       </header>
       <main className={`flex flex-1 flex-col overflow-y-auto p-6 ${game.gradient}`}>
         <div className="mx-auto w-full max-w-5xl">
-          <h1 className="font-pirate mb-2 text-5xl tracking-wide text-amber-200">
+          <h1
+            className={`mb-2 text-5xl tracking-wide ${
+              gameId === "onepiece"
+                ? "font-pirate text-amber-200"
+                : "font-bold text-amber-200"
+            }`}
+          >
             🛒 Boutique cosmétique
           </h1>
           <p className="mb-8 text-sm text-zinc-400">
-            Personnalise ton apparence : avatars Leader, dos de cartes (sleeves)
-            et playmats thématiques One Piece. Pure cosmétique — n&apos;affecte
-            pas le gameplay.
+            {gameId === "onepiece"
+              ? "Personnalise ton apparence : avatars Leader, dos de cartes (sleeves) et playmats thématiques One Piece. Pure cosmétique — n'affecte pas le gameplay."
+              : "Personnalise ton apparence : avatars Pokémon, dos de cartes (sleeves) par type d'énergie, playmats lieux iconiques et pièces de pile/face. Pure cosmétique — n'affecte pas le gameplay."}
           </p>
 
           <CosmeticsShopClient
@@ -133,7 +149,8 @@ export default async function TcgCosmeticsPage({
             activeAvatar={gameActive.avatar ?? "default"}
             activeSleeve={gameActive.sleeve ?? "default"}
             activePlaymat={gameActive.playmat ?? "default"}
-            catalog={ONEPIECE_COSMETICS}
+            activeCoin={gameActive.coin ?? "default"}
+            catalog={catalog}
           />
         </div>
       </main>
