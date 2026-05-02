@@ -1006,7 +1006,7 @@ function BattleBoard({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 gap-2 overflow-y-auto p-2">
           {/* ── Colonne joueur (gauche) — vertical : info → KO → board → contrôles ── */}
           {state.self && (
             <div
@@ -1016,7 +1016,7 @@ function BattleBoard({
               {/* Phase 11.1 : layout horizontal Pokémons à gauche,
                   PlayerInfo + BackRow + Attaques à droite (au niveau
                   de la hauteur du cadre du board). */}
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-2">
                 <div className="flex flex-col items-center gap-3">
                   <BoardArea
                     active={state.self.active}
@@ -1147,7 +1147,7 @@ function BattleBoard({
               board à droite. ── */}
           {state.opponent && (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-2">
                 {/* Phase 11.1 + 11.2 : PlayerInfo + BackRow + HandHidden
                     tous regroupés à gauche du board adverse (mirroir
                     symétrique du joueur). HandHidden était auparavant
@@ -1480,10 +1480,15 @@ function BackRow({
   discardCount: number;
   handCount?: number;
 }) {
+  // Phase 11.3 : `handCount` et `discardCount` retirés de l'affichage
+  // (jugés inutiles : la main est visible en bas, la défausse via le
+  // bouton dédié). On garde les paramètres pour la compatibilité.
+  void handCount;
+  void discardCount;
   return (
-    <div className="flex items-center gap-3 text-xs text-zinc-300">
+    <div className="flex items-center gap-2 text-xs text-zinc-300">
       {/* KO progress en cases — agrandi pour lisibilité 1920×1080 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <span className="text-[11px] uppercase tracking-widest text-zinc-400">
           KO <span className="font-bold tabular-nums text-amber-200">{koCount}</span>
           <span className="text-zinc-500">/{BATTLE_CONFIG.koWinTarget}</span>
@@ -1492,7 +1497,7 @@ function BackRow({
           {Array.from({ length: BATTLE_CONFIG.koWinTarget }, (_, i) => (
             <div
               key={i}
-              className={`h-5 w-5 rounded border-2 transition-colors ${
+              className={`h-4 w-4 rounded border-2 transition-colors ${
                 i < koCount
                   ? "border-amber-300/80 bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_8px_rgba(251,191,36,0.5)]"
                   : "border-white/10 bg-white/[0.02]"
@@ -1504,12 +1509,6 @@ function BackRow({
       <span className="h-4 w-px bg-white/10" />
       <span className="tabular-nums" title="Cartes restantes dans le deck">
         📚 <span className="font-bold text-zinc-100">{deckSize}</span>
-      </span>
-      <span className="tabular-nums" title="Carte(s) en main">
-        ✋ <span className="font-bold text-zinc-100">{handCount ?? 0}</span>
-      </span>
-      <span className="tabular-nums" title="Défausse">
-        🗑 <span className="font-bold text-zinc-100">{discardCount}</span>
       </span>
     </div>
   );
@@ -1627,7 +1626,7 @@ function BoardArea({
 
   return (
     <div
-      className={`flex flex-col items-center gap-6 rounded-xl border-2 px-6 py-4 ${
+      className={`flex flex-col items-center gap-4 rounded-xl border-2 px-2 py-2 ${
         isOpponent
           ? "border-rose-400/30 bg-rose-950/20"
           : "border-emerald-400/30 bg-emerald-950/20"
@@ -2304,7 +2303,7 @@ function SelfControls({
     (active?.playedThisTurn ?? false);
 
   return (
-    <div className="flex w-[220px] shrink-0 flex-col items-stretch gap-2 xl:w-[240px] 2xl:w-[260px]">
+    <div className="flex w-[190px] shrink-0 flex-col items-stretch gap-2 xl:w-[210px] 2xl:w-[230px]">
       {/* Liste des attaques (à droite du board joueur) */}
       <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-zinc-500">
         <Swords size={12} aria-hidden="true" />
