@@ -31,8 +31,23 @@ type WonderPickResult = {
   opener_username: string;
 };
 
+/** Statut par défaut affiché tant que la RPC n'a pas répondu OU si elle
+ *  échoue (RPC manquante = SQL pas encore exécuté, etc). On affiche
+ *  toujours la section pour que l'user comprenne la mécanique, même si
+ *  rien n'est dispo pour l'instant. */
+const FALLBACK_STATUS: WonderPickStatus = {
+  can_pick: false,
+  hours_until_reset: 0,
+  pool_size: 0,
+};
+
 export function WonderPickSection({ gameId }: { gameId: string }) {
-  const [status, setStatus] = useState<WonderPickStatus | null>(null);
+  // null = pas encore résolu (1er render). On utilise un state séparé
+  // `statusReady` pour distinguer "en cours de chargement" vs "résolu
+  // avec valeurs 0". Évite le bug "Chargement..." infini si la RPC
+  // n'existe pas (cas du SQL pas encore exécuté).
+  const [status, setStatus] = useState<WonderPickStatus>(FALLBACK_STATUS);
+  const [statusReady, setStatusReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   /** Ordre random fixe pendant la session — on shuffle 0-4 à chaque
@@ -44,15 +59,30 @@ export function WonderPickSection({ gameId }: { gameId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [zoomCard, setZoomCard] = useState<string | null>(null);
 
-  // Charge le statut au mount.
+  // Charge le statut au mount. Si la RPC échoue (ex. SQL pas exécuté
+  // ou réseau down), on reste sur FALLBACK_STATUS et on marque
+  // statusReady=true pour SORTIR de l'état "chargement".
   const fetchStatus = useCallback(async () => {
     const sb = createClient();
-    if (!sb) return;
-    const { data } = await sb.rpc("wonder_pick_status", {
-      p_game_id: gameId,
-    });
-    if (data && typeof data === "object") {
-      setStatus(data as WonderPickStatus);
+    if (!sb) {
+      setStatusReady(true);
+      return;
+    }
+    try {
+      const { data, error: rpcErr } = await sb.rpc("wonder_pick_status", {
+        p_game_id: gameId,
+      });
+      if (rpcErr) {
+        // RPC manquante (SQL pas exécuté) ou non-auth → on garde le
+        // fallback mais on ne bloque pas l'affichage.
+        console.warn("[wonder-pick] status RPC error:", rpcErr.message);
+      } else if (data && typeof data === "object") {
+        setStatus(data as WonderPickStatus);
+      }
+    } catch (err) {
+      console.warn("[wonder-pick] status threw:", err);
+    } finally {
+      setStatusReady(true);
     }
   }, [gameId]);
   useEffect(() => {
@@ -135,14 +165,6 @@ export function WonderPickSection({ gameId }: { gameId: string }) {
   // Wonder Pick uniquement pour Pokemon en v1 — adapter facilement aux
   // autres jeux en passant un getCardImage générique.
   if (gameId !== "pokemon") return null;
-
-  if (!status) {
-    return (
-      <div className="rounded-xl border border-fuchsia-400/30 bg-gradient-to-br from-fuchsia-950/40 to-purple-950/40 p-4">
-        <div className="text-sm text-zinc-400">Chargement Wonder Pick…</div>
-      </div>
-    );
-  }
 
   // Cas 1 : session en cours (5 dos affichés)
   if (sessionId) {
@@ -284,37 +306,67 @@ export function WonderPickSection({ gameId }: { gameId: string }) {
   }
 
   // Cas 2 : pas de session — affichage du statut + bouton "Lancer".
-  const canPick = status.can_pick && status.pool_size >= 5;
+  // États possibles :
+  //   - statusReady=false → affichage du squelette avec valeurs 0 mais
+  //     pas bloquant (l'user voit la section et son explication)
+  //   - pool_size < 5 → "Aucun Wonder Pick disponible pour le moment"
+  //   - can_pick = false (cooldown) → "Reviens dans Xh"
+  //   - can_pick = true && pool >= 5 → bouton actif
+  const canPick = statusReady && status.can_pick && status.pool_size >= 5;
+  const noPool = statusReady && status.pool_size < 5;
+  const onCooldown = statusReady && !status.can_pick;
   return (
     <div className="rounded-xl border-2 border-fuchsia-400/40 bg-gradient-to-br from-fuchsia-950/40 to-purple-950/40 p-5">
       <div className="flex items-start gap-4">
         <div className="text-4xl">✨</div>
         <div className="flex-1">
           <h3 className="text-lg font-bold text-fuchsia-100">
-            Wonder Pick
+            Wonder Pick — 1 par jour
           </h3>
           <p className="mt-1 text-xs text-fuchsia-200/80">
-            Choisis 1 carte sur 5 face cachée (la &quot;best card&quot; du
-            dernier pack gratuit d&apos;un autre joueur). 1 fois par jour.
+            Choisis 1 carte sur 5 face cachée — la &quot;best card&quot; du
+            dernier booster gratuit d&apos;un autre joueur. Tente ta chance
+            une fois par jour.
           </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
             <span className="rounded bg-black/30 px-2 py-0.5 text-zinc-300">
-              🎴 Pool : <strong>{status.pool_size}</strong> joueurs
+              🎴 Pool :{" "}
+              <strong className="text-fuchsia-200">
+                {statusReady ? status.pool_size : "…"}
+              </strong>{" "}
+              joueur{status.pool_size > 1 ? "s" : ""}
             </span>
-            {!status.can_pick && (
+            {noPool && (
+              <span className="rounded bg-amber-500/20 px-2 py-0.5 text-amber-200">
+                ⌛ Aucun Wonder Pick disponible pour le moment
+              </span>
+            )}
+            {onCooldown && !noPool && (
               <span className="rounded bg-rose-500/20 px-2 py-0.5 text-rose-200">
-                ⏳ Cooldown : {Math.ceil(status.hours_until_reset)}h restantes
+                ⏳ Reviens dans {Math.ceil(status.hours_until_reset)}h
+              </span>
+            )}
+            {canPick && (
+              <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-200">
+                ✓ Disponible !
               </span>
             )}
           </div>
+          {noPool && (
+            <p className="mt-2 text-[11px] text-zinc-400">
+              D&apos;autres joueurs doivent d&apos;abord ouvrir leurs
+              boosters gratuits pour alimenter le pool. Reviens un peu
+              plus tard.
+            </p>
+          )}
         </div>
         <button
           onClick={startSession}
           disabled={!canPick || loading}
           title={
-            !status.can_pick
-              ? `Reviens dans ${Math.ceil(status.hours_until_reset)}h`
-              : status.pool_size < 5
+            onCooldown
+              ? `Cooldown actif — reviens dans ${Math.ceil(status.hours_until_reset)}h`
+              : noPool
                 ? `Pool insuffisant (${status.pool_size}/5). D'autres joueurs doivent ouvrir des packs gratuits.`
                 : undefined
           }

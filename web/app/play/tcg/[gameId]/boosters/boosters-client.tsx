@@ -183,11 +183,6 @@ export function BoostersClient({
         )}
 
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-          {/* Wonder Pick (uniquement Pokemon en v1). Section qui charge
-              le statut, lance la session et présente 5 cartes face
-              cachée parmi lesquelles le user choisit. */}
-          <WonderPickSection gameId={gameId} />
-
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 p-4 backdrop-blur-sm">
             <div>
               <h1 className="text-2xl font-bold text-zinc-100">🎴 Boosters</h1>
@@ -240,6 +235,11 @@ export function BoostersClient({
               />
             ))}
           </div>
+
+          {/* Wonder Pick (uniquement Pokemon en v1) — placé en BAS des
+              packs. Section qui charge le statut de manière non-bloquante
+              (toujours affichée, même si pool insuffisant ou cooldown). */}
+          <WonderPickSection gameId={gameId} />
         </div>
 
         <AnimatePresence>
