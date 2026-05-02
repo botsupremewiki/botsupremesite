@@ -45,6 +45,74 @@ import {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Tier de rareté Pokemon (du plus commun au plus rare). Utilisé pour
+ *  Wonder Pick : on garde la carte au tier le plus haut du pack. */
+const POKEMON_RARITY_TIER: Record<string, number> = {
+  promo: 0,
+  "diamond-1": 1,
+  "diamond-2": 2,
+  "diamond-3": 3,
+  "diamond-4": 4,
+  "star-1": 5,
+  "star-2": 6,
+  "star-3": 7,
+  crown: 8,
+};
+
+/** Tier OnePiece (mêmes valeurs que ONEPIECE_RARITY_TIER côté client). */
+const ONEPIECE_RARITY_TIER: Record<string, number> = {
+  c: 1,
+  uc: 2,
+  r: 3,
+  l: 5,
+  sr: 4,
+  sp: 6,
+  sec: 7,
+  tr: 8,
+  p: 0,
+  don: 0,
+};
+
+/** Tier LoR : champion > epic > rare > common. */
+const LOR_RARITY_TIER: Record<string, number> = {
+  COMMON: 1,
+  RARE: 2,
+  EPIC: 3,
+  CHAMPION: 4,
+};
+
+/** Sélectionne la carte la plus rare d'un pack pour le pool Wonder Pick.
+ *  Ties : on garde la première (= ordre dans le pack, qui est random
+ *  donc pas un biais). Retourne null si aucune carte trouvée. */
+function pickBestCardForWonderPick(
+  cardIds: string[],
+  gameId: TcgGameId,
+): string | null {
+  if (cardIds.length === 0) return null;
+  let bestId: string | null = null;
+  let bestTier = -1;
+  for (const id of cardIds) {
+    let tier = 0;
+    if (gameId === "pokemon") {
+      const meta = POKEMON_BASE_SET_BY_ID.get(id);
+      tier = meta ? POKEMON_RARITY_TIER[meta.rarity] ?? 0 : 0;
+    } else if (gameId === "lol") {
+      const meta = RUNETERRA_BASE_SET_BY_CODE.get(id);
+      tier = meta ? LOR_RARITY_TIER[meta.rarity] ?? 0 : 0;
+    } else if (gameId === "onepiece") {
+      // ONEPIECE_BASE_SET est un array — on construit un index inline
+      // (évite d'importer un BY_ID si pas dispo). Coût : O(n) par pack.
+      const meta = ONEPIECE_BASE_SET.find((c) => c.id === id);
+      tier = meta ? ONEPIECE_RARITY_TIER[meta.rarity] ?? 0 : 0;
+    }
+    if (tier > bestTier) {
+      bestTier = tier;
+      bestId = id;
+    }
+  }
+  return bestId;
+}
+
 type ConnInfo = {
   authId: string | null;
   name: string;
@@ -1102,15 +1170,21 @@ export default class TcgServer implements Party.Server {
       usedFreePack,
     });
 
-    // Wonder Pick : ajout du pack au pool global (best effort, async).
-    if (info.authId) {
-      void addToWonderPickPool(this.room, {
-        gameId: this.gameId,
-        openerId: info.authId,
-        openerUsername: info.name,
-        packType: packTypeId ?? null,
-        cards: cardIds,
-      }).catch(() => {});
+    // Wonder Pick v2 : update pool UNIQUEMENT pour les packs gratuits.
+    // Stocke uniquement la "best card" (carte la plus rare) du pack.
+    // L'ancien comportement (1 row par pack ouvert, tous types) est
+    // remplacé par 1 row max par user/game (UPSERT côté SQL).
+    if (usedFreePack && info.authId) {
+      const bestCardId = pickBestCardForWonderPick(cardIds, this.gameId);
+      if (bestCardId) {
+        void addToWonderPickPool(this.room, {
+          gameId: this.gameId,
+          openerId: info.authId,
+          openerUsername: info.name,
+          packType: packTypeId ?? null,
+          bestCardId,
+        }).catch(() => {});
+      }
     }
   }
 

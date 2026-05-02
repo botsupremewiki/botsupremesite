@@ -459,8 +459,15 @@ export async function recordBattleLogs(
   }
 }
 
-/** Ajoute un pack ouvert au pool Wonder Pick (table tcg_wonder_pick_pool).
- *  Trigger SQL nettoie automatiquement (max 100 par game). Best effort. */
+/** Wonder Pick v2 : upsert la "best card" du dernier pack GRATUIT ouvert
+ *  par ce user dans le pool (1 entrée max par user/game).
+ *
+ *  Important : à appeler UNIQUEMENT pour les packs gratuits (pas les
+ *  achats OS) — c'est la spec utilisateur. La RPC `wonder_pick_upsert`
+ *  fait un INSERT ON CONFLICT DO UPDATE → si l'user a déjà une entrée,
+ *  elle est remplacée par la nouvelle "best card".
+ *
+ *  Best effort (failed updates ne bloquent pas l'ouverture pack). */
 export async function addToWonderPickPool(
   room: Party.Room,
   args: {
@@ -468,13 +475,14 @@ export async function addToWonderPickPool(
     openerId: string;
     openerUsername: string;
     packType: string | null;
-    cards: string[];
+    /** Carte la plus rare du pack ouvert (best card). */
+    bestCardId: string;
   },
 ): Promise<void> {
   const env = getSupabaseEnv(room);
   if (!env) return;
   try {
-    await fetch(`${env.url}/rest/v1/tcg_wonder_pick_pool`, {
+    await fetch(`${env.url}/rest/v1/rpc/wonder_pick_upsert`, {
       method: "POST",
       headers: {
         apikey: env.key,
@@ -483,15 +491,15 @@ export async function addToWonderPickPool(
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
-        game_id: args.gameId,
-        opener_id: args.openerId,
-        opener_username: args.openerUsername,
-        pack_type: args.packType,
-        cards: args.cards,
+        p_user_id: args.openerId,
+        p_game_id: args.gameId,
+        p_card_id: args.bestCardId,
+        p_opener_username: args.openerUsername,
+        p_pack_type: args.packType,
       }),
     });
   } catch (err) {
-    console.warn("[wonder-pick] addToPool threw:", err);
+    console.warn("[wonder-pick] upsert threw:", err);
   }
 }
 

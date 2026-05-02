@@ -41,7 +41,7 @@ const COMMANDS: Cmd[] = [
   { id: "tcg-meta", label: "Méta global", hint: "Stats agrégées site", href: "/play/tcg/pokemon/meta", icon: "📈" },
   { id: "tcg-replays", label: "Replays", hint: "Mes 50 derniers logs", href: "/play/tcg/pokemon/replays", icon: "🎬" },
   { id: "tcg-trade", label: "Échange de cartes", hint: "Proposer / accepter", href: "/play/tcg/pokemon/trade", icon: "🤝" },
-  { id: "tcg-wonder", label: "Pioche Mystère", hint: "Cristaux → carte aléatoire", href: "/play/tcg/pokemon/wonder-pick", icon: "🎲" },
+  { id: "tcg-wonder", label: "Wonder Pick", hint: "1 carte sur 5 face cachée — section dans Boosters", href: "/play/tcg/pokemon/boosters", icon: "✨" },
   { id: "tcg-starter", label: "Starter decks", hint: "Decks préfabriqués", href: "/play/tcg/pokemon/starter-decks", icon: "🎴" },
   { id: "tcg-auto", label: "Auto-deckbuilder", hint: "IA construit ton deck", href: "/play/tcg/pokemon/auto-deck", icon: "🤖" },
   { id: "tcg-tutorial", label: "Tutoriel TCG", hint: "8 étapes guidées", href: "/play/tcg/pokemon/tutorial", icon: "🎓" },
