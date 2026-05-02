@@ -43,6 +43,16 @@ type LikesData = {
   liked_by_me: boolean;
 };
 
+/** Statuts de la relation d'amitié entre l'user courant et le profil
+ *  affiché. "self" = je suis sur mon propre profil → pas de bouton. */
+type FriendStatus =
+  | "self"
+  | "none"
+  | "pending_outgoing"
+  | "pending_incoming"
+  | "accepted"
+  | "loading";
+
 export function ProfilePopupHost() {
   const { current, close } = useProfilePopup();
   return (
@@ -72,6 +82,7 @@ function ProfilePopup({
   const [busy, setBusy] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [me, setMe] = useState<{ id: string } | null>(null);
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>("loading");
 
   // Echap pour fermer.
   useEffect(() => {
@@ -130,6 +141,18 @@ function ProfilePopup({
       if (!cancelled && likesData && typeof likesData === "object") {
         setLikes(likesData as LikesData);
       }
+      // 5) Friend status (popup → bouton dynamique selon état).
+      const { data: fsData } = await supabase.rpc("friend_status_with", {
+        p_target_id: p.id,
+      });
+      if (!cancelled && typeof fsData === "string") {
+        setFriendStatus(fsData as FriendStatus);
+      } else if (!cancelled) {
+        // Si la RPC échoue (SQL pas migré) on tombe sur "none" pour
+        // afficher quand même le bouton "Demander en ami" (qui sera
+        // fonctionnel via l'autre RPC déjà en place).
+        setFriendStatus("none");
+      }
       setLoading(false);
     })();
     return () => {
@@ -183,17 +206,60 @@ function ProfilePopup({
     }
   }
 
-  // Demander en ami.
-  async function sendFriendRequest() {
+  // Demander en ami / accepter / retirer selon le statut courant.
+  async function handleFriendAction() {
     if (!supabase || !profile || busy) return;
     if (me?.id === profile.id) return;
     setBusy(true);
     setActionFeedback(null);
-    const { error: rpcErr } = await supabase.rpc("friend_request", {
-      p_target: profile.id,
-    });
+    let rpcName: string | null = null;
+    let nextStatus: FriendStatus = friendStatus;
+    // Param mapping selon la RPC (chaque RPC a son nom de param).
+    let params: Record<string, string> = {};
+    if (friendStatus === "none") {
+      rpcName = "friend_request";
+      params = { p_target: profile.id };
+      nextStatus = "pending_outgoing";
+    } else if (friendStatus === "pending_incoming") {
+      rpcName = "friend_accept";
+      params = { p_requester: profile.id };
+      nextStatus = "accepted";
+    } else if (friendStatus === "accepted") {
+      if (!confirm(`Retirer ${profile.username} de tes amis ?`)) {
+        setBusy(false);
+        return;
+      }
+      rpcName = "friend_remove";
+      params = { p_other: profile.id };
+      nextStatus = "none";
+    } else if (friendStatus === "pending_outgoing") {
+      // Annule MA demande sortante via friend_remove (qui supprime la
+      // friendship peu importe le statut/requester si je fais partie
+      // de la paire).
+      rpcName = "friend_remove";
+      params = { p_other: profile.id };
+      nextStatus = "none";
+    }
+    if (!rpcName) {
+      setBusy(false);
+      return;
+    }
+    const { error: rpcErr } = await supabase.rpc(rpcName, params);
     setBusy(false);
-    setActionFeedback(rpcErr ? rpcErr.message : "Demande envoyée ✓");
+    if (rpcErr) {
+      setActionFeedback(rpcErr.message);
+      return;
+    }
+    setFriendStatus(nextStatus);
+    setActionFeedback(
+      nextStatus === "accepted"
+        ? "✓ Ami ajouté !"
+        : nextStatus === "pending_outgoing"
+          ? "Demande envoyée ✓"
+          : nextStatus === "none"
+            ? "Retiré"
+            : "OK",
+    );
   }
 
   return (
@@ -274,16 +340,48 @@ function ProfilePopup({
                   Voir le profil complet →
                 </a>
               </div>
-              {/* Boutons d'action — uniquement si on regarde quelqu'un d'autre */}
+              {/* Bouton ami dynamique selon le statut de la relation. */}
               {me && me.id !== profile.id && (
                 <div className="flex flex-col gap-1.5">
-                  <button
-                    onClick={sendFriendRequest}
-                    disabled={busy}
-                    className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
-                  >
-                    🤝 Demander en ami
-                  </button>
+                  {friendStatus === "loading" ? (
+                    <div className="rounded-md border border-zinc-500/40 bg-zinc-500/10 px-3 py-1.5 text-xs text-zinc-400">
+                      …
+                    </div>
+                  ) : friendStatus === "accepted" ? (
+                    <button
+                      onClick={handleFriendAction}
+                      disabled={busy}
+                      title="Cliquer pour retirer des amis"
+                      className="rounded-md border border-emerald-400/60 bg-emerald-400/20 px-3 py-1.5 text-xs font-bold text-emerald-100 hover:bg-rose-500/20 hover:border-rose-400/40 hover:text-rose-200 disabled:opacity-50"
+                    >
+                      ✓ Ami
+                    </button>
+                  ) : friendStatus === "pending_incoming" ? (
+                    <button
+                      onClick={handleFriendAction}
+                      disabled={busy}
+                      className="rounded-md border border-amber-400/60 bg-amber-400/20 px-3 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-400/30 disabled:opacity-50"
+                    >
+                      ✓ Accepter la demande
+                    </button>
+                  ) : friendStatus === "pending_outgoing" ? (
+                    <button
+                      onClick={handleFriendAction}
+                      disabled={busy}
+                      title="Cliquer pour annuler ta demande"
+                      className="rounded-md border border-zinc-400/40 bg-zinc-400/10 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-rose-500/20 disabled:opacity-50"
+                    >
+                      ⏳ Demande envoyée
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleFriendAction}
+                      disabled={busy}
+                      className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                    >
+                      🤝 Demander en ami
+                    </button>
+                  )}
                 </div>
               )}
             </div>
