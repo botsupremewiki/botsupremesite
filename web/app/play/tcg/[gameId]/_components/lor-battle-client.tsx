@@ -97,6 +97,11 @@ export function LorBattleClient({
   const [recentlySummoned, setRecentlySummoned] = useState<Set<string>>(
     new Set(),
   );
+  // Phase 9.2 : Set d'uids récemment ciblés par un sort résolvant (flash
+  // violet 700ms). Détecté quand spellStack pop (length diminue).
+  const [recentlyHitBySpell, setRecentlyHitBySpell] = useState<Set<string>>(
+    new Set(),
+  );
   // Phase 5.8 : modal confirmation concede (vs native confirm).
   const [concedeModalOpen, setConcedeModalOpen] = useState(false);
   // Phase 5.12 : pulse hand badge quand handCount augmente (draw card).
@@ -266,6 +271,26 @@ export function LorBattleClient({
     const currStackLen = state.spellStack?.length ?? 0;
     if (prevStackLen !== currStackLen) {
       sfxStackChange = true;
+    }
+    // Phase 9.2 : pop détecté → flash violet sur les targetUids du sort résolu.
+    if (prevStackLen > currStackLen && prev.spellStack) {
+      // Le top juste résolu = dernière entrée du PREV stack.
+      const popped = prev.spellStack[prev.spellStack.length - 1];
+      const targets = popped?.targetUids ?? [];
+      if (targets.length > 0) {
+        setRecentlyHitBySpell((prevSet) => {
+          const next = new Set(prevSet);
+          targets.forEach((uid) => next.add(uid));
+          return next;
+        });
+        setTimeout(() => {
+          setRecentlyHitBySpell((prevSet) => {
+            const next = new Set(prevSet);
+            targets.forEach((uid) => next.delete(uid));
+            return next;
+          });
+        }, 700);
+      }
     }
     if (newSummonedUids.size > 0) {
       setRecentlySummoned((prevSet) => {
@@ -573,6 +598,7 @@ export function LorBattleClient({
             damagePopups={damagePopups}
             nexusDamagePopups={nexusDamagePopups}
             recentlySummoned={recentlySummoned}
+            recentlyHitBySpell={recentlyHitBySpell}
             handPulse={handPulse}
           />
         )}
@@ -941,6 +967,7 @@ function RoundView({
   damagePopups,
   nexusDamagePopups,
   recentlySummoned,
+  recentlyHitBySpell,
   handPulse,
 }: {
   state: RuneterraBattleState;
@@ -978,6 +1005,8 @@ function RoundView({
   };
   // Phase 5.6 : summon animation entrée banc (slide-in 600ms).
   recentlySummoned?: Set<string>;
+  // Phase 9.2 : flash violet quand sort résout sur unité (700ms).
+  recentlyHitBySpell?: Set<string>;
   // Phase 5.12 : pulse handCount sur draw card (timestamp).
   handPulse?: { self: number; opponent: number };
 }) {
@@ -1124,6 +1153,7 @@ function RoundView({
         recentLevelUps={recentLevelUps}
         damagePopups={damagePopups}
         recentlySummoned={recentlySummoned}
+        recentlyHitBySpell={recentlyHitBySpell}
         highlighted={
           pendingSpell &&
           (pendingSpell.side === "enemy" ||
@@ -1351,6 +1381,7 @@ function RoundView({
         recentLevelUps={recentLevelUps}
         damagePopups={damagePopups}
         recentlySummoned={recentlySummoned}
+        recentlyHitBySpell={recentlyHitBySpell}
         highlighted={
           combatMode === "attacker-pick"
             ? pickedAttackers
@@ -1747,6 +1778,7 @@ function BenchRow({
   recentLevelUps,
   damagePopups,
   recentlySummoned,
+  recentlyHitBySpell,
 }: {
   units: RuneterraBattleUnit[];
   onUnitClick: (u: RuneterraBattleUnit) => void;
@@ -1763,6 +1795,8 @@ function BenchRow({
   damagePopups?: Record<string, { amount: number; ts: number }>;
   // Phase 5.6 : animation summon entrée (slide-in 600ms).
   recentlySummoned?: Set<string>;
+  // Phase 9.2 : flash violet quand sort résout sur cette unité (700ms).
+  recentlyHitBySpell?: Set<string>;
 }) {
   if (units.length === 0) {
     return (
@@ -1801,6 +1835,7 @@ function BenchRow({
               flashLevelUp={recentLevelUps?.has(u.uid)}
               damagePopup={damagePopups?.[u.uid]}
               justSummoned={recentlySummoned?.has(u.uid)}
+              hitBySpell={recentlyHitBySpell?.has(u.uid)}
             />
           </div>
         );
@@ -2017,6 +2052,7 @@ function UnitCard({
   flashLevelUp,
   damagePopup,
   justSummoned,
+  hitBySpell,
 }: {
   unit: RuneterraBattleUnit;
   onClick: () => void;
@@ -2032,6 +2068,8 @@ function UnitCard({
   // Phase 5.6 : animation d'entrée slide-in quand l'unité vient d'être
   // invoquée sur le banc (600ms).
   justSummoned?: boolean;
+  // Phase 9.2 : flash violet quand un sort résout sur cette cible (700ms).
+  hitBySpell?: boolean;
 }) {
   const card = RUNETERRA_BASE_SET_BY_CODE.get(unit.cardCode);
   const aliveHealth = unit.health - unit.damage;
@@ -2095,6 +2133,13 @@ function UnitCard({
       {highlighted && (
         <div
           className="pointer-events-none absolute inset-0 animate-pulse rounded ring-2 ring-rose-300/80 shadow-[0_0_18px_rgba(244,114,128,0.7)]"
+          aria-hidden
+        />
+      )}
+      {/* Phase 9.2 : flash violet quand un sort résout sur cette cible (700ms). */}
+      {hitBySpell && (
+        <div
+          className="pointer-events-none absolute inset-0 animate-ping rounded bg-violet-400/40 ring-4 ring-violet-300"
           aria-hidden
         />
       )}

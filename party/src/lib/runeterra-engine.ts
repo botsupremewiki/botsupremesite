@@ -1592,11 +1592,16 @@ export function projectStateForSeat(
             attackerSeat: seatToId(state.attackInProgress.attackerSeatIdx),
             lanes: state.attackInProgress.lanes,
           },
-    // Phase 7.0 : projeter la spellStack au client (juste casterSeat +
-    // cardCode, on peut ré-récupérer le card depuis le baseSet).
+    // Phase 7.0 + 9.2 : projeter la spellStack au client. targetUids
+    // inclus pour permettre le VFX flash sur la cible au moment de la
+    // résolution (compare new state vs prev pour pop, on peut associer
+    // la dernière entrée de stack à ses targets).
     spellStack: state.spellStack.map((s) => ({
       casterSeat: seatToId(s.casterSeat),
       cardCode: s.cardCode,
+      targetUids: [s.targetUid, s.targetUid2, s.targetUid3].filter(
+        (u): u is string => !!u,
+      ),
     })),
     round: state.round,
     winner:
