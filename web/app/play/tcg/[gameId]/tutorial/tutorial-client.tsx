@@ -57,15 +57,24 @@ export function TutorialClient({
   gameId,
   isLoggedIn,
   alreadyCompleted,
+  reviewMode = false,
 }: {
   gameId: string;
   isLoggedIn: boolean;
   alreadyCompleted: boolean;
+  /** Tutoriel revisité depuis le hub (?review=1) : pas de récompense,
+   *  bouton "Terminer" qui renvoie au hub /play/tcg/<gameId>, bouton
+   *  "Skip" toujours dispo. */
+  reviewMode?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
-  const [completed, setCompleted] = useState(alreadyCompleted);
+  // En mode review, jamais d'écran "Tutoriel terminé" — on revient
+  // direct au hub via le bouton Terminer du dernier step.
+  const [completed, setCompleted] = useState(
+    reviewMode ? false : alreadyCompleted,
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Pour l'instant on n'a que pokemon — on duplique pour les autres jeux.
@@ -80,6 +89,19 @@ export function TutorialClient({
   function showCompletionScreen() {
     setError(null);
     setCompleted(true);
+  }
+
+  // Mode review : "Terminer" renvoie direct au hub /play/tcg/<gameId>,
+  // sans appel RPC ni écran de fin (l'user a déjà eu sa récompense la
+  // 1ère fois — ou peut faire un autre run ne donne pas de récompense).
+  function finishReviewMode() {
+    router.push(`/play/tcg/${gameId}`);
+  }
+
+  // Mode review : skip du tutoriel = retour au hub. Identique à finir
+  // mais accessible depuis n'importe quel step.
+  function skipReviewMode() {
+    router.push(`/play/tcg/${gameId}`);
   }
 
   // Validation finale + navigation. Appelé uniquement quand l'user clique
@@ -164,12 +186,28 @@ export function TutorialClient({
   const current = steps[step];
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-100">🎓 Tutoriel</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Étape {step + 1} / {steps.length} — termine pour débloquer tes 10
-          boosters gratuits.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">🎓 Tutoriel</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            Étape {step + 1} / {steps.length}
+            {reviewMode
+              ? " — relecture libre, aucune récompense."
+              : " — termine pour débloquer tes 10 boosters gratuits."}
+          </p>
+        </div>
+        {/* Skip : visible uniquement en mode review (depuis le hub).
+            En mode 1ère visite, on bloque l'évasion pour forcer la
+            complétion + récompense. */}
+        {reviewMode && (
+          <button
+            type="button"
+            onClick={skipReviewMode}
+            className="shrink-0 text-xs text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
+          >
+            Skip le tutoriel →
+          </button>
+        )}
       </div>
 
       {/* Progress bar */}
@@ -228,7 +266,7 @@ export function TutorialClient({
         {isLast ? (
           <button
             type="button"
-            onClick={showCompletionScreen}
+            onClick={reviewMode ? finishReviewMode : showCompletionScreen}
             className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-200 transition-colors hover:bg-emerald-400/20"
           >
             Terminer 🎉

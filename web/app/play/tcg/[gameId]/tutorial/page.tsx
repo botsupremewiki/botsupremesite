@@ -10,13 +10,20 @@ export const dynamic = "force-dynamic";
 
 export default async function TutorialPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ gameId: string }>;
+  searchParams: Promise<{ review?: string }>;
 }) {
   const { gameId } = await params;
+  const sp = await searchParams;
   if (!(gameId in TCG_GAMES)) notFound();
   const game = TCG_GAMES[gameId as TcgGameId];
   const profile = await getProfile();
+  // Mode "review" : tutoriel revisitable depuis le hub. Pas de
+  // récompense en fin, bouton "Terminer" qui renvoie au hub, et bouton
+  // "Skip" toujours dispo. Activé via ?review=1.
+  const reviewMode = sp.review === "1";
 
   let alreadyCompleted = false;
   if (profile) {
@@ -29,26 +36,23 @@ export default async function TutorialPage({
     }
   }
 
-  // Si le tuto a déjà été complété, on n'affiche JAMAIS plus l'écran de
-  // tutoriel (cf. demande user : "le tutoriel ne devrait plus jamais
-  // s'afficher pour le joueur"). On redirige direct vers les boosters,
-  // qui est la prochaine étape logique du flow d'onboarding.
-  if (alreadyCompleted) {
+  // Mode normal (1ère visite) : si déjà complété, redirige vers
+  // /boosters. Mode review : on AFFICHE le tutoriel quoi qu'il en soit
+  // (l'user veut le revoir).
+  if (alreadyCompleted && !reviewMode) {
     redirect(`/play/tcg/${gameId}/boosters`);
   }
+
+  // Header : retour vers le hub autorisé en mode review (toujours) OU
+  // si déjà complété OU si pas connecté. Sinon on bloque (1ère visite,
+  // user connecté → forcer la complétion).
+  const canExit = reviewMode || alreadyCompleted || !profile;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
-          {/* Le retour vers le hub n'est autorisé que si :
-              - le tuto a déjà été complété (l'user revient le revoir), ou
-              - l'user n'est pas connecté (pas de persistence possible).
-              Pour un user connecté qui n'a pas encore complété, on bloque
-              toute échappatoire pour forcer le clic sur "Terminer 🎉" qui
-              appelle le RPC complete_tcg_tutorial — sinon le tuto revient
-              à chaque visite. */}
-          {alreadyCompleted || !profile ? (
+          {canExit ? (
             <Link
               href={`/play/tcg/${gameId}?skipTutorial=1`}
               className="text-zinc-400 transition-colors hover:text-zinc-100"
@@ -60,7 +64,9 @@ export default async function TutorialPage({
           )}
           <div className="h-4 w-px bg-white/10" />
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
-          <span className="text-xs text-zinc-500">🎓 Tutoriel</span>
+          <span className="text-xs text-zinc-500">
+            🎓 Tutoriel{reviewMode ? " (revoir)" : ""}
+          </span>
         </div>
         {profile ? (
           <UserPill profile={profile} variant="play" />
@@ -77,6 +83,7 @@ export default async function TutorialPage({
             gameId={gameId}
             isLoggedIn={Boolean(profile)}
             alreadyCompleted={alreadyCompleted}
+            reviewMode={reviewMode}
           />
         </div>
       </main>

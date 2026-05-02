@@ -304,16 +304,10 @@ export default async function TcgGameHub({
               />
             )}
             <MenuButton
-              href={`/play/tcg/${gameId}/tutorial`}
+              href={`/play/tcg/${gameId}/tutorial?review=1`}
               icon="🎓"
               title="Tutoriel guidé"
-              description={
-                gameId === "pokemon" ||
-                gameId === "onepiece" ||
-                gameId === "lol"
-                  ? "Apprends les bases en 8 étapes. +50 OS et +10 boosters la première fois."
-                  : "Apprends les bases en 8 étapes. +50 OS la première fois."
-              }
+              description="Revoir les 8 étapes. Aucune récompense (la 1ère fois est offerte au démarrage)."
               accent="text-cyan-200"
               border="border-cyan-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.10),transparent_70%)]"
