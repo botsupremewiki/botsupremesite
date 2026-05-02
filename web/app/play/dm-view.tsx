@@ -9,6 +9,7 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { DmHub } from "./use-dm-hub";
+import { useProfilePopup } from "@/components/profile-popup-context";
 
 export function DmView({
   hub,
@@ -143,9 +144,7 @@ export function DmView({
             </svg>
           </button>
           <Avatar url={activePartner.avatarUrl} name={activePartner.name} />
-          <div className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100">
-            {activePartner.name}
-          </div>
+          <DmPartnerName name={activePartner.name} />
         </div>
 
         <div
@@ -361,5 +360,20 @@ function Avatar({ url, name }: { url?: string; name: string }) {
     <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[11px] font-semibold text-white">
       {name.charAt(0).toUpperCase()}
     </div>
+  );
+}
+
+/** Nom du partenaire de DM, cliquable pour ouvrir la popup profil. */
+function DmPartnerName({ name }: { name: string }) {
+  const profilePopup = useProfilePopup();
+  return (
+    <button
+      type="button"
+      onClick={() => profilePopup.open(name)}
+      className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-zinc-100 transition-colors hover:text-amber-300"
+      title="Voir le profil"
+    >
+      {name}
+    </button>
   );
 }

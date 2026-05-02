@@ -4,6 +4,8 @@ import { createClient, isAuthConfigured } from "@/lib/supabase/server";
 import { ToastProvider } from "@/components/toast";
 import { CommandPalette } from "@/components/command-palette";
 import { OnboardingTour } from "@/components/onboarding-tour";
+import { ProfilePopupProvider } from "@/components/profile-popup-context";
+import { ProfilePopupHost } from "@/components/profile-popup";
 
 // Toute la zone /play (plaza, casino, RPG, TCG, Imperium, Skyline, …) est
 // désormais réservée aux utilisateurs connectés via Discord. Plus de mode
@@ -39,9 +41,14 @@ export default async function PlayLayout({
   }
   return (
     <ToastProvider>
-      {children}
-      <CommandPalette />
-      <OnboardingTour active={needsOnboarding} />
+      <ProfilePopupProvider>
+        {children}
+        <CommandPalette />
+        <OnboardingTour active={needsOnboarding} />
+        {/* Popup profil rendue à la racine — ouverte via
+            useProfilePopup().open(username) depuis n'importe où. */}
+        <ProfilePopupHost />
+      </ProfilePopupProvider>
     </ToastProvider>
   );
 }

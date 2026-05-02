@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { UserMention } from "@/components/user-mention";
 import type {
   ImperiumAllianceRow,
   ImperiumAllianceMemberRow,
@@ -422,7 +423,15 @@ function ChatPanel({
                 className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
               >
                 <div className="text-[9px] text-zinc-500">
-                  {isMe ? "Toi" : m.playerName} ·{" "}
+                  {isMe ? (
+                    <span className="font-semibold">Toi</span>
+                  ) : (
+                    <UserMention
+                      name={m.playerName}
+                      className="font-semibold text-indigo-300"
+                    />
+                  )}{" "}
+                  ·{" "}
                   {new Date(m.timestamp).toLocaleTimeString("fr-FR", {
                     hour: "2-digit",
                     minute: "2-digit",

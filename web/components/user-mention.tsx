@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useProfilePopup } from "./profile-popup-context";
 
 /**
  * Pseudo cliquable utilisé partout (chat, leaderboards, sièges casino…).
@@ -31,6 +32,7 @@ export function UserMention({
   const [userId, setUserId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const profilePopup = useProfilePopup();
 
   // Lookup the userId by username when the popup opens. Cached after the
   // first lookup for the lifetime of the component.
@@ -114,12 +116,16 @@ export function UserMention({
           <div className="border-b border-white/5 px-3 py-2 text-[11px] font-semibold text-zinc-300">
             {name}
           </div>
-          <a
-            href={`/u/${encodeURIComponent(name)}`}
-            className="block px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:bg-white/5"
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              profilePopup.open(name);
+            }}
+            className="block w-full px-3 py-1.5 text-left text-xs text-zinc-200 transition-colors hover:bg-white/5"
           >
             👤 Voir le profil
-          </a>
+          </button>
           <button
             type="button"
             onClick={openDm}
