@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 type Step = {
@@ -67,24 +66,35 @@ export function TutorialClient({
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(alreadyCompleted);
-  const [reward, setReward] = useState<{ gold: number; packs: number } | null>(
-    null,
-  );
   const [error, setError] = useState<string | null>(null);
 
   // Pour l'instant on n'a que pokemon — on duplique pour les autres jeux.
   const steps = STEPS_POKEMON;
   const isLast = step >= steps.length - 1;
 
-  async function complete() {
+  // "Terminer 🎉" sur la dernière étape : on affiche juste l'écran de fin
+  // avec un PREVIEW des récompenses (+50 OS, +10 boosters). Aucun appel RPC
+  // pour le moment — la validation officielle se fait sur le clic du bouton
+  // "Accéder aux boosters" (cf. validateAndGoToBoosters), pour que l'user
+  // puisse contempler ses gains tant qu'il veut avant de continuer.
+  function showCompletionScreen() {
+    setError(null);
+    setCompleted(true);
+  }
+
+  // Validation finale + navigation. Appelé uniquement quand l'user clique
+  // "Accéder aux boosters" sur l'écran de fin. C'est CE clic qui :
+  //   1. Insère la ligne dans tcg_tutorial_completion (on conflict do nothing)
+  //   2. Crédite les +50 OS + 10 boosters (uniquement la 1ère fois)
+  //   3. Navigue vers /boosters
+  // Si la RPC échoue, l'user reste sur l'écran de fin et voit l'erreur,
+  // il peut re-cliquer pour retry.
+  async function validateAndGoToBoosters() {
+    const target = `/play/tcg/${gameId}/boosters`;
     setCompleting(true);
     setError(null);
-    // Visiteur non connecté : on ne peut pas persister, on lui montre quand
-    // même l'écran de fin (la redirection hub→tutorial ne s'applique qu'aux
-    // users connectés de toute façon).
     if (!isLoggedIn) {
-      setCompleted(true);
-      setCompleting(false);
+      router.push(target);
       return;
     }
     const supabase = createClient();
@@ -93,31 +103,29 @@ export function TutorialClient({
       setCompleting(false);
       return;
     }
-    const { data, error: rpcError } = await supabase.rpc(
-      "complete_tcg_tutorial",
-      { p_game_id: gameId },
-    );
-    setCompleting(false);
-    // Si la RPC échoue, on N'AVANCE PAS vers l'écran de fin — sinon le
-    // joueur croit avoir terminé mais la complétion n'est pas enregistrée
-    // et le tutoriel revient à la visite suivante.
+    const { error: rpcError } = await supabase.rpc("complete_tcg_tutorial", {
+      p_game_id: gameId,
+    });
     if (rpcError) {
       setError(
         rpcError.message ?? "Erreur lors de l'enregistrement. Réessaie.",
       );
+      setCompleting(false);
       return;
     }
-    setCompleted(true);
-    const r = data as
-      | { first_time: boolean; reward_gold: number; reward_packs?: number }
-      | null;
-    if (r?.first_time) {
-      setReward({ gold: r.reward_gold, packs: r.reward_packs ?? 0 });
-    }
-    router.refresh();
+    // RPC OK → navigation. On utilise router.push (pas router.refresh)
+    // pour quitter la route /tutorial proprement sans déclencher le redirect
+    // serveur intermédiaire.
+    router.push(target);
   }
 
   if (completed) {
+    // Preview des récompenses (les valeurs sont fixes côté RPC v2 :
+    // +50 OS pour tous les jeux, +10 boosters pour pokemon/onepiece/lol).
+    // Si tu changes tcg-tutorial-rewards-v2.sql, mets aussi à jour ces
+    // chiffres pour rester cohérent.
+    const previewGold = 50;
+    const previewPacks = 10;
     return (
       <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-400/10 to-emerald-400/5 p-8 text-center">
         <div className="text-6xl">🎓</div>
@@ -126,26 +134,33 @@ export function TutorialClient({
         </h2>
         <p className="mt-2 text-sm text-zinc-300">
           Tu as reçu{" "}
-          <strong className="text-amber-200">10 boosters gratuits</strong>{" "}
+          <strong className="text-amber-200">
+            {previewPacks} boosters gratuits
+          </strong>{" "}
           pour démarrer ta collection !
         </p>
-        {reward && (
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-            <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-200">
-              🎁 +{reward.gold} OS
-            </div>
-            <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
-              🎴 +{reward.packs} boosters gratuits
-            </div>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-200">
+            🎁 +{previewGold} OS
+          </div>
+          <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
+            🎴 +{previewPacks} boosters gratuits
+          </div>
+        </div>
+        {error && (
+          <div className="mt-4 rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
+            ⚠️ {error}
           </div>
         )}
         <div className="mt-6 flex justify-center">
-          <Link
-            href={`/play/tcg/${gameId}/boosters`}
-            className="rounded-md border-2 border-emerald-300/70 bg-gradient-to-br from-emerald-500 to-emerald-700 px-6 py-3 text-base font-extrabold text-emerald-50 shadow-[0_4px_18px_rgba(52,211,153,0.35)] transition-all hover:scale-[1.02] hover:from-emerald-400 hover:to-emerald-600"
+          <button
+            type="button"
+            onClick={validateAndGoToBoosters}
+            disabled={completing}
+            className="rounded-md border-2 border-emerald-300/70 bg-gradient-to-br from-emerald-500 to-emerald-700 px-6 py-3 text-base font-extrabold text-emerald-50 shadow-[0_4px_18px_rgba(52,211,153,0.35)] transition-all hover:scale-[1.02] hover:from-emerald-400 hover:to-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
           >
-            🎴 Accéder aux boosters
-          </Link>
+            {completing ? "Enregistrement…" : "🎴 Accéder aux boosters"}
+          </button>
         </div>
       </div>
     );
@@ -218,11 +233,10 @@ export function TutorialClient({
         {isLast ? (
           <button
             type="button"
-            disabled={completing}
-            onClick={complete}
-            className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-200 transition-colors hover:bg-emerald-400/20 disabled:opacity-50"
+            onClick={showCompletionScreen}
+            className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-200 transition-colors hover:bg-emerald-400/20"
           >
-            {completing ? "…" : "Terminer 🎉"}
+            Terminer 🎉
           </button>
         ) : (
           <button
