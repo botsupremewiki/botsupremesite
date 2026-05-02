@@ -38,24 +38,28 @@ export type TutorialStep = {
 /** Deck du joueur tutoriel — 20 cartes A1, ordre de pioche fixe.
  *  Index 0 = top of deck (1ère carte piochée si on devait piocher).
  *  Mais comme on contrôle aussi la main initiale, les 5 premières
- *  cartes sont la main de départ. */
+ *  cartes sont la main de départ.
+ *
+ *  Le 3e Pokémon de Base est Magnéti pour permettre une démo
+ *  interactive du talent Charge Volt à l'Acte 4 (Magnéti évolue en
+ *  Magnéton qui a le talent activable, attache 1⚡ par tour). */
 export const TUTORIAL_PLAYER_DECK: string[] = [
   // Main de départ (5 cartes)
   "A1-094", // Pikachu (Basic, sera Actif)
   "A1-053", // Carapuce (Basic, bench)
-  "A1-033", // Salamèche (Basic, bench)
+  "A1-097", // Magnéti (Basic, bench — évoluera en Magnéton à l'Acte 4)
   "A1-095", // Raichu (Stage 1 → évoluera Pikachu)
   "P-A-001", // Potion (Item)
   // Pioche tour 2+
   "P-A-007", // Recherches Professorales (Supporter)
-  "A1-098", // Magnéton (Basic + Talent Charge Volt)
+  "A1-098", // Magnéton (Stage 1 + Talent Charge Volt — démo Acte 4)
   "A1-094", // 2e Pikachu (backup)
   "P-A-005", // Poké Ball
   "P-A-002", // Vitesse +
   "A1-053", // 2e Carapuce
-  "A1-033", // 2e Salamèche
+  "A1-033", // Salamèche (filler)
   "P-A-001", // 2e Potion
-  "A1-094", // (rempli filler — on ira pas si loin)
+  "A1-094", // (filler — on ira pas si loin)
   "A1-098",
   "P-A-007",
   "A1-053",
@@ -108,7 +112,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "set-bench",
     title: "Le banc (1-3 Pokémon)",
-    body: "Tu peux ajouter jusqu'à 3 Pokémon de Base sur ton Banc — ils servent de remplaçants si l'Actif est KO. Clique Carapuce et Salamèche pour les ajouter.",
+    body: "Tu peux ajouter jusqu'à 3 Pokémon de Base sur ton Banc — ils servent de remplaçants si l'Actif est KO. Clique Carapuce et Magnéti pour les ajouter (Magnéti évoluera plus tard en Magnéton qui a un Talent activable).",
     target: '[data-tutorial-target="hand"]',
     requiresAction: true,
     nextLabel: null,
@@ -275,11 +279,20 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     nextLabel: "Compris",
   },
   {
-    id: "talent-vs-attack",
-    title: "Talents vs Attaques",
-    body: "Beaucoup de Pokémon ont un Talent (ability) en plus de leurs attaques. Talents passifs (s'appliquent toujours, ex. Coque Armure -20 dmg) ou activés (1×/tour, ex. Fuite de Gaz, Charge Volt). Les talents N'utilisent PAS d'énergie — c'est leur force.",
-    target: null,
-    nextLabel: "Compris",
+    id: "evolve-magneton",
+    title: "Démo Talent : évolue Magnéti",
+    body: "Tu as Magnéton dans ta main (drawn during the previous turns). Il évolue depuis Magnéti (sur ton banc). Magnéton possède un Talent activable « Charge Volt » qui attache 1⚡ une fois par tour, sans coût. Clique sur Magnéton dans ta main pour le faire évoluer.",
+    target: '[data-tutorial-target="hand-card-A1-098"]',
+    requiresAction: true,
+    nextLabel: null,
+  },
+  {
+    id: "activate-charge-volt",
+    title: "Active Charge Volt !",
+    body: "Magnéton est en jeu. Un bandeau « ⭐ Activer Charge Volt » apparaît sur sa carte. Clique-le pour activer le talent : 1⚡ s'attache automatiquement, sans coût. Talents passifs (toujours actifs, ex. Coque Armure) vs activés (1×/tour) — c'est l'avantage stratégique des talents.",
+    target: '[data-tutorial-target="ability-banner"]',
+    requiresAction: true,
+    nextLabel: null,
   },
   {
     id: "ex-rules",

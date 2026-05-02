@@ -12,8 +12,8 @@
  * Le state battle est local (pas de WebSocket) — déterministe pour
  * que chaque joueur voit la même séquence de mécaniques.
  *
- * À la fin : redirige vers /tutorial avec ?completed=1 pour que
- * complete_tcg_tutorial soit appelée et débloque les +50 OS + 10 packs.
+ * À la fin : appelle la RPC complete_tcg_tutorial qui débloque les
+ * 10 boosters gratuits (la prime OS a été retirée — cf. v3-no-gold).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -107,6 +107,9 @@ type GameState = {
   self: Side;
   bot: Side;
   winner: "self" | "bot" | null;
+  /** UIDs des Pokémon dont le talent activable a déjà été utilisé ce
+   *  tour (1×/tour par carte, vraie règle). Reset au changement de tour. */
+  abilitiesUsedThisTurn: string[];
 };
 
 /** Cherche un Pokémon allié (active ou bench) dont le nom matche
@@ -155,6 +158,7 @@ function makeInitialState(): GameState {
       koCount: 0,
     },
     winner: null,
+    abilitiesUsedThisTurn: [],
   };
 }
 
@@ -204,8 +208,9 @@ export function TutorialGameClient({
   }, [router, gameId, reviewMode]);
 
   /** Validation finale + appel RPC complete_tcg_tutorial qui crédite
-   *  +50 OS + 10 boosters. Idempotent côté serveur (on conflict do nothing).
-   *  En mode review ou déjà complété, on ne fait que rediriger. */
+   *  10 boosters gratuits (plus de prime OS). Idempotent côté serveur
+   *  (on conflict do nothing). En mode review ou déjà complété, on ne
+   *  fait que rediriger. */
   const validateAndGoToBoosters = useCallback(async () => {
     const target = `/play/tcg/${gameId}/boosters`;
     if (reviewMode || alreadyCompleted || !isLoggedIn) {
@@ -414,6 +419,8 @@ export function TutorialGameClient({
         return {
           ...s,
           activeSide: "bot",
+          // Reset des talents activés (1×/tour) au changement de tour.
+          abilitiesUsedThisTurn: [],
           self: {
             ...s.self,
             energyAttachedThisTurn: false,
@@ -432,6 +439,7 @@ export function TutorialGameClient({
       return {
         ...s,
         activeSide: "bot",
+        abilitiesUsedThisTurn: [],
         self: {
           ...s.self,
           energyAttachedThisTurn: false,
@@ -446,6 +454,50 @@ export function TutorialGameClient({
     });
     if (currentStep?.id === "launch-attack") advance();
     if (currentStep?.id === "launch-tonnerre") advance();
+  }
+
+  /** Active le talent activable d'un Pokémon (côté joueur). Pour le
+   *  tutoriel : seul Charge Volt (Magnéton) est implémenté → attache
+   *  1⚡ au Pokémon. Les autres talents sont des no-ops (le tutoriel
+   *  ne les rencontre pas dans le scénario actuel). 1×/tour par carte. */
+  function useAbility(uid: string) {
+    setState((s) => {
+      if (s.abilitiesUsedThisTurn.includes(uid)) return s;
+      // Cherche la carte ciblée (Active ou Bench).
+      const target =
+        s.self.active?.uid === uid
+          ? s.self.active
+          : s.self.bench.find((b) => b.uid === uid);
+      if (!target) return s;
+      const meta = getPokemonCard(target.cardId);
+      if (!meta || meta.ability?.kind !== "activated") return s;
+      // Effet du talent. Tutoriel : Charge Volt = +1⚡ sur Magnéton.
+      // Les talents Fuite de Gaz, Coque Armure, etc. ne s'appliquent
+      // pas côté joueur dans ce scénario.
+      if (meta.ability.name === "Charge Volt") {
+        const updated: InPlay = {
+          ...target,
+          attachedEnergies: [...target.attachedEnergies, "lightning"],
+        };
+        return {
+          ...s,
+          self: {
+            ...s.self,
+            active:
+              s.self.active?.uid === uid ? updated : s.self.active,
+            bench: s.self.bench.map((b) => (b.uid === uid ? updated : b)),
+          },
+          abilitiesUsedThisTurn: [...s.abilitiesUsedThisTurn, uid],
+        };
+      }
+      // Talent non implémenté : on marque comme utilisé sans effet
+      // (le tutoriel ne devrait pas atterrir ici dans le scénario).
+      return {
+        ...s,
+        abilitiesUsedThisTurn: [...s.abilitiesUsedThisTurn, uid],
+      };
+    });
+    if (currentStep?.id === "activate-charge-volt") advance();
   }
 
   /** Évolue un Pokémon : remplace le Pokémon en jeu (cible) par la carte
@@ -522,6 +574,7 @@ export function TutorialGameClient({
         ...s,
         turn: 2,
         activeSide: "self",
+        abilitiesUsedThisTurn: [],
         self: {
           ...s.self,
           // Pioche 1 carte (top of deck = index 0).
@@ -607,6 +660,7 @@ export function TutorialGameClient({
         ...s,
         turn: 4,
         activeSide: "self",
+        abilitiesUsedThisTurn: [],
         self: {
           ...s.self,
           active: s.self.active
@@ -658,6 +712,7 @@ export function TutorialGameClient({
         ...s,
         turn: 3,
         activeSide: "self",
+        abilitiesUsedThisTurn: [],
         self: {
           ...s.self,
           hand: s.self.deck.length > 0 ? [...s.self.hand, s.self.deck[0]] : s.self.hand,
@@ -816,6 +871,7 @@ export function TutorialGameClient({
         onAttachEnergy={attachEnergy}
         onAttack={attack}
         onEvolve={evolve}
+        onUseAbility={useAbility}
         onEndTurn={endTurn}
       />
 
@@ -889,6 +945,7 @@ function SelfBoard({
   onAttachEnergy,
   onAttack,
   onEvolve,
+  onUseAbility,
   onEndTurn,
 }: {
   state: GameState;
@@ -899,8 +956,10 @@ function SelfBoard({
   onAttachEnergy: (targetUid: string) => void;
   onAttack: (attackIdx: number) => void;
   onEvolve: (handIdx: number, targetUid: string) => void;
+  onUseAbility: (uid: string) => void;
   onEndTurn: () => void;
 }) {
+  const abilityUsedSet = new Set(state.abilitiesUsedThisTurn);
   // Carte Pokémon Actif (pour afficher ses attaques dans le panneau).
   const activeCard = state.self.active
     ? getPokemonCard(state.self.active.cardId)
@@ -939,7 +998,11 @@ function SelfBoard({
                 onClick={() => state.self.pendingEnergy && onAttachEnergy(state.self.active!.uid)}
                 className="cursor-pointer"
               >
-                <CardWithStats inPlay={state.self.active} />
+                <CardWithStats
+                  inPlay={state.self.active}
+                  abilityUsed={abilityUsedSet.has(state.self.active.uid)}
+                  onUseAbility={onUseAbility}
+                />
               </button>
             ) : (
               <EmptySlot label="Actif" small={false} />
@@ -960,7 +1023,12 @@ function SelfBoard({
                   onClick={() => state.self.pendingEnergy && onAttachEnergy(c.uid)}
                   className="cursor-pointer"
                 >
-                  <CardWithStats inPlay={c} small />
+                  <CardWithStats
+                    inPlay={c}
+                    small
+                    abilityUsed={abilityUsedSet.has(c.uid)}
+                    onUseAbility={onUseAbility}
+                  />
                 </button>
               ) : (
                 <EmptySlot key={i} label="Banc" small />
@@ -1171,13 +1239,21 @@ function CardMini({ cardId, small }: { cardId: string; small?: boolean }) {
 
 /** Carte avec stats : HP bar + énergies attachées. Utilisée sur le board.
  *  Affiche aussi un flash "+N" éphémère quand les dégâts augmentent
- *  (feedback visuel pour les attaques + poison). */
+ *  (feedback visuel pour les attaques + poison).
+ *
+ *  `onUseAbility` (optionnel) active un Talent activable visible sous
+ *  la carte sous forme de bandeau « ⭐ Activer [Nom du talent] ». null
+ *  pour côté adverse / Pokémon sans talent activable / déjà utilisé. */
 function CardWithStats({
   inPlay,
   small,
+  abilityUsed,
+  onUseAbility,
 }: {
   inPlay: InPlay;
   small?: boolean;
+  abilityUsed?: boolean;
+  onUseAbility?: (uid: string) => void;
 }) {
   const meta = getPokemonCard(inPlay.cardId);
   // Track le précédent damage pour calculer le delta. La popup +N
@@ -1265,6 +1341,19 @@ function CardWithStats({
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Bandeau « Activer talent » : visible si la carte a un talent
+            activable et qu'on lui passe un onUseAbility (= côté joueur).
+            Plus visible que l'ancien petit ⭐ : le nom du talent est
+            écrit directement, on peut cliquer dessus sans hover. */}
+        {meta.ability?.kind === "activated" && onUseAbility && (
+          <AbilityBanner
+            abilityName={meta.ability.name}
+            abilityEffect={meta.ability.effect}
+            used={abilityUsed ?? false}
+            small={small}
+            onClick={() => onUseAbility(inPlay.uid)}
+          />
+        )}
       </div>
       {/* Énergies attachées sous la carte. */}
       {inPlay.attachedEnergies.length > 0 && (
@@ -1288,6 +1377,48 @@ function EmptySlot({ label, small }: { label: string; small?: boolean }) {
     >
       {label}
     </div>
+  );
+}
+
+/** Bandeau visible « ⭐ Activer [Talent] » qui pop en bas de la carte.
+ *  Clic = activer le talent. Greyed out + label « utilisé » si used.
+ *  Mirror de l'AbilityButton de battle-client.tsx pour cohérence
+ *  visuelle entre le tutoriel et le vrai combat. */
+function AbilityBanner({
+  abilityName,
+  abilityEffect,
+  used,
+  small,
+  onClick,
+}: {
+  abilityName: string;
+  abilityEffect: string;
+  used: boolean;
+  small?: boolean;
+  onClick: () => void;
+}) {
+  const padding = small ? "px-1.5 py-1" : "px-2 py-1.5";
+  const fontSize = small ? "text-[8px]" : "text-[9px] lg:text-[10px]";
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!used) onClick();
+      }}
+      disabled={used}
+      title={`Talent : ${abilityName}\n\n${abilityEffect}${used ? "\n\n(Déjà utilisé ce tour)" : ""}`}
+      data-tutorial-target="ability-banner"
+      className={`pointer-events-auto absolute -bottom-1 left-1/2 z-10 flex w-[92%] -translate-x-1/2 items-center justify-center gap-1 rounded-full border-2 font-extrabold uppercase tracking-wide shadow-lg transition-all ${padding} ${fontSize} ${
+        used
+          ? "border-zinc-600/60 bg-zinc-800/90 text-zinc-500"
+          : "border-amber-300/80 bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 hover:scale-[1.04] hover:from-amber-200 animate-pulse cursor-pointer"
+      }`}
+    >
+      <span className="text-base leading-none">⭐</span>
+      <span className="truncate">
+        {used ? "Talent utilisé" : `Activer ${abilityName}`}
+      </span>
+    </button>
   );
 }
 

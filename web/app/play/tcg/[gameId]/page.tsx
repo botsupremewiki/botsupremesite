@@ -27,7 +27,8 @@ export default async function TcgGameHub({
   // si l'user n'a jamais complété le tuto pour ce jeu, on l'envoie
   // automatiquement à sa première visite (sauf si ?skipTutorial=1 dans
   // l'URL — utile pour navigation interne).
-  // Le tuto crédite +50 OS + 10 boosters gratuits à la complétion.
+  // Le tuto crédite 10 boosters gratuits à la complétion (la prime OS
+  // a été retirée — cf. supabase/tcg-tutorial-rewards-v3-no-gold.sql).
   if (
     profile &&
     sp.skipTutorial !== "1" &&

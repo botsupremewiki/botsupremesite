@@ -183,7 +183,7 @@ export function TutorialClient({
   const isLast = step >= steps.length - 1;
 
   // "Terminer 🎉" sur la dernière étape : on affiche juste l'écran de fin
-  // avec un PREVIEW des récompenses (+50 OS, +10 boosters). Aucun appel RPC
+  // avec un PREVIEW des récompenses (+10 boosters). Aucun appel RPC
   // pour le moment — la validation officielle se fait sur le clic du bouton
   // "Accéder aux boosters" (cf. validateAndGoToBoosters), pour que l'user
   // puisse contempler ses gains tant qu'il veut avant de continuer.
@@ -208,7 +208,7 @@ export function TutorialClient({
   // Validation finale + navigation. Appelé uniquement quand l'user clique
   // "Accéder aux boosters" sur l'écran de fin. C'est CE clic qui :
   //   1. Insère la ligne dans tcg_tutorial_completion (on conflict do nothing)
-  //   2. Crédite les +50 OS + 10 boosters (uniquement la 1ère fois)
+  //   2. Crédite les 10 boosters (uniquement la 1ère fois — plus d'OS)
   //   3. Navigue vers /boosters
   // Si la RPC échoue, l'user reste sur l'écran de fin et voit l'erreur,
   // il peut re-cliquer pour retry.

@@ -2136,9 +2136,10 @@ function BoardCard({
   );
 }
 
-/** Petit bouton ⭐ qui pop sur le coin haut-gauche d'une carte du board pour
- *  activer son Talent. Glow ambré pulsant tant que disponible, grisé une
- *  fois utilisé ce tour. Tooltip = nom + effet du talent. */
+/** Bandeau "Activer talent" qui pop en bas de la carte pour activer un
+ *  Talent activable. Beaucoup plus visible que l'ancien petit ⭐ : le
+ *  joueur lit directement le nom du talent sans devoir hover. Glow
+ *  ambré pulsant tant que disponible, grisé une fois utilisé ce tour. */
 function AbilityButton({
   ability,
   used,
@@ -2153,7 +2154,10 @@ function AbilityButton({
   small?: boolean;
 }) {
   const isDisabled = disabled || used;
-  const size = small ? "h-8 w-8 text-sm" : "h-10 w-10 text-base lg:h-11 lg:w-11";
+  // Variantes : `small` pour les cartes du banc (taille réduite), default
+  // pour l'Actif (un peu plus large et lisible).
+  const padding = small ? "px-1.5 py-1" : "px-2 py-1.5";
+  const fontSize = small ? "text-[9px]" : "text-[10px] lg:text-[11px]";
   return (
     <button
       onClick={(e) => {
@@ -2162,13 +2166,17 @@ function AbilityButton({
       }}
       disabled={isDisabled}
       title={`Talent : ${ability.name}\n\n${ability.effect}${used ? "\n\n(Déjà utilisé ce tour)" : ""}`}
-      className={`pointer-events-auto absolute -left-2 -top-2 z-10 flex items-center justify-center rounded-full border-2 font-bold shadow-lg transition-all ${size} ${
+      data-ability-button
+      className={`pointer-events-auto absolute -bottom-1 left-1/2 z-10 flex w-[92%] -translate-x-1/2 items-center justify-center gap-1 rounded-full border-2 font-extrabold uppercase tracking-wide shadow-lg transition-all ${padding} ${fontSize} ${
         isDisabled
           ? "border-zinc-600/60 bg-zinc-800/90 text-zinc-500"
-          : "border-amber-300/80 bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 hover:scale-110 animate-pulse cursor-pointer"
+          : "border-amber-300/80 bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 hover:scale-[1.04] hover:from-amber-200 animate-pulse cursor-pointer"
       }`}
     >
-      ⭐
+      <span className="text-base leading-none">⭐</span>
+      <span className="truncate">
+        {used ? "Talent utilisé" : `Activer ${ability.name}`}
+      </span>
     </button>
   );
 }
