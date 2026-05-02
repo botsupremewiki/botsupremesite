@@ -237,10 +237,10 @@ begin
   end if;
   v_card_id := v_session.card_ids[p_index + 1];
   v_username := v_session.opener_usernames[p_index + 1];
-  insert into public.tcg_collection (user_id, game_id, card_id, count)
+  insert into public.tcg_cards_owned (user_id, game_id, card_id, count)
   values (v_user_id, v_session.game_id, v_card_id, 1)
   on conflict (user_id, game_id, card_id) do update
-    set count = public.tcg_collection.count + 1;
+    set count = public.tcg_cards_owned.count + 1;
   update public.profiles
   set last_wonder_pick_at = now(), updated_at = now()
   where id = v_user_id;

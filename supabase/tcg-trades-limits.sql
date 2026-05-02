@@ -81,7 +81,7 @@ begin
     from jsonb_array_elements(p_offered) elem
   loop
     select count into v_owned
-    from public.tcg_collection
+    from public.tcg_cards_owned
     where user_id = v_sender_id
       and game_id = p_game_id
       and card_id = v_card.cid;
