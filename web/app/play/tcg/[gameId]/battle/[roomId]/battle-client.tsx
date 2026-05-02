@@ -1273,7 +1273,7 @@ function RecapSidebar({
 }) {
   if (hoveredCard) {
     return (
-      <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3 xl:w-80 2xl:w-96">
+      <aside className="flex w-[284px] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-black/40 p-3">
         <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-500">
           Aperçu
         </div>
@@ -1375,7 +1375,7 @@ function RecapSidebar({
     );
   }
   return (
-    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40 xl:w-80 2xl:w-96">
+    <aside className="flex w-[284px] shrink-0 flex-col overflow-hidden border-r border-white/10 bg-black/40">
       <div className="border-b border-white/5 px-3 py-2 text-[10px] uppercase tracking-widest text-zinc-500">
         📜 Journal du combat
       </div>
@@ -1626,8 +1626,11 @@ function BoardArea({
       }`}
     >
       {/* Active — wrapper AnimatePresence : si l'Actif est KO ou retraité,
-          on anime sa sortie (fade + shrink + rotation). */}
-      <div className="relative h-56 w-40">
+          on anime sa sortie (fade + shrink + rotation). Container
+          dimensionné sur la même sizeClass que la carte interne pour
+          que le layout réserve la bonne place (avant : container fixe
+          h-56 w-40 plus petit que la carte → carte overflow). */}
+      <div className="relative w-44 h-60 lg:w-48 lg:h-64 xl:w-52 xl:h-72 2xl:w-56 2xl:h-[20rem]">
         <AnimatePresence mode="popLayout">
           {active
             ? (() => {
@@ -1700,7 +1703,10 @@ function BoardArea({
         {Array.from({ length: BATTLE_CONFIG.maxBench }, (_, i) => {
           const card = bench[i];
           return (
-            <div key={`bench-slot-${i}`} className="relative h-36 w-24">
+            <div
+              key={`bench-slot-${i}`}
+              className="relative w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48"
+            >
               <AnimatePresence mode="popLayout">
                 {card
                   ? (() => {
