@@ -1536,7 +1536,7 @@ function HandHidden({
         {Array.from({ length: Math.min(count, 7) }, (_, i) => (
           <div
             key={i}
-            className={`-ml-3 h-14 w-10 rounded border border-white/20 bg-gradient-to-br ${gradient} shadow first:ml-0 xl:h-16 xl:w-12`}
+            className={`-ml-3 h-10 w-7 rounded border border-white/20 bg-gradient-to-br ${gradient} shadow first:ml-0 xl:h-12 xl:w-9`}
           />
         ))}
         {count > 7 && (
@@ -1637,7 +1637,7 @@ function BoardArea({
           dimensionné sur la même sizeClass que la carte interne pour
           que le layout réserve la bonne place (avant : container fixe
           h-56 w-40 plus petit que la carte → carte overflow). */}
-      <div className="relative w-40 h-56 lg:w-44 lg:h-60 xl:w-48 xl:h-64 2xl:w-52 2xl:h-72">
+      <div className="relative w-36 h-60 lg:w-40 lg:h-64 xl:w-44 xl:h-72 2xl:w-48 2xl:h-80">
         <AnimatePresence mode="popLayout">
           {active
             ? (() => {
@@ -1712,7 +1712,7 @@ function BoardArea({
           return (
             <div
               key={`bench-slot-${i}`}
-              className="relative w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48 2xl:w-40 2xl:h-56"
+              className="relative w-24 h-40 lg:w-28 lg:h-44 xl:w-32 xl:h-48"
             >
               <AnimatePresence mode="popLayout">
                 {card
@@ -1911,13 +1911,13 @@ function BoardCard({
   //   • HP courant en bas (gros, rouge si dégâts)
   //   • Énergies attachées sous la carte (pastilles colorées par type)
   //   • Statuses en haut à droite (badges emoji)
-  // Tailles responsive : Active (large) plus grosse que Bench. Compromis
-  // entre les tailles initiales (qui débordaient verticalement sur 1080p)
-  // et les tailles trop compactes (Phase 11) qui rendaient les cartes
-  // trop petites. Ratio 5:7 conservé pour cohérence visuelle.
+  // Tailles responsive : largeurs Phase 11 (qui passent horizontalement
+  // sur 1080p sans déborder), hauteurs Phase 11 pour la carte ELLE-MÊME.
+  // Les wrappers externes (BoardArea) sont plus hauts pour ajouter une
+  // zone réservée aux énergies SOUS la carte.
   const sizeClass = large
-    ? "w-40 h-56 lg:w-44 lg:h-60 xl:w-48 xl:h-64 2xl:w-52 2xl:h-72"
-    : "w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48 2xl:w-40 2xl:h-56";
+    ? "w-36 h-52 lg:w-40 lg:h-56 xl:w-44 xl:h-60 2xl:w-48 2xl:h-64"
+    : "w-24 h-32 lg:w-28 lg:h-36 xl:w-32 xl:h-40";
   const remainingHp = Math.max(0, data.hp - card.damage);
   const damaged = card.damage > 0;
   const hpPct = Math.max(0, Math.min(1, remainingHp / data.hp));
@@ -2101,39 +2101,36 @@ function BoardCard({
             )}
           </AnimatePresence>
 
-          {/* Pastilles d'énergies attachées — overlay À L'INTÉRIEUR de
-              la carte (au-dessus de la HP bar, alignées gauche). Avant :
-              les énergies étaient sous la carte, mais comme la carte est
-              dans un wrapper `absolute inset-0` avec hauteur fixe, elles
-              étaient invisibles (clip par le bord de la BoardArea).
-              Maintenant en overlay : pas de gain ni perte vertical, et
-              le joueur voit ses énergies. */}
-          {card.attachedEnergies.length > 0 && (
-            <div className="pointer-events-none absolute bottom-7 left-1 flex flex-wrap items-center gap-0.5">
-              {card.attachedEnergies.map((e, i) => {
-                const t = e as PokemonEnergyType;
-                const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
-                const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
-                const isNew = newEnergyIdx === i;
-                return (
-                  <motion.span
-                    key={i}
-                    initial={isNew ? { scale: 0, rotate: -180 } : false}
-                    animate={isNew ? { scale: [0, 1.3, 1], rotate: 0 } : undefined}
-                    transition={{ duration: 0.5, ease: "backOut" }}
-                    className={`flex items-center justify-center rounded-full font-bold shadow-md ring-2 ring-black/40 ${
-                      large ? "h-6 w-6 text-xs" : "h-5 w-5 text-[10px]"
-                    } ${bg} ${fg}`}
-                    title={e}
-                  >
-                    {energyEmoji(t)}
-                  </motion.span>
-                );
-              })}
-            </div>
-          )}
         </div>
       </motion.div>
+
+      {/* Pastilles d'énergies attachées SOUS la carte. Le wrapper externe
+          (BoardArea) réserve une zone supplémentaire en bas (h-60 wrapper
+          vs h-52 carte = 32px de zone énergies). */}
+      {card.attachedEnergies.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-1 px-0.5">
+          {card.attachedEnergies.map((e, i) => {
+            const t = e as PokemonEnergyType;
+            const bg = ENERGY_BADGE_BG[t] ?? "bg-zinc-400";
+            const fg = ENERGY_BADGE_TEXT[t] ?? "text-zinc-900";
+            const isNew = newEnergyIdx === i;
+            return (
+              <motion.span
+                key={i}
+                initial={isNew ? { scale: 0, rotate: -180 } : false}
+                animate={isNew ? { scale: [0, 1.3, 1], rotate: 0 } : undefined}
+                transition={{ duration: 0.5, ease: "backOut" }}
+                className={`flex items-center justify-center rounded-full font-bold shadow ring-1 ring-black/30 ${
+                  large ? "h-6 w-6 text-sm" : "h-5 w-5 text-xs"
+                } ${bg} ${fg}`}
+                title={e}
+              >
+                {energyEmoji(t)}
+              </motion.span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -3104,7 +3101,7 @@ function HandCard({
       }}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
-      className={`relative w-28 h-40 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-32 lg:h-44 xl:w-36 xl:h-52 2xl:w-40 2xl:h-56 ${
+      className={`relative w-24 h-32 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-28 lg:h-36 xl:w-32 xl:h-44 2xl:w-36 2xl:h-48 ${
         playable
           ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
           : blocked
