@@ -147,11 +147,13 @@ create or replace function public.list_my_market_history(
 ) returns table (
   id uuid,
   card_id text,
-  price_os int,
+  price_os bigint,
   seller_id uuid,
   buyer_id uuid,
   status text,
   created_at timestamptz,
+  -- "sold_at" est en fait closed_at dans la table — alias pour matcher
+  -- le type côté client.
   sold_at timestamptz,
   is_buyer boolean,
   is_seller boolean
@@ -168,7 +170,7 @@ as $$
     l.buyer_id,
     l.status,
     l.created_at,
-    l.sold_at,
+    l.closed_at as sold_at,
     l.buyer_id = auth.uid() as is_buyer,
     l.seller_id = auth.uid() as is_seller
   from public.tcg_card_listings l
@@ -178,7 +180,7 @@ as $$
       or (p_kind = 'sells' and l.seller_id = auth.uid() and l.status = 'sold')
       or (p_kind = 'all' and (l.buyer_id = auth.uid() or l.seller_id = auth.uid()))
     )
-  order by coalesce(l.sold_at, l.created_at) desc
+  order by coalesce(l.closed_at, l.created_at) desc
   limit 200;
 $$;
 
