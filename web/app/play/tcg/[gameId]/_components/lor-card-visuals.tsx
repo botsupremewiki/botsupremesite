@@ -152,14 +152,14 @@ export function LorCardZoomModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[92vh] w-auto"
+        className="relative max-h-[78vh] w-auto"
       >
         {card.image && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={card.image}
             alt={card.name}
-            className="h-[88vh] w-auto rounded-lg object-contain"
+            className="h-[75vh] w-auto max-w-[min(95vw,540px)] rounded-lg object-contain"
           />
         )}
         <button

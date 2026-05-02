@@ -67,7 +67,9 @@ export function TutorialClient({
   const [step, setStep] = useState(0);
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(alreadyCompleted);
-  const [reward, setReward] = useState<{ gold: number } | null>(null);
+  const [reward, setReward] = useState<{ gold: number; packs: number } | null>(
+    null,
+  );
 
   // Pour l'instant on n'a que pokemon — on duplique pour les autres jeux.
   const steps = STEPS_POKEMON;
@@ -91,25 +93,43 @@ export function TutorialClient({
     });
     setCompleting(false);
     setCompleted(true);
-    const r = data as { first_time: boolean; reward_gold: number } | null;
-    if (r?.first_time) setReward({ gold: r.reward_gold });
+    const r = data as
+      | { first_time: boolean; reward_gold: number; reward_packs?: number }
+      | null;
+    if (r?.first_time) {
+      setReward({ gold: r.reward_gold, packs: r.reward_packs ?? 0 });
+    }
     router.refresh();
   }
 
   if (completed) {
+    const gotPacks = reward && reward.packs > 0;
     return (
       <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-400/10 to-emerald-400/5 p-8 text-center">
-        <div className="text-5xl">🎓</div>
+        <div className="text-6xl">🎓</div>
         <h2 className="mt-3 text-2xl font-bold text-emerald-200">
           Tutoriel terminé !
         </h2>
         <p className="mt-2 text-sm text-zinc-300">
-          Tu connais maintenant les règles essentielles. Le mieux est
-          d&apos;apprendre en jouant.
+          Tu connais maintenant les règles essentielles.
+          {gotPacks && (
+            <>
+              {" "}
+              Voici tes <strong className="text-amber-200">10 boosters
+              gratuits</strong> pour bien démarrer ta collection !
+            </>
+          )}
         </p>
         {reward ? (
-          <div className="mt-4 inline-block rounded-md border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-bold text-amber-200">
-            🎁 +{reward.gold} OS reçus !
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-200">
+              🎁 +{reward.gold} OS
+            </div>
+            {gotPacks && (
+              <div className="rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-4 py-3 text-sm font-bold text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.3)]">
+                🎴 +{reward.packs} boosters gratuits
+              </div>
+            )}
           </div>
         ) : alreadyCompleted ? (
           <div className="mt-4 text-xs text-zinc-500">
@@ -118,17 +138,31 @@ export function TutorialClient({
           </div>
         ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
+          {gotPacks && (
+            <Link
+              href={`/play/tcg/${gameId}/boosters`}
+              className="rounded-md border-2 border-emerald-300/70 bg-gradient-to-br from-emerald-500 to-emerald-700 px-5 py-3 text-base font-extrabold text-emerald-50 shadow-[0_4px_18px_rgba(52,211,153,0.35)] transition-all hover:scale-[1.02] hover:from-emerald-400 hover:to-emerald-600"
+            >
+              🎴 Accéder aux boosters
+            </Link>
+          )}
+          <Link
+            href={`/play/tcg/${gameId}?skipTutorial=1`}
+            className="rounded-md border border-white/20 bg-white/[0.03] px-4 py-3 text-sm text-zinc-200 transition-colors hover:bg-white/[0.07]"
+          >
+            🏠 Continuer vers le hub
+          </Link>
           <Link
             href={`/play/tcg/${gameId}/battle/bot`}
-            className="rounded-md border border-amber-400/60 bg-amber-400/10 px-4 py-2 text-sm font-bold text-amber-100 transition-colors hover:bg-amber-400/20"
+            className="rounded-md border border-amber-400/60 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100 transition-colors hover:bg-amber-400/20"
           >
-            🤖 Premier match contre le Bot
+            🤖 Match contre le Bot
           </Link>
           <Link
             href={`/play/tcg/${gameId}/decks`}
-            className="rounded-md border border-white/20 bg-white/[0.03] px-4 py-2 text-sm text-zinc-200 transition-colors hover:bg-white/[0.07]"
+            className="rounded-md border border-white/20 bg-white/[0.03] px-4 py-3 text-sm text-zinc-200 transition-colors hover:bg-white/[0.07]"
           >
-            🃏 Construire mon deck
+            🃏 Mes decks
           </Link>
         </div>
       </div>
@@ -146,8 +180,9 @@ export function TutorialClient({
           </p>
         </div>
         <Link
-          href={`/play/tcg/${gameId}`}
+          href={`/play/tcg/${gameId}?skipTutorial=1`}
           className="text-xs text-zinc-400 transition-colors hover:text-zinc-100"
+          title="Quitter le tutoriel sans le compléter (pas de récompense)"
         >
           Passer →
         </Link>

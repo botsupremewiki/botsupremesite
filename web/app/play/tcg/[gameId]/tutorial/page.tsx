@@ -34,7 +34,7 @@ export default async function TutorialPage({
       <header className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-sm">
         <div className="flex items-center gap-3">
           <Link
-            href={`/play/tcg/${gameId}`}
+            href={`/play/tcg/${gameId}?skipTutorial=1`}
             className="text-zinc-400 transition-colors hover:text-zinc-100"
           >
             ← {game.name}

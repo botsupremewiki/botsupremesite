@@ -496,6 +496,7 @@ function PackRevealOverlay({
   onDone: () => void;
 }) {
   const [revealedIdx, setRevealedIdx] = useState<number>(-1);
+  const [zoomCard, setZoomCard] = useState<PokemonCardData | null>(null);
   const cards = pack.cards
     .map((id) => cardById.get(id))
     .filter((c): c is PokemonCardData => !!c);
@@ -511,6 +512,11 @@ function PackRevealOverlay({
       <div className="flex w-full max-w-4xl flex-col items-center gap-4">
         <div className="text-[11px] uppercase tracking-widest text-zinc-400">
           Pack ouvert · {cards.length} cartes
+          {allRevealed && (
+            <span className="ml-2 text-amber-300/80">
+              · clique sur une carte pour la zoomer
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {cards.map((card, i) => (
@@ -520,8 +526,9 @@ function PackRevealOverlay({
               flipped={i <= revealedIdx}
               onClick={() => {
                 if (i === revealedIdx + 1) setRevealedIdx(i);
+                else if (i <= revealedIdx) setZoomCard(card);
               }}
-              clickable={i === revealedIdx + 1}
+              clickable={i === revealedIdx + 1 || i <= revealedIdx}
             />
           ))}
         </div>
@@ -548,6 +555,9 @@ function PackRevealOverlay({
           )}
         </div>
       </div>
+      {/* Zoom modal au clic sur une carte déjà révélée. Stop-propagation
+          obligatoire pour ne pas refermer le reveal en cliquant outside. */}
+      <CardZoomModal card={zoomCard} onClose={() => setZoomCard(null)} />
     </motion.div>
   );
 }

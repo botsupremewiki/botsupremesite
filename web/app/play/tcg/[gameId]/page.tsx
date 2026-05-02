@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TCG_GAMES, type TcgGameId } from "@shared/types";
@@ -12,13 +12,32 @@ export const dynamic = "force-dynamic";
 
 export default async function TcgGameHub({
   params,
+  searchParams,
 }: {
   params: Promise<{ gameId: string }>;
+  searchParams: Promise<{ skipTutorial?: string }>;
 }) {
   const { gameId } = await params;
+  const sp = await searchParams;
   if (!(gameId in TCG_GAMES)) notFound();
   const profile = await getProfile();
   const game = TCG_GAMES[gameId as TcgGameId];
+
+  // Auto-redirect vers le tutoriel pour Pokemon : si l'user n'a jamais
+  // complété le tuto, on l'envoie automatiquement à sa première visite
+  // (sauf si ?skipTutorial=1 dans l'URL — utile pour navigation interne).
+  // Le tuto crédite +50 OS + 10 boosters gratuits à la complétion.
+  if (gameId === "pokemon" && profile && sp.skipTutorial !== "1") {
+    const sb = await createClient();
+    if (sb) {
+      const { data: doneData } = await sb.rpc("has_completed_tcg_tutorial", {
+        p_game_id: gameId,
+      });
+      if (!doneData) {
+        redirect(`/play/tcg/${gameId}/tutorial`);
+      }
+    }
+  }
 
   // Stats serveur (collection, free packs, ELO) si user connecté.
   let owned = 0;
@@ -283,7 +302,11 @@ export default async function TcgGameHub({
               href={`/play/tcg/${gameId}/tutorial`}
               icon="🎓"
               title="Tutoriel guidé"
-              description="Apprends les bases en 8 étapes. +50 OS la première fois."
+              description={
+                gameId === "pokemon"
+                  ? "Apprends les bases en 8 étapes. +50 OS et +10 boosters la première fois."
+                  : "Apprends les bases en 8 étapes. +50 OS la première fois."
+              }
               accent="text-cyan-200"
               border="border-cyan-400/40"
               gradient="bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.10),transparent_70%)]"

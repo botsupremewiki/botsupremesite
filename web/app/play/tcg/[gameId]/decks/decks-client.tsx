@@ -35,6 +35,10 @@ type ConnStatus = "connecting" | "connected" | "disconnected";
 const DECK_TARGET = BATTLE_CONFIG.deckSize;
 const MAX_COPIES = BATTLE_CONFIG.maxCopies;
 const DECK_NAME_MAX = 40;
+/** Cap UI sur le nombre de decks par joueur. 20 est un compromis raisonnable :
+ *  largement assez pour explorer toutes les archétypes Pocket sans saturer
+ *  la sidebar. Le check est aussi à mettre côté serveur via SQL. */
+const MAX_DECKS = 20;
 
 // Empty deck draft used when creating a new deck.
 const EMPTY_DRAFT = {
@@ -226,14 +230,85 @@ export function DecksClient({
     setErrorMsg(null);
   }, []);
 
-  // Toggle un type d'énergie dans la sélection (max 3 actifs).
-  const toggleEnergyType = useCallback((t: PokemonEnergyType) => {
+  // Types Pokémon présents dans le draft — sert pour l'auto-sélection
+  // d'énergies et pour disabler les types qui ne servent à rien dans
+  // ce deck (un deck sans Pokémon Feu n'a aucune raison d'avoir l'énergie
+  // Feu sélectionnée).
+  const deckPokemonTypes = useMemo(() => {
+    const set = new Set<PokemonEnergyType>();
+    for (const [cardId] of draftEntries) {
+      const c = POKEMON_BASE_SET_BY_ID.get(cardId);
+      if (c?.kind === "pokemon") set.add(c.type);
+    }
+    return set;
+  }, [draftEntries]);
+
+  // Auto-sélection des énergies : à chaque changement du deck, on
+  // resynchronise la sélection :
+  //   • Si le deck contient des Pokémon Feu/Plante/Psy → on auto-sélectionne
+  //     ces 3 types (l'utilisateur peut ensuite en désélectionner jusqu'à
+  //     1 minimum).
+  //   • Si l'utilisateur a manuellement désélectionné un type ET que le
+  //     deck contient toujours ce type → on respecte son choix tant qu'il
+  //     reste >= 1 énergie. C'est l'invariant : on ne ré-ajoute jamais
+  //     un type que l'utilisateur a explicitement retiré, sauf si la
+  //     sélection passerait à 0.
+  //   • Si le deck contient un nouveau type non encore couvert → on l'ajoute
+  //     automatiquement (jusqu'à 3 max).
+  //   • Si la sélection contient un type qui n'est plus dans le deck → on
+  //     le retire (sauf si c'est la seule énergie restante, pour respecter
+  //     "minimum 1").
+  const prevDeckTypesRef = useRef<Set<PokemonEnergyType>>(new Set());
+  useEffect(() => {
     setDraftEnergyTypes((prev) => {
-      if (prev.includes(t)) return prev.filter((x) => x !== t);
-      if (prev.length >= 3) return prev; // cap Pocket
-      return [...prev, t];
+      const prevDeck = prevDeckTypesRef.current;
+      const next = new Set(prev);
+      // Retire les types qui ne sont plus dans le deck.
+      for (const t of prev) {
+        if (!deckPokemonTypes.has(t)) next.delete(t);
+      }
+      // Ajoute les types nouvellement présents dans le deck (qui n'étaient
+      // pas là avant).
+      for (const t of deckPokemonTypes) {
+        if (!prevDeck.has(t) && next.size < 3) next.add(t);
+      }
+      // Garantit qu'il y a au moins 1 énergie si le deck contient des
+      // Pokémon : on prend le 1er type dispo si la sélection est vide.
+      if (next.size === 0 && deckPokemonTypes.size > 0) {
+        const first = Array.from(deckPokemonTypes)[0];
+        next.add(first);
+      }
+      prevDeckTypesRef.current = new Set(deckPokemonTypes);
+      const arr = Array.from(next);
+      // Évite re-render si rien ne change.
+      if (
+        arr.length === prev.length &&
+        arr.every((t) => prev.includes(t))
+      ) {
+        return prev;
+      }
+      return arr;
     });
-  }, []);
+  }, [deckPokemonTypes]);
+
+  // Toggle un type d'énergie. Cap à 3 max ; minimum 1 SI le deck contient
+  // au moins un Pokémon (sinon le joueur peut tout désélectionner pendant
+  // la construction).
+  const toggleEnergyType = useCallback(
+    (t: PokemonEnergyType) => {
+      setDraftEnergyTypes((prev) => {
+        if (prev.includes(t)) {
+          // Refuse de retirer si c'est la dernière et que le deck
+          // contient des Pokémon (sinon le deck devient invalide).
+          if (prev.length <= 1 && deckPokemonTypes.size > 0) return prev;
+          return prev.filter((x) => x !== t);
+        }
+        if (prev.length >= 3) return prev;
+        return [...prev, t];
+      });
+    },
+    [deckPokemonTypes],
+  );
 
   const addCard = useCallback(
     (card: PokemonCardData) => {
@@ -363,12 +438,25 @@ export function DecksClient({
         <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-white/5 bg-black/30 p-3">
           <button
             onClick={startNewDraft}
-            className="mb-3 shrink-0 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400"
+            disabled={decks.length >= MAX_DECKS}
+            title={
+              decks.length >= MAX_DECKS
+                ? `Limite atteinte (${MAX_DECKS} decks max). Supprime un deck pour en créer un nouveau.`
+                : undefined
+            }
+            className="mb-3 shrink-0 rounded-md bg-amber-500 px-3 py-2 text-sm font-bold text-amber-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
           >
             + Nouveau deck
           </button>
           <div className="mb-2 shrink-0 text-[10px] uppercase tracking-widest text-zinc-500">
-            Mes decks ({decks.length})
+            Mes decks{" "}
+            <span
+              className={`tabular-nums ${
+                decks.length >= MAX_DECKS ? "text-amber-300" : "text-zinc-400"
+              }`}
+            >
+              ({decks.length}/{MAX_DECKS})
+            </span>
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
             {decks.length === 0 && (
@@ -493,6 +581,7 @@ export function DecksClient({
                   onRemove={removeCard}
                   energyTypes={draftEnergyTypes}
                   onToggleEnergy={toggleEnergyType}
+                  deckPokemonTypes={deckPokemonTypes}
                 />
 
                 {/* Séparateur visuel net */}
@@ -519,25 +608,24 @@ export function DecksClient({
 }
 
 // ─── Collection picker ───────────────────────────────────────────────────
+// Pattern aligné sur CollectionGrid pour cohérence (cf. collection-grid.tsx) :
+//   • Catégorie EXCLUSIVE (radio) — switch reset les filtres dépendants
+//   • Types Pokémon visibles seulement si category !== "trainer"
+//   • Raretés dans l'ordre croissant (◆ → ◆◆ → ◆◆◆ → ◆◆◆◆ → ★ → ★★ → ★★★ → 👑)
+//   • Pour Dresseurs : on ne montre que les raretés effectivement présentes
+//   • "EX" toggle après couronne, visible seulement pour Pokémon
+//   • Tri : 3 options (Pokédex / Rareté / Nom A→Z) + flèche bidirectionnelle
+//   • Fix bug : tri Pokédex utilise pokedexId (pas number qui mixait Dresseurs)
 
 type PickerOwned = "all" | "owned" | "missing";
-type PickerSort = "number" | "name" | "rarity" | "count";
-type PickerCategory = "pokemon" | "trainer";
+type PickerSort = "pokedex" | "name" | "rarity";
+type PickerSortDir = "asc" | "desc";
+type PickerCategory = "all" | "pokemon" | "trainer";
 
-// Un seul filtre "facette" actif à la fois (catégorie OU type OU rareté).
-type PickerActiveFilter =
-  | { kind: "category"; value: PickerCategory }
-  | { kind: "type"; value: PokemonEnergyType }
-  | { kind: "rarity"; value: TcgRarity }
-  | null;
-
-// Filtres compacts : labels courts (emoji seul pour types/raretés, mot seul
-// pour catégories) — tout tient sur une ligne. Le titre complet est en
-// `title=` HTML (tooltip au hover).
 const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string; title: string }[] = [
+  { id: "grass", label: "🍃", title: "Plante" },
   { id: "fire", label: "🔥", title: "Feu" },
   { id: "water", label: "💧", title: "Eau" },
-  { id: "grass", label: "🍃", title: "Plante" },
   { id: "lightning", label: "⚡", title: "Électrique" },
   { id: "psychic", label: "🌀", title: "Psy" },
   { id: "fighting", label: "👊", title: "Combat" },
@@ -548,19 +636,20 @@ const PICKER_TYPE_OPTIONS: { id: PokemonEnergyType; label: string; title: string
 ];
 
 const PICKER_CATEGORY_OPTIONS: { id: PickerCategory; label: string; title: string }[] = [
-  { id: "pokemon", label: "Pokémon", title: "Pokémon (toutes catégories)" },
+  { id: "all", label: "Tout", title: "Pokémon + Dresseurs" },
+  { id: "pokemon", label: "Pokémon", title: "Pokémon uniquement" },
   { id: "trainer", label: "Dresseurs", title: "Dresseurs (Supporter + Objet)" },
 ];
 
 const PICKER_RARITY_OPTIONS: { id: TcgRarity; label: string; title: string }[] = [
+  { id: "diamond-1", label: "◆", title: "Commune (1 losange)" },
+  { id: "diamond-2", label: "◆◆", title: "Peu commune (2 losanges)" },
+  { id: "diamond-3", label: "◆◆◆", title: "Rare (3 losanges)" },
+  { id: "diamond-4", label: "◆◆◆◆", title: "Rare ex (4 losanges)" },
+  { id: "star-1", label: "★", title: "Full Art (1 étoile)" },
+  { id: "star-2", label: "★★", title: "Full Art alt (2 étoiles)" },
+  { id: "star-3", label: "★★★", title: "Immersive (3 étoiles)" },
   { id: "crown", label: "👑", title: "Couronne brillante" },
-  { id: "star-3", label: "★★★", title: "Immersive" },
-  { id: "star-2", label: "★★", title: "Full Art alt" },
-  { id: "star-1", label: "★", title: "Full Art" },
-  { id: "diamond-4", label: "◆◆◆◆", title: "Rare ex" },
-  { id: "diamond-3", label: "◆◆◆", title: "Rare" },
-  { id: "diamond-2", label: "◆◆", title: "Peu commune" },
-  { id: "diamond-1", label: "◆", title: "Commune" },
 ];
 
 function CollectionPicker({
@@ -575,26 +664,54 @@ function CollectionPicker({
   onAdd: (card: PokemonCardData) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<PickerActiveFilter>(null);
+  const [category, setCategory] = useState<PickerCategory>("all");
+  const [types, setTypes] = useState<Set<PokemonEnergyType>>(new Set());
+  const [rarities, setRarities] = useState<Set<TcgRarity>>(new Set());
+  const [exOnly, setExOnly] = useState(false);
   const [ownedFilter, setOwnedFilter] = useState<PickerOwned>("owned");
-  const [sortMode, setSortMode] = useState<PickerSort>("number");
-  // Carte sélectionnée pour preview (modal zoom avec bouton "Ajouter au deck").
+  const [sortMode, setSortMode] = useState<PickerSort>("pokedex");
+  const [sortDir, setSortDir] = useState<PickerSortDir>("asc");
   const [previewCard, setPreviewCard] = useState<PokemonCardData | null>(null);
 
-  function toggleFilter(next: PickerActiveFilter) {
-    if (
-      activeFilter &&
-      next &&
-      activeFilter.kind === next.kind &&
-      activeFilter.value === next.value
-    ) {
-      setActiveFilter(null);
-    } else {
-      setActiveFilter(next);
-    }
+  // Reset filtres dépendants au changement de catégorie.
+  function setCategoryReset(v: PickerCategory) {
+    setCategory(v);
+    setTypes(new Set());
+    setRarities(new Set());
+    setExOnly(false);
   }
-  const isActive = (kind: "category" | "type" | "rarity", value: string) =>
-    activeFilter?.kind === kind && activeFilter.value === value;
+  function toggleType(v: PokemonEnergyType) {
+    setTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v);
+      else next.add(v);
+      return next;
+    });
+  }
+  function toggleRarity(v: TcgRarity) {
+    setRarities((prev) => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v);
+      else next.add(v);
+      return next;
+    });
+  }
+
+  // Raretés effectivement présentes pour la catégorie active (pour
+  // n'afficher que les chips utiles sur "trainer").
+  const availableRarities = useMemo(() => {
+    const seen = new Set<TcgRarity>();
+    for (const c of pool) {
+      if (category === "pokemon" && c.kind !== "pokemon") continue;
+      if (category === "trainer" && c.kind !== "trainer") continue;
+      seen.add(c.rarity);
+    }
+    return seen;
+  }, [pool, category]);
+  const visibleRarities =
+    category === "trainer"
+      ? PICKER_RARITY_OPTIONS.filter((r) => availableRarities.has(r.id))
+      : PICKER_RARITY_OPTIONS;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -602,51 +719,51 @@ function CollectionPicker({
       const owned = collection.get(c.id) ?? 0;
       if (ownedFilter === "owned" && owned <= 0) return false;
       if (ownedFilter === "missing" && owned > 0) return false;
-      // Filtre facette unique (catégorie / type / rareté).
-      if (activeFilter) {
-        if (activeFilter.kind === "rarity") {
-          if (c.rarity !== activeFilter.value) return false;
-        } else if (activeFilter.kind === "type") {
-          if (c.kind !== "pokemon" || c.type !== activeFilter.value)
-            return false;
-        } else if (activeFilter.kind === "category") {
-          const v = activeFilter.value;
-          if (v === "pokemon" && c.kind !== "pokemon") return false;
-          if (v === "trainer" && c.kind !== "trainer") return false;
-        }
+      if (category === "pokemon" && c.kind !== "pokemon") return false;
+      if (category === "trainer" && c.kind !== "trainer") return false;
+      if (types.size > 0) {
+        if (c.kind !== "pokemon" || !types.has(c.type)) return false;
       }
+      if (rarities.size > 0 && !rarities.has(c.rarity)) return false;
+      if (exOnly && (c.kind !== "pokemon" || !c.isEx)) return false;
       if (q && !c.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [pool, collection, search, activeFilter, ownedFilter]);
+  }, [pool, collection, search, category, types, rarities, exOnly, ownedFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
     arr.sort((a, b) => {
       switch (sortMode) {
-        case "number":
-          return a.number - b.number;
+        case "pokedex": {
+          // Bug fix : pokedexId au lieu de number (qui mixait Pokémon
+          // et Dresseurs). Dresseurs → 9999 (en fin de liste).
+          const ap = a.kind === "pokemon" ? a.pokedexId ?? 9999 : 9999;
+          const bp = b.kind === "pokemon" ? b.pokedexId ?? 9999 : 9999;
+          if (ap !== bp) return (ap - bp) * dir;
+          return a.name.localeCompare(b.name) * dir;
+        }
         case "name":
-          return a.name.localeCompare(b.name);
+          return a.name.localeCompare(b.name) * dir;
         case "rarity": {
           const ar = RARITY_TIER[a.rarity] ?? 0;
           const br = RARITY_TIER[b.rarity] ?? 0;
-          if (ar !== br) return br - ar;
-          return a.name.localeCompare(b.name);
-        }
-        case "count": {
-          const ca = collection.get(a.id) ?? 0;
-          const cb = collection.get(b.id) ?? 0;
-          if (ca !== cb) return cb - ca;
-          return a.name.localeCompare(b.name);
+          if (ar !== br) return (ar - br) * dir;
+          return a.name.localeCompare(b.name) * dir;
         }
       }
     });
     return arr;
-  }, [filtered, sortMode, collection]);
+  }, [filtered, sortMode, sortDir]);
 
   const filtersChanged =
-    !!search || activeFilter !== null || ownedFilter !== "owned";
+    !!search ||
+    category !== "all" ||
+    types.size > 0 ||
+    rarities.size > 0 ||
+    exOnly ||
+    ownedFilter !== "owned";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -664,16 +781,29 @@ function CollectionPicker({
             onChange={(e) => setSortMode(e.target.value as PickerSort)}
             className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
           >
-            <option value="number">Tri : N° Pokédex</option>
+            <option value="pokedex">Tri : N° Pokédex</option>
             <option value="rarity">Tri : Rareté</option>
             <option value="name">Tri : Nom A→Z</option>
-            <option value="count">Tri : Possédées</option>
           </select>
+          <button
+            onClick={() =>
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+            }
+            className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-zinc-200 hover:bg-white/10"
+            title={
+              sortDir === "asc"
+                ? "Croissant — clic pour décroissant"
+                : "Décroissant — clic pour croissant"
+            }
+            aria-label={sortDir === "asc" ? "Tri croissant" : "Tri décroissant"}
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
           {filtersChanged && (
             <button
               onClick={() => {
                 setSearch("");
-                setActiveFilter(null);
+                setCategoryReset("all");
                 setOwnedFilter("owned");
               }}
               className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-300 hover:bg-white/10"
@@ -682,7 +812,6 @@ function CollectionPicker({
             </button>
           )}
         </div>
-        {/* Une seule ligne : possession | catégorie | type | rareté */}
         <div className="flex flex-wrap items-center gap-1.5">
           <PickerChip
             active={ownedFilter === "owned"}
@@ -703,32 +832,44 @@ function CollectionPicker({
           {PICKER_CATEGORY_OPTIONS.map((c) => (
             <PickerChip
               key={c.id}
-              active={isActive("category", c.id)}
-              onClick={() => toggleFilter({ kind: "category", value: c.id })}
+              active={category === c.id}
+              onClick={() => setCategoryReset(c.id)}
               label={c.label}
               title={c.title}
             />
           ))}
+          {category !== "trainer" && (
+            <>
+              <PickerSeparator />
+              {PICKER_TYPE_OPTIONS.map((t) => (
+                <PickerChip
+                  key={t.id}
+                  active={types.has(t.id)}
+                  onClick={() => toggleType(t.id)}
+                  label={t.label}
+                  title={t.title}
+                />
+              ))}
+            </>
+          )}
           <PickerSeparator />
-          {PICKER_TYPE_OPTIONS.map((t) => (
-            <PickerChip
-              key={t.id}
-              active={isActive("type", t.id)}
-              onClick={() => toggleFilter({ kind: "type", value: t.id })}
-              label={t.label}
-              title={t.title}
-            />
-          ))}
-          <PickerSeparator />
-          {PICKER_RARITY_OPTIONS.map((r) => (
+          {visibleRarities.map((r) => (
             <PickerChip
               key={r.id}
-              active={isActive("rarity", r.id)}
-              onClick={() => toggleFilter({ kind: "rarity", value: r.id })}
+              active={rarities.has(r.id)}
+              onClick={() => toggleRarity(r.id)}
               label={r.label}
               title={r.title}
             />
           ))}
+          {category !== "trainer" && (
+            <PickerChip
+              active={exOnly}
+              onClick={() => setExOnly((v) => !v)}
+              label="EX"
+              title="Pokémon EX uniquement"
+            />
+          )}
         </div>
         {filtersChanged && (
           <div className="text-[11px] text-zinc-500">
@@ -922,12 +1063,16 @@ function DeckHeader({
   onRemove,
   energyTypes,
   onToggleEnergy,
+  deckPokemonTypes,
 }: {
   draftEntries: Map<string, number>;
   cardById: Map<string, PokemonCardData>;
   onRemove: (cardId: string) => void;
   energyTypes: PokemonEnergyType[];
   onToggleEnergy: (t: PokemonEnergyType) => void;
+  /** Set des types Pokémon présents dans le deck — sert à griser les
+   *  types non-pertinents (ex. Feu si deck full Plante). */
+  deckPokemonTypes: Set<PokemonEnergyType>;
 }) {
   const { cards, totalCount } = useMemo(() => {
     const list: { card: PokemonCardData; count: number }[] = [];
@@ -978,7 +1123,18 @@ function DeckHeader({
         </span>
         {PICKER_TYPE_OPTIONS.map((t) => {
           const active = energyTypes.includes(t.id);
-          const disabled = !active && energyTypes.length >= 3;
+          const inDeck = deckPokemonTypes.has(t.id);
+          // Disabled si :
+          //   • Déjà 3 sélectionnés et celui-ci n'est pas actif
+          //   • OU le type n'est dans aucune carte Pokémon du deck (ne sert
+          //     à rien de sélectionner Feu si aucun Pokémon Feu)
+          //   • Empêche aussi de désélectionner si c'est la dernière
+          //     énergie restante (minimum 1 si le deck contient des Pokémon)
+          const overCap = !active && energyTypes.length >= 3;
+          const lastOne =
+            active && energyTypes.length <= 1 && deckPokemonTypes.size > 0;
+          const irrelevant = !active && !inDeck;
+          const disabled = overCap || lastOne || irrelevant;
           return (
             <button
               key={t.id}
@@ -987,12 +1143,18 @@ function DeckHeader({
               className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
                 active
                   ? "border-amber-400/70 bg-amber-400/20 text-amber-100"
-                  : "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
+                  : inDeck
+                    ? "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07]"
+                    : "border-white/5 bg-white/[0.01] text-zinc-500"
               }`}
               title={
-                disabled
-                  ? "Max 3 types — désélectionne un autre"
-                  : t.title
+                lastOne
+                  ? "Au moins 1 énergie requise tant que le deck contient des Pokémon"
+                  : overCap
+                    ? "Max 3 types — désélectionne un autre"
+                    : irrelevant
+                      ? `${t.title} — aucun Pokémon ${t.title.toLowerCase()} dans le deck`
+                      : t.title
               }
             >
               {t.label}

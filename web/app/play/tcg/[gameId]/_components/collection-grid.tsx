@@ -10,35 +10,38 @@ import { POKEMON_SETS } from "@shared/tcg-pokemon-sets";
 import { CardSlot, CardZoomModal, RARITY_TIER } from "./card-visuals";
 
 type CollectionFilter = "all" | "owned" | "missing" | "dupes";
-type CollectionSort = "number" | "name" | "rarity" | "count" | "hp";
-type CategoryFilter =
-  | "pokemon"
-  | "trainer"
-  | "supporter"
-  | "item"
-  | "basic"
-  | "stage1"
-  | "stage2";
-type PackFilter = "mewtwo" | "charizard" | "pikachu" | "promo";
+type CollectionSort = "pokedex" | "name" | "rarity";
+type SortDir = "asc" | "desc";
+/**
+ * Catégorie EXCLUSIVE (radio) :
+ * - "all" : tout afficher (par défaut)
+ * - "pokemon" : Pokémon uniquement → on affiche les chips de TYPES + toutes
+ *   les raretés (diamond-1 → crown) + un toggle "EX seulement" après crown
+ * - "trainer" : Dresseurs uniquement → on cache les TYPES + on n'affiche
+ *   que les raretés que les Dresseurs peuvent avoir (en pratique
+ *   diamond-1 à diamond-3, calculées dynamiquement depuis le pool)
+ *
+ * Changer de catégorie reset les filtres types/raretés/exOnly pour
+ * éviter les états incohérents.
+ */
+type CategoryFilter = "all" | "pokemon" | "trainer";
 
-// Filtres facette : multi-select. Chaque "kind" a son propre Set ; entre
-// kinds c'est un AND, dans un kind c'est un OR. Permet par exemple
-// "Pokémon Feu OU Eau" + "Rare ou + + EX seulement".
+// Filtres facette : multi-select pour types et raretés (chaque kind a son
+// propre Set ; entre kinds c'est un AND, dans un kind c'est un OR).
+// Catégorie est exclusive.
 type FacetState = {
-  categories: Set<CategoryFilter>;
+  category: CategoryFilter;
   types: Set<PokemonEnergyType>;
   rarities: Set<TcgRarity>;
-  packs: Set<PackFilter>;
   /** Set Pocket (A1+P-A, A1a, A2…). Vide = tous les sets. */
   sets: Set<string>;
   exOnly: boolean;
 };
 
 const EMPTY_FACETS: FacetState = {
-  categories: new Set(),
+  category: "all",
   types: new Set(),
   rarities: new Set(),
-  packs: new Set(),
   sets: new Set(),
   exOnly: false,
 };
@@ -47,9 +50,9 @@ const EMPTY_FACETS: FacetState = {
 // pour catégories) — tout tient sur une ligne. Le titre complet est en
 // `title=` HTML (tooltip au hover).
 const TYPE_OPTIONS: { id: PokemonEnergyType; label: string; title: string }[] = [
+  { id: "grass", label: "🍃", title: "Plante" },
   { id: "fire", label: "🔥", title: "Feu" },
   { id: "water", label: "💧", title: "Eau" },
-  { id: "grass", label: "🍃", title: "Plante" },
   { id: "lightning", label: "⚡", title: "Électrique" },
   { id: "psychic", label: "🌀", title: "Psy" },
   { id: "fighting", label: "👊", title: "Combat" },
@@ -60,26 +63,24 @@ const TYPE_OPTIONS: { id: PokemonEnergyType; label: string; title: string }[] = 
 ];
 
 const CATEGORY_OPTIONS: { id: CategoryFilter; label: string; title: string }[] = [
-  { id: "pokemon", label: "Pokémon", title: "Pokémon (toutes catégories)" },
+  { id: "all", label: "Tout", title: "Pokémon + Dresseurs" },
+  { id: "pokemon", label: "Pokémon", title: "Pokémon uniquement" },
   { id: "trainer", label: "Dresseurs", title: "Dresseurs (Supporter + Objet)" },
 ];
 
+// Ordre des raretés du moins rare au plus rare (croissant). L'utilisateur
+// scanne de gauche à droite : commence par les communes puis monte vers les
+// alt-arts et la couronne. EX est un toggle séparé qui apparaît APRÈS la
+// couronne uniquement quand category === "pokemon".
 const RARITY_OPTIONS: { id: TcgRarity; label: string; title: string }[] = [
+  { id: "diamond-1", label: "◆", title: "Commune (1 losange)" },
+  { id: "diamond-2", label: "◆◆", title: "Peu commune (2 losanges)" },
+  { id: "diamond-3", label: "◆◆◆", title: "Rare (3 losanges)" },
+  { id: "diamond-4", label: "◆◆◆◆", title: "Rare ex (4 losanges)" },
+  { id: "star-1", label: "★", title: "Full Art (1 étoile)" },
+  { id: "star-2", label: "★★", title: "Full Art alt (2 étoiles)" },
+  { id: "star-3", label: "★★★", title: "Immersive (3 étoiles)" },
   { id: "crown", label: "👑", title: "Couronne brillante" },
-  { id: "star-3", label: "★★★", title: "Immersive" },
-  { id: "star-2", label: "★★", title: "Full Art alt" },
-  { id: "star-1", label: "★", title: "Full Art" },
-  { id: "diamond-4", label: "◆◆◆◆", title: "Rare ex" },
-  { id: "diamond-3", label: "◆◆◆", title: "Rare" },
-  { id: "diamond-2", label: "◆◆", title: "Peu commune" },
-  { id: "diamond-1", label: "◆", title: "Commune" },
-];
-
-const PACK_OPTIONS: { id: PackFilter; label: string; title: string }[] = [
-  { id: "mewtwo", label: "Mewtwo", title: "Pack Mewtwo" },
-  { id: "charizard", label: "Dracaufeu", title: "Pack Dracaufeu" },
-  { id: "pikachu", label: "Pikachu", title: "Pack Pikachu" },
-  { id: "promo", label: "Promo", title: "Promo (P-A)" },
 ];
 
 export function CollectionGrid({
@@ -92,18 +93,35 @@ export function CollectionGrid({
   const [search, setSearch] = useState("");
   const [facets, setFacets] = useState<FacetState>(EMPTY_FACETS);
   const [ownedFilter, setOwnedFilter] = useState<CollectionFilter>("all");
-  const [sortMode, setSortMode] = useState<CollectionSort>("number");
+  const [sortMode, setSortMode] = useState<CollectionSort>("pokedex");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [zoomedCard, setZoomedCard] = useState<PokemonCardData | null>(null);
 
-  // Toggle un facet : add si absent, remove si présent. Multi-select donc
-  // chaque kind a son propre Set.
-  function toggleCategory(v: CategoryFilter) {
-    setFacets((f) => {
-      const next = new Set(f.categories);
-      if (next.has(v)) next.delete(v);
-      else next.add(v);
-      return { ...f, categories: next };
-    });
+  /** Calcule dynamiquement les raretés présentes dans le pool pour la
+   *  catégorie active (pour Dresseurs : on n'affiche que les chips qui
+   *  matchent au moins une carte → pas de star/crown qui ne s'appliquent
+   *  qu'aux Pokémon). */
+  const availableRarities = useMemo(() => {
+    const seen = new Set<TcgRarity>();
+    for (const c of pool) {
+      if (facets.category === "pokemon" && c.kind !== "pokemon") continue;
+      if (facets.category === "trainer" && c.kind !== "trainer") continue;
+      seen.add(c.rarity);
+    }
+    return seen;
+  }, [pool, facets.category]);
+
+  /** Reset des filtres dépendants de la catégorie au changement (types,
+   *  raretés, exOnly). Évite les incohérences (ex. type Feu sélectionné
+   *  alors qu'on est passé sur Dresseurs). */
+  function setCategory(v: CategoryFilter) {
+    setFacets((f) => ({
+      ...f,
+      category: v,
+      types: new Set(),
+      rarities: new Set(),
+      exOnly: false,
+    }));
   }
   function toggleType(v: PokemonEnergyType) {
     setFacets((f) => {
@@ -119,14 +137,6 @@ export function CollectionGrid({
       if (next.has(v)) next.delete(v);
       else next.add(v);
       return { ...f, rarities: next };
-    });
-  }
-  function togglePack(v: PackFilter) {
-    setFacets((f) => {
-      const next = new Set(f.packs);
-      if (next.has(v)) next.delete(v);
-      else next.add(v);
-      return { ...f, packs: next };
     });
   }
   function toggleSet(v: string) {
@@ -145,43 +155,18 @@ export function CollectionGrid({
       if (ownedFilter === "owned" && count === 0) return false;
       if (ownedFilter === "missing" && count > 0) return false;
       if (ownedFilter === "dupes" && count < 2) return false;
-      // Multi-select : OR dans un kind, AND entre kinds.
-      if (facets.rarities.size > 0 && !facets.rarities.has(c.rarity))
-        return false;
+      // Catégorie exclusive : "all" laisse tout passer.
+      if (facets.category === "pokemon" && c.kind !== "pokemon") return false;
+      if (facets.category === "trainer" && c.kind !== "trainer") return false;
+      // Types : applicable seulement aux Pokémon. Si la catégorie est
+      // "trainer", on ignore les types (réinitialisés au switch de toute
+      // façon).
       if (facets.types.size > 0) {
         if (c.kind !== "pokemon" || !facets.types.has(c.type)) return false;
       }
-      if (facets.categories.size > 0) {
-        let ok = false;
-        for (const v of facets.categories) {
-          if (v === "pokemon" && c.kind === "pokemon") ok = true;
-          else if (v === "trainer" && c.kind === "trainer") ok = true;
-          else if (v === "basic" && c.kind === "pokemon" && c.stage === "basic")
-            ok = true;
-          else if (
-            v === "stage1" && c.kind === "pokemon" && c.stage === "stage1"
-          ) ok = true;
-          else if (
-            v === "stage2" && c.kind === "pokemon" && c.stage === "stage2"
-          ) ok = true;
-          else if (
-            v === "supporter" &&
-            c.kind === "trainer" &&
-            c.trainerType === "supporter"
-          ) ok = true;
-          else if (
-            v === "item" &&
-            c.kind === "trainer" &&
-            c.trainerType === "item"
-          ) ok = true;
-        }
-        if (!ok) return false;
-      }
-      if (facets.packs.size > 0) {
-        // pack peut être string id ou absent (cartes anciennes).
-        const pack = (c as { pack?: string }).pack;
-        if (!pack || !facets.packs.has(pack as PackFilter)) return false;
-      }
+      // Raretés multi-select : OR dans le kind.
+      if (facets.rarities.size > 0 && !facets.rarities.has(c.rarity))
+        return false;
       if (facets.sets.size > 0) {
         // Match par préfixe d'id (A1-001, A1a-005, P-A-001…).
         const isPA = c.id.startsWith("P-A-");
@@ -205,44 +190,50 @@ export function CollectionGrid({
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
     arr.sort((a, b) => {
       switch (sortMode) {
-        case "number":
-          return a.number - b.number;
+        case "pokedex": {
+          // Bug fix : utiliser pokedexId (numéro Pokédex national) au lieu
+          // de `number` (= numéro de carte du set, qui mélange Pokémon et
+          // Dresseurs). Les Dresseurs n'ont pas de pokedexId → 9999 pour
+          // les pousser en fin de liste, puis on stabilise par nom.
+          const ap = a.kind === "pokemon" ? a.pokedexId ?? 9999 : 9999;
+          const bp = b.kind === "pokemon" ? b.pokedexId ?? 9999 : 9999;
+          if (ap !== bp) return (ap - bp) * dir;
+          return a.name.localeCompare(b.name) * dir;
+        }
         case "name":
-          return a.name.localeCompare(b.name);
+          return a.name.localeCompare(b.name) * dir;
         case "rarity": {
           const ar = RARITY_TIER[a.rarity] ?? 0;
           const br = RARITY_TIER[b.rarity] ?? 0;
-          if (ar !== br) return br - ar;
-          return a.name.localeCompare(b.name);
-        }
-        case "count": {
-          const ca = collection.get(a.id) ?? 0;
-          const cb = collection.get(b.id) ?? 0;
-          if (ca !== cb) return cb - ca;
-          return a.name.localeCompare(b.name);
-        }
-        case "hp": {
-          const ah = a.kind === "pokemon" ? a.hp : 0;
-          const bh = b.kind === "pokemon" ? b.hp : 0;
-          if (ah !== bh) return bh - ah;
-          return a.name.localeCompare(b.name);
+          // Asc = du moins rare au plus rare ; desc = inverse.
+          if (ar !== br) return (ar - br) * dir;
+          return a.name.localeCompare(b.name) * dir;
         }
       }
     });
     return arr;
-  }, [filtered, sortMode, collection]);
+  }, [filtered, sortMode, sortDir]);
 
   const facetCount =
-    facets.categories.size +
+    (facets.category !== "all" ? 1 : 0) +
     facets.types.size +
     facets.rarities.size +
-    facets.packs.size +
     facets.sets.size +
     (facets.exOnly ? 1 : 0);
   const filtersActive =
     !!search || facetCount > 0 || ownedFilter !== "all";
+
+  // Pour Dresseurs : on filtre la liste de chips de raretés à celles
+  // effectivement présentes dans le pool (typiquement diamond-1 à
+  // diamond-3 + parfois diamond-4 ou promo). Pour Pokémon : toutes les
+  // raretés sont permises (un Pokémon peut être star-3 ou crown).
+  const visibleRarities =
+    facets.category === "trainer"
+      ? RARITY_OPTIONS.filter((r) => availableRarities.has(r.id))
+      : RARITY_OPTIONS;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -260,12 +251,28 @@ export function CollectionGrid({
             onChange={(e) => setSortMode(e.target.value as CollectionSort)}
             className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 focus:border-amber-400/50 focus:outline-none"
           >
-            <option value="number">Tri : N° Pokédex</option>
+            <option value="pokedex">Tri : N° Pokédex</option>
             <option value="rarity">Tri : Rareté</option>
             <option value="name">Tri : Nom A→Z</option>
-            <option value="count">Tri : Possédées</option>
-            <option value="hp">Tri : PV (haut→bas)</option>
           </select>
+          <button
+            onClick={() =>
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+            }
+            className="rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-zinc-200 hover:bg-white/10"
+            title={
+              sortDir === "asc"
+                ? "Croissant — clic pour passer en décroissant"
+                : "Décroissant — clic pour passer en croissant"
+            }
+            aria-label={
+              sortDir === "asc"
+                ? "Tri croissant"
+                : "Tri décroissant"
+            }
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
           {filtersActive && (
             <button
               onClick={() => {
@@ -302,27 +309,38 @@ export function CollectionGrid({
             label="Doublons"
           />
           <FilterSeparator />
+          {/* Catégorie EXCLUSIVE (radio) — switch reset les filtres
+              dépendants (types/raretés/exOnly). */}
           {CATEGORY_OPTIONS.map((c) => (
             <FilterChip
               key={c.id}
-              active={facets.categories.has(c.id)}
-              onClick={() => toggleCategory(c.id)}
+              active={facets.category === c.id}
+              onClick={() => setCategory(c.id)}
               label={c.label}
               title={c.title}
             />
           ))}
+          {/* Types Pokémon : visibles seulement si catégorie === "pokemon"
+              ou "all" (où "all" autorise types). Cachés sur "trainer". */}
+          {facets.category !== "trainer" && (
+            <>
+              <FilterSeparator />
+              {TYPE_OPTIONS.map((t) => (
+                <FilterChip
+                  key={t.id}
+                  active={facets.types.has(t.id)}
+                  onClick={() => toggleType(t.id)}
+                  label={t.label}
+                  title={t.title}
+                />
+              ))}
+            </>
+          )}
           <FilterSeparator />
-          {TYPE_OPTIONS.map((t) => (
-            <FilterChip
-              key={t.id}
-              active={facets.types.has(t.id)}
-              onClick={() => toggleType(t.id)}
-              label={t.label}
-              title={t.title}
-            />
-          ))}
-          <FilterSeparator />
-          {RARITY_OPTIONS.map((r) => (
+          {/* Raretés dans l'ordre croissant : ◆ → ◆◆ → ◆◆◆ → ◆◆◆◆ → ★
+              → ★★ → ★★★ → 👑. Pour Dresseurs on filtre dynamiquement aux
+              raretés effectivement présentes (typiquement ◆ à ◆◆◆). */}
+          {visibleRarities.map((r) => (
             <FilterChip
               key={r.id}
               active={facets.rarities.has(r.id)}
@@ -331,39 +349,31 @@ export function CollectionGrid({
               title={r.title}
             />
           ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {PACK_OPTIONS.map((p) => (
+          {/* "EX seulement" placé APRÈS la couronne (logique : un EX est
+              une variante d'un Pokémon haute rareté, donc à la fin de
+              l'échelle). Visible uniquement si on cible des Pokémon. */}
+          {facets.category !== "trainer" && (
             <FilterChip
-              key={p.id}
-              active={facets.packs.has(p.id)}
-              onClick={() => togglePack(p.id)}
-              label={p.label}
-              title={p.title}
+              active={facets.exOnly}
+              onClick={() => setFacets((f) => ({ ...f, exOnly: !f.exOnly }))}
+              label="EX"
+              title="N'afficher que les Pokémon EX"
             />
-          ))}
-          <FilterSeparator />
-          <FilterChip
-            active={facets.exOnly}
-            onClick={() => setFacets((f) => ({ ...f, exOnly: !f.exOnly }))}
-            label="EX seulement"
-            title="N'afficher que les Pokémon EX"
-          />
-          {POKEMON_SETS.filter((s) => s.active).length > 1 ? (
-            <>
-              <FilterSeparator />
-              {POKEMON_SETS.filter((s) => s.active).map((s) => (
-                <FilterChip
-                  key={s.id}
-                  active={facets.sets.has(s.id)}
-                  onClick={() => toggleSet(s.id)}
-                  label={s.id}
-                  title={s.name}
-                />
-              ))}
-            </>
-          ) : null}
+          )}
         </div>
+        {POKEMON_SETS.filter((s) => s.active).length > 1 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {POKEMON_SETS.filter((s) => s.active).map((s) => (
+              <FilterChip
+                key={s.id}
+                active={facets.sets.has(s.id)}
+                onClick={() => toggleSet(s.id)}
+                label={s.id}
+                title={s.name}
+              />
+            ))}
+          </div>
+        ) : null}
         {filtersActive && (
           <div className="text-[11px] text-zinc-500">
             {sorted.length} résultat{sorted.length > 1 ? "s" : ""} sur{" "}
