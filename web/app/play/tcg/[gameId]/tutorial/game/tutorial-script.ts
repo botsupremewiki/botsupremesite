@@ -199,7 +199,58 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
 
   // ─── ACTE 3 : Évolution + Trainers (steps 16-22) ─────────────────
-  // (à implémenter dans commit suivant)
+  {
+    id: "evolve-rules",
+    title: "L'évolution",
+    body: "Roucool n'a plus que 20 PV — un coup bien placé suffit. Pour ça tu vas faire évoluer Pikachu en Raichu (Stage 1, 100 PV, attaque Tonnerre 3⚡ → 140 dégâts). Une évolution se fait depuis la main sur un Pokémon en jeu depuis ≥1 tour.",
+    target: '[data-tutorial-target="hand-card-A1-095"]',
+    nextLabel: "Compris",
+  },
+  {
+    id: "evolve-pikachu",
+    title: "Évolue Pikachu",
+    body: "Clique sur Raichu dans ta main pour l'évoluer sur Pikachu. Il garde ses énergies attachées et ses dégâts (l'évolution N'EST PAS un soin — elle clear seulement les altérations type Sommeil/Paralysie).",
+    target: '[data-tutorial-target="hand-card-A1-095"]',
+    requiresAction: true,
+    nextLabel: null,
+  },
+  {
+    id: "attach-energy-3",
+    title: "3e énergie",
+    body: "Une nouvelle ⚡ pendante ! Attache-la à Raichu pour avoir 3⚡ au total — le coût exact de Tonnerre.",
+    target: '[data-tutorial-target="energy-pending"]',
+    requiresAction: true,
+    nextLabel: null,
+  },
+  {
+    id: "launch-tonnerre",
+    title: "Tonnerre !",
+    body: "Tonnerre fait 140 dmg de base. Roucool a faiblesse ⚡ → +20 = 160 dmg total. Il est largement KO. Note : Tonnerre défausse toutes les énergies de Raichu après l'attaque (effet text), il faudra recharger.",
+    target: '[data-tutorial-target="attack-btn-0"]',
+    requiresAction: true,
+    nextLabel: null,
+  },
+  {
+    id: "prize-system",
+    title: "Tu marques 1 KO !",
+    body: "KO normal = 1 point. Tu mènes 1/3 (les Pokémon EX rapportent 2 points). Le bot doit promouvoir un Pokémon de son banc en Actif : Smogo arrive au front. Sa faiblesse est 👊 (combat).",
+    target: null,
+    nextLabel: "Continuer",
+  },
+  {
+    id: "trainer-cards",
+    title: "Les cartes Dresseur",
+    body: "Tu as 2 cartes Dresseur en main : Potion (Objet — soigne 20 PV un Pokémon) et Recherches Professorales (Supporter — pioche 2 cartes). Tu peux jouer 1 Supporter par tour, mais autant d'Objets que tu veux. Elles vont à la défausse après usage.",
+    target: '[data-tutorial-target="hand"]',
+    nextLabel: "Compris",
+  },
+  {
+    id: "end-acte-3",
+    title: "Acte 3 terminé !",
+    body: "Tu sais : évoluer un Pokémon, marquer des KO/prizes, comprendre les Trainer cards. Dans l'Acte 4 on couvre les status (poison, paralysie, sommeil, brûlé), le retreat, les talents activés, les EX et la pile/face.",
+    target: null,
+    nextLabel: "Acte 4 →",
+  },
 
   // ─── ACTE 4 : Avancé (steps 23-30) ───────────────────────────────
   // (à implémenter dans commit suivant)

@@ -75,6 +75,7 @@ function computeDamage(
   return base;
 }
 
+
 /** State minimal d'un Pokémon en jeu (Active ou Bench). */
 type InPlay = {
   uid: string;
@@ -107,6 +108,21 @@ type GameState = {
   bot: Side;
   winner: "self" | "bot" | null;
 };
+
+/** Cherche un Pokémon allié (active ou bench) dont le nom matche
+ *  `evolvesFrom`. Retourne l'uid de la 1ère cible valide (Active
+ *  prioritaire). null si aucune cible. */
+function findEvolveTarget(state: GameState, evolvesFrom: string): string | null {
+  if (state.self.active) {
+    const m = getPokemonCard(state.self.active.cardId);
+    if (m && m.name === evolvesFrom) return state.self.active.uid;
+  }
+  for (const b of state.self.bench) {
+    const m = getPokemonCard(b.cardId);
+    if (m && m.name === evolvesFrom) return b.uid;
+  }
+  return null;
+}
 
 /** Crée le state initial du tutoriel : main de départ + deck. */
 function makeInitialState(): GameState {
@@ -350,7 +366,8 @@ export function TutorialGameClient({
     });
     if (
       currentStep?.id === "attach-first-energy" ||
-      currentStep?.id === "attach-energy-2"
+      currentStep?.id === "attach-energy-2" ||
+      currentStep?.id === "attach-energy-3"
     ) {
       advance();
     }
@@ -371,8 +388,9 @@ export function TutorialGameClient({
   /** Lance une attaque du Pokémon Actif sur l'Actif adverse. Règle
    *  Pokémon TCG Pocket : attaquer met fin au tour. On flippe donc
    *  activeSide à "bot" après l'attaque. Pour le tutoriel : pas de cible
-   *  alternative, pas d'effet text — juste les dégâts + faiblesse.
-   *  KO géré dans un sous-step (Acte 3). */
+   *  alternative — juste les dégâts + faiblesse + KO + auto-promote.
+   *  Effet text "défausse toutes les énergies" est implémenté pour
+   *  l'attaque Tonnerre de Raichu (détecté par texte fr). */
   function attack(attackIdx: number) {
     setState((s) => {
       if (s.activeSide !== "self" || !s.self.active || !s.bot.active) return s;
@@ -383,21 +401,104 @@ export function TutorialGameClient({
       if (!a) return s;
       if (!canPayCost(s.self.active.attachedEnergies, a.cost)) return s;
       const dmg = computeDamage(a, attacker.type, defender.weakness);
+      const newDamage = s.bot.active.damage + dmg;
+      const koed = newDamage >= defender.hp;
+      // Effet "Défaussez toutes les Énergies" (Tonnerre, Psykoforce…).
+      const discardAll =
+        typeof a.text === "string" &&
+        /défausse[zr]? toutes les énergies/i.test(a.text);
+      const updatedSelfActive: InPlay = {
+        ...s.self.active,
+        attachedEnergies: discardAll ? [] : s.self.active.attachedEnergies,
+      };
+      if (koed) {
+        // Bot promote 1er bench (FIFO simplifié — vrai jeu : choix
+        // joueur, mais ici scénarisé : Smogo passe en actif).
+        const promoted = s.bot.bench[0] ?? null;
+        const restBench = s.bot.bench.slice(1);
+        // Prizes : EX = 2, sinon 1.
+        const prize = defender.isEx ? 2 : 1;
+        return {
+          ...s,
+          activeSide: "bot",
+          self: {
+            ...s.self,
+            energyAttachedThisTurn: false,
+            pendingEnergy: null,
+            active: updatedSelfActive,
+            koCount: s.self.koCount + prize,
+          },
+          bot: {
+            ...s.bot,
+            active: promoted,
+            bench: restBench,
+            discard: [...s.bot.discard, s.bot.active.cardId],
+          },
+        };
+      }
       return {
         ...s,
-        // Attaquer met fin au tour automatiquement (règle Pocket).
         activeSide: "bot",
-        self: { ...s.self, energyAttachedThisTurn: false, pendingEnergy: null },
+        self: {
+          ...s.self,
+          energyAttachedThisTurn: false,
+          pendingEnergy: null,
+          active: updatedSelfActive,
+        },
         bot: {
           ...s.bot,
-          active: {
-            ...s.bot.active,
-            damage: s.bot.active.damage + dmg,
-          },
+          active: { ...s.bot.active, damage: newDamage },
         },
       };
     });
     if (currentStep?.id === "launch-attack") advance();
+    if (currentStep?.id === "launch-tonnerre") advance();
+  }
+
+  /** Évolue un Pokémon : remplace le Pokémon en jeu (cible) par la carte
+   *  d'évolution depuis la main. Garde les énergies + dégâts (vrai
+   *  Pokémon TCG : pas de heal) ; clear les statuses (le rules text). */
+  function evolve(handIdx: number, targetUid: string) {
+    setState((s) => {
+      const cardId = s.self.hand[handIdx];
+      const evoMeta = POKEMON_BASE_SET_BY_ID.get(cardId);
+      if (!evoMeta || evoMeta.kind !== "pokemon") return s;
+      if (evoMeta.stage === "basic") return s;
+      // Trouve la cible (active ou bench).
+      const target =
+        s.self.active?.uid === targetUid
+          ? s.self.active
+          : s.self.bench.find((b) => b.uid === targetUid);
+      if (!target) return s;
+      const targetMeta = getPokemonCard(target.cardId);
+      if (!targetMeta) return s;
+      // L'évolution doit matcher : evoMeta.evolvesFrom === targetMeta.name
+      if (evoMeta.evolvesFrom !== targetMeta.name) return s;
+      // Le Pokémon cible doit être en jeu depuis ≥1 tour (pas
+      // playedThisTurn). Pour le tutoriel on relâche cette contrainte.
+      const newHand = [
+        ...s.self.hand.slice(0, handIdx),
+        ...s.self.hand.slice(handIdx + 1),
+      ];
+      const evolved: InPlay = {
+        ...target,
+        cardId: evoMeta.id,
+        statuses: [], // clear status (règle évolution)
+        playedThisTurn: true,
+      };
+      return {
+        ...s,
+        self: {
+          ...s.self,
+          hand: newHand,
+          active:
+            s.self.active?.uid === targetUid ? evolved : s.self.active,
+          bench: s.self.bench.map((b) => (b.uid === targetUid ? evolved : b)),
+          discard: [...s.self.discard, target.cardId],
+        },
+      };
+    });
+    if (currentStep?.id === "evolve-pikachu") advance();
   }
 
   /** Animation du tour 1 du bot : il a déjà posé ses Pokémon dans
@@ -607,6 +708,7 @@ export function TutorialGameClient({
         onConfirm={confirmSetup}
         onAttachEnergy={attachEnergy}
         onAttack={attack}
+        onEvolve={evolve}
         onEndTurn={endTurn}
       />
 
@@ -679,6 +781,7 @@ function SelfBoard({
   onConfirm,
   onAttachEnergy,
   onAttack,
+  onEvolve,
   onEndTurn,
 }: {
   state: GameState;
@@ -688,6 +791,7 @@ function SelfBoard({
   onConfirm: () => void;
   onAttachEnergy: (targetUid: string) => void;
   onAttack: (attackIdx: number) => void;
+  onEvolve: (handIdx: number, targetUid: string) => void;
   onEndTurn: () => void;
 }) {
   // Carte Pokémon Actif (pour afficher ses attaques dans le panneau).
@@ -779,9 +883,11 @@ function SelfBoard({
             </div>
             {activeCard.attacks.map((a, i) => {
               const canPay = canPayCost(state.self.active!.attachedEnergies, a.cost);
-              // On débloque le bouton uniquement à partir de "launch-attack".
-              // Les steps précédentes empêchent les clics accidentels.
-              const allowed = currentStepId === "launch-attack";
+              // On débloque le bouton uniquement aux steps d'attaque
+              // explicites. Les autres steps empêchent les clics accidentels.
+              const allowed =
+                currentStepId === "launch-attack" ||
+                currentStepId === "launch-tonnerre";
               const disabled = !canPay || !allowed;
               return (
                 <button
@@ -864,8 +970,25 @@ function SelfBoard({
             const meta = POKEMON_BASE_SET_BY_ID.get(cardId);
             if (!meta) return null;
             const isBasic = meta.kind === "pokemon" && meta.stage === "basic";
+            const isEvolution =
+              meta.kind === "pokemon" && meta.stage !== "basic";
+            // Détermine si on peut faire évoluer un Pokémon en jeu avec
+            // cette carte (la cible doit avoir le bon nom dans
+            // evolvesFrom). Pour le tutoriel : Raichu peut évoluer Pikachu
+            // si Pikachu est en Actif/Bench.
+            const evolveTargetUid: string | null =
+              isEvolution && meta.evolvesFrom && state.phase === "playing"
+                ? findEvolveTarget(state, meta.evolvesFrom)
+                : null;
+            // Une carte est "jouable" si :
+            //  - phase setup : c'est un Basic (pour Actif/Banc)
+            //  - phase playing : c'est un Basic (banc) OU une évolution
+            //    avec une cible valide en jeu OU un trainer (cliquable
+            //    pour effet — pas implémenté pour tous, juste display).
             const canPlay =
-              isBasic && (state.phase === "setup" || state.phase === "playing");
+              (state.phase === "setup" && isBasic) ||
+              (state.phase === "playing" &&
+                (isBasic || evolveTargetUid != null));
             return (
               <motion.button
                 layout
@@ -878,6 +1001,13 @@ function SelfBoard({
                     if (!state.self.active) onSetActive(idx);
                     else if (isBasic && state.self.bench.length < 3)
                       onAddBench(idx);
+                  } else if (state.phase === "playing") {
+                    if (isEvolution && evolveTargetUid) {
+                      onEvolve(idx, evolveTargetUid);
+                    }
+                    // Autres trainer/basic cards : non gérés ici (clic
+                    // ignoré silencieusement — l'overlay coach guide
+                    // l'user vers les bonnes actions).
                   }
                 }}
                 disabled={!canPlay}
