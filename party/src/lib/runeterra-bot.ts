@@ -66,12 +66,49 @@ export function botAct(
   if (state.activeSeatIdx !== seatIdx) return null;
 
   const player = state.players[seatIdx];
+  const opponent = state.players[otherSeat(seatIdx)];
 
-  // Phase 8.2 : si la spellStack est non-vide, le bot doit passer pour
-  // laisser le top du stack résoudre. Le bot ne réagit pas (simplification :
-  // un bot AI naïf qui ne contre-spell pas — joueurs humains ont l'avantage
-  // tactique, c'est intentionnel pour entraînement).
+  // Phase 8.2 + 9.3 : si la spellStack est non-vide, le bot tente de
+  // réagir avec un Burst/Fast spell. Sinon il passe pour laisser le top
+  // du stack résoudre. Logique simple :
+  //   1) Cherche un Burst ou Fast spell dans sa main avec mana suffisante
+  //   2) Si effet "any" / "enemy", target = 1ère unité ennemie
+  //   3) Si effet "ally", target = 1er allié
+  //   4) Cast → l'effet va aussi sur la pile (LIFO résoudra plus tard)
   if (state.spellStack.length > 0) {
+    for (let i = 0; i < player.hand.length; i++) {
+      const card = getCard(player.hand[i].cardCode);
+      if (card?.type !== "Spell") continue;
+      const speed = card.spellSpeed;
+      // Slow rejeté en réaction (rule LoR Phase 7.0).
+      if (speed !== "Burst" && speed !== "Fast" && speed !== "Focus") continue;
+      if (card.cost > player.mana + player.spellMana) continue;
+      const effect = RUNETERRA_SPELL_EFFECTS[player.hand[i].cardCode];
+      if (!effect) continue;
+      const side = getSpellTargetSide(effect);
+      let targetUid: string | null = null;
+      if (side === "enemy" || side === "any") {
+        targetUid = opponent.bench[0]?.uid ?? null;
+      } else if (side === "ally") {
+        targetUid = player.bench[0]?.uid ?? null;
+      } else if (side === "any-or-nexus") {
+        targetUid = opponent.bench[0]?.uid ?? "nexus-enemy";
+      } else if (side === "none") {
+        targetUid = null;
+      } else {
+        // Multi-target sides (ally-and-enemy, etc.) : skip pour simplicité.
+        continue;
+      }
+      if (
+        (side === "enemy" || side === "ally" || side === "any") &&
+        targetUid === null
+      ) {
+        continue; // pas de cible disponible
+      }
+      const result = playSpell(state, seatIdx, i, targetUid);
+      if (result.ok) return result;
+    }
+    // Aucun spell réactif — pass pour résoudre le stack.
     return passPriority(state, seatIdx);
   }
 
@@ -97,7 +134,7 @@ export function botAct(
   // applicable. Validation explicite par type d'effet pour éviter d'envoyer
   // au serveur une combinaison sort+cible qui retournera une erreur (ce qui
   // bloquerait le bot — le scheduleBotAct s'arrête sur ok:false).
-  const opponent = state.players[otherSeat(seatIdx)];
+  // (opponent déjà déclaré en haut Phase 9.3)
   for (let i = 0; i < player.hand.length; i++) {
     const card = getCard(player.hand[i].cardCode);
     if (card?.type !== "Spell") continue;
