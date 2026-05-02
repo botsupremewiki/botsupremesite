@@ -1637,7 +1637,7 @@ function BoardArea({
           dimensionné sur la même sizeClass que la carte interne pour
           que le layout réserve la bonne place (avant : container fixe
           h-56 w-40 plus petit que la carte → carte overflow). */}
-      <div className="relative w-44 h-60 lg:w-48 lg:h-64 xl:w-52 xl:h-72 2xl:w-56 2xl:h-[20rem]">
+      <div className="relative w-36 h-52 lg:w-40 lg:h-56 xl:w-44 xl:h-60 2xl:w-48 2xl:h-64">
         <AnimatePresence mode="popLayout">
           {active
             ? (() => {
@@ -1712,7 +1712,7 @@ function BoardArea({
           return (
             <div
               key={`bench-slot-${i}`}
-              className="relative w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48"
+              className="relative w-24 h-32 lg:w-28 lg:h-36 xl:w-32 xl:h-40"
             >
               <AnimatePresence mode="popLayout">
                 {card
@@ -1911,11 +1911,13 @@ function BoardCard({
   //   • HP courant en bas (gros, rouge si dégâts)
   //   • Énergies attachées sous la carte (pastilles colorées par type)
   //   • Statuses en haut à droite (badges emoji)
-  // Tailles responsive : Active (large) plus grosse que Bench. Sur 1920×1080
-  // on profite vraiment de l'espace dispo (avant : tailles fixes 160/100).
+  // Tailles responsive : Active (large) plus grosse que Bench. Compactées
+  // (~15-20% en moins par rapport à la refonte UX 1920×1080 initiale)
+  // pour tenir verticalement sur 1080p sans scroll. Largeurs réduites en
+  // proportion pour garder le ratio 5:7 des cartes.
   const sizeClass = large
-    ? "w-44 h-60 lg:w-48 lg:h-64 xl:w-52 xl:h-72 2xl:w-56 2xl:h-[20rem]"
-    : "w-28 h-40 lg:w-32 lg:h-44 xl:w-36 xl:h-48";
+    ? "w-36 h-52 lg:w-40 lg:h-56 xl:w-44 xl:h-60 2xl:w-48 2xl:h-64"
+    : "w-24 h-32 lg:w-28 lg:h-36 xl:w-32 xl:h-40";
   const remainingHp = Math.max(0, data.hp - card.damage);
   const damaged = card.damage > 0;
   const hpPct = Math.max(0, Math.min(1, remainingHp / data.hp));
@@ -3097,7 +3099,7 @@ function HandCard({
       }}
       onMouseEnter={() => onHover?.(data)}
       onMouseLeave={() => onHover?.(null)}
-      className={`relative w-28 h-40 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-32 lg:h-44 xl:w-36 xl:h-52 2xl:w-40 2xl:h-56 ${
+      className={`relative w-24 h-32 shrink-0 overflow-hidden rounded-lg border transition-colors lg:w-28 lg:h-36 xl:w-32 xl:h-44 2xl:w-36 2xl:h-48 ${
         playable
           ? "cursor-pointer border-emerald-400/60 ring-2 ring-emerald-400/40 hover:scale-[1.05] hover:ring-emerald-300"
           : blocked
@@ -3229,22 +3231,32 @@ function CoinFlipOverlay({
   coinId?: string;
 }) {
   const coinStyle = COIN_STYLES[coinId ?? "default"] ?? COIN_STYLES.default;
-  // Phase 0 → 0.6s : la pièce tourne. Le `result` détermine où elle s'arrête
+  // Phase 0 → 0.9s : la pièce tourne. Le `result` détermine où elle s'arrête
   // (heads = 720° = face visible, tails = 540° = pile visible).
   const targetRotation = event.result === "heads" ? 720 : 540;
-  // Total ~1.2s : 0.6s spin + 0.6s annonce. Réduit depuis 1.8s pour les
-  // séries de pile/face (Pikachu Rafale d'Éclairs = 4 flips successifs).
-  const TOTAL_MS = 1200;
+  // Phase 11.4 : TOTAL_MS bumpé 1200 → 2200 pour donner ~1s de pause
+  // après l'annonce du résultat (~1.2s) avant de passer au flip suivant.
+  // User-reported : trop rapide auparavant, on n'avait pas le temps de
+  // voir/ressentir chaque flip individuellement.
+  const TOTAL_MS = 2200;
 
   useEffect(() => {
     const t = window.setTimeout(onComplete, TOTAL_MS);
     return () => window.clearTimeout(t);
   }, [event.id, onComplete]);
 
-  // Agrégats de la série : seul les entries de la même série que
-  // l'event actuel comptent (label match).
+  // Phase 11.4 : ne montrer dans le récap QUE les flips déjà
+  // révélés (index <= event.index). Avant : le serveur envoyait souvent
+  // tous les flips en rafale (Rafale d'Éclairs = 4 messages quasi
+  // simultanés), donc series.entries contenait déjà les 4 résultats
+  // dès le 1er flip → le user voyait le total final avant d'avoir vu
+  // les flips. Désormais on cumule au fur et à mesure.
+  // Sans index (single flip), tout afficher (1 entry de toute façon).
+  const currentIdx = event.index ?? Number.POSITIVE_INFINITY;
   const seriesEntries =
-    series.label === event.label ? series.entries : [];
+    series.label === event.label
+      ? series.entries.filter((e) => e.index <= currentIdx)
+      : [];
   const headsCount = seriesEntries.filter((e) => e.result === "heads").length;
   const tailsCount = seriesEntries.filter((e) => e.result === "tails").length;
   const fixedTotal = event.total && event.total > 1 ? event.total : 0;
