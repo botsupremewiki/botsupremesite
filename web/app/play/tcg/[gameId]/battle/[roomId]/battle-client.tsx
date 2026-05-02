@@ -22,6 +22,7 @@ import type {
 } from "@shared/types";
 import { BATTLE_CONFIG, TCG_GAMES } from "@shared/types";
 import { POKEMON_BASE_SET_BY_ID } from "@shared/tcg-pokemon-base";
+import { POKEMON_COSMETICS } from "@shared/tcg-pokemon-cosmetics";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/auth";
 import { UserPill } from "@/components/user-pill";
@@ -91,12 +92,44 @@ const TYPE_BG: Record<PokemonEnergyType, string> = {
   colorless: "from-zinc-300/20 to-zinc-500/30",
 };
 
+/** Résout l'id d'un sleeve Pokemon vers sa classe Tailwind de gradient.
+ *  Utilisé pour colorer les dos de cartes (deck, main adverse). */
+function resolveSleeveGradient(sleeveId: string): string {
+  const item = POKEMON_COSMETICS.find(
+    (c) => c.type === "sleeve" && c.id === sleeveId,
+  );
+  return item?.sleeveColor ?? "from-rose-700 via-zinc-100 to-rose-700";
+}
+
+/** Résout l'id du playmat Pokemon en classe Tailwind de gradient applicable
+ *  au background du board. Mapping inline (pas dans le catalogue car les
+ *  classes sont spécifiques au battle). */
+const PLAYMAT_BG_BY_ID: Record<string, string> = {
+  default:
+    "bg-gradient-to-br from-zinc-900 via-emerald-950/30 to-zinc-950", // Bourg Palette
+  "foret-jade":
+    "bg-gradient-to-br from-zinc-950 via-emerald-900/40 to-green-950",
+  "mont-selenite":
+    "bg-gradient-to-br from-zinc-950 via-indigo-900/30 to-slate-950",
+  stade:
+    "bg-gradient-to-br from-zinc-900 via-amber-900/20 to-orange-950",
+  cinabre:
+    "bg-gradient-to-br from-zinc-950 via-orange-900/40 to-rose-950",
+  "spiral-mewtwo":
+    "bg-gradient-to-br from-zinc-950 via-fuchsia-900/30 to-violet-950",
+};
+
+function resolvePlaymatBg(playmatId: string): string {
+  return PLAYMAT_BG_BY_ID[playmatId] ?? PLAYMAT_BG_BY_ID.default;
+}
+
 export function BattleClient({
   profile,
   gameId,
   roomId,
   deckId,
   spectator = false,
+  cosmetics,
 }: {
   profile: Profile | null;
   gameId: TcgGameId;
@@ -106,6 +139,10 @@ export function BattleClient({
    *  envoyable. Le serveur PartyKit envoie l'état complet sans
    *  révéler les mains des joueurs. */
   spectator?: boolean;
+  /** Cosmétiques actifs (sleeve / playmat / coin) chargés côté serveur
+   *  depuis profiles.tcg_cosmetics_active. Default = "default" si pas
+   *  de cosmétique acheté/équipé. */
+  cosmetics?: { sleeve: string; playmat: string; coin: string };
 }) {
   const game = TCG_GAMES[gameId];
   const cardById = POKEMON_BASE_SET_BY_ID;
@@ -659,7 +696,11 @@ export function BattleClient({
       )}
 
       {profile && state && (
-        <main className="flex flex-1 flex-col overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(34,197,94,0.05),transparent_70%)]">
+        <main
+          className={`flex flex-1 flex-col overflow-hidden ${
+            cosmetics ? resolvePlaymatBg(cosmetics.playmat) : "bg-[radial-gradient(ellipse_at_center,rgba(34,197,94,0.05),transparent_70%)]"
+          }`}
+        >
           {state.phase === "waiting" && (
             <div className="flex flex-1 items-center justify-center text-center text-sm text-zinc-300">
               <div>
@@ -694,6 +735,7 @@ export function BattleClient({
               onPromoteActive={promoteActive}
               onPlayTrainer={playTrainer}
               onUseAbility={useAbility}
+              cosmetics={cosmetics}
             />
           )}
 
@@ -756,11 +798,15 @@ export function BattleClient({
             </div>
           )}
 
-          {/* Animation pile/face : on consomme la queue un par un. */}
+          {/* Animation pile/face : on consomme la queue un par un.
+              Le coinId vient des cosmétiques équipés (Pokéball par
+              défaut, Super Ball/Hyper Ball/Master Ball/Pikachu si
+              acheté). */}
           <CoinFlipQueue
             queue={coinQueue}
             series={coinSeries}
             onConsume={consumeCoin}
+            coinId={cosmetics?.coin}
           />
 
           {/* Bandeau « À toi ! » / « Tour adverse » à chaque changement de tour. */}
@@ -837,12 +883,15 @@ function BattleBoard({
   onPromoteActive,
   onPlayTrainer,
   onUseAbility,
+  cosmetics,
 }: {
   state: BattleState;
   cardById: Map<string, PokemonCardData>;
   isMyTurn: boolean;
   gameId: string;
   roomId: string;
+  /** Cosmétiques équipés (sleeve/playmat/coin) — propagé du parent. */
+  cosmetics?: { sleeve: string; playmat: string; coin: string };
   onSetActive: (handIndex: number) => void;
   onAddBench: (handIndex: number) => void;
   onRemoveBench: (benchIndex: number) => void;
@@ -1121,7 +1170,14 @@ function BattleBoard({
                   pendingAbilityUid !== null ? attachModeHandler : null
                 }
               />
-              <HandHidden count={state.opponent.handCount} />
+              <HandHidden
+                count={state.opponent.handCount}
+                sleeveGradient={
+                  cosmetics
+                    ? resolveSleeveGradient(cosmetics.sleeve)
+                    : undefined
+                }
+              />
             </div>
           )}
         </div>
@@ -1453,7 +1509,17 @@ function BackRow({
 
 /** Main cachée de l'adversaire — affichée en bas de sa colonne, en mini
  *  cartes empilées horizontalement (effet "fan" léger). */
-function HandHidden({ count }: { count: number }) {
+function HandHidden({
+  count,
+  sleeveGradient,
+}: {
+  count: number;
+  /** Gradient Tailwind du sleeve équipé (ex. "from-orange-700 via-red-800
+   *  to-orange-900"). Si non fourni → bleu indigo classique. */
+  sleeveGradient?: string;
+}) {
+  const gradient =
+    sleeveGradient ?? "from-indigo-600 to-indigo-900";
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] uppercase tracking-widest text-zinc-400">
@@ -1463,7 +1529,7 @@ function HandHidden({ count }: { count: number }) {
         {Array.from({ length: Math.min(count, 7) }, (_, i) => (
           <div
             key={i}
-            className="-ml-3 h-14 w-10 rounded border border-indigo-300/40 bg-gradient-to-br from-indigo-600 to-indigo-900 shadow first:ml-0 xl:h-16 xl:w-12"
+            className={`-ml-3 h-14 w-10 rounded border border-white/20 bg-gradient-to-br ${gradient} shadow first:ml-0 xl:h-16 xl:w-12`}
           />
         ))}
         {count > 7 && (
@@ -3055,14 +3121,75 @@ function HandCard({
 /** Consomme une file d'évènements pile/face, en jouant l'animation un par
  *  un. Tant que la queue n'est pas vide, on rend l'overlay pour le 1er
  *  évènement. Quand l'animation finit, le parent retire l'évènement. */
+/** Mapping coin cosmétique id → styles Tailwind (face heads/tails) +
+ *  emoji optionnel. Utilisé par CoinFlipOverlay pour rendre la pièce
+ *  équipée par le user. */
+const COIN_STYLES: Record<
+  string,
+  {
+    headsBg: string;
+    headsRing: string;
+    headsText: string;
+    tailsBg: string;
+    tailsRing: string;
+    tailsText: string;
+    headsEmoji?: string;
+  }
+> = {
+  default: {
+    headsBg: "from-amber-300 via-amber-400 to-amber-600",
+    headsRing: "ring-amber-200/40",
+    headsText: "text-amber-950",
+    tailsBg: "from-zinc-300 via-zinc-400 to-zinc-600",
+    tailsRing: "ring-zinc-200/40",
+    tailsText: "text-zinc-900",
+  },
+  superball: {
+    headsBg: "from-sky-400 via-blue-500 to-blue-700",
+    headsRing: "ring-sky-200/40",
+    headsText: "text-sky-50",
+    tailsBg: "from-rose-400 via-rose-500 to-rose-700",
+    tailsRing: "ring-rose-200/40",
+    tailsText: "text-rose-50",
+  },
+  hyperball: {
+    headsBg: "from-yellow-300 via-amber-500 to-yellow-700",
+    headsRing: "ring-yellow-200/50",
+    headsText: "text-yellow-950",
+    tailsBg: "from-zinc-700 via-zinc-800 to-black",
+    tailsRing: "ring-zinc-300/30",
+    tailsText: "text-zinc-100",
+  },
+  "master-ball": {
+    headsBg: "from-fuchsia-500 via-purple-600 to-violet-800",
+    headsRing: "ring-fuchsia-300/50",
+    headsText: "text-fuchsia-50",
+    tailsBg: "from-violet-700 via-purple-800 to-fuchsia-900",
+    tailsRing: "ring-violet-200/30",
+    tailsText: "text-violet-50",
+  },
+  pikachu: {
+    headsBg: "from-yellow-300 via-amber-400 to-yellow-600",
+    headsRing: "ring-yellow-200/50",
+    headsText: "text-yellow-950",
+    tailsBg: "from-amber-700 via-amber-800 to-orange-900",
+    tailsRing: "ring-amber-200/30",
+    tailsText: "text-amber-50",
+    headsEmoji: "⚡",
+  },
+};
+
 function CoinFlipQueue({
   queue,
   series,
   onConsume,
+  coinId,
 }: {
   queue: CoinFlipEvent[];
   series: { label: string; entries: CoinSeriesEntry[] };
   onConsume: (id: string) => void;
+  /** Id du coin cosmétique équipé. Default = "default" (Pokéball). */
+  coinId?: string;
 }) {
   const head = queue[0];
   if (!head) return null;
@@ -3072,22 +3199,26 @@ function CoinFlipQueue({
       event={head}
       series={series}
       onComplete={() => onConsume(head.id)}
+      coinId={coinId}
     />
   );
 }
 
 /** Affiche une pièce qui se retourne en 3D et atterrit sur PILE ou FACE,
  *  puis annonce le résultat (« FACE ! » + followUp en gros). Auto-dismiss
- *  après ~1.8s. */
+ *  après ~1.2s. Le style de la pièce dépend du cosmétique équipé. */
 function CoinFlipOverlay({
   event,
   series,
   onComplete,
+  coinId,
 }: {
   event: CoinFlipEvent;
   series: { label: string; entries: CoinSeriesEntry[] };
   onComplete: () => void;
+  coinId?: string;
 }) {
+  const coinStyle = COIN_STYLES[coinId ?? "default"] ?? COIN_STYLES.default;
   // Phase 0 → 0.6s : la pièce tourne. Le `result` détermine où elle s'arrête
   // (heads = 720° = face visible, tails = 540° = pile visible).
   const targetRotation = event.result === "heads" ? 720 : 540;
@@ -3144,16 +3275,21 @@ function CoinFlipOverlay({
             height: 120,
           }}
         >
-          {/* Face « FACE » (heads) — visible à rotateY 0/720 */}
+          {/* Face « FACE » (heads) — visible à rotateY 0/720.
+              Style dépend du coin équipé (Pokéball/Super Ball/etc). */}
           <div
             style={{
               position: "absolute",
               inset: 0,
               backfaceVisibility: "hidden",
             }}
-            className="flex items-center justify-center rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 text-3xl font-black text-amber-950 shadow-2xl ring-4 ring-amber-200/40"
+            className={`flex items-center justify-center rounded-full bg-gradient-to-br ${coinStyle.headsBg} text-3xl font-black ${coinStyle.headsText} shadow-2xl ring-4 ${coinStyle.headsRing}`}
           >
-            FACE
+            {coinStyle.headsEmoji ? (
+              <span className="text-4xl">{coinStyle.headsEmoji}</span>
+            ) : (
+              "FACE"
+            )}
           </div>
           {/* Face « PILE » (tails) — visible à rotateY 180/540 */}
           <div
@@ -3163,7 +3299,7 @@ function CoinFlipOverlay({
               backfaceVisibility: "hidden",
               transform: "rotateY(180deg)",
             }}
-            className="flex items-center justify-center rounded-full bg-gradient-to-br from-zinc-300 via-zinc-400 to-zinc-600 text-3xl font-black text-zinc-900 shadow-2xl ring-4 ring-zinc-200/40"
+            className={`flex items-center justify-center rounded-full bg-gradient-to-br ${coinStyle.tailsBg} text-3xl font-black ${coinStyle.tailsText} shadow-2xl ring-4 ${coinStyle.tailsRing}`}
           >
             PILE
           </div>
