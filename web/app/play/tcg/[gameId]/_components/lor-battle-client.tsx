@@ -37,6 +37,7 @@ import {
   LorCardZoomModal,
   LOR_RARITY_COLOR,
 } from "./lor-card-visuals";
+import { isMuted, playSfxIfEnabled, setMuted } from "./lor-sfx";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -208,6 +209,17 @@ export function LorBattleClient({
         setRoundAnnouncement((curr) => (curr?.ts === ts ? null : curr));
       }, 1500);
     }
+    // Phase 9.1 : SFX victoire / défaite quand state.phase passe à "ended".
+    if (prev.phase !== "ended" && state.phase === "ended") {
+      const won = state.winner === state.selfSeat;
+      playSfxIfEnabled(won ? "victory" : "defeat");
+    }
+    // SFX draw card si handCount augmente.
+    const selfHandDiffSfx =
+      (state.self?.handCount ?? 0) - (prev.self?.handCount ?? 0);
+    if (selfHandDiffSfx > 0) {
+      playSfxIfEnabled("draw");
+    }
     // Helper : récupère TOUTES les unités sur les deux bancs (allié + ennemi).
     const getAllUnits = (s: RuneterraBattleState): RuneterraBattleUnit[] => {
       const out: RuneterraBattleUnit[] = [];
@@ -221,6 +233,11 @@ export function LorBattleClient({
     const newDamage: Record<string, { amount: number; ts: number }> = {};
     // Phase 5.6 : nouveaux uids sur le banc (summon animation).
     const newSummonedUids = new Set<string>();
+    // Phase 9.1 : SFX — détecter événements pour jouer le bon son.
+    let sfxAttack = false;
+    let sfxDamage = false;
+    let sfxLevelUp = false;
+    let sfxStackChange = false;
     for (const u of currUnits) {
       const old = prevUnits.get(u.uid);
       if (!old) {
@@ -231,12 +248,24 @@ export function LorBattleClient({
       // Level-up détecté : 1 → 2
       if (old.level < 2 && u.level >= 2) {
         newLevelUps.add(u.uid);
+        sfxLevelUp = true;
       }
       // Damage augmenté
       const dmgDelta = u.damage - old.damage;
       if (dmgDelta > 0) {
         newDamage[u.uid] = { amount: dmgDelta, ts: Date.now() };
+        sfxDamage = true;
       }
+    }
+    // Phase 9.1 : attack started (attackInProgress flip null → object)
+    if (!prev.attackInProgress && state.attackInProgress) {
+      sfxAttack = true;
+    }
+    // Stack change (push or pop)
+    const prevStackLen = prev.spellStack?.length ?? 0;
+    const currStackLen = state.spellStack?.length ?? 0;
+    if (prevStackLen !== currStackLen) {
+      sfxStackChange = true;
     }
     if (newSummonedUids.size > 0) {
       setRecentlySummoned((prevSet) => {
@@ -301,6 +330,12 @@ export function LorBattleClient({
         }));
       }, 800);
     }
+    // Phase 9.1 : SFX firing — joue les sons en fonction des événements
+    // détectés ce frame. Le throttle interne évite le spam.
+    if (sfxAttack) playSfxIfEnabled("attack");
+    if (sfxLevelUp) playSfxIfEnabled("level-up");
+    if (sfxStackChange) playSfxIfEnabled("stack-resolve");
+    if (sfxDamage) playSfxIfEnabled("damage");
     // Phase 5.4 : nexus health diff → popup -N (dégâts) ou +N (heal).
     const nexusDiffSelf = prev.self && state.self
       ? state.self.nexusHealth - prev.self.nexusHealth
@@ -309,6 +344,11 @@ export function LorBattleClient({
       ? state.opponent.nexusHealth - prev.opponent.nexusHealth
       : 0;
     if (nexusDiffSelf !== 0 || nexusDiffOpp !== 0) {
+      // Phase 9.1 : SFX nexus
+      if (nexusDiffSelf < 0 || nexusDiffOpp < 0)
+        playSfxIfEnabled("damage");
+      if (nexusDiffSelf > 0 || nexusDiffOpp > 0)
+        playSfxIfEnabled("heal");
       const ts = Date.now();
       setNexusDamagePopups((prev) => ({
         ...prev,
@@ -346,6 +386,9 @@ export function LorBattleClient({
       const cardCode = state.self.hand[handIndex];
       const card = RUNETERRA_BASE_SET_BY_CODE.get(cardCode);
       if (!card) return;
+      // Phase 9.1 : SFX immédiat au click (avant attente serveur).
+      if (card.type === "Spell") playSfxIfEnabled("spell-cast");
+      else playSfxIfEnabled("card-play");
       setErrorMsg(null);
       if (card.type === "Unit") {
         send({ type: "lor-play-unit", handIndex });
@@ -458,7 +501,11 @@ export function LorBattleClient({
           <span className={`font-semibold ${game.accent}`}>{game.name}</span>
           <span className="text-xs text-zinc-500">⚔️ Combat — salle {roomId.slice(0, 8)}</span>
         </div>
-        <UserPill profile={profile} variant="play" />
+        <div className="flex items-center gap-3">
+          {/* Phase 9.1 : toggle mute SFX (persisté en localStorage). */}
+          <SfxMuteToggle />
+          <UserPill profile={profile} variant="play" />
+        </div>
       </header>
 
       <main
@@ -1542,6 +1589,30 @@ const REGION_LABELS: Record<string, string> = {
   PiltoverZaun: "Piltover & Zaun",
   ShadowIsles: "Îles obscures",
 };
+
+// Phase 9.1 : toggle mute pour les SFX synthétisés. Persisté en
+// localStorage via lor-sfx.isMuted/setMuted.
+function SfxMuteToggle() {
+  const [muted, setMutedState] = useState<boolean>(false);
+  useEffect(() => {
+    setMutedState(isMuted());
+  }, []);
+  const toggle = () => {
+    const next = !muted;
+    setMuted(next);
+    setMutedState(next);
+    if (!next) playSfxIfEnabled("click"); // feedback que le son revient
+  };
+  return (
+    <button
+      onClick={toggle}
+      className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 hover:bg-white/10"
+      title={muted ? "Activer les sons" : "Couper les sons"}
+    >
+      {muted ? "🔇" : "🔊"}
+    </button>
+  );
+}
 
 // Phase 7.0 : visualise la spell stack au centre de l'écran. Chaque sort
 // est représenté avec une carte miniature + nom du caster. LIFO : le top
