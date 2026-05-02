@@ -253,7 +253,62 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
 
   // ─── ACTE 4 : Avancé (steps 23-30) ───────────────────────────────
-  // (à implémenter dans commit suivant)
+  {
+    id: "bot-turn-3",
+    title: "Le bot contre-attaque",
+    body: "Le Bot va faire évoluer Smogo en Smogogo (110 PV), utiliser son talent Fuite de Gaz pour t'empoisonner, puis poser Mewtwo-ex au banc. Click pour le voir jouer.",
+    target: null,
+    nextLabel: "▶️ Voir le bot jouer",
+  },
+  {
+    id: "poison-effect",
+    title: "Empoisonné !",
+    body: "Raichu est empoisonné ☠️ — il subit 10 dégâts à la fin du tour de chaque joueur. Le poison persiste jusqu'à ce qu'il soit retiré (par retraite, évolution ou KO). Les autres status : Sommeil 💤, Paralysie 🌀, Confusion ❓, Brûlé 🔥 — chacun a sa propre règle.",
+    target: '[data-tutorial-target="active-zone"]',
+    nextLabel: "Compris",
+  },
+  {
+    id: "retreat-rules",
+    title: "La retraite",
+    body: "Tu peux retraiter ton Actif vers le Banc à tout moment de ton tour (sauf si endormi/paralysé) en défaussant N énergies = retreatCost. Raichu coûte 1, Smogogo coûte 3 (lourd !). Retraiter clear Sommeil/Paralysie mais PAS Poison/Brûlure.",
+    target: null,
+    nextLabel: "Compris",
+  },
+  {
+    id: "talent-vs-attack",
+    title: "Talents vs Attaques",
+    body: "Beaucoup de Pokémon ont un Talent (ability) en plus de leurs attaques. Talents passifs (s'appliquent toujours, ex. Coque Armure -20 dmg) ou activés (1×/tour, ex. Fuite de Gaz, Charge Volt). Les talents N'utilisent PAS d'énergie — c'est leur force.",
+    target: null,
+    nextLabel: "Compris",
+  },
+  {
+    id: "ex-rules",
+    title: "Les Pokémon EX",
+    body: "Mewtwo-ex (au banc adverse, 150 PV) est un Pokémon EX : très grosses stats (HP + dégâts) MAIS quand il est KO, l'adversaire gagne 2 prizes au lieu d'1. Risque calculé : un EX KO peut renverser le match.",
+    target: null,
+    nextLabel: "Compris",
+  },
+  {
+    id: "coin-flip",
+    title: "Pile ou face",
+    body: "Beaucoup d'attaques ont un effet « lance une pièce » : pile = bonus (ex. +20 dmg, paralyse), face = rien. Tu peux personnaliser le design de ta pièce dans la boutique cosmétique (Or Suprême). C'est purement esthétique.",
+    target: null,
+    nextLabel: "Compris",
+  },
+  {
+    id: "victory-conditions",
+    title: "Conditions de victoire",
+    body: "Tu gagnes si tu marques 3 points (KO normal = 1, EX = 2). Tu gagnes aussi si l'adversaire ne peut plus jouer : son deck est vide à la pioche, OU il n'a plus aucun Pokémon en jeu. Inversement, garde l'œil sur ton propre deck (20 cartes, ça file vite).",
+    target: null,
+    nextLabel: "Compris",
+  },
+  {
+    id: "tutorial-end",
+    title: "Tu es prêt à jouer !",
+    body: "Tu connais TOUTES les mécaniques : main, Actif, Banc, énergie auto, attaques, faiblesses, évolution, KO/prizes, Trainer cards, status, retraite, talents, EX, pile/face, victoire. Le mieux maintenant : enchaîne quelques matchs contre le Bot Suprême (12 decks pré-faits) puis vise le PvP. 🎴 Récupère tes 10 boosters !",
+    target: null,
+    nextLabel: "🎉 Terminer",
+  },
 ];
 
 /** Énergies du deck du joueur tutoriel : on force ⚡ uniquement (déterministe). */

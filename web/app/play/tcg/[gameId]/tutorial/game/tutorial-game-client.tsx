@@ -543,6 +543,101 @@ export function TutorialGameClient({
     }, 1500);
   }, [advance]);
 
+  /** Animation du tour 3 du bot : évolution Smogo→Smogogo, talent Fuite
+   *  de Gaz → poison sur Raichu, pose Mewtwo-ex au banc. Bot ne attaque
+   *  pas (économie de tour). À la fin, retour au tour joueur 4. */
+  const runBotTurn3AndAdvance = useCallback(() => {
+    // Phase 1 (600ms) : Smogo évolue en Smogogo. On garde l'uid +
+    // énergies (le bot a posé 0⭐ sur Smogo donc rien à garder, mais
+    // pour cohérence on conserve la structure).
+    setTimeout(() => {
+      setState((s) => {
+        if (!s.bot.active) return s;
+        return {
+          ...s,
+          bot: {
+            ...s.bot,
+            active: {
+              ...s.bot.active,
+              cardId: "A1-177", // Smogogo
+              statuses: [],
+              playedThisTurn: true,
+            },
+            hand: s.bot.hand.filter((c) => c !== "A1-177"),
+            discard: [...s.bot.discard, s.bot.active.cardId],
+          },
+        };
+      });
+    }, 600);
+    // Phase 2 (1500ms) : talent Fuite de Gaz → poison sur Raichu.
+    setTimeout(() => {
+      setState((s) => {
+        if (!s.self.active) return s;
+        if (s.self.active.statuses.includes("poison")) return s;
+        return {
+          ...s,
+          self: {
+            ...s.self,
+            active: {
+              ...s.self.active,
+              statuses: [...s.self.active.statuses, "poison"],
+            },
+          },
+        };
+      });
+    }, 1500);
+    // Phase 3 (2400ms) : pose Mewtwo-ex sur le bench.
+    setTimeout(() => {
+      setState((s) => ({
+        ...s,
+        bot: {
+          ...s.bot,
+          bench: [
+            ...s.bot.bench,
+            {
+              uid: nextUid(),
+              cardId: "A1-129", // Mewtwo-ex
+              damage: 0,
+              attachedEnergies: [],
+              statuses: [],
+              playedThisTurn: true,
+            },
+          ],
+          hand: s.bot.hand.filter((c) => c !== "A1-129"),
+        },
+      }));
+    }, 2400);
+    // Phase 4 (3500ms) : end of turn → poison damage 10 sur Raichu,
+    // puis retour au tour joueur 4 + pioche + énergie pendante.
+    setTimeout(() => {
+      setState((s) => ({
+        ...s,
+        turn: 4,
+        activeSide: "self",
+        self: {
+          ...s.self,
+          active: s.self.active
+            ? {
+                ...s.self.active,
+                damage:
+                  s.self.active.statuses.includes("poison")
+                    ? s.self.active.damage + 10
+                    : s.self.active.damage,
+              }
+            : null,
+          hand:
+            s.self.deck.length > 0
+              ? [...s.self.hand, s.self.deck[0]]
+              : s.self.hand,
+          deck: s.self.deck.slice(1),
+          pendingEnergy: "lightning",
+          energyAttachedThisTurn: false,
+        },
+      }));
+      advance();
+    }, 3500);
+  }, [advance]);
+
   /** Animation du tour 2 du bot : Roucool attaque Pikachu avec Tornade
    *  (1⭐ → 10 dmg). Pas de faiblesse ⭐ donc juste 10. Avance ensuite. */
   const runBotAttackAndAdvance = useCallback(() => {
@@ -594,10 +689,19 @@ export function TutorialGameClient({
       case "bot-attack":
         runBotAttackAndAdvance();
         break;
+      case "bot-turn-3":
+        runBotTurn3AndAdvance();
+        break;
       default:
         advance();
     }
-  }, [currentStep, advance, runBotTurn1AndAdvance, runBotAttackAndAdvance]);
+  }, [
+    currentStep,
+    advance,
+    runBotTurn1AndAdvance,
+    runBotAttackAndAdvance,
+    runBotTurn3AndAdvance,
+  ]);
 
   // Auto-advance pour les steps purement informatifs avec délai (ex.
   // "draw-turn-2" — on laisse le user 1.5s pour observer la pioche puis
@@ -1101,6 +1205,20 @@ function CardWithStats({
             💀
           </div>
         )}
+        {/* Statut(s) en haut-gauche : poison ☠️, sommeil 💤, etc. */}
+        {inPlay.statuses.length > 0 && (
+          <div className="absolute left-0.5 top-0.5 flex flex-wrap gap-0.5">
+            {inPlay.statuses.map((s, i) => (
+              <span
+                key={i}
+                className="rounded bg-purple-700 px-1 py-0.5 text-[10px] font-bold text-white shadow ring-1 ring-purple-300/50"
+                title={s}
+              >
+                {statusEmoji(s)}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {/* Énergies attachées sous la carte. */}
       {inPlay.attachedEnergies.length > 0 && (
@@ -1125,6 +1243,24 @@ function EmptySlot({ label, small }: { label: string; small?: boolean }) {
       {label}
     </div>
   );
+}
+
+/** Emoji pour un status (poison, sommeil, paralysie, confusion, brûlé). */
+function statusEmoji(s: string): string {
+  switch (s) {
+    case "poison":
+      return "☠️";
+    case "asleep":
+      return "💤";
+    case "paralyzed":
+      return "🌀";
+    case "confused":
+      return "❓";
+    case "burned":
+      return "🔥";
+    default:
+      return "⚠️";
+  }
 }
 
 /** Pastille énergie. */
