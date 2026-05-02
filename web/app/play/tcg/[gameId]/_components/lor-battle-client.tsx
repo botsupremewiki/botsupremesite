@@ -38,6 +38,8 @@ import {
   LOR_RARITY_COLOR,
 } from "./lor-card-visuals";
 import { isMuted, playSfxIfEnabled, setMuted } from "./lor-sfx";
+import { createClient } from "@/lib/supabase/client";
+import { trackAchievement } from "@/lib/achievement-tracker";
 
 type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -112,6 +114,19 @@ export function LorBattleClient({
     allyUids: Set<string>;
     enemyUid: string | null;
   } | null>(null);
+  // Phase 10.0 : compteurs locaux pour achievements (track per-game).
+  // - spellsCastLocal : incrémenté à chaque playHandCard d'un Spell
+  // - levelUpsLocal : incrémenté à chaque détection de level-up dans diff
+  const spellsCastLocalRef = useRef(0);
+  const levelUpsLocalRef = useRef(0);
+  // Anti-double-track des achievements en fin de partie.
+  const achievementsTrackedRef = useRef(false);
+  // Mode bot détecté via URL param ?bot=1.
+  const isBotMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("bot") === "1";
+  // Mode ranked détecté via préfixe roomId.
+  const isRankedMode = roomId.startsWith("ranked-");
   // Phase 5.12 : pulse hand badge quand handCount augmente (draw card).
   const [handPulse, setHandPulse] = useState<{ self: number; opponent: number }>({
     self: 0,
@@ -223,9 +238,24 @@ export function LorBattleClient({
       }, 1500);
     }
     // Phase 9.1 : SFX victoire / défaite quand state.phase passe à "ended".
+    // Phase 10.0 : track achievements end-of-game.
     if (prev.phase !== "ended" && state.phase === "ended") {
       const won = state.winner === state.selfSeat;
       playSfxIfEnabled(won ? "victory" : "defeat");
+      if (!achievementsTrackedRef.current) {
+        achievementsTrackedRef.current = true;
+        void trackEndGameAchievements({
+          won,
+          isBotMode,
+          isRankedMode,
+          spellsCast: spellsCastLocalRef.current,
+          levelUps: levelUpsLocalRef.current,
+          fioraWincon: state.log.some((l) =>
+            l.includes("Fiora a vaincu 4 ennemis"),
+          ),
+          monoRegion: (state.self?.deckRegions ?? []).length === 1,
+        });
+      }
     }
     // SFX draw card si handCount augmente.
     const selfHandDiffSfx =
@@ -262,6 +292,8 @@ export function LorBattleClient({
       if (old.level < 2 && u.level >= 2) {
         newLevelUps.add(u.uid);
         sfxLevelUp = true;
+        // Phase 10.0 : track local count pour achievement champion-levelups.
+        levelUpsLocalRef.current += 1;
       }
       // Damage augmenté
       const dmgDelta = u.damage - old.damage;
@@ -420,8 +452,11 @@ export function LorBattleClient({
       const card = RUNETERRA_BASE_SET_BY_CODE.get(cardCode);
       if (!card) return;
       // Phase 9.1 : SFX immédiat au click (avant attente serveur).
-      if (card.type === "Spell") playSfxIfEnabled("spell-cast");
-      else playSfxIfEnabled("card-play");
+      if (card.type === "Spell") {
+        playSfxIfEnabled("spell-cast");
+        // Phase 10.0 : count pour achievement spells-cast-100.
+        spellsCastLocalRef.current += 1;
+      } else playSfxIfEnabled("card-play");
       setErrorMsg(null);
       if (card.type === "Unit") {
         send({ type: "lor-play-unit", handIndex });
@@ -1683,6 +1718,52 @@ const REGION_LABELS: Record<string, string> = {
   PiltoverZaun: "Piltover & Zaun",
   ShadowIsles: "Îles obscures",
 };
+
+// Phase 10.0 : track achievements en fin de partie. Appelé une seule
+// fois par game (anti-double via achievementsTrackedRef).
+async function trackEndGameAchievements({
+  won,
+  isBotMode,
+  isRankedMode,
+  spellsCast,
+  levelUps,
+  fioraWincon,
+  monoRegion,
+}: {
+  won: boolean;
+  isBotMode: boolean;
+  isRankedMode: boolean;
+  spellsCast: number;
+  levelUps: number;
+  fioraWincon: boolean;
+  monoRegion: boolean;
+}) {
+  const supabase = createClient();
+  if (!supabase) return;
+  // Tracks toujours (peu importe win/loss)
+  if (spellsCast > 0) {
+    void trackAchievement(supabase, "lol.spells-cast-100", spellsCast);
+  }
+  if (levelUps > 0) {
+    void trackAchievement(supabase, "lol.champion-levelups", levelUps);
+  }
+  // Tracks uniquement si on gagne
+  if (!won) return;
+  if (isBotMode) {
+    void trackAchievement(supabase, "lol.first-bot-win", 1);
+    void trackAchievement(supabase, "lol.bot-wins-25", 1);
+  } else if (isRankedMode) {
+    void trackAchievement(supabase, "lol.first-ranked-win", 1);
+  } else {
+    void trackAchievement(supabase, "lol.first-pvp-win", 1);
+  }
+  if (fioraWincon) {
+    void trackAchievement(supabase, "lol.win-fiora", 1);
+  }
+  if (monoRegion) {
+    void trackAchievement(supabase, "lol.win-mono-region", 1);
+  }
+}
 
 // Phase 9.4 : modal d'activation Skill (Vladimir L1 « Immédiat »).
 // Le joueur sélectionne 1+ alliés (toggle) puis 1 ennemi (radio).
