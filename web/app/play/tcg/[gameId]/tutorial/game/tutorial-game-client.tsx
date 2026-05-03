@@ -1341,11 +1341,14 @@ function CardWithStats({
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Bandeau « Activer talent » : visible si la carte a un talent
-            activable et qu'on lui passe un onUseAbility (= côté joueur).
-            Plus visible que l'ancien petit ⭐ : le nom du talent est
-            écrit directement, on peut cliquer dessus sans hover. */}
-        {meta.ability?.kind === "activated" && onUseAbility && (
+      </div>
+      {/* Bandeau « Activer talent » INLINE en dessous de la carte
+          (au-dessus des énergies). Empêche le chevauchement avec les
+          énergies attachées (ancien design : button absolute -bottom-1
+          → masquait la rangée des énergies). 2 lignes bien distinctes :
+          talent en premier, puis les énergies. */}
+      {meta.ability?.kind === "activated" && onUseAbility && (
+        <div className={small ? "w-24 px-1" : "w-36 px-1"}>
           <AbilityBanner
             abilityName={meta.ability.name}
             abilityEffect={meta.ability.effect}
@@ -1353,8 +1356,8 @@ function CardWithStats({
             small={small}
             onClick={() => onUseAbility(inPlay.uid)}
           />
-        )}
-      </div>
+        </div>
+      )}
       {/* Énergies attachées sous la carte. */}
       {inPlay.attachedEnergies.length > 0 && (
         <div className="flex flex-wrap justify-center gap-0.5">
@@ -1380,10 +1383,13 @@ function EmptySlot({ label, small }: { label: string; small?: boolean }) {
   );
 }
 
-/** Bandeau visible « ⭐ Activer [Talent] » qui pop en bas de la carte.
+/** Bandeau visible « Activer talent » qui pop en dessous de la carte
+ *  (inline, pas absolute, pour qu'il ne chevauche pas les énergies).
  *  Clic = activer le talent. Greyed out + label « utilisé » si used.
  *  Mirror de l'AbilityButton de battle-client.tsx pour cohérence
- *  visuelle entre le tutoriel et le vrai combat. */
+ *  visuelle entre le tutoriel et le vrai combat. Texte court fixe
+ *  « Activer talent » pour rentrer sans truncation ; nom + effet du
+ *  talent restent dans le tooltip. */
 function AbilityBanner({
   abilityName,
   abilityEffect,
@@ -1398,7 +1404,7 @@ function AbilityBanner({
   onClick: () => void;
 }) {
   const padding = small ? "px-1.5 py-1" : "px-2 py-1.5";
-  const fontSize = small ? "text-[8px]" : "text-[9px] lg:text-[10px]";
+  const fontSize = small ? "text-[9px]" : "text-[10px] lg:text-[11px]";
   return (
     <button
       onClick={(e) => {
@@ -1408,16 +1414,13 @@ function AbilityBanner({
       disabled={used}
       title={`Talent : ${abilityName}\n\n${abilityEffect}${used ? "\n\n(Déjà utilisé ce tour)" : ""}`}
       data-tutorial-target="ability-banner"
-      className={`pointer-events-auto absolute -bottom-1 left-1/2 z-10 flex w-[92%] -translate-x-1/2 items-center justify-center gap-1 rounded-full border-2 font-extrabold uppercase tracking-wide shadow-lg transition-all ${padding} ${fontSize} ${
+      className={`pointer-events-auto flex w-full items-center justify-center rounded-full border-2 font-extrabold uppercase tracking-wide shadow-lg transition-all ${padding} ${fontSize} ${
         used
           ? "border-zinc-600/60 bg-zinc-800/90 text-zinc-500"
           : "border-amber-300/80 bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 hover:scale-[1.04] hover:from-amber-200 animate-pulse cursor-pointer"
       }`}
     >
-      <span className="text-base leading-none">⭐</span>
-      <span className="truncate">
-        {used ? "Talent utilisé" : `Activer ${abilityName}`}
-      </span>
+      {used ? "Talent utilisé" : "Activer talent"}
     </button>
   );
 }

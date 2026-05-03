@@ -1016,8 +1016,11 @@ function BattleBoard({
             >
               {/* Phase 11.1 : layout horizontal Pokémons à gauche,
                   PlayerInfo + BackRow + Attaques à droite (au niveau
-                  de la hauteur du cadre du board). */}
-              <div className="flex items-start gap-2">
+                  de la hauteur du cadre du board). justify-center +
+                  w-full pour symétrie visuelle parfaite avec le côté
+                  adversaire (auparavant l'inner content auto-sized
+                  donnait des marges asymétriques selon la largeur). */}
+              <div className="flex w-full items-start justify-center gap-2">
                 <div className="flex flex-col items-center gap-3">
                   <BoardArea
                     active={state.self.active}
@@ -1148,11 +1151,13 @@ function BattleBoard({
               board à droite. ── */}
           {state.opponent && (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
-              <div className="flex items-start gap-2">
+              <div className="flex w-full items-start justify-center gap-2">
                 {/* Phase 11.1 + 11.2 : PlayerInfo + BackRow + HandHidden
                     tous regroupés à gauche du board adverse (mirroir
                     symétrique du joueur). HandHidden était auparavant
-                    rendu en dessous du board, maintenant sous le BackRow. */}
+                    rendu en dessous du board, maintenant sous le BackRow.
+                    w-full + justify-center pour symétrie parfaite avec
+                    le côté joueur. */}
                 <div className="flex flex-col items-stretch gap-2">
                   <PlayerInfo player={state.opponent} isOpponent />
                   <BackRow
@@ -1638,7 +1643,11 @@ function BoardArea({
           dimensionné sur la même sizeClass que la carte interne pour
           que le layout réserve la bonne place (avant : container fixe
           h-56 w-40 plus petit que la carte → carte overflow). */}
-      <div className="relative w-36 h-60 lg:w-40 lg:h-64 xl:w-44 xl:h-72 2xl:w-48 2xl:h-80">
+      {/* Wrapper Active : largeur Phase 11, hauteur étendue pour
+          accommoder le bandeau « Activer talent » + la rangée d'énergies
+          en 2 lignes distinctes (au lieu de l'ancien overlay absolute
+          qui chevauchait les énergies). */}
+      <div className="relative w-36 h-72 lg:w-40 lg:h-[19rem] xl:w-44 xl:h-80 2xl:w-48 2xl:h-[22rem]">
         <AnimatePresence mode="popLayout">
           {active
             ? (() => {
@@ -1671,7 +1680,28 @@ function BoardArea({
                     }`}
                     title={data.name}
                   >
-                    <BoardCard card={active} cardById={cardById} large />
+                    <BoardCard
+                      card={active}
+                      cardById={cardById}
+                      large
+                      /* Talent activable rendu INLINE dans BoardCard
+                         (entre card image et énergies) : 2 lignes
+                         distinctes au lieu de l'ancien overlay absolute
+                         qui chevauchait les énergies. */
+                      ability={
+                        ownActions && data.kind === "pokemon"
+                          ? data.ability ?? null
+                          : null
+                      }
+                      abilityUsed={
+                        abilitiesUsedThisTurn?.has(active.uid) ?? false
+                      }
+                      onUseAbility={
+                        ownActions && onUseAbility
+                          ? () => onUseAbility(active.uid)
+                          : null
+                      }
+                    />
                   </motion.button>
                 );
               })()
@@ -1687,21 +1717,6 @@ function BoardArea({
               </motion.div>
             )}
         </AnimatePresence>
-        {/* Bouton ⭐ Talent (overlay top-left de l'Actif) */}
-        {active &&
-          ownActions &&
-          (() => {
-            const data = getCardForBattle(active.cardId, cardById);
-            if (data?.ability?.kind !== "activated") return null;
-            return (
-              <AbilityButton
-                ability={data.ability}
-                used={abilitiesUsedThisTurn?.has(active.uid) ?? false}
-                onClick={() => onUseAbility?.(active.uid)}
-                disabled={!onUseAbility}
-              />
-            );
-          })()}
       </div>
       {/* Bench (Pocket : max 3 slots) — chaque carte keyée par uid pour
           que AnimatePresence anime son entrée / sa sortie. Cards qui
@@ -1713,7 +1728,7 @@ function BoardArea({
           return (
             <div
               key={`bench-slot-${i}`}
-              className="relative w-24 h-40 lg:w-28 lg:h-44 xl:w-32 xl:h-48"
+              className="relative w-24 h-52 lg:w-28 lg:h-56 xl:w-32 xl:h-60"
             >
               <AnimatePresence mode="popLayout">
                 {card
@@ -1754,7 +1769,23 @@ function BoardArea({
                                 : data.name
                           }
                         >
-                          <BoardCard card={card} cardById={cardById} />
+                          <BoardCard
+                            card={card}
+                            cardById={cardById}
+                            ability={
+                              ownActions && data.kind === "pokemon"
+                                ? data.ability ?? null
+                                : null
+                            }
+                            abilityUsed={
+                              abilitiesUsedThisTurn?.has(card.uid) ?? false
+                            }
+                            onUseAbility={
+                              ownActions && onUseAbility
+                                ? () => onUseAbility(card.uid)
+                                : null
+                            }
+                          />
                         </motion.button>
                       );
                     })()
@@ -1770,24 +1801,6 @@ function BoardArea({
                     </motion.div>
                   )}
               </AnimatePresence>
-              {/* Bouton ⭐ Talent (overlay top-left du banc) */}
-              {card &&
-                ownActions &&
-                (() => {
-                  const d = getCardForBattle(card.cardId, cardById);
-                  if (d?.ability?.kind !== "activated") return null;
-                  return (
-                    <AbilityButton
-                      ability={d.ability}
-                      used={
-                        abilitiesUsedThisTurn?.has(card.uid) ?? false
-                      }
-                      onClick={() => onUseAbility?.(card.uid)}
-                      disabled={!onUseAbility}
-                      small
-                    />
-                  );
-                })()}
             </div>
           );
         })}
@@ -1828,10 +1841,19 @@ function BoardCard({
   card,
   cardById,
   large,
+  ability,
+  abilityUsed,
+  onUseAbility,
 }: {
   card: BattleCard;
   cardById: Map<string, PokemonCardData>;
   large?: boolean;
+  /** Talent activable de la carte (s'il en a un de type "activated").
+   *  Si fourni AVEC `onUseAbility`, on rend le bandeau « Activer talent »
+   *  en dessous de l'image de la carte, au-dessus de la rangée d'énergies. */
+  ability?: PokemonAbility | null;
+  abilityUsed?: boolean;
+  onUseAbility?: (() => void) | null;
 }) {
   // Vue "comme un Pokémon" — pour les Fossiles, synthétise un Pokémon
   // de Base 40 PV / Incolore.
@@ -2105,9 +2127,24 @@ function BoardCard({
         </div>
       </motion.div>
 
-      {/* Pastilles d'énergies attachées SOUS la carte. Le wrapper externe
-          (BoardArea) réserve une zone supplémentaire en bas (h-60 wrapper
-          vs h-52 carte = 32px de zone énergies). */}
+      {/* Bandeau « Activer talent » INLINE sous la carte (au-dessus des
+          énergies). Empêche le chevauchement avec les énergies attachées
+          (ancien design : button absolute -bottom-1 → masquait le row
+          des énergies sur les cartes du banc). Le wrapper externe a été
+          ajusté pour accommoder ces 2 lignes. */}
+      {ability && ability.kind === "activated" && onUseAbility && (
+        <div className="w-[92%] px-0.5">
+          <AbilityButton
+            ability={ability}
+            used={abilityUsed ?? false}
+            onClick={onUseAbility}
+            small={!large}
+          />
+        </div>
+      )}
+      {/* Pastilles d'énergies attachées SOUS la carte (sous le talent
+          si présent). Le wrapper externe (BoardArea) réserve une zone
+          supplémentaire en bas pour ces 2 lignes possibles. */}
       {card.attachedEnergies.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-1 px-0.5">
           {card.attachedEnergies.map((e, i) => {
@@ -2136,10 +2173,11 @@ function BoardCard({
   );
 }
 
-/** Bandeau "Activer talent" qui pop en bas de la carte pour activer un
- *  Talent activable. Beaucoup plus visible que l'ancien petit ⭐ : le
- *  joueur lit directement le nom du talent sans devoir hover. Glow
- *  ambré pulsant tant que disponible, grisé une fois utilisé ce tour. */
+/** Bandeau "Activer talent" qui pop sous la carte pour activer un
+ *  Talent activable. Texte court et fixe (« Activer talent ») pour
+ *  rentrer dans la largeur de la carte sans truncation. Le nom + effet
+ *  du talent restent en tooltip pour les détails. Greyed une fois
+ *  utilisé ce tour. */
 function AbilityButton({
   ability,
   used,
@@ -2167,16 +2205,13 @@ function AbilityButton({
       disabled={isDisabled}
       title={`Talent : ${ability.name}\n\n${ability.effect}${used ? "\n\n(Déjà utilisé ce tour)" : ""}`}
       data-ability-button
-      className={`pointer-events-auto absolute -bottom-1 left-1/2 z-10 flex w-[92%] -translate-x-1/2 items-center justify-center gap-1 rounded-full border-2 font-extrabold uppercase tracking-wide shadow-lg transition-all ${padding} ${fontSize} ${
+      className={`pointer-events-auto flex w-full items-center justify-center rounded-full border-2 font-extrabold uppercase tracking-wide shadow-lg transition-all ${padding} ${fontSize} ${
         isDisabled
           ? "border-zinc-600/60 bg-zinc-800/90 text-zinc-500"
           : "border-amber-300/80 bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 hover:scale-[1.04] hover:from-amber-200 animate-pulse cursor-pointer"
       }`}
     >
-      <span className="text-base leading-none">⭐</span>
-      <span className="truncate">
-        {used ? "Talent utilisé" : `Activer ${ability.name}`}
-      </span>
+      {used ? "Talent utilisé" : "Activer talent"}
     </button>
   );
 }
